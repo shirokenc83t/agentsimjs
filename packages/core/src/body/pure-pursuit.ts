@@ -23,6 +23,14 @@ export interface PursuitCommand {
   alpha: number;
 }
 
+/** What a `PurePursuit` keeps between ticks (a snapshot: ADR-0035 addition of 2026-10-17, item 8). `bestDistance` starts at +Infinity. */
+export interface PursuitSnapshot {
+  readonly path: Float64Array;
+  readonly segment: number;
+  readonly bestDistance: number;
+  readonly sinceProgressS: number;
+}
+
 /** Closest-point search looks this many segments ahead of the current progress (never back). */
 const SEARCH_WINDOW = 8;
 /** Below this distance to the goal the vehicle slows down linearly (m per m/s of speed). */
@@ -39,6 +47,20 @@ export class PurePursuit {
   private bestDistance = Number.POSITIVE_INFINITY;
   private sinceProgressS = 0;
   private readonly cmd: PursuitCommand = { speed: 0, curvature: 0, distanceToGoalM: 0, arrived: false, stuck: false, nearestX: 0, nearestY: 0, crossTrackM: 0, alpha: 0 };
+
+  /** The tracker's run state as plain data (the parameters come from the follower's body parameters). */
+  snapshot(): PursuitSnapshot {
+    return { path: this.path.slice(), segment: this.segment, bestDistance: this.bestDistance, sinceProgressS: this.sinceProgressS };
+  }
+
+  /** Puts a snapshot back in place: the path with any legs appended, the progress and the no-progress timer. */
+  restore(s: PursuitSnapshot): void {
+    if (s.path.length < 2 || s.path.length % 2 !== 0) throw new RangeError("path needs at least one (x, y) point");
+    this.path = s.path.slice();
+    this.segment = s.segment;
+    this.bestDistance = s.bestDistance;
+    this.sinceProgressS = s.sinceProgressS;
+  }
 
   /** `path`: x, y pairs (metres), at least one point; the first point is near the vehicle. */
   constructor(

@@ -54,8 +54,9 @@ export function encodeCodecGolden(): { value: { length: number; hash: string }; 
 }
 
 export const CODEC_GOLDEN = {
-  value: { length: 497, hash: "af72e29f5bb3dfe1" },
-  snapshot: { length: 618, hash: "bf12d5971f9460af", sections: ["1a1b26e2bb691418", "af72e29f5bb3dfe1"] },
+  // Regenerated in F3a M1 T-004 when object keys went from sorted to insertion order (the format was not in use yet).
+  value: { length: 497, hash: "20b3a30e85df43cf" },
+  snapshot: { length: 618, hash: "4e78a6014aefabbd", sections: ["1a1b26e2bb691418", "20b3a30e85df43cf"] },
   // Same hash as the inline container: the sections' place does not change the snapshot's content hash.
-  external: { length: 98, hash: "bf12d5971f9460af" },
+  external: { length: 98, hash: "4e78a6014aefabbd" },
 };

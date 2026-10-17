@@ -4,10 +4,11 @@
 // (no wall time, no engine-dependent output): JSON loses -0, NaN and ±Infinity, and orders object keys by insertion.
 // This codec writes a self-describing, tagged binary form of plain data:
 //   undefined, null, booleans, numbers (an int32 as a zigzag varint, anything else as a little-endian Float64 with one
-//   canonical NaN, so -0, ±Infinity and every other bit pattern survive), strings (UTF-8), arrays, plain objects (keys
-//   sorted), Map and Set (entries sorted by the bytes of their encoded keys; `inOrder()` keeps insertion order where
-//   order is state), typed arrays of the eight integer and two float kinds (little-endian, length in elements) and
-//   section references. Functions, symbols, bigints, class instances and cycles are refused with the path that holds them.
+//   canonical NaN, so -0, ±Infinity and every other bit pattern survive), strings (UTF-8), arrays, plain objects (keys in
+//   insertion order: the simulator hashes and traces plain data with JSON.stringify, so key order is state), Map and Set
+//   (entries sorted by the bytes of their encoded keys; `inOrder()` keeps insertion order where order is state), typed
+//   arrays of the eight integer and two float kinds (little-endian, length in elements) and section references.
+//   Functions, symbols, bigints, class instances and cycles are refused with the path that holds them.
 //
 // A snapshot is a container: magic "ASNP", a format version, the root value, and content-addressed **sections** (a value
 // encoded on its own and named by the 64-bit content hash of its bytes). The root refers to a section by its hash, so
@@ -272,7 +273,10 @@ class Encoder extends ByteWriter {
       const name = (v as { constructor?: { name?: string } }).constructor?.name ?? "unknown";
       this.fail(`class instance ${name} cannot be part of a snapshot (capture its fields as plain data)`);
     }
-    const keys = Object.keys(v).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    // Key order is state: the simulator hashes and traces plain data with JSON.stringify (events, requests, results), whose
+    // output follows insertion order, and fixes that order in code. A restored object must keep it, so keys are written
+    // in insertion order (the order the language defines: integer-like keys ascending, then the others as inserted).
+    const keys = Object.keys(v);
     this.u8(TAG.object);
     this.varint(keys.length);
     for (const k of keys) {

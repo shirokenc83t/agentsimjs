@@ -54,7 +54,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     hasher: s("buffer of the state hash"),
     lastTick: c("last executed tick"),
     lastSimTimeS: c("sim time of the last executed tick"),
-    lastHash: r("state hash of the last tick: computed from the restored state and compared with the snapshot's"),
+    lastHash: c("the hash the last tick reported: taken before that tick's requests empty the inbox, so it is not recomputable from the state a snapshot leaves; WorldSnapshot.checkHash validates the restore instead"),
   },
   Inbox: {
     entries: c("undelivered events in arrival order, with their tick and seq"),
@@ -128,8 +128,23 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     note: r("closure: rebuilt from context"),
     navigate: r("closure that builds the inner goTo: rebuilt from context"),
   },
+  HoldBehavior: {
+    phase: c("holding"),
+    agent: r("the shared SimAgent"),
+    dtS: r("run configuration"),
+    ticks: c("duration in ticks; Infinity for an open hold"),
+    held: c("ticks held so far"),
+  },
+  TakeoffBehavior: {
+    phase: c("climbing"),
+    s: r("the shared agent's UavState"),
+    b: r("the agent's body parameters"),
+    x: c("where the climb started: it rises straight up from here"),
+    y: c("where the climb started"),
+    altitudeM: c("action parameter"),
+  },
   PathFollower: {
-    p: r("follower parameters from the body; a back-off or escape variant is recorded by the owning GoToBehavior"),
+    p: r("follower parameters from the body; the arrival tolerance a back-off or escape follower was built with is part of FollowerSnapshot"),
     stuckAfterS: r("constant of the follower"),
     index: c("segment being driven"),
     pursuit: c("the PurePursuit of the current segment"),
@@ -376,11 +391,8 @@ export interface ClosureState {
 }
 
 export const CLOSURE_STATE: readonly ClosureState[] = [
-  { where: "hold behaviour: held", file: "core/src/actions/runtime.ts", token: "let held = 0", treatment: "captured", note: "ticks held so far; with the duration in ticks it is the whole behaviour (T-004 makes it explicit state)" },
-  { where: "hold behaviour: ticks", file: "core/src/actions/runtime.ts", token: "const ticks = durationS === undefined", treatment: "captured", note: "duration in ticks, Infinity for an open hold" },
-  { where: "takeoff behaviour: start x, y and target altitude", file: "core/src/actions/runtime.ts", token: "const { x, y } = agent.state;", treatment: "captured", note: "the climb holds x and y where it started and rises to altitudeM (T-004 makes it explicit state)" },
-  { where: "land behaviour", file: "core/src/actions/runtime.ts", token: 'phase: "descending"', treatment: "rebuilt", note: "reads only the agent's state and the ground: nothing of its own" },
-  { where: "battery reflex latch: fired", file: "core/src/reflexes/builtin.ts", token: "const fired = new Set<string>()", treatment: "captured", note: "agents the critical-battery reflex already acted on (T-004 makes it explicit state)" },
+  { where: "land behaviour", file: "core/src/actions/runtime.ts", token: 'phase: "descending"', treatment: "rebuilt", note: "reads only the agent's state and the ground: nothing of its own beyond its phase (LandSnapshot)" },
+  { where: "battery reflex latch: fired", file: "core/src/reflexes/builtin.ts", token: "const fired = new Set<string>()", treatment: "captured", note: "agents the critical-battery reflex already acted on: handed over by Reflex.snapshot and put back by Reflex.restore (T-004)" },
   { where: "sensing noise closure", file: "scenarios/src/assemble/sensing.ts", token: "noise: spec.type !== \"camera\"", treatment: "rebuilt", note: "draws from the sensor's Rng, which is captured" },
   { where: "TopologyService constructor closures (viewOf, positionOf)", file: "scenarios/src/assemble/topology.ts", token: "private readonly viewOf", treatment: "rebuilt", note: "wiring" },
   { where: "PlanningServiceAdapter.take / takeLegs map objects", file: "scenarios/src/assemble/adapters.ts", token: "get version()", treatment: "rebuilt", note: "views onto the live planning view, created when a plan is taken" },

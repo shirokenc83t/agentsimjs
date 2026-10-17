@@ -42,4 +42,10 @@ export interface Reflex {
   beforeMove?(ctx: ReflexContext, agent: SimAgent, from: Pose, to: Pose, planMap: PlanMap | undefined): ReflexTrigger | undefined;
   /** Called once per tick after the action step (state-based reflexes such as the battery). */
   afterStep?(ctx: ReflexContext, agent: SimAgent, runningAction: string | undefined): ReflexTrigger | undefined;
+  /**
+   * A reflex that keeps state between ticks (the battery reflex's latch) hands it over as plain data for a snapshot
+   * (ADR-0035 addition of 2026-10-17, item 8), and takes it back in place. Stateless reflexes have neither.
+   */
+  snapshot?(): unknown;
+  restore?(data: unknown): void;
 }

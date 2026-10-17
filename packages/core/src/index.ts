@@ -110,8 +110,8 @@ export {
   type ScriptStep,
   type SelfView,
 } from "./world/brain.ts";
-export { World, runLockstep, mindSlot, type WorldParts, type RunInput } from "./world/world.ts";
-export { Inbox, INBOX_CAP, isControl, type AgentEvent, type DecisionEvent, type DecisionEventKind } from "./world/events.ts";
+export { World, runLockstep, mindSlot, type WorldParts, type WorldSnapshot, type RunInput } from "./world/world.ts";
+export { Inbox, INBOX_CAP, isControl, type AgentEvent, type DecisionEvent, type DecisionEventKind, type InboxSnapshot } from "./world/events.ts";
 export {
   EMPTY_MIND_VIEW,
   MAX_ENTITY_VIEWS,

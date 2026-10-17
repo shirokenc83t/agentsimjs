@@ -6,7 +6,7 @@ import { StateHasher } from "../numerics/state-hash.ts";
 import type { Steppable, TickContext } from "../time/scheduler.ts";
 import type { Scheduler } from "../time/scheduler.ts";
 import type { Brain, DecisionEnvelope, DecisionRequest, SelfView, TimerOp } from "./brain.ts";
-import { Inbox, isControl, type AgentEvent, type DecisionEvent } from "./events.ts";
+import { Inbox, isControl, type AgentEvent, type DecisionEvent, type InboxSnapshot } from "./events.ts";
 import { EMPTY_MIND_VIEW, round2 as r2, round3 as r3, type MindViewPort } from "./mind-view.ts";
 
 export interface WorldParts {
@@ -35,6 +35,42 @@ export interface WorldParts {
   readonly minDecisionIntervalS?: number;
   /** The beliefs and space parts of a request (F2 M2d), from the agent's own map. None = empty views (core tests). */
   readonly mindView?: MindViewPort;
+  /**
+   * Genesis (default true): at construction each agent with a brain gets a `start` event and its first decision request,
+   * and both are traced. `false` builds the world as the target of a restore: none of that happens, and `restore` puts the
+   * snapshot's inboxes, requests and timing in place (ADR-0035 addition of 2026-10-17, item 8).
+   */
+  readonly genesis?: boolean;
+}
+
+/** What a `World` keeps between ticks, as plain data (a snapshot: ADR-0035 addition of 2026-10-17, item 8). */
+export interface WorldSnapshot {
+  readonly tick: number;
+  readonly simTimeS: number;
+  /** The step of the last tick: timers and requests convert with it. */
+  readonly dtS: number;
+  /**
+   * The state hash the last tick reported. It is taken before that tick's requests move the inbox's events into request
+   * slots, so it cannot be recomputed from the state a snapshot leaves: it is captured as it was.
+   */
+  readonly stateHash: string;
+  /** The hash of the state as the snapshot leaves it, recomputed by a restore: a different one means the parts do not agree. */
+  readonly checkHash: string;
+  /** The agents' mutable state, by agent ID order: body state, battery, odometer. Restored in place (the objects are shared). */
+  readonly agents: readonly { readonly id: string; readonly state: Readonly<Record<string, number | boolean>>; readonly battery: { readonly soc: number }; readonly odometerM: number }[];
+  readonly inboxes: readonly InboxSnapshot[];
+  /** Sim time of each agent's previous request, -Infinity before the first. */
+  readonly lastRequestS: readonly number[];
+  readonly prevSoc: readonly number[];
+  /** Active timers of each agent's mind: (tag, due tick), sorted by tag. */
+  readonly timers: readonly (readonly (readonly [string, number])[])[];
+  /** Space summaries already traced, by hash, sorted. */
+  readonly seenSpaces: readonly string[];
+  /** Decision requests asked and not yet applied, by agent index, with the answer once it arrived. */
+  readonly slots: readonly ({ readonly agentId: string; readonly request: DecisionRequest; readonly envelope?: DecisionEnvelope } | undefined)[];
+  readonly unanswered: number;
+  readonly inputLog: readonly RunInput[];
+  readonly nextInput: number;
 }
 
 /**
@@ -148,12 +184,85 @@ export class World implements Steppable {
     this.minDecisionIntervalS = parts.minDecisionIntervalS ?? 1;
     this.timers = agents.map(() => new Map<string, number>());
     this.slots = agents.map(() => undefined);
-    for (let i = 0; i < agents.length; i++) {
-      if (!this.brainAt[i]) continue;
-      this.addEvent(i, { kind: "start" }, 0, 0);
-      this.ask(i, 0, 0);
+    if (parts.genesis !== false) {
+      for (let i = 0; i < agents.length; i++) {
+        if (!this.brainAt[i]) continue;
+        this.addEvent(i, { kind: "start" }, 0, 0);
+        this.ask(i, 0, 0);
+      }
     }
     this.lastHash = this.computeHash();
+  }
+
+  /**
+   * The world's state between ticks as plain data: the agents' bodies, batteries and odometers, the inboxes, request timing,
+   * timers, the requests asked and not yet applied (and their answers), the space summaries already traced, the run
+   * inputs and the counters. A snapshot is taken between ticks only, after the tick's state hash. A world that failed
+   * midway is inconsistent and refuses.
+   */
+  snapshot(): WorldSnapshot {
+    if (this.failed !== undefined) throw new Error("cannot snapshot a world that failed in an earlier step", { cause: this.failed });
+    const byTag = (x: readonly [string, number], y: readonly [string, number]): number => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0);
+    return {
+      tick: this.lastTick,
+      simTimeS: this.lastSimTimeS,
+      dtS: this.dtS,
+      stateHash: this.lastHash,
+      checkHash: this.computeHash(),
+      agents: this.agents.map((a) => ({ id: a.id, state: { ...a.state }, battery: { soc: a.battery.soc }, odometerM: a.odometerM })),
+      inboxes: this.inboxes.map((b) => b.snapshot()),
+      lastRequestS: [...this.lastRequestS],
+      prevSoc: [...this.prevSoc],
+      timers: this.timers.map((m) => [...m].sort(byTag)),
+      seenSpaces: [...this.seenSpaces].sort(),
+      slots: this.slots.map((p) => (p ? { agentId: p.agentId, request: p.request, ...(p.envelope ? { envelope: p.envelope } : {}) } : undefined)),
+      unanswered: this.unanswered,
+      inputLog: this.inputLog.map((i) => ({ ...i })),
+      nextInput: this.nextInput,
+    };
+  }
+
+  /**
+   * Puts a snapshot back in place, into a world built without genesis over the same agents. Everything else the world's
+   * hash reads (the action runtime, sensing and the maps) must be restored first: the hash of the restored state is
+   * recomputed here against the snapshot's `checkHash`, and a different one means the parts do not agree with the
+   * snapshot, so it throws rather than continue.
+   */
+  restore(s: WorldSnapshot): void {
+    const n = this.agents.length;
+    if (s.agents.length !== n || s.inboxes.length !== n || s.lastRequestS.length !== n || s.prevSoc.length !== n || s.timers.length !== n || s.slots.length !== n) {
+      throw new RangeError(`snapshot is for ${s.agents.length} agents, the world has ${n}`);
+    }
+    for (let i = 0; i < n; i++) {
+      const a = this.agents[i] as SimAgent;
+      const sa = s.agents[i] as WorldSnapshot["agents"][number];
+      if (sa.id !== a.id) throw new RangeError(`snapshot agent ${i} is ${sa.id}, the world's is ${a.id}`);
+      Object.assign(a.state, sa.state);
+      a.battery.soc = sa.battery.soc;
+      a.odometerM = sa.odometerM;
+      (this.inboxes[i] as Inbox).restore(s.inboxes[i] as InboxSnapshot);
+      this.lastRequestS[i] = s.lastRequestS[i] as number;
+      this.prevSoc[i] = s.prevSoc[i] as number;
+      const mine = this.timers[i] as Map<string, number>;
+      mine.clear();
+      for (const [tag, due] of s.timers[i] as readonly (readonly [string, number])[]) mine.set(tag, due);
+      const slot = s.slots[i];
+      if (slot && slot.agentId !== a.id) throw new RangeError(`snapshot request of slot ${i} is for ${slot.agentId}, the world's agent is ${a.id}`);
+      this.slots[i] = slot ? { agentId: slot.agentId, request: slot.request, ...(slot.envelope ? { envelope: slot.envelope } : {}) } : undefined;
+    }
+    this.seenSpaces.clear();
+    for (const h of s.seenSpaces) this.seenSpaces.add(h);
+    this.unanswered = s.unanswered;
+    this.failed = undefined;
+    this.inputLog.length = 0;
+    for (const i of s.inputLog) this.inputLog.push({ ...i });
+    this.nextInput = s.nextInput;
+    this.dtS = s.dtS;
+    this.lastTick = s.tick;
+    this.lastSimTimeS = s.simTimeS;
+    const hash = this.computeHash();
+    if (hash !== s.checkHash) throw new Error(`restored state hash ${hash} differs from the snapshot's ${s.checkHash}: restore the action runtime, sensing and the maps before the world`);
+    this.lastHash = s.stateHash;
   }
 
   /**

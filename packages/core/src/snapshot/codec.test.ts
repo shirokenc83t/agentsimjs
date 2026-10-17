@@ -207,8 +207,14 @@ describe("snapshot codec: values", () => {
     expect([...(roundTrip(inOrder(new Set(["z", "a"]))) as Set<string>)]).toEqual(["z", "a"]);
   });
 
-  it("gives the same bytes for objects whose keys were inserted in a different order", () => {
-    expect(encodeValue({ x: 1, y: [2, { q: 3, p: 4 }] })).toEqual(encodeValue({ y: [2, { p: 4, q: 3 }], x: 1 }));
+  it("keeps the insertion order of object keys, so JSON.stringify of a restored object is the original's (the simulator hashes plain data that way)", () => {
+    const v = { kind: "detected", entityId: "o-1", xM: 1, nested: { z: 1, a: 2 }, 10: "ten", 2: "two" };
+    const back = decodeValue(encodeValue(v)) as object;
+    expect(JSON.stringify(back)).toBe(JSON.stringify(v));
+    expect(Object.keys(back)).toEqual(Object.keys(v));
+    // Order is state: the same content in another insertion order is another value, and the same code path gives the same bytes.
+    expect(encodeValue({ x: 1, y: 2 })).not.toEqual(encodeValue({ y: 2, x: 1 }));
+    expect(encodeValue(v)).toEqual(encodeValue({ ...v }));
   });
 
   it("keeps an own property set to undefined distinct from a missing one", () => {

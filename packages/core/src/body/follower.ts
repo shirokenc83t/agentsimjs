@@ -1,6 +1,6 @@
 import type { DriveCommand, DriveParams } from "./drive.ts";
 import type { UgvState } from "./kinematics.ts";
-import { PurePursuit } from "./pure-pursuit.ts";
+import { PurePursuit, type PursuitSnapshot } from "./pure-pursuit.ts";
 
 /** A path piece driven in one direction; consecutive segments of opposite direction meet at a cusp. */
 export interface PathSegment {
@@ -22,6 +22,15 @@ export interface FollowCommand extends DriveCommand {
   distanceToGoalM: number;
   /** Index of the segment being driven. */
   segment: number;
+}
+
+/** What a `PathFollower` keeps between ticks (a snapshot; see `PathFollower.snapshot`). */
+export interface FollowerSnapshot {
+  readonly segments: readonly { readonly pts: Float64Array; readonly reverse: boolean }[];
+  readonly index: number;
+  readonly pursuit: PursuitSnapshot;
+  readonly stuckAfterS: number;
+  readonly arrivalToleranceM: number;
 }
 
 /** A differential drive rotates in place when the look-ahead point is further off its heading than this. */
@@ -96,6 +105,35 @@ export class PathFollower {
     joined.set(pts, only.pts.length);
     this.segments[0] = { pts: joined, reverse: false };
     this.pursuit.extend(pts);
+  }
+
+  /**
+   * The follower's run state as plain data (ADR-0035 addition of 2026-10-17, item 8): the path of every segment (legs
+   * appended by a lazy plan included), the segment being driven, the tracker's progress, and the arrival tolerance this
+   * follower was built with (a back-off or escape follower is tighter than the body's, so a restore rebuilds that variant).
+   */
+  snapshot(): FollowerSnapshot {
+    return {
+      segments: this.segments.map((s) => ({ pts: s.pts.slice(), reverse: s.reverse })),
+      index: this.index,
+      pursuit: this.pursuit.snapshot(),
+      stuckAfterS: this.stuckAfterS,
+      arrivalToleranceM: this.p.arrivalToleranceM,
+    };
+  }
+
+  /** A follower with the snapshot's state, over the body's parameters (the snapshot supplies the arrival tolerance it was built with). */
+  static restore(s: FollowerSnapshot, params: FollowerParams): PathFollower {
+    const f = new PathFollower(
+      s.segments.map((x) => ({ pts: x.pts.slice(), reverse: x.reverse })),
+      { ...params, arrivalToleranceM: s.arrivalToleranceM },
+      s.stuckAfterS,
+    );
+    if (!Number.isInteger(s.index) || s.index < 0 || s.index >= f.segments.length) throw new RangeError(`follower segment index ${s.index} of ${f.segments.length}`);
+    f.index = s.index;
+    f.pursuit = f.pursuitFor(s.index);
+    f.pursuit.restore(s.pursuit);
+    return f;
   }
 
   get segmentIndex(): number {

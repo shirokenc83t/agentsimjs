@@ -1,14 +1,14 @@
 import { drainBattery } from "../body/battery.ts";
 import { stepDrive } from "../body/drive.ts";
-import { PathFollower, type PathSegment } from "../body/follower.ts";
-import { stepUavTowards } from "../body/kinematics.ts";
+import { PathFollower, type FollowerParams, type FollowerSnapshot, type PathSegment } from "../body/follower.ts";
+import { stepUavTowards, type UavState } from "../body/kinematics.ts";
 import { cos, sin } from "../numerics/detmath/index.ts";
 import { contentHash64 } from "../numerics/content-hash.ts";
 import type { AllowedAction, UnavailableAction } from "../world/mind-view.ts";
 
 
 import { err, ok, type CodedError, type Result } from "../result.ts";
-import { agentPosition, type SimAgent } from "./agent.ts";
+import { agentPosition, type SimAgent, type UavBodyParams } from "./agent.ts";
 import type { Pose, Reflex, ReflexTrigger } from "../reflexes/reflex.ts";
 import type { CapabilityPort, ContactPort, FrontierCandidate, FrontierPort, PlanLeg, PlanMap, PlannerPort, PlanProgress, PlanResult, ProximityPort, Scope, SpatialPort, TraceSink } from "./ports.ts";
 import { predictTracking, type PredriveOutcome } from "./predrive.ts";
@@ -106,11 +106,144 @@ interface Behavior {
   step(ctx: TickCtx): Step;
   /** Called once when the action ends for any reason (cancel planning, stop the body). */
   stop(simTime: number): void;
+  /** The behaviour's run state as plain data (ADR-0035 addition of 2026-10-17, item 8). */
+  snapshot(): BehaviorSnapshot;
 }
 
 interface Active {
   readonly info: { actionId: string; agentId: string; name: string; startedTick: number };
   readonly behavior: Behavior;
+}
+
+// ---- Snapshots (F3a M1, T-004; ADR-0035 addition of 2026-10-17, item 8) ---------------------------------------------------
+// What a running action keeps between ticks, as plain data for the snapshot codec. Closures over the runtime's context
+// (`note`, `guard`, the unreachable marker, the navigation of explore) are not captured: restore builds them again from the
+// ports, as starting the action does. Start-time checks are not repeated on restore: they judged the state at the start.
+
+export interface HoldSnapshot {
+  readonly kind: "hold";
+  readonly phase: string;
+  /** Duration in ticks (Infinity for an open hold). */
+  readonly ticks: number;
+  readonly held: number;
+}
+
+export interface TakeoffSnapshot {
+  readonly kind: "takeoff";
+  readonly phase: string;
+  /** Where the climb started: it rises straight up from here. */
+  readonly x: number;
+  readonly y: number;
+  readonly altitudeM: number;
+}
+
+export interface LandSnapshot {
+  readonly kind: "land";
+  readonly phase: string;
+}
+
+export interface GoToSnapshot {
+  readonly kind: "goTo";
+  readonly phase: string;
+  readonly tx: number;
+  readonly ty: number;
+  readonly cruise: number;
+  readonly returning: boolean;
+  /** The planner query in flight; the planning service's own snapshot holds the query. */
+  readonly queryId: string | undefined;
+  readonly follower: FollowerSnapshot | undefined;
+  readonly backingOff: boolean;
+  readonly recoveries: number;
+  /** A plan exists: its map is the agent's live planning view, taken again from the planner on restore. */
+  readonly hasPlanMap: boolean;
+  readonly uavPath: readonly (readonly [number, number])[];
+  readonly uavIndex: number;
+  readonly planVersion: number;
+  readonly replans: number;
+  readonly excursionPeakM: number;
+  readonly legsPending: boolean;
+  readonly holdStartS: number | undefined;
+  readonly predictedEnd: PredriveOutcome["end"] | undefined;
+}
+
+export interface ExploreSnapshot {
+  readonly kind: "explore";
+  readonly phase: string;
+  readonly region: string | undefined;
+  readonly strategy: "nearest" | "largest";
+  readonly inner: GoToSnapshot | undefined;
+  readonly target: FrontierCandidate | undefined;
+  readonly markable: boolean;
+  readonly visited: number;
+  readonly marked: number;
+  readonly distanceM: number;
+  readonly waitedS: number;
+  /** Strikes per frontier cell, ascending by cell. */
+  readonly strikes: readonly (readonly [number, number])[];
+  /** Frontier cells skipped for the rest of the action, ascending. */
+  readonly skipped: readonly number[];
+}
+
+export type BehaviorSnapshot = HoldSnapshot | TakeoffSnapshot | LandSnapshot | GoToSnapshot | ExploreSnapshot;
+
+/** What an `ActionRuntime` keeps between ticks. Taken between ticks only: nothing may be waiting to be delivered as an ended action. */
+export interface RuntimeSnapshot {
+  readonly nextAction: number;
+  /** The running behaviour of each agent, by agent ID. */
+  readonly active: readonly { readonly agentId: string; readonly info: Active["info"]; readonly behavior: BehaviorSnapshot }[];
+  /** Each agent's current or latest action, by agent ID. */
+  readonly last: readonly ActionInfo[];
+  readonly recovering: readonly string[];
+  /** The state of the reflexes that keep any, by reflex name. */
+  readonly reflexes: Readonly<Record<string, unknown>>;
+}
+
+/** A hold: stays put for a number of ticks (forever when open). */
+class HoldBehavior implements Behavior {
+  phase = "holding";
+
+  constructor(
+    private readonly agent: SimAgent,
+    private readonly dtS: number,
+    private readonly ticks: number,
+    private held = 0,
+  ) {}
+
+  step(): Step {
+    if (this.agent.kind === "ugv") this.agent.state.speed = 0;
+    this.held++;
+    return this.held >= this.ticks ? { kind: "succeeded", result: { heldS: this.held * this.dtS } } : RUNNING;
+  }
+
+  stop(): void {}
+
+  snapshot(): HoldSnapshot {
+    return { kind: "hold", phase: this.phase, ticks: this.ticks, held: this.held };
+  }
+}
+
+/** A takeoff: climbs straight up from where it started to `altitudeM`. */
+class TakeoffBehavior implements Behavior {
+  phase = "climbing";
+
+  constructor(
+    private readonly s: UavState,
+    private readonly b: UavBodyParams,
+    private readonly x: number,
+    private readonly y: number,
+    private readonly altitudeM: number,
+  ) {}
+
+  step(ctx: TickCtx): Step {
+    this.s.airborne = true;
+    return stepUavTowards(this.s, this.b, this.x, this.y, this.altitudeM, ctx.dtS) ? { kind: "succeeded", result: { altitudeM: this.s.z } } : RUNNING;
+  }
+
+  stop(): void {}
+
+  snapshot(): TakeoffSnapshot {
+    return { kind: "takeoff", phase: this.phase, x: this.x, y: this.y, altitudeM: this.altitudeM };
+  }
 }
 
 
@@ -415,16 +548,7 @@ export class ActionRuntime {
 
   private hold(agent: SimAgent, durationS: number | undefined): Behavior {
     const ticks = durationS === undefined ? Number.POSITIVE_INFINITY : Math.max(1, Math.ceil(durationS / this.dtS - 1e-9));
-    let held = 0;
-    return {
-      phase: "holding",
-      step: () => {
-        if (agent.kind === "ugv") agent.state.speed = 0;
-        held++;
-        return held >= ticks ? { kind: "succeeded", result: { heldS: held * this.dtS } } : RUNNING;
-      },
-      stop: () => {},
-    };
+    return new HoldBehavior(agent, this.dtS, ticks);
   }
 
   private takeoff(agent: SimAgent, altitudeM: number): Result<Behavior, ActionFailure> {
@@ -435,16 +559,7 @@ export class ActionRuntime {
     if (altitudeM < lim.min || altitudeM > lim.max || !this.ports.planner.knownSpace(agent.id).freeForAir(x, y, altitudeM, agent.body.clearanceM)) {
       return err({ code: "altitude_out_of_range", message: `cannot hover at ${altitudeM} m here (airspace ${lim.min}–${lim.max} m)` });
     }
-    const s = agent.state;
-    const b = agent.body;
-    return ok({
-      phase: "climbing",
-      step: (ctx) => {
-        s.airborne = true;
-        return stepUavTowards(s, b, x, y, altitudeM, ctx.dtS) ? { kind: "succeeded", result: { altitudeM: s.z } } : RUNNING;
-      },
-      stop: () => {},
-    });
+    return ok(new TakeoffBehavior(agent.state, agent.body, x, y, altitudeM));
   }
 
   /**
@@ -475,8 +590,15 @@ export class ActionRuntime {
     const s = agent.state;
     // Start-time check on the agent's own map (ADR-0005; F2 audit of 2026-10-10): a landing site it believes free.
     if (!this.ports.planner.knownSpace(agent.id).landable(s.x, s.y)) return err({ code: "landing_blocked", message: "the ground below is believed occupied" });
+    return ok(this.landBehavior(agent));
+  }
+
+  /** The descent itself, without the start-time check (a restore builds it again as it was). It keeps nothing of its own. */
+  private landBehavior(agent: SimAgent): Behavior {
+    if (agent.kind !== "uav") throw new Error("land is UAV only");
+    const s = agent.state;
     const b = agent.body;
-    return ok({
+    const behavior: Behavior = {
       phase: "descending",
       step: (ctx) => {
         // The descent ends on the real ground (physics, read as it happens); touching an obstacle is a collision.
@@ -490,7 +612,9 @@ export class ActionRuntime {
         return { kind: "succeeded", result: { position: { xM: s.x, yM: s.y, zM: s.z } } };
       },
       stop: () => {},
-    });
+      snapshot: () => ({ kind: "land", phase: behavior.phase }),
+    };
+    return behavior;
   }
 
   /** goTo and returnToBase (which lands a UAV on arrival). */
@@ -514,11 +638,18 @@ export class ActionRuntime {
     }
     // A goTo towards a frontier group's point that is unreachable (or fails the pre-drive check) marks the group
     // for this agent (ADR-0039 §1 and its addition of 2026-10-10).
+    return ok(this.goToFor(agent, tx, ty, cruise, returning, this.markerFor(agent, tx, ty)));
+  }
+
+  /** A goTo wired to this runtime's context: its trace notes, the reflex guard, and what to do when the target is unreachable. */
+  private goToFor(agent: SimAgent, tx: number, ty: number, cruise: number, returning: boolean, onUnreachable: ((simTime: number) => void) | undefined): GoToBehavior {
+    return new GoToBehavior(this.ports, agent, tx, ty, cruise, returning, (t, payload) => this.emit(agent, t, "full", payload), (ctx, from, to, map) => this.guard(ctx, from, to, map, agent), onUnreachable);
+  }
+
+  /** A goTo towards a frontier group's point that is unreachable marks the group for this agent (ADR-0039 §1). */
+  private markerFor(agent: SimAgent, tx: number, ty: number): ((simTime: number) => void) | undefined {
     const frontiers = this.ports.frontiers;
-    const mark = frontiers ? (simTime: number) => void frontiers.markAt(agent.id, tx, ty, simTime) : undefined;
-    return ok(
-      new GoToBehavior(this.ports, agent, tx, ty, cruise, returning, (t, payload) => this.emit(agent, t, "full", payload), (ctx, from, to, map) => this.guard(ctx, from, to, map, agent), mark),
-    );
+    return frontiers ? (simTime: number) => void frontiers.markAt(agent.id, tx, ty, simTime) : undefined;
   }
 
   /** explore (ADR-0039 addition of 2026-10-10): frontier targets on the agent's own map, reached by goTo navigation. */
@@ -526,12 +657,90 @@ export class ActionRuntime {
     const frontiers = this.ports.frontiers;
     if (!frontiers) return err({ code: "unknown_capability", message: "explore needs the agent's frontier layer" });
     if (region !== undefined && !frontiers.hasRegion(agent.id, region)) return err({ code: "unknown_region", message: `no region ${region}` });
+    return ok(this.exploreFor(frontiers, agent, region, strategy));
+  }
+
+  /** The explore behaviour wired to this runtime's context; its goTo navigation keeps the cruise altitude the action started with. */
+  private exploreFor(frontiers: FrontierPort, agent: SimAgent, region: string | undefined, strategy: "nearest" | "largest"): ExploreBehavior {
     const note = (t: number, payload: unknown) => this.emit(agent, t, "full", payload);
-    const guard: MoveGuard = (ctx, from, to, map) => this.guard(ctx, from, to, map, agent);
     const cruise = agent.kind === "uav" ? agent.state.z : 0;
-    return ok(
-      new ExploreBehavior(frontiers, agent, region, strategy, note, (tx, ty, onMarkable) => new GoToBehavior(this.ports, agent, tx, ty, cruise, false, note, guard, onMarkable)),
-    );
+    return new ExploreBehavior(frontiers, agent, region, strategy, note, (tx, ty, onMarkable, cruiseOverride) => this.goToFor(agent, tx, ty, cruiseOverride ?? cruise, false, onMarkable));
+  }
+
+  // ---- snapshot and restore (F3a M1, T-004; ADR-0035 addition of 2026-10-17, item 8) ----------------------------------
+
+  /**
+   * The runtime's state between ticks as plain data: the action counter, each agent's running behaviour and latest action,
+   * the agents in a reflex recovery, and the state of the reflexes that keep any (the battery latch). It refuses if ended
+   * actions are still waiting for the world to take them: a snapshot is taken after the tick's events were collected.
+   */
+  snapshot(): RuntimeSnapshot {
+    if (this.ended.length > 0) throw new Error("cannot snapshot an action runtime with ended actions not yet taken (snapshots are taken between ticks)");
+    const reflexes: Record<string, unknown> = {};
+    for (const r of this.ports.reflexes ?? []) if (r.snapshot) reflexes[r.name] = r.snapshot();
+    const byId = <T extends readonly [string, unknown]>(a: T, b: T): number => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    return {
+      nextAction: this.nextAction,
+      active: [...this.active].sort(byId).map(([agentId, a]) => ({ agentId, info: { ...a.info }, behavior: a.behavior.snapshot() })),
+      last: [...this.last].sort(byId).map(([, i]) => ({ ...i })),
+      recovering: [...this.recovering].sort(),
+      reflexes,
+    };
+  }
+
+  /**
+   * Puts a snapshot back in place, binding each behaviour to the agent objects of `agents` (shared with sensing, topology and
+   * the host, so they are not replaced). Behaviours are built again without their start-time checks, with the context
+   * closures this runtime gives a new action. Restore the planner (and the maps) first: a goTo takes the map of its plan from it.
+   */
+  restore(s: RuntimeSnapshot, agents: readonly SimAgent[]): void {
+    const byId = new Map(agents.map((a) => [a.id, a]));
+    this.nextAction = s.nextAction;
+    this.active.clear();
+    for (const a of s.active) {
+      const agent = byId.get(a.agentId);
+      if (!agent) throw new RangeError(`snapshot has an action of unknown agent ${a.agentId}`);
+      this.active.set(a.agentId, { info: { ...a.info }, behavior: this.restoreBehavior(agent, a.behavior) });
+    }
+    this.last.clear();
+    for (const i of s.last) this.last.set(i.agentId, { ...i });
+    this.ended = [];
+    this.recovering.clear();
+    for (const id of s.recovering) this.recovering.add(id);
+    for (const r of this.ports.reflexes ?? []) if (r.restore) r.restore(s.reflexes[r.name]);
+  }
+
+  private restoreBehavior(agent: SimAgent, snap: BehaviorSnapshot): Behavior {
+    switch (snap.kind) {
+      case "hold": {
+        const b = new HoldBehavior(agent, this.dtS, snap.ticks, snap.held);
+        b.phase = snap.phase;
+        return b;
+      }
+      case "takeoff": {
+        if (agent.kind !== "uav") throw new RangeError(`snapshot has a takeoff for ${agent.id}, which is not a UAV`);
+        const b = new TakeoffBehavior(agent.state, agent.body, snap.x, snap.y, snap.altitudeM);
+        b.phase = snap.phase;
+        return b;
+      }
+      case "land": {
+        const b = this.landBehavior(agent);
+        b.phase = snap.phase;
+        return b;
+      }
+      case "goTo": {
+        const b = this.goToFor(agent, snap.tx, snap.ty, snap.cruise, snap.returning, this.markerFor(agent, snap.tx, snap.ty));
+        b.restoreFrom(snap);
+        return b;
+      }
+      case "explore": {
+        const frontiers = this.ports.frontiers;
+        if (!frontiers) throw new RangeError("snapshot has an explore action but the runtime has no frontier layer");
+        const b = this.exploreFor(frontiers, agent, snap.region, snap.strategy);
+        b.restoreFrom(snap);
+        return b;
+      }
+    }
   }
 }
 
@@ -568,11 +777,52 @@ class ExploreBehavior implements Behavior {
     private readonly region: string | undefined,
     private readonly strategy: "nearest" | "largest",
     private readonly note: (simTime: number, payload: unknown) => void,
-    private readonly navigate: (tx: number, ty: number, onMarkable: (simTime: number) => void) => GoToBehavior,
+    /** Builds the goTo towards a target; `cruiseOverride` is for a restore, which gives the inner goTo the cruise altitude it had. */
+    private readonly navigate: (tx: number, ty: number, onMarkable: (simTime: number) => void, cruiseOverride?: number) => GoToBehavior,
   ) {}
 
   stop(simTime: number): void {
     this.inner?.stop(simTime);
+  }
+
+  snapshot(): ExploreSnapshot {
+    return {
+      kind: "explore",
+      phase: this.phase,
+      region: this.region,
+      strategy: this.strategy,
+      inner: this.inner?.snapshot(),
+      target: this.target ? { ...this.target, cells: [...this.target.cells] } : undefined,
+      markable: this.markable,
+      visited: this.visited,
+      marked: this.marked,
+      distanceM: this.distanceM,
+      waitedS: this.waitedS,
+      strikes: [...this.strikes].sort((a, b) => a[0] - b[0]),
+      skipped: [...this.skipped].sort((a, b) => a - b),
+    };
+  }
+
+  /** Puts a snapshot back in place; the inner goTo is built again by `navigate`, with the marker that sets `markable`. */
+  restoreFrom(s: ExploreSnapshot): void {
+    this.phase = s.phase;
+    this.target = s.target ? { ...s.target, cells: [...s.target.cells] } : undefined;
+    this.markable = s.markable;
+    this.visited = s.visited;
+    this.marked = s.marked;
+    this.distanceM = s.distanceM;
+    this.waitedS = s.waitedS;
+    this.strikes.clear();
+    for (const [cell, n] of s.strikes) this.strikes.set(cell, n);
+    this.skipped.clear();
+    for (const cell of s.skipped) this.skipped.add(cell);
+    if (s.inner) {
+      const inner = this.navigate(s.inner.tx, s.inner.ty, () => {
+        this.markable = true;
+      }, s.inner.cruise);
+      inner.restoreFrom(s.inner);
+      this.inner = inner;
+    } else this.inner = undefined;
   }
 
   step(ctx: TickCtx): Step {
@@ -758,6 +1008,55 @@ class GoToBehavior implements Behavior {
     // A query exists while planning, and for a lazy plan while it moves too; for an eager one it is gone once its path arrived.
     if (this.queryId !== undefined) this.ports.planner.cancel(this.agent.id);
     this.flushExcursion(simTime);
+  }
+
+  snapshot(): GoToSnapshot {
+    return {
+      kind: "goTo",
+      phase: this.phase,
+      tx: this.tx,
+      ty: this.ty,
+      cruise: this.cruise,
+      returning: this.returning,
+      queryId: this.queryId,
+      follower: this.follower?.snapshot(),
+      backingOff: this.backingOff,
+      recoveries: this.recoveries,
+      hasPlanMap: this.planMap !== undefined,
+      uavPath: this.uavPath.map(([x, y]) => [x, y] as const),
+      uavIndex: this.uavIndex,
+      planVersion: this.planVersion,
+      replans: this.replans,
+      excursionPeakM: this.excursionPeakM,
+      legsPending: this.legsPending,
+      holdStartS: this.holdStartS,
+      predictedEnd: this.predictedEnd ? { ...this.predictedEnd } : undefined,
+    };
+  }
+
+  /**
+   * Puts a snapshot back in place (the action's parameters, tx, ty, cruise and returning, are the constructor's). The
+   * plan's map is the agent's live planning view, asked from the planner again (a UAV's at its cruise altitude).
+   */
+  restoreFrom(s: GoToSnapshot): void {
+    const a = this.agent;
+    this.phase = s.phase;
+    this.queryId = s.queryId;
+    if (s.follower) {
+      if (a.kind !== "ugv") throw new RangeError(`snapshot has a path follower for ${a.id}, which is not a UGV`);
+      this.follower = PathFollower.restore(s.follower, a.body as FollowerParams);
+    } else this.follower = undefined;
+    this.backingOff = s.backingOff;
+    this.recoveries = s.recoveries;
+    this.planMap = s.hasPlanMap ? this.ports.planner.currentMap(a.id, a.kind === "uav" ? this.cruise : undefined) : undefined;
+    this.uavPath = s.uavPath.map(([x, y]) => [x, y] as const);
+    this.uavIndex = s.uavIndex;
+    this.planVersion = s.planVersion;
+    this.replans = s.replans;
+    this.excursionPeakM = s.excursionPeakM;
+    this.legsPending = s.legsPending;
+    this.holdStartS = s.holdStartS;
+    this.predictedEnd = s.predictedEnd ? { ...s.predictedEnd } : undefined;
   }
 
   /**
