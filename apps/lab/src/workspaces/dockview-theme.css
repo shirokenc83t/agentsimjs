@@ -1,0 +1,30 @@
+/* Loaded with the deferred workspace chunk (issue #4), not in the initial stylesheet. */
+/* dockview (ADR-0032 §7): its colour variables mapped from tokens. Doubled class for specificity over
+   dockview's own theme classes, which load later with the deferred workspace chunk. */
+.dockview-theme-agentsim.dockview-theme-agentsim {
+  color-scheme: inherit;
+  --dv-group-view-background-color: var(--bg1);
+  --dv-tabs-and-actions-container-background-color: var(--bg2);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--bg1);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--bg2);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg1);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--bg2);
+  --dv-tab-divider-color: var(--ln);
+  --dv-activegroup-visiblepanel-tab-color: var(--fg);
+  --dv-activegroup-hiddenpanel-tab-color: var(--fg2);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--fg2);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--fg3);
+  --dv-separator-border: var(--ln);
+  --dv-paneview-header-border-color: var(--ln);
+  --dv-paneview-active-outline-color: var(--ac);
+  --dv-drag-over-background-color: var(--acbg);
+  --dv-drag-over-border-color: var(--ac);
+  --dv-edge-dock-indicator-color: var(--ac);
+  --dv-tabs-container-scrollbar-color: var(--ln2);
+  --dv-icon-hover-background-color: var(--bg3);
+  --dv-active-sash-color: var(--ac);
+  --dv-floating-box-shadow: none;
+  --dv-floating-border: 1px solid var(--ln);
+  --dv-tabs-and-actions-container-font-size: var(--type-body-size);
+  --dv-tabs-and-actions-container-height: 30px;
+}

@@ -1,0 +1,193 @@
+/* GENERATED from packages/ui/src/theme/tokens.ts and base.css by css.ts — do not edit (ADR-0032 §1).
+   Regenerate: UPDATE_THEME_CSS=1 pnpm exec vitest run --project node tools/theme */
+:root {
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --type-title-size: 15px;
+  --type-title-weight: 600;
+  --type-body-size: 13px;
+  --type-body-weight: 400;
+  --type-label-size: 11px;
+  --type-label-weight: 600;
+  --type-mono-size: 12px;
+  --type-mono-weight: 400;
+  --type-monoState-size: 11px;
+  --type-monoState-weight: 600;
+  --space-xxs: 2px;
+  --space-xs: 4px;
+  --space-s: 6px;
+  --space-m: 8px;
+  --space-l: 12px;
+  --space-xl: 16px;
+  --space-xxl: 24px;
+  --radius-control: 3px;
+  --radius-node: 8px;
+  --row-compact: 20px;
+  --row-comfortable: 25px;
+  --z-dock: 1;
+  --z-hud: 10;
+  --z-popover: 1000;
+  --z-dialog: 1100;
+  --focus-ring: 2px;
+}
+
+:root, :root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg0: #0e1115;
+  --bg1: #14181d;
+  --bg2: #1a1f26;
+  --bg3: #232a32;
+  --ln: #262d36;
+  --ln2: #636b73;
+  --fg: #d5dbe3;
+  --fg2: #9ba6b3;
+  --fg3: #87919c;
+  --ac: #5aa4ea;
+  --acfg: #0b1520;
+  --acbg: rgba(90, 164, 234, 0.14);
+  --run: #3fbccb;
+  --ok: #62bd80;
+  --warn: #e6ab3e;
+  --alm: #f0625a;
+  --almbg: rgba(240, 98, 90, 0.13);
+  --kind-slate: #8d9db0;
+  --kind-violet: #c6a0f2;
+  --kind-cyan: #4fc6d0;
+  --kind-amber: #e8b95e;
+  --kind-orange: #f39864;
+  --kind-green: #8fcbaa;
+  --kind-pink: #ff86a3;
+  --port-world: #4cc4b0;
+  --port-agent: #6ea8fe;
+  --port-mind: #b48cf2;
+  --port-planning: #f0956a;
+  --port-coordination: #e8b95e;
+  --port-run: #7ccf8a;
+  --agent-0: #4fc6d0;
+  --agent-1: #e8b95e;
+  --agent-2: #c6a0f2;
+  --agent-3: #8fcbaa;
+  --agent-4: #ff86a3;
+  --agent-5: #f39864;
+  --agent-6: #86adff;
+  --agent-7: #a9d483;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg0: #e8ebee;
+  --bg1: #f7f8fa;
+  --bg2: #eef1f4;
+  --bg3: #e1e5ea;
+  --ln: #d3d9df;
+  --ln2: #81878e;
+  --fg: #19202a;
+  --fg2: #465261;
+  --fg3: #5c6775;
+  --ac: #1b67b7;
+  --acfg: #ffffff;
+  --acbg: rgba(28, 105, 187, 0.11);
+  --run: #0a707f;
+  --ok: #297442;
+  --warn: #8b5d00;
+  --alm: #c12d26;
+  --almbg: rgba(194, 45, 38, 0.08);
+  --kind-slate: #536275;
+  --kind-violet: #7438bd;
+  --kind-cyan: #0a707f;
+  --kind-amber: #8b5d00;
+  --kind-orange: #a94816;
+  --kind-green: #2b7350;
+  --kind-pink: #b1265a;
+  --port-world: #0f7d6c;
+  --port-agent: #2160c4;
+  --port-mind: #7438bd;
+  --port-planning: #ad4a16;
+  --port-coordination: #8f5f00;
+  --port-run: #2b7a46;
+  --agent-0: #0a7685;
+  --agent-1: #8f5f00;
+  --agent-2: #7438bd;
+  --agent-3: #2b7350;
+  --agent-4: #b1265a;
+  --agent-5: #ad4a16;
+  --agent-6: #2858c4;
+  --agent-7: #3c7419;
+}
+
+/* Structural styles of the shell and panels (ADR-0032). Colours come only from token variables;
+   this file is concatenated after the token variables into the generated theme.css.
+   Lines: --ln2 only for control boundaries (inputs, selects, outlined buttons, ports, focusable node borders,
+   3:1); --ln for panel frames, dividers and other decorative lines (no contrast minimum). */
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg0); color: var(--fg); font: var(--type-body-size)/1.4 var(--font-sans); }
+button, select, input { font: inherit; color: inherit; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+/* MUI inputs set their own font: the two-class selector wins, so `mono` inputs (numbers, JSON) stay monospace. */
+.MuiInputBase-input.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--fg2); }
+:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: 1px; }
+
+.btn {
+  background: var(--bg2); border: 1px solid var(--ln2); border-radius: var(--radius-control);
+  padding: 3px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { border-color: var(--ac); }
+.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+.btn.primary { border-color: var(--ac); }
+.field { background: var(--bg0); border: 1px solid var(--ln2); border-radius: var(--radius-control); padding: 3px 8px; }
+
+.shell { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+.toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--bg1); border-bottom: 1px solid var(--ln); flex-wrap: wrap; }
+.toolbar .brand { font-weight: 600; margin-right: 8px; }
+.toolbar .spacer { flex: 1; }
+.tabs { display: inline-flex; gap: 2px; }
+.tabs .btn[aria-pressed="true"] { border-color: var(--ac); background: var(--acbg); }
+.statusline { display: flex; gap: 16px; padding: 3px 10px; background: var(--bg1); border-top: 1px solid var(--ln); font-family: var(--font-mono); font-size: var(--type-mono-size); color: var(--fg2); flex-wrap: wrap; }
+.statusline .warn { color: var(--warn); }
+.statusline .danger { color: var(--alm); }
+.workspace { min-height: 0; position: relative; }
+.workspace-fill { position: absolute; inset: 0; }
+
+/* Banners: tinted surface, a state-coloured edge and a glyph in the text (colour is never the only signal). */
+.banner { display: flex; gap: 10px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--ln); border-left: 3px solid transparent; color: var(--fg); }
+.banner.warn { background: color-mix(in srgb, var(--warn) 14%, var(--bg1)); border-left-color: var(--warn); }
+.banner.danger { background: var(--almbg); border-left-color: var(--alm); }
+.banner.info { background: var(--acbg); border-left-color: var(--ac); }
+
+.panel { height: 100%; overflow: auto; padding: 10px; }
+.panel h3 { margin: 0 0 8px; font-size: var(--type-title-size); font-weight: var(--type-title-weight); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-family: var(--font-mono); font-size: var(--type-mono-size); }
+.kv dt { color: var(--fg2); }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+table.grid { border-collapse: collapse; width: 100%; font-family: var(--font-mono); font-size: var(--type-mono-size); }
+table.grid th, table.grid td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--ln); }
+table.grid th { color: var(--fg2); font-weight: normal; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+
+.scene-host { position: absolute; inset: 0; }
+.hud {
+  position: absolute; top: 8px; right: 8px; background: color-mix(in srgb, var(--bg0) 85%, transparent); border: 1px solid var(--ln);
+  border-radius: var(--radius-control); padding: 6px 10px; font-family: var(--font-mono); font-size: 11px; min-width: 210px;
+  /* Informational: clicks go through to the scene, so ground points under it can still be picked; only its checkbox takes them. */
+  pointer-events: none;
+}
+.hud .kv { font-size: 11px; }
+.hud label { display: flex; gap: 6px; align-items: center; margin-top: 4px; pointer-events: auto; width: max-content; }
+
+.palette-backdrop { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg0) 60%, transparent); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; z-index: var(--z-popover); }
+.palette { width: min(560px, calc(100vw - 32px)); background: var(--bg1); border: 1px solid var(--ln); border-radius: var(--radius-control); overflow: hidden; }
+.palette input { width: 100%; border: 0; border-bottom: 1px solid var(--ln); background: transparent; padding: 10px 12px; outline: none; }
+.palette ul { list-style: none; margin: 0; padding: 4px; max-height: 50vh; overflow: auto; }
+.palette li { padding: 6px 10px; border-radius: var(--radius-control); cursor: pointer; display: flex; justify-content: space-between; }
+.palette li[aria-selected="true"] { background: var(--acbg); }
+.palette .group { color: var(--fg2); font-size: 11px; }
+.danger { color: var(--alm); }
+.warn { color: var(--warn); }
+.ok { color: var(--ok); }
+
+/* Workspace tabs (MUI Tabs, compact) in the toolbar. */
+.workspace-tabs { min-height: 30px; }
+.workspace-tabs .MuiTab-root { min-height: 30px; padding: 4px 12px; color: var(--fg2); }
+.workspace-tabs .MuiTab-root.Mui-selected { color: var(--fg); }

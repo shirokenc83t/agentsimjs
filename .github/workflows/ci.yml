@@ -1,0 +1,220 @@
+name: CI
+
+# Usage (2026-10-15): one run per change, and the heavy work only where it is needed. There is no path filter on the
+# triggers: a required status check that never starts would block a pull request that touches only a README.
+# - Branches are checked through their pull request only: no second run for the same commit on `push` (main excepted).
+# - Draft pull requests run the light job (lint, typecheck, unit/contract/browser tests in Chromium, determinism runs).
+# - Ready-for-review pull requests, pushes to main and manual runs also run the heavy job (build, cross-engine
+#   determinism in Chromium and Firefox, e2e, benchmarks).
+# - The visual job runs only when files the screenshots depend on changed (or on a manual run).
+# - A newer push to the same pull request cancels the run in progress.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      heavy:
+        description: "Also run the heavy job (build, cross-engine determinism, e2e, benchmarks)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Every run: the checks that catch most problems in a few minutes. It also decides what else runs, so no extra
+  # job (and no extra billed minute) is spent on that.
+  light:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      heavy: ${{ steps.mode.outputs.heavy }}
+      ui: ${{ steps.diff.outputs.ui }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+
+      # Heavy on pushes to main, on manual runs that ask for it, and on pull requests that are not drafts.
+      - name: Decide the heavy job
+        id: mode
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          ASKED: ${{ inputs.heavy }}
+        run: |
+          heavy=false
+          case "$EVENT" in
+            push) heavy=true ;;
+            workflow_dispatch) [ "$ASKED" = "true" ] && heavy=true ;;
+            pull_request) [ "$DRAFT" != "true" ] && heavy=true ;;
+          esac
+          echo "heavy=$heavy" >> "$GITHUB_OUTPUT"
+          echo "Heavy job: $heavy ($EVENT)" >> "$GITHUB_STEP_SUMMARY"
+
+      # The screenshots show the lab (apps), the shared components and theme (packages/ui) and the demo scenarios
+      # (packages/scenarios); dependencies and the test config change them too. The whole pull request is compared with
+      # its base, so a later push that touches nothing visual still re-checks a pull request that did.
+      - name: Decide the visual job
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          ui=true
+          if [ "$EVENT" != "workflow_dispatch" ] && [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ]; then
+            if git diff --name-only "$BASE...$HEAD" | grep -qE '^(apps/|packages/ui/|packages/scenarios/|package\.json$|pnpm-lock\.yaml$|playwright\.config\.ts$|\.github/workflows/ci\.yml$)'; then ui=true; else ui=false; fi
+          fi
+          echo "ui=$ui" >> "$GITHUB_OUTPUT"
+          echo "Visual job: $ui" >> "$GITHUB_STEP_SUMMARY"
+
+      # pnpm version from package.json "packageManager"
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Browser binaries are cached per lockfile (the Playwright version is in it); system packages are installed each time.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # `pnpm test` without the cross-engine project (Firefox), which runs in the heavy job.
+      - name: Unit, contract and browser tests
+        run: pnpm exec vitest run --project node --project dom --project browser
+
+      - name: Determinism runs
+        run: pnpm test:determinism
+
+  heavy:
+    needs: light
+    if: needs.light.outputs.heavy == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      # pnpm version from package.json "packageManager"
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # The export e2e runs tools/scripts/check_sqlite_export.py (stdlib sqlite3).
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-firefox-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # Firefox runs the cross-engine determinism tests (ADR-0023).
+      - name: Install Playwright Chromium and Firefox
+        run: pnpm exec playwright install --with-deps chromium firefox
+
+      - name: Build
+        id: build
+        run: pnpm build
+
+      - name: Cross-engine determinism (Chromium and Firefox)
+        run: pnpm exec vitest run --project xengine
+
+      - name: End-to-end tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm test:e2e
+        env:
+          PYTHON: python3
+
+      # Runs even if e2e failed, but never after a failed build.
+      - name: Benchmarks
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: pnpm bench
+
+      - name: Upload benchmark results and bundle report
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bench-results
+          path: bench/results/
+          if-no-files-found: ignore
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  # Visual regression (ADR-0032 §9): the committed baselines, on the same pinned image that generates them
+  # (update-visual-baselines.yml). Read-only; diff images are uploaded only when the job fails.
+  visual:
+    needs: light
+    if: needs.light.outputs.ui == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    container:
+      # Pinned by digest; the comment names its tag, which must match @playwright/test (tools/test/visual-image.test.ts).
+      image: mcr.microsoft.com/playwright@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27 # v1.63.0-noble
+      options: --user 1001
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      # pnpm version from package.json "packageManager"
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Visual regression
+        run: pnpm test:visual
+        env:
+          AGENTSIM_VISUAL_IMAGE: "1"
+
+      - name: Upload diffs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: visual-diffs
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

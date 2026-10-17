@@ -1,0 +1,8 @@
+#!/bin/sh
+# Keeps every commit green: lint (cached) and typecheck (incremental).
+# Lint and typecheck check the working tree, not only the staged files. Never bypass (--no-verify) unless
+# the human asks.
+set -e
+echo "pre-commit: pnpm lint, pnpm typecheck"
+pnpm lint
+pnpm typecheck

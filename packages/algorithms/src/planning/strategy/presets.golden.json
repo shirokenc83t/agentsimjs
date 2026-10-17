@@ -1,0 +1,93 @@
+{
+  "presets": [
+    {
+      "schemaVersion": 0,
+      "id": "anytime-weighted",
+      "version": 1,
+      "description": "Weighted A* passes with weights 3, 2, 1.5, 1: a first path early, improved while the budget lasts.",
+      "origin": "human",
+      "root": {
+        "kind": "anytime",
+        "weights": [
+          3,
+          2,
+          1.5,
+          1
+        ]
+      }
+    },
+    {
+      "schemaVersion": 0,
+      "id": "astar-only",
+      "version": 1,
+      "description": "A* alone: the same planner as `algorithm: astar`.",
+      "origin": "human",
+      "root": {
+        "kind": "algorithm",
+        "algorithm": "astar"
+      }
+    },
+    {
+      "schemaVersion": 0,
+      "id": "astar-then-hpa",
+      "version": 1,
+      "description": "A* with a small search budget; if it runs out or finds nothing, HPA* takes over.",
+      "origin": "human",
+      "root": {
+        "kind": "fallback",
+        "stages": [
+          {
+            "kind": "algorithm",
+            "algorithm": "astar",
+            "stageBudget": 5000
+          },
+          {
+            "kind": "algorithm",
+            "algorithm": "hpa"
+          }
+        ]
+      }
+    },
+    {
+      "schemaVersion": 0,
+      "id": "hpa-only",
+      "version": 1,
+      "description": "HPA* alone: the same planner as `algorithm: hpa`.",
+      "origin": "human",
+      "root": {
+        "kind": "algorithm",
+        "algorithm": "hpa"
+      }
+    },
+    {
+      "schemaVersion": 0,
+      "id": "short-astar-long-hpa",
+      "version": 1,
+      "description": "A* for trips up to 200 m (straight line), HPA* beyond.",
+      "origin": "human",
+      "root": {
+        "kind": "select",
+        "branches": [
+          {
+            "when": "dist.m <= 200",
+            "then": {
+              "kind": "algorithm",
+              "algorithm": "astar"
+            }
+          }
+        ],
+        "else": {
+          "kind": "algorithm",
+          "algorithm": "hpa"
+        }
+      }
+    }
+  ],
+  "hashes": {
+    "anytime-weighted@1": "7c65461f",
+    "astar-only@1": "5b3ddca4",
+    "astar-then-hpa@1": "843d557b",
+    "hpa-only@1": "cb533c29",
+    "short-astar-long-hpa@1": "3afdac99"
+  }
+}

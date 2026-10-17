@@ -1,0 +1,24 @@
+node_modules/
+dist/
+coverage/
+.vite/
+playwright-report/
+test-results/
+*.sqlite
+*.sqlite-journal
+traces/
+.env
+.env.*
+!.env.example
+# Linked in from the private docs repository (tools/link-workspace.ps1 there); never committed.
+.claude/
+.mcp.json
+CLAUDE.local.md
+__pycache__/
+.venv/
+.DS_Store
+.vitest/
+bench/results/
+bench/local/
+*.tsbuildinfo
+.playwright-mcp/

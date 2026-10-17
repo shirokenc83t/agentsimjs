@@ -1,0 +1,13 @@
+#!/bin/sh
+# Rejects any push that updates (or deletes) refs/heads/main: main is updated only via pull requests.
+# GitHub rulesets are not enforced on this private repo (free plan), so this is the local guard.
+# Enable once per clone: git config core.hooksPath .githooks
+remote="$1"
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    echo "pre-push: refusing to push to main on '$remote' — main is updated only via pull requests." >&2
+    status=1
+  fi
+done
+exit $status

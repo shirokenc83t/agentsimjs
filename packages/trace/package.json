@@ -1,0 +1,17 @@
+{
+  "name": "@agentsim/trace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agentsim/core": "workspace:*",
+    "typebox": "1.3.34"
+  },
+  "sideEffects": false
+}

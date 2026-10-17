@@ -1,0 +1,307 @@
+{
+  "$comment": "ADR-0013/0021 budgets, measured per ADR-0022 (software GL in CI) and ADR-0030 (CPU budgets on shared runners: ciStat/ciMax apply when CI is set). stat is mean, median or p95; report-only metrics have no threshold.",
+  "metrics": {
+    "storage.append10k": {
+      "stat": "p95",
+      "max": 250,
+      "ciStat": "median",
+      "ciMax": 500,
+      "$comment": "ADR-0021 budget; on shared CI runners gated on the median at 2x (ADR-0030)"
+    },
+    "render.frameWork": {
+      "stat": "p95",
+      "max": 4
+    },
+    "sim.stateLatency": {
+      "report": true,
+      "$comment": "with rendering; not gated on software GL (ADR-0022)"
+    },
+    "render.frameInterval": {
+      "report": true
+    },
+    "render.frameWork.reference": {
+      "stat": "p95",
+      "max": 4,
+      "ciStat": "median",
+      "ciMax": 8,
+      "$comment": "F1 acceptance (frame time while agents move and a path is planned): 1 km² reference world, scout flying, rover planning cross-map over the whole window; initial atlas upload excluded (render.frameWork.referenceUpload). Budget 4 ms (ADR-0013) on p95 locally; CI gates the median at 2x (ADR-0030). Measured at gating: local p95 0.3 ms (Ryzen 7 9800X3D, SwiftShader); CI run 37836508879 (ca1dca3, report-only) median 0.40 ms, p95 0.70 ms; first gated CI run 37844516454 (1a26fb6) median 0.40 ms, p95 0.80 ms (AMD EPYC 7763, 2 threads, SwiftShader); hardware GPU (RTX 3080, bench:gpu 2026-10-08) p95 0.30 ms."
+    },
+    "render.frameWork.referenceUpload": {
+      "report": true,
+      "$comment": "F1 f3: frame work while the 1,024 atlas chunks upload (≤ 16 per frame, ADR-0027); outside the gated window"
+    },
+    "render.frameWork.referenceOverlays": {
+      "stat": "p95",
+      "max": 4,
+      "ciStat": "median",
+      "ciMax": 8,
+      "$comment": "F2 M2e5 (proposed for approval): frame time on the 1 km² reference world with the belief overlay on in its heaviest form (researcher-only difference mode: two textures) over the airborne scout's growing map while the scout and the rover move; the belief upload is outside the window (render.frameWork.beliefUpload). Same method as render.frameWork.reference: 4 ms (ADR-0013) on p95 locally, CI gates the median at 2x (ADR-0030). With the scout's lidar rays and its regions and frontier groups drawn as well (M2e6), measured locally (3 runs, SwiftShader): p95 0.3 ms, median 0.2 ms, mean 0.16-0.18 ms (belief and difference only, M2e5: p95 0.3-0.4 ms); first CI run with the gate (run 38162797928, AMD EPYC, 2 threads, SwiftShader): median 0.50 ms, p95 1.10 ms, mean 0.62 ms against the 8 ms median gate."
+    },
+    "render.frameWork.beliefUpload": {
+      "report": true,
+      "$comment": "F2 M2e5: frame work while a whole known 1 km² belief map uploads (1,024 chunks within the shared <= 16 per frame, ADR-0027); measured p95 0.6 ms, mean 0.37-0.39 ms"
+    },
+    "render.beliefUploadFrames": {
+      "report": true
+    },
+    "render.beliefShowMs": {
+      "report": true,
+      "$comment": "F2 M2e5: wall time from switching the belief overlay on to the whole known 1 km² map drawn (worker, transfer and 63 upload frames); measured 1.92-1.95 s locally (software GL)"
+    },
+    "render.referenceUploadFrames": {
+      "report": true
+    },
+    "render.referenceUploadMs": {
+      "report": true
+    },
+    "load.interactive": {
+      "report": true
+    },
+    "load.workspaceVisible": {
+      "report": true,
+      "$comment": "first workspace visible; dockview is loaded after first paint (issue #4)"
+    },
+    "bundle.fonts.gzip": {
+      "report": true,
+      "$comment": "all self-hosted font files (ADR-0032 §4); only the preloaded face counts in bundle.initial.gzip"
+    },
+    "bundle.lazy.workspace.gzip": {
+      "report": true,
+      "$comment": "deferred dockview workspace host (issue #4)"
+    },
+    "bundle.lazy.scene.gzip": {
+      "report": true,
+      "$comment": "Scene workspace panel (three.js), lazy-loaded"
+    },
+    "bundle.lazy.storage.gzip": {
+      "report": true
+    },
+    "bundle.lazy.settings.gzip": {
+      "report": true
+    },
+    "bundle.lazy.editor.gzip": {
+      "report": true,
+      "$comment": "scenario editor panel chunk (F1 e7); three.js is counted under bundle.lazy.scene (vendor-three, shared)"
+    },
+    "bundle.lazy.runConfig.gzip": {
+      "report": true,
+      "$comment": "run configuration panel chunk (F1 e6)"
+    },
+    "bundle.lazy.runController.gzip": {
+      "report": true,
+      "$comment": "run starting and presets on the main thread (F1 f1); the presets themselves are built in the sim worker"
+    },
+    "bundle.lazy.inspector.gzip": {
+      "report": true,
+      "$comment": "Inspector panel, agent views and the stream hook (F2 M2e): what the mind receives, researcher view, commands"
+    },
+    "bundle.lazy.explorer.gzip": {
+      "report": true,
+      "$comment": "Explorer panel (virtualized agent list)"
+    },
+    "bundle.lazy.commands.gzip": {
+      "report": true,
+      "$comment": "the palette's researcher commands and demo presets, loaded when the palette first opens (F2 M2e1)"
+    },
+    "bundle.lazy.runInfo.gzip": {
+      "report": true,
+      "$comment": "run header popover, loaded on first open"
+    },
+    "bundle.lazy.sharedMui.gzip": {
+      "report": true,
+      "$comment": "MUI controls shared by the lazy panels (TextField, ToggleButtonGroup, Popover, FormControlLabel)"
+    },
+    "bundle.lazy.sharedContracts.gzip": {
+      "report": true,
+      "$comment": "contract validation and scenario code shared by the lazy panels (editor, run configuration)"
+    },
+    "bundle.worker.sim.gzip": {
+      "report": true,
+      "$comment": "sim worker bundle (core, spatial, algorithms, scenarios); not part of first paint"
+    },
+    "bundle.worker.storage.gzip": {
+      "report": true,
+      "$comment": "storage worker bundle (SQLite WASM glue); not part of first paint"
+    },
+    "bundle.initial.gzip": {
+      "stat": "p95",
+      "max": 179230,
+      "$comment": "ADR-0032 §3 gate, set at F1 close: 175716 B measured + 2%. F2 close measured 176924 B (172.8 KB), within it; the re-baseline to 180462 B proposed at F2 phase close was not approved and is reverted (2026-10-12). Contract schemas are guarded out of the initial chunk by the bundle report (ADR-0018 addition of 2026-10-12)."
+    },
+    "bundle.initial.raw": {
+      "report": true
+    },
+    "sim.stateLatency.noRender": {
+      "stat": "p95",
+      "max": 5,
+      "$comment": "ADR-0021 budget, gated per ADR-0022"
+    },
+    "spatial.pyramidBuild": {
+      "report": true,
+      "$comment": "1 km² at 0.5 m reference world (F1 milestone b); thresholds once planning budgets land"
+    },
+    "spatial.pyramidDirtyRebuild": {
+      "report": true
+    },
+    "spatial.gridHashFull": {
+      "report": true
+    },
+    "spatial.memoryMaterialized": {
+      "report": true
+    },
+    "scenario.layersRleBytes": {
+      "report": true,
+      "$comment": "ADR-0025: encoded layer size of the reference world"
+    },
+    "scenario.layersRawBytes": {
+      "report": true
+    },
+    "scenario.referenceDocumentBytes": {
+      "report": true,
+      "$comment": "ADR-0025: full reference scenario document (pretty JSON, as exported)"
+    },
+    "scenario.referenceDocumentCompactBytes": {
+      "report": true
+    },
+    "scenario.referenceParse": {
+      "report": true
+    },
+    "scenario.referenceLoad": {
+      "report": true
+    },
+    "planning.hpaCrossMapQuery": {
+      "stat": "p95",
+      "max": 50,
+      "ciStat": "median",
+      "ciMax": 100,
+      "$comment": "ADR-0024 / F1 plan: cross-map HPA* query, graph built. ADR-0030: real budget locally on p95; CI gates the median at 2x"
+    },
+    "planning.hpaCrossMapExpansions": {
+      "stat": "p95",
+      "max": 50000,
+      "$comment": "hardware-independent count: same gate locally and in CI (ADR-0030)"
+    },
+    "planning.slice20k": {
+      "stat": "p95",
+      "max": 8,
+      "ciStat": "median",
+      "ciMax": 16,
+      "$comment": "one 20k-expansion A* step per agent (F1 plan). ADR-0030: real budget locally on p95; CI gates the median at 2x"
+    },
+    "planning.hpaGraphBuild": {
+      "report": true,
+      "$comment": "target ≤ 2 s (F1 plan), reported"
+    },
+    "planning.hpaLocalRebuild": {
+      "report": true
+    },
+    "sim.sensing20x180": {
+      "stat": "p95",
+      "max": 9,
+      "ciStat": "median",
+      "ciMax": 18,
+      "$comment": "F2 M2a: sensing phase per tick, 20 UGVs with the built-in sensors (180-ray lidar 30 m at 10 Hz) on the 1 km² reference world. Measured after the optimization pass (Ryzen 7 9800X3D): median 6.0 ms, p95 7.0 ms. ADR-0030: local p95 with ~30 % margin, CI median at 2x"
+    },
+    "sim.tick20AgentsSensing": {
+      "stat": "p95",
+      "max": 25,
+      "ciStat": "median",
+      "ciMax": 50,
+      "$comment": "F2 acceptance tick budget (2026-10-09): a whole tick for 20 agents with the built-in sensors at 10 Hz, no planning query in flight (planning stays bounded per agent by planning.slice20k), <= 25 ms p95 locally (a quarter of the 100 ms period). Measured: median 6.2 ms, p95 8.2 ms"
+    },
+    "sim.tick20AgentsExploring": {
+      "stat": "p95",
+      "max": 25,
+      "ciStat": "median",
+      "ciMax": 50,
+      "$comment": "F2 tick budget for exploring agents (2026-10-10): the same whole tick for 20 agents that reveal new cells every tick (moved 1 m between ticks), planning views prepared: sensing, view sync, topology, runtime, state hash; no planning query in flight. <= 25 ms p95 locally. Measured after the per-cell view sync pass: median 14.1 ms, p95 17.6 ms"
+    },
+    "observer.beliefVsTruth20Exploring": {
+      "stat": "p95",
+      "max": 0.5,
+      "ciStat": "median",
+      "ciMax": 1,
+      "$comment": "ADR-0035 target for metrics, ADR-0005 addition (M2d4; 2026-10-11): the observer's own work per tick (sampling plus recount, timed directly, zero on ticks when no agent is due) for 20 exploring agents; <= 0.5 ms p95 locally, CI median at 2x. Measured: mean 0.017 ms, p95 0.020 ms, max 1.7 ms (first samples, 77 of 380 ticks do any work)."
+    },
+    "sim.tick20AgentsExploringObserved": {
+      "report": true
+    },
+    "sim.tick20AgentsExploringPlain320": {
+      "report": true
+    },
+    "observer.beliefVsTruthBuild20Agents": {
+      "report": true
+    },
+    "planning.viewSync20Exploring": {
+      "report": true,
+      "$comment": "Live planning views (ADR-0024 addition of 2026-10-10): the after-sensing sync point for 20 exploring agents. 14.2 ms p95 with chunk rebuilds; 1.3 ms p95 with per-cell refresh from the belief map's change log"
+    },
+    "topology.update20Agents": {
+      "report": true,
+      "$comment": "ADR-0039 section 4: per-tick topology maintenance for 20 agents moving 1 m per tick; report first, then a gate"
+    },
+    "topology.firstUpdate20Agents": {
+      "report": true,
+      "$comment": "The first topology build for 20 agents (at assembly, load time)"
+    },
+    "sim.requestBuild20Agents": {
+      "report": true,
+      "$comment": "ADR-0005 addition of 2026-10-11: building the beliefs, space and menu of a request for 20 agents on explored 1 km2 maps, views warm (per-region waypoint memo; the first request after a region changes also rescans that region, about 1 ms). 57.8 ms before the memo"
+    },
+    "trace.requestBytesPerAgentHour": {
+      "report": true,
+      "$comment": "ADR-0005 addition of 2026-10-11 (M2d): bytes of request records (op request and op space, payload JSON) per agent per hour of sim time, 20 UGVs exploring the 1 km2 reference world; space summaries deduplicated by 64-bit hash, allowed actions as names plus the manifest hash"
+    },
+    "trace.requestBytesPerAgentHour.inlined": {
+      "report": true,
+      "$comment": "The same requests with every space summary and every parameter schema inlined: what the deduplication saves"
+    },
+    "trace.requestsPerAgentHour": {
+      "report": true,
+      "$comment": "Decision requests per agent per hour of sim time in the same run (perception events at minDecisionIntervalS 1 s, and control events)"
+    },
+    "sim.beliefHash20Explored": {
+      "report": true,
+      "$comment": "Belief maps in the per-tick state hash (cached per chunk): 20 fully explored 1 km2 maps, 9 chunks changed per agent per tick"
+    },
+    "load.planningPrepare": {
+      "report": true,
+      "$comment": "F2 M1a: planning view + HPA* graph built before tick 0 on the 1 km² reference world (one UGV, ADR-0024 'at scenario load'); load time, never tick time"
+    },
+    "planning.maskBuild": {
+      "report": true
+    },
+    "planning.maskBuildConstraintHeavy": {
+      "report": true
+    },
+    "planning.slice20kConstraintHeavy": {
+      "report": true
+    },
+    "planning.perTick20Agents": {
+      "report": true
+    },
+    "planning.serviceTick20Plain": {
+      "report": true,
+      "$comment": "F2b M2 (ADR-0037): one PlanningService tick of 20 agents, each stepping one 20k-expansion slice of a cross-map A* query on the 1 km² world (plain algorithm). The A/B reference for the strategy rows below. Local median about 88 ms (the same work as planning.perTick20Agents, through the service)"
+    },
+    "planning.serviceTick20OneNodeStrategy": {
+      "report": true,
+      "$comment": "F2b M2: the same tick with the same A* as a one-node strategy: the stage runner's overhead. Measured against the plain row, interleaved over several runs: no difference beyond noise (87.8 vs 88.9 ms mean median)"
+    },
+    "planning.strategySlice20AstarThenHpa": {
+      "report": true,
+      "$comment": "F2b M2: the shipped astar-then-hpa strategy, 20 agents, one tick: A* is cut at its 5,000-expansion stage budget (about 1 ms per agent) and HPA* then plans the whole query inside the same 20k slice (about 12k expansions); local median about 177 ms for the 20 agents"
+    },
+    "planning.strategySlice20ShortLong": {
+      "report": true,
+      "$comment": "F2b M2: the shipped short-astar-long-hpa strategy, 20 agents, one tick: cross-map queries take the HPA* branch (local median about 158 ms for 20 queries, 7.9 ms each)"
+    },
+    "sim.tickNoPlanning": {
+      "stat": "p95",
+      "max": 1,
+      "ciStat": "median",
+      "ciMax": 2,
+      "$comment": "F1 acceptance (tick budget split): world tick with one agent moving, planning phase idle. ADR-0030: real budget locally on p95; CI gates the median at 2x"
+    }
+  }
+}

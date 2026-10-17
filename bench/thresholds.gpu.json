@@ -1,0 +1,10 @@
+{
+  "$comment": "Overlay for `pnpm bench:gpu` (ADR-0022): merged onto thresholds.json; entries here win.",
+  "metrics": {
+    "sim.stateLatency": {
+      "stat": "p95",
+      "max": 16.7,
+      "$comment": "one frame at 60 Hz, hardware GPU, rendering on"
+    }
+  }
+}
