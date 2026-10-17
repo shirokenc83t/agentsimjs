@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { checkRestore, recipeFacts, type MomentFacts, type RestoreApi, type RestoreRecipe } from "./restore-check.ts";
 import { LONG_RECIPES, SHORT_RECIPES } from "./restore-recipes.ts";
 
-// F3a M1, T-003: the restore harness is tested before it is used on a real restore (T-006). Its comparisons are tried
+// F3a M1: the restore harness is tested before it is used on a real restore. Its comparisons are tried
 // on a "restore" by replay (re-run the first N ticks: right by construction) and on restores that are wrong in ways
 // the state hash alone does not show. The recipes' snapshot ticks are tied to what each is meant to cover.
 
@@ -32,7 +32,7 @@ function replayApi(opts: { extraTicks?: number; nonce?: boolean; after?: (target
   };
 }
 
-describe("restore harness (F3a M1, T-003)", () => {
+describe("restore harness (F3a M1)", () => {
   const plain = onReplay(byName("plain-f1-demo"), 120, [1, 40]);
 
   it("accepts a restore that is right", async () => {
@@ -72,7 +72,7 @@ describe("restore harness (F3a M1, T-003)", () => {
   }, 60_000);
 });
 
-describe("restore recipes cover what they claim (F3a M1, T-003)", () => {
+describe("restore recipes cover what they claim (F3a M1)", () => {
   const facts = new Map<string, readonly MomentFacts[]>();
   async function at(name: string): Promise<(tick: number) => MomentFacts> {
     if (!facts.has(name)) facts.set(name, await recipeFacts(byName(name)));
@@ -100,21 +100,40 @@ describe("restore recipes cover what they claim (F3a M1, T-003)", () => {
   it("explore: unreachable marks and a belief change the planner has not seen, a query in flight, a back-off", async () => {
     const f = await at("explore-unknown-map");
     expect(f(140).marks).toBeGreaterThan(0);
-    expect(f(140).queries.some((q) => q.unseenChange)).toBe(true);
-    expect(f(360).actions.some((a) => a.name === "explore" && a.phase === "planning")).toBe(true);
-    expect(f(580).goTo.some((g) => g.backingOff)).toBe(true);
+    expect(f(140).queries.some((q) => q.pending && q.overlap), "a change through what the search read").toBe(true);
+    expect(f(179).queries.some((q) => q.pending && !q.overlap), "a change away from what it read").toBe(true);
+    expect(f(355).actions.some((a) => a.name === "explore" && a.phase === "planning")).toBe(true);
+    expect(f(590).goTo.some((g) => g.backingOff)).toBe(true);
   }, 120_000);
 
   it("strategy: mid stage 1, then mid stage 2", async () => {
     const f = await at("strategy-mid-stage");
-    for (const t of [2, 26]) expect(f(t).queries.some((q) => q.strategy && q.stagesDone === 0 && q.inStage), `tick ${t}`).toBe(true);
+    expect(f(2).queries.some((q) => q.strategy && q.stagesDone === 0 && q.inStage)).toBe(true);
     expect(f(5).queries.some((q) => q.strategy && q.stagesDone >= 1 && q.inStage)).toBe(true);
+    // Stage 2 with the HPA* graph moved (restored as a last-seen version no graph has), and a pending change of each kind.
+    expect(f(3).queries.some((q) => q.strategy && q.stagesDone >= 1 && q.inStage && q.graphMoved)).toBe(true);
+    expect(f(26).queries.some((q) => q.strategy && q.pending && q.overlap), "a change through what its searches read").toBe(true);
+    expect(f(33).queries.some((q) => q.strategy && q.pending && !q.overlap), "a change away from what they read").toBe(true);
   }, 120_000);
 
   it("lazy goTo: legs still being planned while the vehicle moves, at every snapshot tick", async () => {
     const f = await at("lazy-goto-mid-leg");
     for (const t of byName("lazy-goto-mid-leg").snapshotTicks) expect(f(t).goTo.some((g) => g.legsPending), `tick ${t}`).toBe(true);
   }, 120_000);
+
+  it("a UAV at cruise altitudes other than the body's: climbing to 30 m, a goTo at 25 m, an explore started at 25 m", async () => {
+    const f = await at("uav-altitudes");
+    const scout = (tick: number) => f(tick).actions.find((a) => a.agentId.startsWith("uav"));
+    expect(scout(100)).toMatchObject({ name: "takeoff", status: "running" });
+    expect(scout(190)).toMatchObject({ name: "goTo", status: "running" });
+    expect(scout(300)).toMatchObject({ name: "explore", status: "running" });
+    const run = byName("uav-altitudes").create("genesis");
+    expect((run.agents.find((a) => a.kind === "uav")?.body as { cruiseAltitudeM: number }).cruiseAltitudeM).toBe(20); // none of 30 and 25 is the default
+  }, 120_000);
+
+  it("the observer is on in whole-run recipes (explore, altitudes), so its schedule is part of what a restore must reproduce", () => {
+    for (const name of ["explore-unknown-map", "uav-altitudes"]) expect(byName(name).create("genesis").observer, name).toBeDefined();
+  });
 
   it("belief-map prior: the rover's map holds the survey from tick 1", async () => {
     const f = await at("belief-map-prior-1km");
@@ -135,7 +154,7 @@ describe("restore recipes cover what they claim (F3a M1, T-003)", () => {
         expect(Math.max(...r.snapshotTicks)).toBeLessThan(r.endTick);
       }
     }
-    expect(SHORT_RECIPES.map((r) => r.name)).toHaveLength(7);
+    expect(SHORT_RECIPES.map((r) => r.name)).toHaveLength(8);
     expect(LONG_RECIPES.every((r) => r.endTick >= 1000)).toBe(true);
     expect(LONG_RECIPES.some((r) => r.name === "twenty-agents")).toBe(true);
   });

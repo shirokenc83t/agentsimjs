@@ -54,7 +54,7 @@ export class PlanningServiceAdapter implements PlannerPort {
   }
 
   /**
-   * The adapter's state between ticks (F3a M1, T-005; ADR-0035 addition of 2026-10-17, item 8): the planning service's
+   * The adapter's state between ticks (F3a M1; ADR-0035 addition of 2026-10-17, item 8): the planning service's
    * snapshot, and the planning configurations a `setConfig` changed since assembly. Taken between ticks: completed
    * outcomes, restart events and lazy legs are all handed to the runtime within the tick, so none may be waiting (a
    * snapshot that found some would lose them).

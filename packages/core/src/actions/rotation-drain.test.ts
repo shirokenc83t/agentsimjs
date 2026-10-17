@@ -3,7 +3,7 @@ import type { SimAgent } from "./agent.ts";
 import { ActionRuntime } from "./runtime.ts";
 import { CollectingTrace, fakeCapabilities, FakePlanner, FakeSpatial, makeUgv } from "./testing/fakes.ts";
 
-// F3a M1, T-004 FINDING, pinned (not fixed): `UgvState.lastRotationRad` is set by `stepDrive` when a differential drive
+// F3a M1 FINDING, pinned (not fixed): `UgvState.lastRotationRad` is set by `stepDrive` when a differential drive
 // rotates in place, and reset only by the next `stepDrive` call. When the vehicle stops driving (the action ends, or is
 // replaced by a hold) nothing resets it, so the value of the last rotation tick is read again every tick: the battery
 // keeps draining `movingWhPerM × footprintRadiusM × lastRotationRad` of energy per tick for as long as the agent stands
@@ -35,7 +35,7 @@ function rotateThenHold() {
   return { rt, a, planner, t: t + 1 };
 }
 
-describe("lastRotationRad after the vehicle stops driving (T-004 finding, pinned)", () => {
+describe("lastRotationRad after the vehicle stops driving (finding, pinned)", () => {
   it("is never reset, and the battery keeps draining its rotation energy every tick of a hold", () => {
     const { rt, a, planner, t } = rotateThenHold();
     if (a.kind !== "ugv") throw new Error("ugv");

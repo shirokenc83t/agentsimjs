@@ -73,7 +73,7 @@ export class TraceBuffer {
   }
 
   /**
-   * Where the buffer's sequence and its sim-time order stand: what a snapshot carries (F3a M1, T-005; ADR-0035 addition of
+   * Where the buffer's sequence and its sim-time order stand: what a snapshot carries (F3a M1; ADR-0035 addition of
    * 2026-10-17, item 8). The records themselves are output, persisted by the recorder (F3a M2), not run state.
    */
   cursor(): TraceCursor {

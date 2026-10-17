@@ -9,7 +9,7 @@ import { ScriptBrain, type DecisionEnvelope, type DecisionRequest, type ScriptSt
 import { Inbox, type DecisionEvent, type InboxSnapshot } from "./events.ts";
 import { World, type WorldSnapshot } from "./world.ts";
 
-// F3a M1, T-004: the world's snapshot and restore (ADR-0035 addition of 2026-10-17, item 8): inboxes with their order,
+// F3a M1: the world's snapshot and restore (ADR-0035 addition of 2026-10-17, item 8): inboxes with their order,
 // request timing, timers, the requests outstanding and their answers, the space summaries already traced, run inputs.
 
 const DT = 0.1;
@@ -141,7 +141,7 @@ async function restoreTwin(a: Rig, n: number): Promise<{ b: Rig; world: WorldSna
   return { b, world, runtime };
 }
 
-describe("World snapshot and restore (F3a M1, T-004)", () => {
+describe("World snapshot and restore (F3a M1)", () => {
   it("genesis false builds a world with no start events, no first requests and no trace records", () => {
     const a = build();
     expect(a.world.outstandingCount).toBe(1);

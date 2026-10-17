@@ -115,7 +115,7 @@ interface Active {
   readonly behavior: Behavior;
 }
 
-// ---- Snapshots (F3a M1, T-004; ADR-0035 addition of 2026-10-17, item 8) ---------------------------------------------------
+// ---- Snapshots (F3a M1; ADR-0035 addition of 2026-10-17, item 8) ---------------------------------------------------
 // What a running action keeps between ticks, as plain data for the snapshot codec. Closures over the runtime's context
 // (`note`, `guard`, the unreachable marker, the navigation of explore) are not captured: restore builds them again from the
 // ports, as starting the action does. Start-time checks are not repeated on restore: they judged the state at the start.
@@ -668,7 +668,7 @@ export class ActionRuntime {
     return new ExploreBehavior(frontiers, agent, region, strategy, cruise, note, (tx, ty, onMarkable, cruiseOverride) => this.goToFor(agent, tx, ty, cruiseOverride ?? cruise, false, onMarkable));
   }
 
-  // ---- snapshot and restore (F3a M1, T-004; ADR-0035 addition of 2026-10-17, item 8) ----------------------------------
+  // ---- snapshot and restore (F3a M1; ADR-0035 addition of 2026-10-17, item 8) ----------------------------------
 
   /**
    * The runtime's state between ticks as plain data: the action counter, each agent's running behaviour and latest action,

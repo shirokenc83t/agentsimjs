@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CLOSURE_STATE } from "../../packages/scenarios/src/assemble/snapshot-inventory.ts";
 
-// F3a M1, T-002: state kept in closures cannot be found by walking objects, so the inventory lists it by a token of its
+// F3a M1: state kept in closures cannot be found by walking objects, so the inventory lists it by a token of its
 // source (packages/scenarios/src/assemble/snapshot-inventory.ts, CLOSURE_STATE). A closure that was removed or renamed
 // must be looked at: either its state became explicit (update the inventory) or it moved. Runs from the repository root.
 describe("snapshot inventory: closure state", () => {

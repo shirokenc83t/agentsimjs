@@ -1,4 +1,4 @@
-// Snapshot codec (F3a M1, T-002; ADR-0035 addition of 2026-10-17, item 8; format proposal for an ADR-0004 dated addition).
+// Snapshot codec (F3a M1; ADR-0035 addition of 2026-10-17, item 8; format proposal for an ADR-0004 dated addition).
 //
 // A snapshot must give back exactly the state it was taken from, and the same state must always give the same bytes
 // (no wall time, no engine-dependent output): JSON loses -0, NaN and ±Infinity, and orders object keys by insertion.

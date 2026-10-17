@@ -185,7 +185,7 @@ export class BeliefVsTruth {
   }
 
   /**
-   * The observer's state between ticks as plain data (F3a M1, T-005; ADR-0035 addition of 2026-10-17, item 8): when each
+   * The observer's state between ticks as plain data (F3a M1; ADR-0035 addition of 2026-10-17, item 8): when each
    * agent's next sample is due, which decides when its trace records appear, and the component each agent is counted in.
    * The tallies are derived from the belief maps and the truth, and are not captured.
    */

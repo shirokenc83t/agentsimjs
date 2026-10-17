@@ -309,7 +309,7 @@ export class TopologyService implements FrontierPort {
   }
 
   /**
-   * The topology state as plain data (F3a M1, T-005; ADR-0035 addition of 2026-10-17, item 8), agents in ID order: whether
+   * The topology state as plain data (F3a M1; ADR-0035 addition of 2026-10-17, item 8), agents in ID order: whether
    * the agent had an unmarked frontier at the last look, and the cells it marked unreachable (ascending) with the marks'
    * change stamp. The layers themselves are derived and are not captured; neither are the caches. Taken between ticks: the
    * world has taken the agents that ran out of frontiers, and the marks have been checked against the planning view.

@@ -20,7 +20,7 @@ export interface AssembleOptions {
   readonly reflexes?: readonly Reflex[];
   /**
    * Genesis (default true): the `config` records of every agent at sim time 0, and (`createRun`) the `start` events and first
-   * decision requests. `false` assembles the target of a restore (F3a M1, T-006): none of it is written, and `restoreRun`
+   * decision requests. `false` assembles the target of a restore (F3a M1): none of it is written, and `restoreRun`
    * puts the snapshot's state in place.
    */
   readonly genesis?: boolean;

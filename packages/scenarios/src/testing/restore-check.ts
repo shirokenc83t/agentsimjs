@@ -3,14 +3,14 @@ import type { TraceRecord } from "@agentsim/trace";
 import type { RunMode } from "./preset-run.ts";
 import type { ReferenceRun } from "./reference-run.ts";
 
-// Restore acceptance harness (F3a M1, T-003; ADR-0035 addition of 2026-10-17, item 8). It compares an uninterrupted run
+// Restore acceptance harness (F3a M1; ADR-0035 addition of 2026-10-17, item 8). It compares an uninterrupted run
 // with a run that was snapshotted at tick N, restored into a freshly assembled run that skips genesis, and continued.
 // `stateHash` alone is not the criterion (it does not cover planner queries, RNG states or behaviour internals), so
 // the harness compares what a continuation shows: the hash at every tick, the pending decision requests, the trace
 // records (timer events included), and the snapshot bytes themselves. It returns a list of mismatches rather than
 // asserting, so the harness can be tested with a restore that is right and one that is wrong.
 
-/** What a restore needs from the run composition (T-006: `snapshotRun` and `restoreRun` in scenarios/assemble). */
+/** What a restore needs from the run composition (`snapshotRun` and `restoreRun` in scenarios/assemble). */
 export interface RestoreApi {
   /** The snapshot of a run between ticks, as container bytes (packages/core/src/snapshot). */
   snapshot(run: ReferenceRun): Uint8Array;
@@ -28,6 +28,12 @@ export interface RestoreRecipe {
   readonly endTick: number;
   /** The ticks to snapshot at: early, mid-action, mid-query. */
   readonly snapshotTicks: readonly number[];
+  /**
+   * Called after each tick of every run of the recipe (the uninterrupted one, the source and the restored ones, which only run
+   * the ticks after their snapshot), with the tick just run: for belief changes injected at the end of a tick, which is when
+   * a snapshot finds a query one change behind.
+   */
+  readonly afterTick?: (run: ReferenceRun, tick: number) => void;
 }
 
 /** What a moment of a run looks like, to show that a snapshot tick covers the case it was chosen for. */
@@ -38,8 +44,12 @@ export interface MomentFacts {
   /** Active timers over all agents. */
   readonly timers: number;
   readonly actions: readonly { readonly agentId: string; readonly name: string; readonly status: string; readonly phase: string }[];
-  /** Planner queries in flight. `stagesDone` counts a strategy's completed searches; `unseenChange` is a belief change the query has not read yet. */
-  readonly queries: readonly { readonly agentId: string; readonly strategy: boolean; readonly stagesDone: number; readonly inStage: boolean; readonly lazy: boolean; readonly unseenChange: boolean }[];
+  /**
+   * Planner queries in flight. `stagesDone` counts a strategy's completed searches. `pending` is a belief change the query has not
+   * examined yet, as its snapshot holds it: `overlap` when the changed chunks include one its search has read (it will restart),
+   * `graphMoved` when its HPA* graph moved.
+   */
+  readonly queries: readonly { readonly agentId: string; readonly strategy: boolean; readonly stagesDone: number; readonly inStage: boolean; readonly lazy: boolean; readonly pending: boolean; readonly overlap: boolean; readonly graphMoved: boolean }[];
   /** Behaviours of running goTo (also inside explore): lazy legs pending, holding for the next leg, backing off. */
   readonly goTo: readonly { readonly agentId: string; readonly legsPending: boolean; readonly holding: boolean; readonly backingOff: boolean }[];
   /** Cells marked unreachable, over all agents. */
@@ -64,18 +74,23 @@ export function momentFacts(run: ReferenceRun): MomentFacts {
     const i = run.runtime.info(a.id);
     return i ? [{ agentId: a.id, name: i.name, status: i.status, phase: i.phase }] : [];
   });
+  // What each query's snapshot holds of its pending change: the same content a restore would carry.
+  const held = new Map(run.planner.service.snapshot().active.map((a) => [a.request.agentId, a.strategy ?? a]));
   const queries = (values(priv(run.planner.service, "active")) as Record<string, unknown>[]).map((q) => {
     const strat = priv(q, "strat");
-    const views = priv(q, "views");
-    const version = priv(priv(views, "space"), "version");
-    const seen = strat ? priv(strat, "seenSpace") : priv(q, "seen");
+    const agentId = String(priv(priv(q, "request"), "agentId"));
+    const h = held.get(agentId);
+    const chunks = h?.pending?.chunks ?? [];
+    const read = h?.read ?? [];
     return {
-      agentId: String(priv(priv(q, "request"), "agentId")),
+      agentId,
       strategy: strat !== undefined,
       stagesDone: strat ? (priv(strat, "completed") as unknown[]).length : 0,
       inStage: strat ? priv(strat, "stage") !== undefined : false,
       lazy: strat ? priv(strat, "lazy") !== undefined : false,
-      unseenChange: priv(q, "hpa") !== true && seen !== version,
+      pending: h?.pending !== undefined,
+      overlap: chunks.some((k) => read.includes(k)),
+      graphMoved: h?.pending?.graphChanged === true,
     };
   });
   const goTo: { agentId: string; legsPending: boolean; holding: boolean; backingOff: boolean }[] = [];
@@ -112,8 +127,11 @@ function pending(run: ReferenceRun): string {
   return JSON.stringify({ outstanding: run.world.outstanding, peek: run.agents.map((a) => run.world.peekRequest(a.id)) });
 }
 
-async function step(run: ReferenceRun, ticks: number): Promise<void> {
-  await runLockstep(run.world, run.scheduler, ticks);
+async function step(run: ReferenceRun, ticks: number, recipe?: RestoreRecipe): Promise<void> {
+  for (let i = 0; i < ticks; i++) {
+    await runLockstep(run.world, run.scheduler, 1);
+    recipe?.afterTick?.(run, run.world.tick);
+  }
 }
 
 interface Baseline {
@@ -143,7 +161,7 @@ async function baseline(recipe: RestoreRecipe, api: RestoreApi): Promise<Baselin
   hashes.set(0, run.world.stateHash);
   note(0);
   for (let t = 1; t <= recipe.endTick; t++) {
-    await step(run, 1);
+    await step(run, 1, recipe);
     hashes.set(t, run.world.stateHash);
     note(t);
   }
@@ -157,14 +175,14 @@ export async function recipeFacts(recipe: RestoreRecipe): Promise<readonly Momen
   const out: MomentFacts[] = [];
   if (wanted.has(0)) out.push(momentFacts(run));
   for (let t = 1; t <= Math.max(...recipe.snapshotTicks); t++) {
-    await step(run, 1);
+    await step(run, 1, recipe);
     if (wanted.has(t)) out.push(momentFacts(run));
   }
   return out;
 }
 
 /**
- * Runs the acceptance check of T-003 for every snapshot tick of the recipe: snapshot at N, restore into a fresh run that
+ * Runs the restore acceptance check for every snapshot tick of the recipe: snapshot at N, restore into a fresh run that
  * skips genesis, continue to the end, and compare with the uninterrupted run.
  */
 export async function checkRestore(recipe: RestoreRecipe, api: RestoreApi): Promise<RestoreReport> {
@@ -173,7 +191,7 @@ export async function checkRestore(recipe: RestoreRecipe, api: RestoreApi): Prom
   const fail = (n: number, what: string) => mismatches.push(`${recipe.name} @${n}: ${what}`);
   for (const n of recipe.snapshotTicks) {
     const source = recipe.create("genesis");
-    if (n > 0) await step(source, n);
+    if (n > 0) await step(source, n, recipe);
     const bytes = api.snapshot(source);
     const target = recipe.create("restore-target");
     await api.restore(target, bytes);
@@ -182,7 +200,7 @@ export async function checkRestore(recipe: RestoreRecipe, api: RestoreApi): Prom
     if (target.world.stateHash !== base.hashes.get(n)) fail(n, "state hash right after the restore differs");
     if (pending(target) !== base.pendingAt.get(n)) fail(n, "pending decision requests (outstanding, peekRequest) right after the restore differ");
     for (let t = n + 1; t <= recipe.endTick; t++) {
-      await step(target, 1);
+      await step(target, 1, recipe);
       if (target.world.stateHash !== base.hashes.get(t)) {
         fail(n, `state hash differs at tick ${t}`);
         break;

@@ -5,7 +5,7 @@ import { stepDrive } from "./drive.ts";
 import { PathFollower, type FollowerParams, type FollowerSnapshot, type PathSegment } from "./follower.ts";
 import type { UgvState } from "./kinematics.ts";
 
-// F3a M1, T-004: a follower restored from its snapshot continues bit for bit (ADR-0035 addition of 2026-10-17, item 8).
+// F3a M1: a follower restored from its snapshot continues bit for bit (ADR-0035 addition of 2026-10-17, item 8).
 
 const DT = 0.1;
 const body = (over: Partial<FollowerParams> = {}): FollowerParams => ({ ...(makeUgv().body as FollowerParams), ...over });
@@ -46,7 +46,7 @@ function check(make: () => { f: PathFollower; s: UgvState; p: FollowerParams }, 
   return { a, restored, snap };
 }
 
-describe("PathFollower snapshot and restore (F3a M1, T-004)", () => {
+describe("PathFollower snapshot and restore (F3a M1)", () => {
   it("restores at the start (bestDistance is still +Infinity) and mid-path, on a drive that rotates in place", () => {
     const p = body({ drive: "differential", turningRadiusM: 0, reverseAllowed: true });
     const make = () => ({ f: new PathFollower([seg(false, 0, 0, 12, 0, 12, 9)], p), s: start(0, 0, 2), p });

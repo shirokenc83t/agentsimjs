@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TraceBuffer } from "./trace-buffer.ts";
 
-// F3a M1, T-005: a restored run's trace continues the sequence and the time order (ADR-0035 addition of 2026-10-17, item 8).
+// F3a M1: a restored run's trace continues the sequence and the time order (ADR-0035 addition of 2026-10-17, item 8).
 
 const rec = (simTime: number) => ({ simTime, kind: "event" as const, agentId: "ugv-001", detail: "full" as const, payload: { op: "x" } });
 

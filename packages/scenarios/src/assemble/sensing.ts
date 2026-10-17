@@ -394,7 +394,7 @@ export class SensingService implements ProximityPort, ContactPort {
   }
 
   /**
-   * The sensing state as plain data (F3a M1, T-005; ADR-0035 addition of 2026-10-17, item 8), agents in ID order: the belief
+   * The sensing state as plain data (F3a M1; ADR-0035 addition of 2026-10-17, item 8), agents in ID order: the belief
    * map (a large piece the composition stores as a content-addressed section), the entity beliefs in insertion order
    * (it drives the order of `lost` events and so of the inbox), the latest proximity hits, and each sensor's RNG state and
    * dropout. Perception events of the tick are taken by the world within the tick: none may be waiting.

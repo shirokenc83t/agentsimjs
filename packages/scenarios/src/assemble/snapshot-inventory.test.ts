@@ -8,7 +8,7 @@ const item = (treatment: StateItem["treatment"], note: string): StateItem => ({ 
 
 /**
  * The observer-side beliefs-vs-truth class, classified here because ADR-0005's boundary test lets only its own module, its
- * export and createRun name it in non-test sources. T-005: `dueS` is captured and the rest is rebuilt.
+ * export and createRun name it in non-test sources. `dueS` is captured and the rest is rebuilt.
  */
 const OBSERVER_INVENTORY: Readonly<Record<string, ClassInventory>> = {
   BeliefVsTruth: {
@@ -28,12 +28,12 @@ const OBSERVER_INVENTORY: Readonly<Record<string, ClassInventory>> = {
 
 const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = { ...COMMON_INVENTORY, ...OBSERVER_INVENTORY };
 
-// F3a M1, T-002: the inventory of a run's mutable state (ADR-0035 addition of 2026-10-17, item 8). The table lives in
+// F3a M1: the inventory of a run's mutable state (ADR-0035 addition of 2026-10-17, item 8). The table lives in
 // snapshot-inventory.ts; this test keeps it true. It walks the objects of real runs and fails when
 //   - a class reachable from a run is in neither STATE_INVENTORY nor NOT_STATE,
 //   - an object has a field the inventory does not classify as captured, rebuilt or scratch,
 //   - the inventory lists a field that no sampled object has any more,
-// Closures cannot be walked: CLOSURE_STATE names the ones known today (T-004 turns the ones that matter into data);
+// Closures cannot be walked: CLOSURE_STATE names the ones known today (the ones that matter became explicit state in the core);
 // tools/test/snapshot-inventory-closures.test.ts checks that each is still in the source.
 
 const priv = (o: unknown, key: string): unknown => (o === undefined || o === null ? undefined : (o as Record<string, unknown>)[key]);
@@ -141,7 +141,7 @@ function classify(inv: ClassInventory, field: string): StateItem | undefined {
   return inv[field] ?? inv["*"];
 }
 
-describe("snapshot state inventory (F3a M1, T-002)", () => {
+describe("snapshot state inventory (F3a M1)", () => {
   let sample: Sample;
   const get = async () => (sample ??= await sampleAll());
 

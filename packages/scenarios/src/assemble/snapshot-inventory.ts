@@ -1,4 +1,4 @@
-// The inventory of a run's mutable state (F3a M1, T-002; ADR-0035 addition of 2026-10-17, item 8).
+// The inventory of a run's mutable state (F3a M1; ADR-0035 addition of 2026-10-17, item 8).
 //
 // Every field of every class that holds state of a running simulation is classified here, so that a snapshot is
 // complete by construction and a new field cannot be forgotten:
@@ -9,9 +9,9 @@
 //             trace's records are persisted by the recorder, not restored).
 // `snapshot-inventory.test.ts` walks the objects of real runs and fails when a class gains (or loses) a field that this
 // table does not know. Closures hold state too and cannot be walked: they are listed in CLOSURE_STATE with a token the
-// test looks for in the source, so removing one is noticed; T-004 turns the ones that matter into explicit state.
+// test looks for in the source, so removing one is noticed; the ones that matter became explicit state in the core.
 //
-// Owners: T-004 core (world, action runtime, body), T-005 the services behind core's ports, T-006 the composition in
+// Owners: core (world, action runtime, body), the services behind core's ports, and the composition in
 // scenarios/assemble.
 
 export type Treatment = "captured" | "rebuilt" | "scratch";
@@ -81,7 +81,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     nextAction: c("action ID counter"),
     active: c("the running behaviour of each agent: info (an Active entry) and its state (GoToBehavior, ExploreBehavior, closures)"),
     last: c("each agent's current or latest action info (result and failure are plain data)"),
-    ended: s("taken by the world every tick: empty between ticks (T-004 asserts it)"),
+    ended: s("taken by the world every tick: empty between ticks (the runtime's snapshot asserts it)"),
     manifestHashCache: r("cache of the capability manifest hash"),
     recovering: c("agents whose running action is a reflex recovery"),
   },
@@ -125,7 +125,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     agent: r("the shared SimAgent"),
     region: c("action parameter"),
     strategy: c("action parameter"),
-    cruise: c("cruise altitude of every goTo of the explore: a UAV's height when the action started (found by T-006: a restore must not read it from the agent again)"),
+    cruise: c("cruise altitude of every goTo of the explore: a UAV's height when the action started (a restore must not read it from the agent again)"),
     note: r("closure: rebuilt from context"),
     navigate: r("closure that builds the inner goTo: rebuilt from context (and the captured cruise)"),
   },
@@ -180,7 +180,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     speed: c(""),
     steering: c(""),
     lastStepM: c("set to 0 at the start of every tick, but read by the next tick's reflexes and hash: captured"),
-    lastRotationRad: c("never reset when the agent stops driving, and it keeps draining the battery (T-004 finding: pinned, not fixed)"),
+    lastRotationRad: c("never reset when the agent stops driving, and it keeps draining the battery (pinned, not fixed: see rotation-drain.test.ts)"),
   },
   UavState: {
     x: c(""),
@@ -324,7 +324,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
   PlanningService: {
     grid: r("ground truth, immutable during a run"),
     opts: r(WIRING),
-    active: c("queries in flight: PlanningSnapshot keeps (request, charge, restarts, continuations, spent) and, since D-003, the change of the view a query has not examined (pending chunks, graph moved) with the chunks its search has read"),
+    active: c("queries in flight: PlanningSnapshot keeps (request, charge, restarts, continuations, spent) and, since the ADR-0024 addition of 2026-10-17, the change of the view a query has not examined (pending chunks, graph moved) with the chunks its search has read"),
     completed: s("drained by the adapter every tick: empty between ticks"),
     restartEvents: s("drained by the adapter every tick: empty between ticks"),
     views: r("live planning views and graphs: rebuilt from the restored maps (ADR-0024: caches never change results)"),
@@ -334,7 +334,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     nextQuery: c("query ID counter"),
     cachesEnabled: r("run configuration"),
     pinned: r("view keys built by prepare()"),
-    lazy: c("legs of lazy queries: produced and taken counts; T-005 asserts untaken legs are empty between ticks or captures them", true),
+    lazy: c("legs of lazy queries: produced and taken counts; the adapter's snapshot asserts untaken legs are empty between ticks", true),
     diagnostics: s("host diagnostics"),
     lastTick: s("statistics of the last tick for the host"),
     smoothMemo: r("cache of a smoothed path"),
@@ -395,7 +395,7 @@ export interface ClosureState {
 
 export const CLOSURE_STATE: readonly ClosureState[] = [
   { where: "land behaviour", file: "core/src/actions/runtime.ts", token: 'phase: "descending"', treatment: "rebuilt", note: "reads only the agent's state and the ground: nothing of its own beyond its phase (LandSnapshot)" },
-  { where: "battery reflex latch: fired", file: "core/src/reflexes/builtin.ts", token: "const fired = new Set<string>()", treatment: "captured", note: "agents the critical-battery reflex already acted on: handed over by Reflex.snapshot and put back by Reflex.restore (T-004)" },
+  { where: "battery reflex latch: fired", file: "core/src/reflexes/builtin.ts", token: "const fired = new Set<string>()", treatment: "captured", note: "agents the critical-battery reflex already acted on: handed over by Reflex.snapshot and put back by Reflex.restore " },
   { where: "sensing noise closure", file: "scenarios/src/assemble/sensing.ts", token: "noise: spec.type !== \"camera\"", treatment: "rebuilt", note: "draws from the sensor's Rng, which is captured" },
   { where: "TopologyService constructor closures (viewOf, positionOf)", file: "scenarios/src/assemble/topology.ts", token: "private readonly viewOf", treatment: "rebuilt", note: "wiring" },
   { where: "PlanningServiceAdapter.take / takeLegs map objects", file: "scenarios/src/assemble/adapters.ts", token: "get version()", treatment: "rebuilt", note: "views onto the live planning view, created when a plan is taken" },

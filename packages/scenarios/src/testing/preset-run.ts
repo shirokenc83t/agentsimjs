@@ -9,7 +9,7 @@ import type { RunConfigDocument } from "../run-config/schema.ts";
 import type { AgentSpec, ScenarioDocument } from "../schema.ts";
 import type { ReferenceRun } from "./reference-run.ts";
 
-// Runs of the shipped presets for the restore tests (F3a M1, T-003): the F1 demo, the F2 discovery demo, the 20-agent
+// Runs of the shipped presets for the restore tests (F3a M1): the F1 demo, the F2 discovery demo, the 20-agent
 // sensing demo and the 1 km² prior-map world, with ScriptBrains and a run configuration patched per test.
 
 export const PRESET_DT_S = 0.1;

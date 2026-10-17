@@ -17,11 +17,11 @@ import type { TopologySnapshot } from "./topology.ts";
 /** The observer's snapshot, named through the run (ADR-0005: only its own module, its export and `createRun` name the observer's module). */
 type ObserverSnapshot = ReturnType<NonNullable<CreatedRun["observer"]>["snapshot"]>;
 
-// The snapshot of a whole run, composed here from the layers' own snapshots (F3a M1, T-006; ADR-0035 addition of 2026-10-17,
+// The snapshot of a whole run, composed here from the layers' own snapshots (F3a M1; ADR-0035 addition of 2026-10-17,
 // item 8). Core reaches the services only through its ports, so the composition lives in assemble: it takes the world and
 // the action runtime from core, the belief maps, sensing, topology, the planner and the observer from the services behind
 // the ports, the trace's cursor and the script brains' positions. Each agent's belief map is stored as a content-addressed
-// section (D-002 addition 1): an unchanged map is one section however many snapshots refer to it, and the writer's `external`
+// section an unchanged map is one section however many snapshots refer to it, and the writer's `external`
 // option leaves the sections out of the container for the belief keyframe blobs of M2.
 
 /** The format of a run snapshot's root value: the container is `ASNP` (packages/core/src/snapshot/codec.ts), this names what is in it. */

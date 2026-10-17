@@ -126,7 +126,7 @@ export class BeliefMap {
   }
 
   /**
-   * The map as plain data for the snapshot codec (F3a M1, T-005; ADR-0035 addition of 2026-10-17, item 8): the materialized
+   * The map as plain data for the snapshot codec (F3a M1; ADR-0035 addition of 2026-10-17, item 8): the materialized
    * chunks (log-odds and height bounds), the change stamps of every chunk, both version counters and the change log (its
    * valid entries). Hash caches are not part of it: they are rebuilt. The same map, unchanged, gives the same snapshot
    * bytes, so the snapshot can be stored once as a content-addressed section however many snapshots refer to it.

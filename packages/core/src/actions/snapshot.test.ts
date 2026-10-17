@@ -6,7 +6,7 @@ import type { PlanQuery } from "./ports.ts";
 import { ActionRuntime, type BehaviorSnapshot, type ExploreSnapshot, type GoToSnapshot, type RuntimePorts, type RuntimeSnapshot } from "./runtime.ts";
 import { CollectingTrace, fakeCapabilities, FakeContact, FakeFrontiers, FakePlanner, FakeProximity, FakeSpatial, makeUav, makeUgv } from "./testing/fakes.ts";
 
-// F3a M1, T-004: the action runtime's snapshot and restore (ADR-0035 addition of 2026-10-17, item 8). Each case runs a
+// F3a M1: the action runtime's snapshot and restore (ADR-0035 addition of 2026-10-17, item 8). Each case runs a
 // runtime to tick N, takes its snapshot through the codec, and restores it into a fresh runtime over the same ports in
 // the state of tick N (a twin run, since the fakes keep state too). Both continue; every tick the agent's state and the
 // info of its action must be byte-identical, the trace must match, and the snapshots must be byte-identical at the end.
@@ -114,7 +114,7 @@ const goToOf = (s: RuntimeSnapshot): GoToSnapshot => {
   return b;
 };
 
-describe("action runtime snapshot and restore: behaviours (F3a M1, T-004)", () => {
+describe("action runtime snapshot and restore: behaviours (F3a M1)", () => {
   it("hold: the ticks held so far and the duration", () => {
     const make = () => build({ agent: makeUgv(), action: { name: "hold", params: { durationS: 3 } } });
     const { snapshot, restored, b } = checkContinuation(make, 10, 30);
@@ -254,7 +254,7 @@ describe("action runtime snapshot and restore: behaviours (F3a M1, T-004)", () =
   });
 });
 
-describe("action runtime snapshot and restore: the runtime's own state (F3a M1, T-004)", () => {
+describe("action runtime snapshot and restore: the runtime's own state (F3a M1)", () => {
   /** A UGV below its critical battery level: the reflex acts on the first tick and latches. */
   const lowBattery = () => {
     const a = makeUgv();

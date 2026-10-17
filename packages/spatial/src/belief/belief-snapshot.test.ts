@@ -2,7 +2,7 @@ import { Rng, SnapshotWriter, StateHasher, decodeValue, encodeValue, readSnapsho
 import { describe, expect, it } from "vitest";
 import { BeliefMap, type BeliefMapSnapshot } from "./belief-map.ts";
 
-// F3a M1, T-005: a belief map restored from its snapshot is the map it was (ADR-0035 addition of 2026-10-17, item 8):
+// F3a M1: a belief map restored from its snapshot is the map it was (ADR-0035 addition of 2026-10-17, item 8):
 // the same content hash, versions and change log, and it goes on changing exactly as the original does.
 
 const hashOf = (m: BeliefMap): string => {
@@ -56,7 +56,7 @@ function view(m: BeliefMap) {
 
 const roundTrip = (s: BeliefMapSnapshot): BeliefMapSnapshot => decodeValue(encodeValue(s)) as BeliefMapSnapshot;
 
-describe("BeliefMap snapshot and restore (F3a M1, T-005)", () => {
+describe("BeliefMap snapshot and restore (F3a M1)", () => {
   it("a restored map equals the original and goes on changing exactly as it does (seeded workloads, through the codec)", () => {
     for (const seed of [1, 2, 3, 4, 5, 6]) {
       const r = Rng.fromSeed(seed);
@@ -106,7 +106,7 @@ describe("BeliefMap snapshot and restore (F3a M1, T-005)", () => {
     expect(used.materializedChunks).toBe(a.materializedChunks);
   });
 
-  it("two snapshots of the same unchanged map give the same section bytes and hash; a change gives another (D-002 addition 1)", () => {
+  it("two snapshots of the same unchanged map give the same section bytes and hash; a change gives another", () => {
     const m = new BeliefMap(128, 128, 32);
     observe(m, Rng.fromSeed(21), 3000);
     const section = (map: BeliefMap) => {

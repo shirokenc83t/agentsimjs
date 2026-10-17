@@ -4,7 +4,7 @@ import { PlanningService, type PlanOutcome, type PlanningConfig, type PlanningSn
 import type { StrategyPlan } from "./strategy/runner.ts";
 import type { StrategyNode } from "./strategy/schema.ts";
 
-// F3a M1, T-005 finding and T-008 (D-003; ADR-0024 and ADR-0037 additions of 2026-10-17): a snapshot taken right after a belief
+// F3a M1 (ADR-0024 and ADR-0037 additions of 2026-10-17): a snapshot taken right after a belief
 // change that the planner has not yet seen carries that change (`pending`, with the chunks the search has read), so the
 // restored query restarts or continues exactly as the live one does. In a run the live views are synced after sensing (the
 // last thing of a tick) and a query reads the change at the start of its next slice, so at the moment a snapshot is taken
@@ -51,10 +51,20 @@ function pending(config: PlanningConfig, change: (g: GridSpace) => void, slices 
   const reference = finish(s, t);
   const r = new PlanningService(g);
   r.restore(snap);
-  return { reference, restored: finish(r, t), snap };
+  // A snapshot of the restored service, before the query's next slice, keeps the change it carries: snapshot(restore(s)) equals s,
+  // and a second generation restored from it goes on exactly as the original does.
+  const again = JSON.parse(JSON.stringify(r.snapshot())) as PlanningSnapshot;
+  expect(again).toEqual(snap);
+  const r2 = new PlanningService(g);
+  r2.restore(again);
+  const restored = finish(r, t);
+  const second = finish(r2, t);
+  expect(seen(second.outcome)).toEqual(seen(restored.outcome));
+  expect(second.restarts).toEqual(restored.restarts);
+  return { reference, restored, snap };
 }
 
-describe("a snapshot taken with a belief change the query has not seen yet (D-003)", () => {
+describe("a snapshot taken with a belief change the query has not seen yet", () => {
   it("a change away from what the search read: the live query counts a continuation, the restored one does too", () => {
     const { reference, restored, snap } = pending(cfg(), (g) => wall(g, 80, 10, 50));
     expect(reference.outcome.continuations).toBe(1);
@@ -149,6 +159,37 @@ describe("a snapshot taken with a belief change the query has not seen yet (D-00
       expect(snap.active[0]?.strategy?.read?.length).toBeGreaterThan(0);
       expect(seen(restored.outcome)).toEqual(seen(reference.outcome));
     }
+  });
+
+  describe("a strategy with an HPA* stage whose graph moved", () => {
+    // Three walls with their gaps at alternate ends keep a search running; stage 1 cannot finish in its budget of 150 expansions.
+    const maze = (g: GridSpace) => {
+      wall(g, 20, 5, 64);
+      wall(g, 40, 0, 59);
+      wall(g, 60, 5, 64);
+    };
+    const toHpa = plan({ kind: "fallback", stages: [{ kind: "algorithm", algorithm: "dijkstra", stageBudget: 150 }, { kind: "algorithm", algorithm: "hpa" }] }, "dijkstra-then-hpa");
+    const config = cfg({ strategy: toHpa, onboardComputeExpansionsPerTick: 100 });
+    const change = (g: GridSpace) => wall(g, 80, 10, 50);
+
+    it("moved while stage 1 runs: the snapshot keeps the plain inequality and the restored query restarts when stage 2 starts, as the live one does", () => {
+      const { reference, restored, snap } = pending(config, change, 1, undefined, maze);
+      expect(snap.active[0]?.strategy?.current).toBeDefined();
+      expect(snap.active[0]?.strategy?.stages).toHaveLength(0); // still stage 1: no HPA* stage has run
+      expect(snap.active[0]?.strategy?.pending?.graphChanged).toBe(true);
+      expect(reference.restarts.length).toBeGreaterThan(0);
+      expect(seen(restored.outcome)).toEqual(seen(reference.outcome));
+      expect(restored.restarts).toEqual(reference.restarts);
+    });
+
+    it("moved while stage 2 (HPA*) runs", () => {
+      const inStage2 = (x: PlanningSnapshot) => (x.active[0]?.strategy?.stages.length ?? 0) >= 1 && x.active[0]?.strategy?.current !== undefined;
+      const { reference, restored, snap } = pending(config, change, 1, inStage2, maze);
+      expect(snap.active[0]?.strategy?.stages.length).toBeGreaterThanOrEqual(1);
+      expect(snap.active[0]?.strategy?.pending?.graphChanged).toBe(true);
+      expect(seen(restored.outcome)).toEqual(seen(reference.outcome));
+      expect(restored.restarts).toEqual(reference.restarts);
+    });
   });
 
   it("nothing is pending when nothing changed: no pending, no read set, in the snapshot", () => {

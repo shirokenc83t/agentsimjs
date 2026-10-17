@@ -6,7 +6,7 @@ import type { ObserverSnapshot } from "./belief-vs-truth.ts";
 import type { SensingSnapshot } from "./sensing.ts";
 import type { TopologySnapshot } from "./topology.ts";
 
-// F3a M1, T-005: the services behind core's ports restore from their snapshots (ADR-0035 addition of 2026-10-17, item 8).
+// F3a M1: the services behind core's ports restore from their snapshots (ADR-0035 addition of 2026-10-17, item 8).
 // Contract per service: snapshot (through the codec), restore into a freshly assembled twin, continue both with the same
 // inputs, same outputs. The sensing phase is driven by hand here (a scripted motion of the agents, no world), in the order the
 // world's sensing phase runs it: readings, the planner's sync point, the topological layer, the observer.
@@ -129,7 +129,7 @@ function check(n: number, after: number, markAt?: number) {
   return { a, b, taken, seqA, seqB, markedAtRestore };
 }
 
-describe("sensing, topology and the observer restore from their snapshots (F3a M1, T-005)", () => {
+describe("sensing, topology and the observer restore from their snapshots (F3a M1)", () => {
   it("before anything has been seen (empty maps, no entities)", () => {
     const { taken } = check(3, 60);
     expect(taken.sensing.agents.every((x) => x.entities.length === 0)).toBe(true);
@@ -183,7 +183,7 @@ describe("sensing, topology and the observer restore from their snapshots (F3a M
   }, 240_000);
 });
 
-describe("planner adapter snapshot (F3a M1, T-005)", () => {
+describe("planner adapter snapshot (F3a M1)", () => {
   const build = () => buildPresetRun({ preset: "f1-demo", scripts: {} });
 
   it("keeps the planning configurations that setConfig changed, and only those", () => {
@@ -233,7 +233,7 @@ describe("planner adapter snapshot (F3a M1, T-005)", () => {
   });
 });
 
-describe("the planner has nothing waiting between ticks of a real run (T-005: assert, or capture)", () => {
+describe("the planner has nothing waiting between ticks of a real run (asserted, not captured)", () => {
   const lazyDoc = { schemaVersion: 0, id: "lazy-restore", version: 1, root: { kind: "refine", mode: "lazy", coarse: { kind: "algorithm", algorithm: "hpa" }, local: { kind: "algorithm", algorithm: "astar" } } };
   const planning = (strategy: unknown) => ({ planning: { default: { strategy, onboardComputeExpansionsPerTick: 100 } } }) as never;
   const far = { rover: [{ name: "goTo", params: { xM: 50, yM: 40 } }], low: [{ name: "goTo", params: { xM: 25, yM: 60 } }] };
