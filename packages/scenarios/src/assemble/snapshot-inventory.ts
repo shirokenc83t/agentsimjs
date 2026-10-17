@@ -125,8 +125,9 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     agent: r("the shared SimAgent"),
     region: c("action parameter"),
     strategy: c("action parameter"),
+    cruise: c("cruise altitude of every goTo of the explore: a UAV's height when the action started (found by T-006: a restore must not read it from the agent again)"),
     note: r("closure: rebuilt from context"),
-    navigate: r("closure that builds the inner goTo: rebuilt from context"),
+    navigate: r("closure that builds the inner goTo: rebuilt from context (and the captured cruise)"),
   },
   HoldBehavior: {
     phase: c("holding"),

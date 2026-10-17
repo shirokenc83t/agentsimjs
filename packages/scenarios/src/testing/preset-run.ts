@@ -67,11 +67,10 @@ export interface PresetRunOptions {
 export type RunMode = "genesis" | "restore-target";
 
 /**
- * Builds a run of a preset. `genesis` is the ordinary run. `restore-target` is a freshly assembled run that skips genesis
- * (T-004's no-genesis World path, T-006's composition): until they exist it throws, so the restore tests are skipped.
+ * Builds a run of a preset. `genesis` is the ordinary run. `restore-target` is a freshly assembled run that skips genesis (no
+ * config records, no start events, no first requests): what `restoreRun` puts a snapshot into.
  */
 export function buildPresetRun(o: PresetRunOptions, mode: RunMode = "genesis"): ReferenceRun {
-  if (mode === "restore-target") throw new Error("the no-genesis construction path of a run arrives with T-004 and T-006");
   const def = PRESETS[o.preset];
   const base = def.scenario();
   const doc: ScenarioDocument = {
@@ -86,6 +85,6 @@ export function buildPresetRun(o: PresetRunOptions, mode: RunMode = "genesis"): 
   const timed = new Set(o.timed ?? []);
   const brains: Record<string, Brain> = {};
   for (const [key, steps] of Object.entries(o.scripts)) brains[key] = timed.has(key) ? new TimedScriptBrain(`script-${key}`, steps) : new ScriptBrain(`script-${key}`, steps);
-  const run = createRun(loaded.value, resolved.value, trace, { dtS: PRESET_DT_S, brains, ...(o.beliefVsTruth ? { beliefVsTruth: o.beliefVsTruth } : {}) });
+  const run = createRun(loaded.value, resolved.value, trace, { dtS: PRESET_DT_S, brains, ...(mode === "restore-target" ? { genesis: false } : {}), ...(o.beliefVsTruth ? { beliefVsTruth: o.beliefVsTruth } : {}) });
   return { ...run, trace, resolved: resolved.value };
 }

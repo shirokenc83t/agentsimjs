@@ -227,7 +227,7 @@ interface ActiveQuery {
   /** Strategy queries (ADR-0037): the runner and the stage in progress; plain queries have none and use `engine`/`cached`. */
   strat?: StrategyExec;
   /** A restored query's unexamined change, applied at its next slice (ADR-0024 addition of 2026-10-17, D-003). */
-  carry?: { readonly chunks: readonly number[]; readonly graphChanged: boolean; readonly read: ReadonlySet<number> | undefined } | undefined;
+  carry?: { readonly chunks: readonly number[]; readonly read: ReadonlySet<number> | undefined } | undefined;
 }
 
 interface CachedResult {
@@ -658,7 +658,7 @@ export class PlanningService {
     q.carry = undefined;
     if (q.hpa) {
       const v = q.views.graph?.version ?? 0;
-      if (v === q.seen && !carry?.graphChanged) return undefined;
+      if (v === q.seen) return undefined;
       q.seen = v;
       return { reason: "graph_changed", chunks: [] };
     }
@@ -823,7 +823,15 @@ export class PlanningService {
       if (!r.ok) throw new Error(`snapshot query ${a.queryId} no longer valid: ${r.error.code}`);
       // The change the query had not examined (D-003): its next slice applies the read-set check to these sets.
       const carried = a.strategy ?? a;
-      if (carried.pending) r.value.carry = { chunks: [...carried.pending.chunks], graphChanged: carried.pending.graphChanged, read: carried.read ? new Set(carried.read) : undefined };
+      if (carried.pending) {
+        r.value.carry = { chunks: [...carried.pending.chunks], read: carried.read ? new Set(carried.read) : undefined };
+        // A moved graph comes back as a last-seen version no graph has (versions start at 0): the next comparison finds it moved,
+        // exactly when the live query's would (a strategy: once an HPA* stage has run, which may be later than the next slice).
+        if (carried.pending.graphChanged) {
+          if (r.value.strat) r.value.strat.seenGraph = -1;
+          else r.value.seen = -1;
+        }
+      }
     }
   }
 
@@ -834,7 +842,9 @@ export class PlanningService {
   private pendingChange(q: ActiveQuery): { readonly pending: PendingChange; readonly read: number[] | undefined } | undefined {
     const st = q.strat;
     if (!st && q.hpa) return (q.views.graph?.version ?? 0) !== q.seen ? { pending: { chunks: [], graphChanged: true }, read: undefined } : undefined;
-    const graphChanged = st !== undefined && st.usedHpa && (q.views.graph?.version ?? 0) !== st.seenGraph;
+    // A strategy compares the graph's version with the one it last saw even before an HPA* stage has run; the comparison only
+    // acts once one has (`changeForStrategy`), so the plain inequality is what the snapshot keeps.
+    const graphChanged = st !== undefined && (q.views.graph?.version ?? 0) !== st.seenGraph;
     const space = q.views.space;
     const seen = st ? st.seenSpace : q.seen;
     const chunks = space.contentVersion !== seen ? space.changedSince(seen) : [];
@@ -1201,7 +1211,7 @@ export class PlanningService {
   private changeForStrategy(q: ActiveQuery, st: StrategyExec): { reason: PlanRestart["reason"]; chunks: number[] } | undefined {
     const carry = q.carry; // a restored query's unexamined change, applied once (D-003)
     q.carry = undefined;
-    let graphChanged = carry?.graphChanged ?? false;
+    let graphChanged = false;
     if (st.usedHpa) {
       const gv = q.views.graph?.version ?? 0;
       if (gv !== st.seenGraph) {

@@ -18,6 +18,12 @@ export interface AssembleOptions {
   readonly planningCachesEnabled?: boolean;
   /** Always-on reflexes (default: the F1 set: geofence, obstacle, critical battery). */
   readonly reflexes?: readonly Reflex[];
+  /**
+   * Genesis (default true): the `config` records of every agent at sim time 0, and (`createRun`) the `start` events and first
+   * decision requests. `false` assembles the target of a restore (F3a M1, T-006): none of it is written, and `restoreRun`
+   * puts the snapshot's state in place.
+   */
+  readonly genesis?: boolean;
 }
 
 /** The runtime pieces of one run, wired to the ground truth. */
@@ -50,7 +56,7 @@ export interface AssembledRun {
 export function assembleRun(loaded: LoadedScenario, resolved: ResolvedRunConfig, trace: TraceBuffer, opts: AssembleOptions): AssembledRun {
   const spatial = new GridSpatialAdapter(loaded.grid);
   const sink = new TraceBufferSink(trace);
-  traceConfigs(resolved, trace);
+  if (opts.genesis !== false) traceConfigs(resolved, trace);
   const byId = new Map(loaded.agents.map((a) => [a.id, a]));
   const agents: SimAgent[] = resolved.agents.map((cfg) => {
     const a = byId.get(cfg.agentId);

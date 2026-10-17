@@ -171,6 +171,8 @@ export interface ExploreSnapshot {
   readonly phase: string;
   readonly region: string | undefined;
   readonly strategy: "nearest" | "largest";
+  /** The cruise altitude every goTo of this explore uses (a UAV's height when the action started): kept, not read from the agent again. */
+  readonly cruise: number;
   readonly inner: GoToSnapshot | undefined;
   readonly target: FrontierCandidate | undefined;
   readonly markable: boolean;
@@ -657,14 +659,13 @@ export class ActionRuntime {
     const frontiers = this.ports.frontiers;
     if (!frontiers) return err({ code: "unknown_capability", message: "explore needs the agent's frontier layer" });
     if (region !== undefined && !frontiers.hasRegion(agent.id, region)) return err({ code: "unknown_region", message: `no region ${region}` });
-    return ok(this.exploreFor(frontiers, agent, region, strategy));
+    return ok(this.exploreFor(frontiers, agent, region, strategy, agent.kind === "uav" ? agent.state.z : 0));
   }
 
   /** The explore behaviour wired to this runtime's context; its goTo navigation keeps the cruise altitude the action started with. */
-  private exploreFor(frontiers: FrontierPort, agent: SimAgent, region: string | undefined, strategy: "nearest" | "largest"): ExploreBehavior {
+  private exploreFor(frontiers: FrontierPort, agent: SimAgent, region: string | undefined, strategy: "nearest" | "largest", cruise: number): ExploreBehavior {
     const note = (t: number, payload: unknown) => this.emit(agent, t, "full", payload);
-    const cruise = agent.kind === "uav" ? agent.state.z : 0;
-    return new ExploreBehavior(frontiers, agent, region, strategy, note, (tx, ty, onMarkable, cruiseOverride) => this.goToFor(agent, tx, ty, cruiseOverride ?? cruise, false, onMarkable));
+    return new ExploreBehavior(frontiers, agent, region, strategy, cruise, note, (tx, ty, onMarkable, cruiseOverride) => this.goToFor(agent, tx, ty, cruiseOverride ?? cruise, false, onMarkable));
   }
 
   // ---- snapshot and restore (F3a M1, T-004; ADR-0035 addition of 2026-10-17, item 8) ----------------------------------
@@ -736,7 +737,7 @@ export class ActionRuntime {
       case "explore": {
         const frontiers = this.ports.frontiers;
         if (!frontiers) throw new RangeError("snapshot has an explore action but the runtime has no frontier layer");
-        const b = this.exploreFor(frontiers, agent, snap.region, snap.strategy);
+        const b = this.exploreFor(frontiers, agent, snap.region, snap.strategy, snap.cruise);
         b.restoreFrom(snap);
         return b;
       }
@@ -776,6 +777,8 @@ class ExploreBehavior implements Behavior {
     private readonly agent: SimAgent,
     private readonly region: string | undefined,
     private readonly strategy: "nearest" | "largest",
+    /** The cruise altitude of the goTo navigation: a UAV's height when the action started (0 for a ground vehicle). */
+    private readonly cruise: number,
     private readonly note: (simTime: number, payload: unknown) => void,
     /** Builds the goTo towards a target; `cruiseOverride` is for a restore, which gives the inner goTo the cruise altitude it had. */
     private readonly navigate: (tx: number, ty: number, onMarkable: (simTime: number) => void, cruiseOverride?: number) => GoToBehavior,
@@ -791,6 +794,7 @@ class ExploreBehavior implements Behavior {
       phase: this.phase,
       region: this.region,
       strategy: this.strategy,
+      cruise: this.cruise,
       inner: this.inner?.snapshot(),
       target: this.target ? { ...this.target, cells: [...this.target.cells] } : undefined,
       markable: this.markable,
