@@ -323,7 +323,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
   PlanningService: {
     grid: r("ground truth, immutable during a run"),
     opts: r(WIRING),
-    active: c("queries in flight: PlanningSnapshot keeps (request, expansions charged); T-005 reviews what a restart needs (the `seen` stamps)"),
+    active: c("queries in flight: PlanningSnapshot keeps (request, charge, restarts, continuations, spent) and, since D-003, the change of the view a query has not examined (pending chunks, graph moved) with the chunks its search has read"),
     completed: s("drained by the adapter every tick: empty between ticks"),
     restartEvents: s("drained by the adapter every tick: empty between ticks"),
     views: r("live planning views and graphs: rebuilt from the restored maps (ADR-0024: caches never change results)"),
@@ -348,7 +348,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     initial: r("each agent's configuration at assembly: what `configs` is compared with"),
   },
   ActiveQuery: {
-    "*": c("a query in flight: PlanningSnapshot keeps (request, charge, restarts, continuations, spent, strategy); engines and views are rebuilt by replay"),
+    "*": c("a query in flight: PlanningSnapshot keeps (request, charge, restarts, continuations, spent, strategy, pending change and read set); engines and views are rebuilt by replay; `carry` is a restored query's pending change until its next slice"),
   },
   // ---- observer and views -------------------------------------------------------------------------------------------
   // The observer-side beliefs-vs-truth class is classified in snapshot-inventory.test.ts, not here: ADR-0005 allows only
