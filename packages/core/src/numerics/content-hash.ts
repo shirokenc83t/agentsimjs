@@ -11,7 +11,11 @@ import { utf8, xxHash32 } from "./xxhash32.ts";
  * payloads.
  */
 export function contentHash64(json: string): string {
-  const bytes = utf8(json);
+  return contentHash64Bytes(utf8(json));
+}
+
+/** The same 64-bit hash of raw bytes (snapshot sections and containers, ADR-0035 addition of 2026-10-17, item 8). */
+export function contentHash64Bytes(bytes: Uint8Array): string {
   return xxHash32(bytes, 0).toString(16).padStart(8, "0") + xxHash32(bytes, 0x9e3779b1).toString(16).padStart(8, "0");
 }
 
