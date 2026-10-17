@@ -643,6 +643,17 @@ export class PlanningService {
     return { reason: "read_set_overlap", chunks: overlap };
   }
 
+  /**
+   * What the service holds for its caller to take: completed outcomes and restart events (taken every tick by the adapter)
+   * and legs of lazy queries that were produced and not yet taken. Between ticks all are zero; a snapshot of the caller
+   * asserts it (a snapshot does not keep them).
+   */
+  pendingOutputs(): { readonly completed: number; readonly restarts: number; readonly legs: number } {
+    let legs = 0;
+    for (const l of this.lazy.values()) legs += l.pending.length;
+    return { completed: this.completed.length, restarts: this.restartEvents.length, legs };
+  }
+
   /** Restarts since the last call, in order (tick, then agent id). */
   takeRestarts(): PlanRestart[] {
     return this.restartEvents.splice(0);

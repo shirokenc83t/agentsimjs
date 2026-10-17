@@ -10,7 +10,7 @@ export {
   isValidTraceRecord,
   firstNonMonotonicRecord,
 } from "./trace-record.ts";
-export { TraceBuffer, type Tracer } from "./trace-buffer.ts";
+export { TraceBuffer, type TraceCursor, type Tracer } from "./trace-buffer.ts";
 export {
   SOURCE_COMPONENTS,
   COMPONENTS_BY_OWNER,

@@ -34,6 +34,23 @@ interface Chunk {
   knownMaxDm: Uint16Array | undefined;
 }
 
+/** A belief map as plain data (see `BeliefMap.snapshot`). Large: up to ~20 MiB for a fully explored 1 km² map. */
+export interface BeliefMapSnapshot {
+  readonly sizeX: number;
+  readonly sizeY: number;
+  readonly chunkSize: number;
+  readonly versionCounter: number;
+  readonly planVersionCounter: number;
+  /** Plan version of the first valid entry of the change log. */
+  readonly logFirst: number;
+  readonly chunkVersion: Uint32Array;
+  readonly chunkPlanVersion: Uint32Array;
+  /** The valid entries of the change log: the cell (j · sizeX + i) of each recent planning-relevant change, oldest first. */
+  readonly planLog: Int32Array;
+  /** The materialized chunks, ascending by index. */
+  readonly chunks: readonly { readonly index: number; readonly logOdds: Int8Array; readonly knownMinDm: Uint16Array | undefined; readonly knownMaxDm: Uint16Array | undefined }[];
+}
+
 /**
  * An agent's belief occupancy map (ADR-0012 belief map; heights from the ADR-0012 addition of 2026-10-09):
  * per cell, log-odds occupancy (int8, clamped at ±100, 0 = never observed) and an interval [knownMin, knownMax]
@@ -106,6 +123,64 @@ export class BeliefMap {
     c.hashedAt.set(this.hashedAt);
     c.chunkHash.set(this.chunkHash);
     return c;
+  }
+
+  /**
+   * The map as plain data for the snapshot codec (F3a M1, T-005; ADR-0035 addition of 2026-10-17, item 8): the materialized
+   * chunks (log-odds and height bounds), the change stamps of every chunk, both version counters and the change log (its
+   * valid entries). Hash caches are not part of it: they are rebuilt. The same map, unchanged, gives the same snapshot
+   * bytes, so the snapshot can be stored once as a content-addressed section however many snapshots refer to it.
+   */
+  snapshot(): BeliefMapSnapshot {
+    const chunks: BeliefMapSnapshot["chunks"][number][] = [];
+    for (let k = 0; k < this.chunks.length; k++) {
+      const c = this.chunks[k];
+      if (c) chunks.push({ index: k, logOdds: c.logOdds.slice(), knownMinDm: c.knownMinDm?.slice(), knownMaxDm: c.knownMaxDm?.slice() });
+    }
+    return {
+      sizeX: this.sizeX,
+      sizeY: this.sizeY,
+      chunkSize: this.chunkSize,
+      versionCounter: this.versionCounter,
+      planVersionCounter: this.planVersionCounter,
+      logFirst: this.logFirst,
+      chunkVersion: this.chunkVersion.slice(),
+      chunkPlanVersion: this.chunkPlanVersion.slice(),
+      planLog: this.planLog.slice(0, this.logLength),
+      chunks,
+    };
+  }
+
+  /**
+   * Puts a snapshot back in place. The map is shared by the belief grid, the observer's trackers and the planner's views, so
+   * it is not replaced. Restore into a map of the same geometry that has seen no observation (a freshly assembled run): the
+   * derived layers (views, topology) catch up from the restored change stamps as they do from any change.
+   */
+  restore(s: BeliefMapSnapshot): void {
+    if (s.sizeX !== this.sizeX || s.sizeY !== this.sizeY || s.chunkSize !== this.chunkSize) {
+      throw new RangeError(`belief snapshot is ${s.sizeX} × ${s.sizeY} in chunks of ${s.chunkSize}, the map ${this.sizeX} × ${this.sizeY} in ${this.chunkSize}`);
+    }
+    if (s.chunkVersion.length !== this.chunkVersion.length || s.chunkPlanVersion.length !== this.chunkPlanVersion.length) throw new RangeError("belief snapshot has the wrong number of chunk stamps");
+    if (s.planLog.length > this.planLog.length) throw new RangeError("belief snapshot's change log is longer than the map's");
+    this.chunks.fill(undefined);
+    this.materialized = 0;
+    const cells = this.chunkSize * this.chunkSize;
+    for (const c of s.chunks) {
+      if (c.index < 0 || c.index >= this.chunks.length || this.chunks[c.index] !== undefined) throw new RangeError(`belief snapshot chunk ${c.index} is out of range or repeated`);
+      if (c.logOdds.length !== cells || (c.knownMinDm && c.knownMinDm.length !== cells) || (c.knownMaxDm && c.knownMaxDm.length !== cells)) throw new RangeError(`belief snapshot chunk ${c.index} has the wrong size`);
+      this.chunks[c.index] = { logOdds: c.logOdds.slice(), knownMinDm: c.knownMinDm?.slice(), knownMaxDm: c.knownMaxDm?.slice() };
+      this.materialized++;
+    }
+    this.chunkVersion.set(s.chunkVersion);
+    this.chunkPlanVersion.set(s.chunkPlanVersion);
+    this.versionCounter = s.versionCounter;
+    this.planVersionCounter = s.planVersionCounter;
+    this.planLog.fill(0);
+    this.planLog.set(s.planLog);
+    this.logLength = s.planLog.length;
+    this.logFirst = s.logFirst;
+    this.hashedAt.fill(-1);
+    this.chunkHash.fill(0);
   }
 
   /**

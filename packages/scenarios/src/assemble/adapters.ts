@@ -1,10 +1,17 @@
-import type { PlanningService, PlanOutcome, PlanRestart, SearchSpace } from "@agentsim/algorithms";
+import type { PlanningService, PlanningSnapshot, PlanOutcome, PlanRestart, SearchSpace } from "@agentsim/algorithms";
 import { err, ok, type CapabilityPort, type CodedError, type KnownSpace, type PlanMap, type PlannerPort, type PlanProgress, type PlanQuery, type PlanResult, type Result, type Scope, type SpatialPort, type TraceSink } from "@agentsim/core";
 import { OCCUPANCY_FREE, TERRAIN_IMPASSABLE, type BeliefGrid, type GridSpace, type PlanningGrid } from "@agentsim/spatial";
 import { capabilityManifest, getCapability, isInjectable, validateParams } from "@agentsim/tools-schema";
 import type { TraceBuffer } from "@agentsim/trace";
 import { toPlanningConfig, type EffectiveAgentConfig } from "../run-config/resolve.ts";
 import { traversalFor } from "../traversal.ts";
+
+/** The state of a `PlanningServiceAdapter` between ticks, as plain data (see `PlanningServiceAdapter.snapshot`). */
+export interface PlannerAdapterSnapshot {
+  readonly service: PlanningSnapshot;
+  /** The configurations a `setConfig` changed since assembly, by agent ID. */
+  readonly overrides: readonly (readonly [string, EffectiveAgentConfig])[];
+}
 
 /**
  * PlannerPort over the per-agent PlanningService (ADR-0024, ADR-0028). Each agent plans with its own
@@ -13,6 +20,8 @@ import { traversalFor } from "../traversal.ts";
 export class PlanningServiceAdapter implements PlannerPort {
   private readonly completed = new Map<string, PlanOutcome>();
   private readonly configs = new Map<string, EffectiveAgentConfig>();
+  /** Each agent's configuration at assembly: `setConfig` changes are what a snapshot keeps. */
+  private readonly initial = new Map<string, EffectiveAgentConfig>();
 
   constructor(
     readonly service: PlanningService,
@@ -24,24 +33,56 @@ export class PlanningServiceAdapter implements PlannerPort {
     /** Each non-ideal agent's belief grid (F2): its queries and onboard checks use it, never ground truth. */
     private readonly beliefGrids: ReadonlyMap<string, BeliefGrid> = new Map(),
   ) {
-    for (const a of agents) this.configs.set(a.agentId, a);
+    for (const a of agents) {
+      this.configs.set(a.agentId, a);
+      this.initial.set(a.agentId, a);
+    }
   }
 
   /**
    * The agent's current planning view (ADR-0024 addition of 2026-10-10): its live view for its body's traversal and
    * current planning configuration, over its belief grid (or the ground truth for `ideal` agents), as of the last
    * sync point. Onboard checks (target fit, back-off, remaining path) use it; never ground truth for belief agents.
-   * Its version is the map's version the view was last synced to.
+   * Its version is the map's version the view was last synced to. A UAV's traversal depends on the altitude its path is
+   * planned at: `cruiseAltitudeM` names it (default: the body's cruise altitude), as a query's request does.
    */
   /** The agent's live planning view (its body's traversal and current configuration), or undefined. */
-  liveView(agentId: string): SearchSpace | undefined {
+  liveView(agentId: string, cruiseAltitudeM?: number): SearchSpace | undefined {
     const cfg = this.configs.get(agentId);
-    const v = cfg ? this.service.view(this.beliefGrids.has(agentId) ? agentId : undefined, traversalFor(cfg), toPlanningConfig(cfg)) : undefined;
+    const v = cfg ? this.service.view(this.beliefGrids.has(agentId) ? agentId : undefined, traversalFor(cfg, cruiseAltitudeM), toPlanningConfig(cfg)) : undefined;
     return v?.ok ? v.value : undefined;
   }
 
-  currentMap(agentId: string): PlanMap {
-    const space = this.liveView(agentId);
+  /**
+   * The adapter's state between ticks (F3a M1, T-005; ADR-0035 addition of 2026-10-17, item 8): the planning service's
+   * snapshot, and the planning configurations a `setConfig` changed since assembly. Taken between ticks: completed
+   * outcomes, restart events and lazy legs are all handed to the runtime within the tick, so none may be waiting (a
+   * snapshot that found some would lose them).
+   */
+  snapshot(): PlannerAdapterSnapshot {
+    const out = this.service.pendingOutputs();
+    if (this.completed.size > 0 || out.completed > 0 || out.restarts > 0 || out.legs > 0) {
+      throw new Error(`cannot snapshot the planner with outputs not yet taken (${this.completed.size + out.completed} outcomes, ${out.restarts} restarts, ${out.legs} legs): snapshots are taken between ticks`);
+    }
+    const overrides = [...this.configs]
+      .filter(([id, c]) => this.initial.get(id) !== c)
+      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+      .map(([id, c]): [string, EffectiveAgentConfig] => [id, c]);
+    return { service: this.service.snapshot(), overrides };
+  }
+
+  /** Puts a snapshot back in place: the changed configurations first (queries restart with them), then the service's queries. */
+  restore(s: PlannerAdapterSnapshot): void {
+    this.completed.clear();
+    for (const [id, c] of s.overrides) {
+      if (!this.configs.has(id)) throw new RangeError(`snapshot has a planning configuration for unknown agent ${id}`);
+      this.configs.set(id, c);
+    }
+    this.service.restore(s.service);
+  }
+
+  currentMap(agentId: string, cruiseAltitudeM?: number): PlanMap {
+    const space = this.liveView(agentId, cruiseAltitudeM);
     if (space) return { version: space.version, clearanceM: (x, y, maxM) => space.clearanceM(x, y, maxM) };
     // No configuration (not an agent of this run): fall back to the map itself.
     const bg = this.beliefGrids.get(agentId);
