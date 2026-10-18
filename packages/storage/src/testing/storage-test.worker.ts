@@ -10,7 +10,7 @@ const replay = async (): Promise<ReplayHandlers> => ({
   async beliefAt(ports, runId, agentId, tick) {
     const run = await ports.runs.get(runId);
     if (!run) return err({ code: "unknown_run", message: `unknown run ${runId}` });
-    return ok({ runId, agentId, tick, keyframeTick: 0, deltasApplied: 0, sizeX: 2, sizeY: 2, chunkSize: 2, coords: new Uint16Array([0, 0]), data: new Uint8Array([tick, 1, 2, 3]) });
+    return ok({ runId, agentId, tick, keyframeTick: 0, deltasApplied: 0, groups: { total: 1, from: 0, to: 1, groupChunks: 1, cached: 0, read: 1 }, sizeX: 2, sizeY: 2, chunkSize: 2, coords: new Uint16Array([0, 0]), data: new Uint8Array([tick, 1, 2, 3]) });
   },
   async world(ports, runId) {
     const run = await ports.runs.get(runId);

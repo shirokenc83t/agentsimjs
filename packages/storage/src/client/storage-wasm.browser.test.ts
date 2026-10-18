@@ -4,6 +4,7 @@ import { SnapshotWriter } from "@agentsim/core";
 import { RECORDING_PRESETS, recordingProfileHash } from "@agentsim/trace";
 import { describeStorageContract } from "../testing/contract.ts";
 import { LATEST_SCHEMA_VERSION } from "../sql/migrations.ts";
+import { BELIEF_MANIFEST_FORMAT_STORED } from "../sql/recording-integrity.ts";
 import { createStorageClient, type StorageClient, type StorageClientOptions } from "./storage-client.ts";
 
 const workers: { worker: Worker; client: StorageClient }[] = [];
@@ -130,11 +131,14 @@ describe("storage worker (browser)", () => {
     await c.ports.runs.create(header("run-000002"));
     const external = new Map<string, Uint8Array>();
     const w = new SnapshotWriter({ external: (h, b) => external.set(h, b) });
-    const container = w.finish({ tick: 0, map: w.section({ chunk: Int8Array.from([1, 2, 3]) }) });
+    // A belief map is a manifest section naming group sections; the keyframe is the manifest (ADR-0004 addition of 2026-10-18, second).
+    const group = w.section({ index: 0, chunks: [{ index: 0, logOdds: Int8Array.from([1, 2, 3]) }] });
+    const manifest = w.section({ format: BELIEF_MANIFEST_FORMAT_STORED, groupChunks: 8, meta: {}, groups: [{ index: 0, hash: group.hash }] });
+    const container = w.finish({ tick: 0, map: manifest });
     const blobs = [...external].map(([id, bytes]) => ({ id, bytes }));
     const written = await c.ports.snapshots.write("run-000001", { seq: 0, simTime: 0, tick: 0, bytes: container, blobs });
     expect(written.ok).toBe(true);
-    const kf = blobs[0];
+    const kf = blobs.find((b) => b.id === manifest.hash);
     if (!kf) throw new Error("a blob was expected");
     const frames = [
       { agentId: "uav-001", seq: 0, tick: 0, simTime: 0, kind: "keyframe" as const, chunks: [0], blobId: kf.id },
@@ -150,7 +154,8 @@ describe("storage worker (browser)", () => {
     expect(await c.ports.runs.get("run-000001")).toEqual(recorded);
     const loaded = written.ok ? await c.ports.snapshots.read("run-000001", written.value.id) : undefined;
     expect(loaded?.container).toEqual(container);
-    expect(loaded?.blobs).toEqual(blobs);
+    const byId = (xs: readonly { id: string }[] | undefined) => [...(xs ?? [])].sort((a, b) => (a.id < b.id ? -1 : 1));
+    expect(byId(loaded?.blobs)).toEqual(byId(blobs));
     expect(await c.ports.beliefFrames.query({ runId: "run-000001", limit: 10 })).toEqual(frames);
     // A run exported alone is a database of its own that imports and keeps its recording.
     if (!one.ok) return;

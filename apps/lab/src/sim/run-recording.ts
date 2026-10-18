@@ -1,5 +1,5 @@
 import { encodeValue, readSnapshot, SnapshotWriter, snapshotHash, type SimAgent } from "@agentsim/core";
-import { snapshotRun, type SnapshotableRun } from "@agentsim/scenarios";
+import { snapshotRun, writeBeliefSections, type SnapshotableRun } from "@agentsim/scenarios";
 import type { RecorderFramesItem, RecordingProfile, RunRecorder, TraceBuffer, TraceRecord } from "@agentsim/trace";
 
 // What a recorded run writes besides what its components trace (ADR-0035 addition of 2026-10-17, items 8 and 9; ADR-0029 addition of the
@@ -45,6 +45,8 @@ export class RunRecording {
     private readonly target: RecordingTarget,
     private readonly recorder: RunRecorder,
     private readonly profile: RecordingProfile,
+    /** Chunks per side of a belief group; the default is the format's (measurements vary it). */
+    private readonly beliefGroupChunks?: number,
   ) {
     this.run = target.run;
     this.trace = target.trace;
@@ -113,7 +115,7 @@ export class RunRecording {
    */
   private snapshot(reason: SnapshotReason, draft?: FramesDraft): { id: string } | undefined {
     const external = new Map<string, Uint8Array>();
-    const bytes = snapshotRun(this.run, { external: (id, b) => external.set(id, b) });
+    const bytes = snapshotRun(this.run, { external: (id, b) => external.set(id, b), ...(this.beliefGroupChunks === undefined ? {} : { beliefGroupChunks: this.beliefGroupChunks }) });
     const id = snapshotHash(bytes);
     const tick = this.tick;
     const record = this.trace.for("world/sim").append({
@@ -146,7 +148,7 @@ export class RunRecording {
     return n;
   }
 
-  /** The belief sections of a snapshot are keyframes of their agents, by the same content id: stored once for both. */
+  /** The belief manifests of a snapshot are keyframes of their agents, by the same content id, and so are its group sections: stored once for both. */
   private keyframesFromSnapshot(bytes: Uint8Array, draft: FramesDraft): void {
     const root = readSnapshot(bytes).root as { sensing: { agents: readonly { agentId: string; belief: { hash: string } }[] } };
     const byAgent = new Map(root.sensing.agents.map((a) => [a.agentId, a.belief.hash]));
@@ -171,7 +173,7 @@ export class RunRecording {
       for (const a of this.beliefAgents()) {
         const external = new Map<string, Uint8Array>();
         const w = new SnapshotWriter({ external: (id, b) => external.set(id, b) });
-        const ref = w.section(this.run.sensing.belief(a.id).snapshot());
+        const ref = writeBeliefSections(w, this.run.sensing.belief(a.id).snapshot(), this.beliefGroupChunks);
         for (const [id, b] of external) {
           if (this.sentBlobs.has(id)) continue;
           this.sentBlobs.add(id);

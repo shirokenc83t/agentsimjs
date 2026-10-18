@@ -278,9 +278,10 @@ export class BeliefMap {
    * Sets the cells of a delta to the values it holds, in place (a replay rebuilds a map from a keyframe and the deltas after it). A chunk
    * that was never observed is made with log-odds 0 everywhere, and one that gains height bounds gets them at their starting values (0 and
    * unknown) for the cells the delta does not name, which is what the live map had. Everything is checked before anything changes; the changed chunks
-   * are stamped as changed; the planning change log is not touched (a rebuilt map is read by overlays, never planned on).
+   * are stamped as changed; the planning change log is not touched (a rebuilt map is read by overlays, never planned on). With `only`, cells in
+   * chunks it refuses are skipped: a reader that rebuilds some groups of the map applies the deltas to those groups only.
    */
-  applyCellDelta(d: BeliefCellDelta): void {
+  applyCellDelta(d: BeliefCellDelta, only?: (chunkIndex: number) => boolean): void {
     const n = d.cells.length;
     if (d.logOdds.length !== n) throw new RangeError("a cell delta's cells and log-odds must have the same length");
     const total = this.sizeX * this.sizeY;
@@ -299,6 +300,7 @@ export class BeliefMap {
       const cell = d.cells[k] as number;
       const i = cell % this.sizeX;
       const j = (cell - i) / this.sizeX;
+      if (only && !only(this.chunkIndex(i, j))) continue;
       const c = this.materialize(i, j) as Chunk;
       c.logOdds[this.offset(i, j)] = d.logOdds[k] as number;
       this.chunkVersion[this.chunkIndex(i, j)] = this.versionCounter;
@@ -308,6 +310,7 @@ export class BeliefMap {
         const cell = d.cells[h.at[m] as number] as number;
         const i = cell % this.sizeX;
         const j = (cell - i) / this.sizeX;
+        if (only && !only(this.chunkIndex(i, j))) continue;
         const c = this.materialize(i, j) as Chunk;
         if (!c.knownMinDm || !c.knownMaxDm) {
           const cells = this.chunkSize * this.chunkSize;

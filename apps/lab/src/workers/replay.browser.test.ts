@@ -1,6 +1,6 @@
-import { Scheduler, contentHash128Bytes, encodeValue } from "@agentsim/core";
-import { F2_DISCOVERY_ID, F2_TWENTY_AGENTS_ID, f2DiscoveryScenario, f2PriorReferenceScenario, f2RunConfig, f2TwentyAgentsScenario } from "@agentsim/scenarios";
-import { BeliefMap } from "@agentsim/spatial";
+import { Scheduler, SnapshotWriter, encodeValue } from "@agentsim/core";
+import { BELIEF_GROUP_CHUNKS, F2_DISCOVERY_ID, F2_TWENTY_AGENTS_ID, f2DiscoveryScenario, f2PriorReferenceScenario, f2RunConfig, f2TwentyAgentsScenario, writeBeliefSections } from "@agentsim/scenarios";
+import { BeliefMap, groupGeometry, groupOfChunk } from "@agentsim/spatial";
 import { createStorageClient, type BeliefFrame, type StorageClient } from "@agentsim/storage";
 import { RECORDING_PRESETS, RunRecorder, recordingProfileHash, type RecorderBatch, type RecorderItem, type RecordingProfile } from "@agentsim/trace";
 import { afterEach, describe, expect, it } from "vitest";
@@ -154,9 +154,7 @@ describe.skipIf(!MEASURE)("replay measurements (report only)", () => {
     const out: string[] = [];
     const say = (s: string) => out.push(s);
     const client = await spawn();
-    // Run A: a fully observed 1 km² map with heights (a 20 MiB keyframe) and the longest run of cell deltas K = 30 s allows (300 at 10 Hz).
-    const keyframe = encodeValue(fullMap().snapshot());
-    const blobId = contentHash128Bytes(keyframe);
+    // Run A (one per group size): a fully observed 1 km² map with heights (20 MiB of groups) and the longest run of cell deltas K = 30 s allows (300 at 10 Hz).
     const live = fullMap();
     live.trackCellChanges();
     for (let k = 0; k < 16 * 50; k++) {
@@ -169,25 +167,48 @@ describe.skipIf(!MEASURE)("replay measurements (report only)", () => {
     const profile = profileOf();
     const saved = await client.ports.scenarios.saveVersion(f2PriorReferenceScenario());
     if (!saved.ok) throw new Error(saved.error.message);
-    await client.ports.runs.create(headerOf("run-000001", profile, saved.value.id, saved.value.version));
-    await client.ports.snapshots.putBlobs("run-000001", [{ id: blobId, bytes: keyframe }]);
-    const frames: BeliefFrame[] = [{ agentId: "ugv-001", seq: 0, tick: 0, simTime: 0, kind: "keyframe", chunks: Array.from({ length: 1024 }, (_, i) => i), blobId }];
-    for (let t = 1; t <= 300; t++) frames.push({ agentId: "ugv-001", seq: t, tick: t, simTime: t / 10, kind: "delta", chunks: taken.chunks, data: deltaBytes });
-    const appended = await client.ports.beliefFrames.append("run-000001", frames);
-    if (!appended.ok) throw new Error(appended.error.message);
-    say(`run A: keyframe ${(keyframe.length / 1048576).toFixed(1)} MiB, 300 deltas of ${taken.delta.cells.length} cells in ${taken.chunks.length} chunks`);
-
-    const cold = await timed(() => client.replay.beliefAt("run-000001", "ugv-001", 300));
-    const phases = await client.replay.beliefAt("run-000001", "ugv-001", 300);
-    say(`phases in the worker (ms): ${JSON.stringify(phases.ok ? phases.value.timingsMs : undefined)}`);
-    const warm: number[] = [];
-    for (let i = 0; i < 6; i++) warm.push((await timed(() => client.replay.beliefAt("run-000001", "ugv-001", 300)))[0]);
-    const atKeyframe: number[] = [];
-    for (let i = 0; i < 4; i++) atKeyframe.push((await timed(() => client.replay.beliefAt("run-000001", "ugv-001", 0)))[0]);
-    say(`belief map at tick 300 (keyframe + 300 deltas), request to bytes in the main thread: first (module load included) ${cold[0].toFixed(0)} ms; warm median ${med(warm).toFixed(0)} ms, max ${Math.max(...warm).toFixed(0)} ms; at the keyframe tick (no deltas) median ${med(atKeyframe).toFixed(0)} ms`);
-    const w1 = await timed(() => client.replay.world("run-000001"));
+    const sizes = [4, 8, 16];
+    const runOf = (g: number) => `run-0000${10 + sizes.indexOf(g)}`;
+    const table: string[] = [];
+    for (const g of sizes) {
+      const runId = runOf(g);
+      const external = new Map<string, Uint8Array>();
+      const ref = writeBeliefSections(new SnapshotWriter({ external: (h, bytes) => external.set(h, bytes) }), fullMap().snapshot(), g);
+      await client.ports.runs.create(headerOf(runId, profile, saved.value.id, saved.value.version));
+      await client.ports.snapshots.putBlobs(runId, [...external].map(([id, bytes]) => ({ id, bytes })));
+      const frames: BeliefFrame[] = [{ agentId: "ugv-001", seq: 0, tick: 0, simTime: 0, kind: "keyframe", chunks: Array.from({ length: 1024 }, (_, i) => i), blobId: ref.hash }];
+      for (let t = 1; t <= 300; t++) frames.push({ agentId: "ugv-001", seq: t, tick: t, simTime: t / 10, kind: "delta", chunks: taken.chunks, data: deltaBytes });
+      const appended = await client.ports.beliefFrames.append(runId, frames);
+      if (!appended.ok) throw new Error(appended.error.message);
+      const sizeBytes = [...external.values()].reduce((n, x) => n + x.length, 0);
+      // The first overlay: the groups that cover a 12 x 12 chunk window around the middle of the map (about 380 m a side), nearest first.
+      const geo = groupGeometry(2000, 2000, 64, g);
+      const window = new Set<number>();
+      for (let cj = 10; cj < 22; cj++) for (let ci = 10; ci < 22; ci++) window.add(groupOfChunk(geo, cj * geo.chunksX + ci));
+      const focus = { ci: 16, cj: 16 };
+      const first = await timed(() => client.replay.beliefAt(runId, "ugv-001", 300, { focus, limit: window.size }));
+      const rest = await timed(() => client.replay.beliefAt(runId, "ugv-001", 300, { focus, skip: window.size }));
+      const fullCold = first[1].ok && rest[1].ok ? first[0] + rest[0] : Number.NaN;
+      const warm: number[] = [];
+      const worker: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        const r = await timed(() => client.replay.beliefAt(runId, "ugv-001", 300, { focus }));
+        warm.push(r[0]);
+        const t = r[1].ok ? r[1].value.timingsMs : undefined;
+        worker.push(t ? t.blob + t.deltas + t.classify : Number.NaN);
+      }
+      const f = first[1].ok ? first[1].value : undefined;
+      table.push(
+        `${g} x ${g} chunks: ${geo.groupsX * geo.groupsY} groups of ~${(sizeBytes / (geo.groupsX * geo.groupsY) / 1048576).toFixed(2)} MiB (${(sizeBytes / 1048576).toFixed(1)} MiB in all); first overlay = ${window.size} nearest groups (${f ? f.coords.length / 2 : "?"} chunks): ${first[0].toFixed(0)} ms cold (worker ${first[1].ok ? (first[1].value.timingsMs?.blob ?? 0).toFixed(0) : "?"} ms reading); rest: ${rest[0].toFixed(0)} ms; whole map cold ${fullCold.toFixed(0)} ms; whole map cached: round trip median ${med(warm).toFixed(0)} ms (max ${Math.max(...warm).toFixed(0)}), worker time median ${med(worker).toFixed(0)} ms`,
+      );
+    }
+    say(`run A: 20 MiB of belief groups for a fully observed 1 km² map with heights, 300 deltas of ${taken.delta.cells.length} cells in ${taken.chunks.length} chunks, tick 300:`);
+    for (const row of table) say(`  ${row}`);
+    const gMain = BELIEF_GROUP_CHUNKS;
+    const mainRun = runOf(gMain);
+    const w1 = await timed(() => client.replay.world(mainRun));
     const w2: number[] = [];
-    for (let i = 0; i < 3; i++) w2.push((await timed(() => client.replay.world("run-000001")))[0]);
+    for (let i = 0; i < 3; i++) w2.push((await timed(() => client.replay.world(mainRun)))[0]);
     say(`world of the 1 km² run (scenario load and ${((2000 * 2000 * 4) / 1048576).toFixed(0)} MiB of atlas chunks), request to bytes: first ${w1[0].toFixed(0)} ms, warm median ${med(w2).toFixed(0)} ms`);
 
     if (import.meta.env["VITE_AGENTSIM_BENCH_REPLAY"] === "A") {
@@ -220,7 +241,7 @@ describe.skipIf(!MEASURE)("replay measurements (report only)", () => {
       done = true;
     })();
     while (!done) {
-      reads.belief.push((await timed(() => client.replay.beliefAt("run-000001", "ugv-001", 300)))[0]);
+      reads.belief.push((await timed(() => client.replay.beliefAt(mainRun, "ugv-001", 300)))[0]);
       reads.agent.push((await timed(() => client.ports.trace.query({ runId: "run-000002", agentId: "ugv-001", limit: 200 })))[0]);
       reads.pose.push((await timed(() => client.ports.trace.query({ runId: "run-000002", kinds: ["observation"], op: "pose", simTime: { from: 10, to: 20 }, limit: 2000 })))[0]);
       reads.kind.push((await timed(() => client.ports.trace.query({ runId: "run-000002", kinds: ["action"], limit: 200 })))[0]);

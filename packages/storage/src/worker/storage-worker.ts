@@ -3,7 +3,7 @@ import type { RecorderItem, RunHeader, RunStatus, TraceRecord } from "@agentsim/
 import type { Database, SAHPoolUtil, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { openWasmSqlDriver, SecondConnectionError } from "../drivers/wasm-sql-driver.ts";
 import type { BeliefFrame, BeliefFrameQuery, CachedResponse, SnapshotWrite, StoragePorts, StoredBlob, StoredRunInput } from "../ports.ts";
-import type { ReplayHandlers, StorageExtensions } from "../replay.ts";
+import type { ReplayHandlers, ReplayView, StorageExtensions } from "../replay.ts";
 import type { SqlDriver } from "../sql/driver.ts";
 import { LATEST_SCHEMA_VERSION, migrate } from "../sql/migrations.ts";
 import { createSqlPorts } from "../sql/sql-storage.ts";
@@ -518,7 +518,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
           if (!extensions?.replay) return fail(req.id, "unsupported", "this storage worker has no replay module");
           replayModule ??= extensions.replay();
           const mod = await replayModule;
-          const r = req.op === "replay.world" ? await mod.world(s, String(a)) : await mod.beliefAt(s, String(a), String(b), Number(req.args[2]));
+          const r = req.op === "replay.world" ? await mod.world(s, String(a)) : await mod.beliefAt(s, String(a), String(b), Number(req.args[2]), req.args[3] as ReplayView | undefined);
           value = r;
           if (r.ok) transfer = [r.value.coords.buffer as ArrayBuffer, r.value.data.buffer as ArrayBuffer];
           break;

@@ -50,7 +50,7 @@ interface Measured {
 }
 
 /** Runs `ticks` ticks of a world whose ground vehicles explore, recorded under `profile` as the sim worker does (or not recorded, `undefined`). */
-function runMeasured(world: ScenarioHostedWorld, ticks: number, profile: RecordingProfile | undefined, poll = 8): Measured {
+function runMeasured(world: ScenarioHostedWorld, ticks: number, profile: RecordingProfile | undefined, poll = 8, groupChunks?: number): Measured {
   const batches: RecorderBatch[] = [];
   const items: RecorderItem[] = [];
   let recorder: RunRecorder | undefined;
@@ -59,7 +59,7 @@ function runMeasured(world: ScenarioHostedWorld, ticks: number, profile: Recordi
   const snapshotMs: number[] = [];
   if (profile) {
     recorder = new RunRecorder({ buffer: world.trace, profile, send: (b) => batches.push(b), sendItem: (i) => items.push(i) });
-    recording = new RunRecording(world.recordingTarget(), recorder, profile);
+    recording = new RunRecording(world.recordingTarget(), recorder, profile, groupChunks);
     const rec = recording;
     let lastItems = 0;
     world.setTickHook(() => {
@@ -379,3 +379,44 @@ measure_("snapshot of the 1 km² prior-map run: container, belief sections and e
   recordResults("node.json", { "recording.snapshot.prior1km.encode": summarize(sizes.map((s) => s[3])), "recording.snapshot.prior1km.beliefBytes": summarize(sizes.map((s) => s[2]), "bytes") });
   expect(sizes[0]?.[1]).toBeGreaterThan(0);
 }, 240_000);
+
+// ---- 6. belief chunk groups: the size of a group (T-027) ------------------------------------------------------------------------------------
+
+measure_("belief chunk groups of 4, 8 and 16 chunks per side: bytes of keyframes and snapshots with sharing, on the 20-agent exploring run and on the 1 km² prior run", () => {
+  const TICKS = 2400;
+  const rows: (string | number)[][] = [["group", "blobs handed over", "blob bytes / agent-hour (keyframes + snapshots)", "snapshot containers / agent-hour", "total / agent-hour"]];
+  const metrics: Record<string, ReturnType<typeof summarize>> = {};
+  const profile = profileWith("default-research", (p) => ({ ...p, channels: { ...p.channels, beliefs: { level: "chunks", keyframeEveryS: 30 } }, checkpoints: { everyTicks: 100, snapshotEveryS: 60 } }));
+  for (const G of [4, 8, 16]) {
+    const m = runMeasured(loadWorld(WORLDS.twenty.doc(), WORLDS.twenty.cfg()), TICKS, profile, 8, G);
+    const blobs = m.items.flatMap((i) => i.blobs);
+    const blobBytes = blobs.reduce((n, b) => n + b.bytes.length, 0);
+    const containers = m.items.filter((i): i is Extract<RecorderItem, { type: "snapshot" }> => i.type === "snapshot").reduce((n, s) => n + s.bytes.length, 0);
+    const perAgentHour = (b: number) => (b / m.agents) * (3600 / m.simSeconds);
+    rows.push([`${G} × ${G} chunks`, blobs.length, kb(perAgentHour(blobBytes)), kb(perAgentHour(containers)), kb(perAgentHour(blobBytes + containers))]);
+    metrics[`recording.groups.G${G}.bytesPerAgentHour`] = summarize([perAgentHour(blobBytes + containers)], "bytes");
+  }
+  emit(`
+Belief groups, ${WORLDS.twenty.label}, ${TICKS * DT} s, K = 30 s, S = 60 s (keyframes and snapshots only; deltas and records are not affected):
+${table(rows)}`);
+  const prior: (string | number)[][] = [["group", "snapshot", "container", "new blob bytes", "blobs"]];
+  for (const G of [4, 8, 16]) {
+    const world = loadWorld(f2PriorReferenceScenario(), f2PriorRunConfig(1));
+    const target = world.recordingTarget();
+    const scheduler = new Scheduler(world, world.dtS);
+    for (const id of world.entityIds) if (id.startsWith("ugv")) world.inject({ agentId: id, name: "explore", params: {} });
+    const seen = new Set<string>();
+    for (const at of [0, 300, 600]) {
+      while (world.tick < at) scheduler.step();
+      let fresh = 0;
+      let count = 0;
+      const bytes = snapshotRun(target.run, { beliefGroupChunks: G, external: (id, b) => { if (!seen.has(id)) { seen.add(id); fresh += b.length; count++; } } });
+      prior.push([`${G} × ${G}`, `tick ${at}`, kb(bytes.length), mb(fresh), count]);
+    }
+  }
+  recordResults("node.json", metrics);
+  emit(`
+1 km² prior-map run (${f2PriorReferenceScenario().agents.length} agents), snapshots of the same run, new blobs only (an unchanged group is not counted again):
+${table(prior)}`);
+  expect(rows.length).toBe(4);
+}, 600_000);

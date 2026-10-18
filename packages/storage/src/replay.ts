@@ -5,10 +5,21 @@ import type { StoragePorts } from "./ports.ts";
 // an agent at a tick, and the world a run was made in. Both are rebuilt in the storage worker, off the render path, by a module that is
 // loaded when the first replay asks for it (the app supplies it: it needs the scenario and belief-map code that this package does not have).
 
-export type ReplayErrorCode = "unknown_run" | "not_recorded" | "no_keyframe" | "scenario_missing" | "scenario_invalid" | "unknown_agent";
+export type ReplayErrorCode = "unknown_run" | "not_recorded" | "no_keyframe" | "scenario_missing" | "scenario_invalid" | "unknown_agent" | "unsupported_recording";
 export type ReplayError = CodedError<ReplayErrorCode>;
 
-/** An agent's belief map at a tick as the belief overlay takes it: the believed state of every materialized chunk, one byte per cell. */
+/**
+ * Which groups of the map a read returns (keyframes are lists of fixed square groups of chunks): the groups are ordered by their distance to
+ * `focus` (default: the middle of the map), and the read returns `limit` of them after skipping `skip`. A first read of the nearest few paints at
+ * once; a second read (`skip` = what the first returned) brings the rest.
+ */
+export interface ReplayView {
+  readonly focus?: { readonly ci: number; readonly cj: number };
+  readonly skip?: number;
+  readonly limit?: number;
+}
+
+/** An agent's belief map at a tick as the belief overlay takes it: the believed state of every materialized chunk of the groups asked for, one byte per cell. */
 export interface ReplayBelief {
   readonly runId: string;
   readonly agentId: string;
@@ -18,6 +29,8 @@ export interface ReplayBelief {
   readonly deltasApplied: number;
   /** Wall time of each phase of the rebuild in the worker (diagnostics: never in a trace or a hash). */
   readonly timingsMs?: { readonly blob: number; readonly decode: number; readonly deltas: number; readonly classify: number };
+  /** The groups the map has at this tick (the keyframe's and those the deltas made), and which of them this read returned (positions in the order of the view). */
+  readonly groups: { readonly total: number; readonly from: number; readonly to: number; readonly groupChunks: number; readonly cached: number; readonly read: number };
   readonly sizeX: number;
   readonly sizeY: number;
   readonly chunkSize: number;
@@ -42,7 +55,7 @@ export interface ReplayWorld {
 }
 
 export interface ReplayHandlers {
-  beliefAt(ports: StoragePorts, runId: string, agentId: string, tick: number): Promise<Result<ReplayBelief, ReplayError>>;
+  beliefAt(ports: StoragePorts, runId: string, agentId: string, tick: number, view?: ReplayView): Promise<Result<ReplayBelief, ReplayError>>;
   world(ports: StoragePorts, runId: string): Promise<Result<ReplayWorld, ReplayError>>;
 }
 
@@ -53,6 +66,6 @@ export interface StorageExtensions {
 
 /** The replay reads of the storage client (they run in the worker). */
 export interface ReplayClient {
-  beliefAt(runId: string, agentId: string, tick: number): Promise<Result<ReplayBelief, ReplayError>>;
+  beliefAt(runId: string, agentId: string, tick: number, view?: ReplayView): Promise<Result<ReplayBelief, ReplayError>>;
   world(runId: string): Promise<Result<ReplayWorld, ReplayError>>;
 }

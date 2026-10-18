@@ -1,4 +1,5 @@
 import { StateHasher, decodeValue } from "@agentsim/core";
+import { readBeliefSections } from "@agentsim/scenarios";
 import { BeliefMap, type BeliefCellDelta, type BeliefMapSnapshot } from "@agentsim/spatial";
 import { describe, expect, it } from "vitest";
 import { framesOf, profileOf, setup } from "./run-recording-harness.ts";
@@ -23,7 +24,8 @@ function rebuild(like: BeliefMap, agentId: string, tick: number, frames: readonl
   const bytes = blobs.get(last.blobId ?? "");
   if (!bytes) throw new Error("keyframe blob missing");
   const map = new BeliefMap(like.sizeX, like.sizeY, like.chunkSize);
-  map.restore(decodeValue(bytes) as BeliefMapSnapshot);
+  // A keyframe is a manifest and group sections, all blobs of the run.
+  map.restore(readBeliefSections(decodeValue(bytes), (hash) => decodeValue(blobs.get(hash) ?? new Uint8Array())));
   for (const d of mine.filter((f) => f.kind === "delta" && f.seq > last.seq)) map.applyCellDelta(decodeValue(d.data ?? new Uint8Array()) as BeliefCellDelta);
   return map;
 }
@@ -50,7 +52,8 @@ describe("a belief map rebuilt from keyframe and deltas is the live map", () => 
       expect(hashOf(rebuilt), `tick ${tick}`).toBe(live.get(tick));
     }
     // Chunks that the keyframe did not have were first made by deltas, and the rebuild is exact all the same.
-    const first = decodeValue(blobs.get(frames.find((f) => f.agentId === id && f.kind === "keyframe")?.blobId ?? "") ?? new Uint8Array()) as BeliefMapSnapshot;
+    const firstManifest = decodeValue(blobs.get(frames.find((f) => f.agentId === id && f.kind === "keyframe")?.blobId ?? "") ?? new Uint8Array());
+    const first = readBeliefSections(firstManifest, (hash) => decodeValue(blobs.get(hash) ?? new Uint8Array())) as BeliefMapSnapshot;
     expect(first.chunks.length).toBeLessThan(belief.materializedChunks);
     // The map really changed over the run (the check is not about an empty map).
     expect(live.get(0)).not.toBe(live.get(200));

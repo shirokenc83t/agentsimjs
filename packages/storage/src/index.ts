@@ -54,4 +54,5 @@ export type { RecorderPortMessage, RecorderToStorage, StorageToRecorder, Persist
 export { QuotaGuard, QUOTA_PAUSE_FRACTION, QUOTA_RESUME_FRACTION, MEMORY_FALLBACK_LIMIT_BYTES, type QuotaMeasure } from "./worker/quota.ts";
 export { recorderAppend, reportCommit, type RecorderAppend } from "./worker/recorder-ingest.ts";
 export { poseWindowQuery, type PoseWindow } from "./replay-queries.ts";
-export type { ReplayBelief, ReplayWorld, ReplayError, ReplayErrorCode, ReplayHandlers, ReplayClient, StorageExtensions } from "./replay.ts";
+export type { ReplayView, ReplayBelief, ReplayWorld, ReplayError, ReplayErrorCode, ReplayHandlers, ReplayClient, StorageExtensions } from "./replay.ts";
+export { BELIEF_MANIFEST_FORMAT_STORED } from "./sql/recording-integrity.ts";
