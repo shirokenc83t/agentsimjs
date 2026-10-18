@@ -10,7 +10,7 @@ async function hashAt(page: Page, tick: number): Promise<string> {
 /**
  * The run's trace without what legitimately differs between two runs: the run ID, the informational wall time,
  * and the run prefix of record IDs (`run-000001#7` → `#7`, also in `parentId` and `causeIds`). The snapshot and checkpoint records the
- * recording adds are left out: a replay schedules its inputs before its first tick, so its start snapshot is not the live run's.
+ * recording adds are left out: a re-simulation schedules its inputs before its first tick, so its start snapshot is not the live run's.
  */
 async function traceOf(page: Page): Promise<unknown[]> {
   return page.evaluate(() => {
@@ -34,8 +34,8 @@ async function openRun(page: Page) {
 }
 
 // Run inputs are stored with the run (ADR-0015 clarification): a run reloaded after a browser restart
-// replays identically, because its scenario version, run configuration and recorded inputs are all in storage.
-test("a run with two \"send to\" commands replays from storage after a reload: same hash at every checkpoint, identical trace", async ({ page }) => {
+// re-simulates identically, because its scenario version, run configuration and recorded inputs are all in storage.
+test("a run with two \"send to\" commands is re-simulated from storage after a reload: same hash at every checkpoint, identical trace", async ({ page }) => {
   test.setTimeout(90_000);
   await loadDemo(page);
   await openRun(page);
@@ -61,26 +61,26 @@ test("a run with two \"send to\" commands replays from storage after a reload: s
   await page.reload();
   await waitForStorageReady(page);
   await openRun(page);
-  await page.getByTestId(`replay-${runId}`).click();
+  await page.getByTestId(`resimulate-${runId}`).click();
   await expect(page.getByTestId("run-id")).not.toHaveText(runId);
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("status-tick")).toHaveText("tick 0");
 
-  const replayed: string[] = [];
+  const resimulated: string[] = [];
   for (const tick of [100, 200, 300]) {
     await step(page, 1);
-    replayed.push(await hashAt(page, tick));
+    resimulated.push(await hashAt(page, tick));
   }
-  expect(replayed).toEqual(live);
+  expect(resimulated).toEqual(live);
   expect(new Set(live).size).toBe(3);
   // The trace is identical too, injected records included (only the run ID and the informational wall time differ).
-  const replayTrace = await traceOf(page);
-  expect(replayTrace.length).toBeGreaterThan(0);
-  expect(replayTrace.filter((r) => (r as { kind?: string }).kind === "injected")).toHaveLength(2);
-  expect(replayTrace).toEqual(liveTrace);
+  const resimTrace = await traceOf(page);
+  expect(resimTrace.length).toBeGreaterThan(0);
+  expect(resimTrace.filter((r) => (r as { kind?: string }).kind === "injected")).toHaveLength(2);
+  expect(resimTrace).toEqual(liveTrace);
 
-  // The replay is a run of its own, with the same inputs stored for it.
+  // The re-simulation is a run of its own, with the same inputs stored for it.
   await openRun(page);
-  const replayId = (await page.getByTestId("run-id").textContent()) ?? "";
-  await expect(page.getByTestId(`stored-run-inputs-${replayId}`)).toHaveText("2 inputs");
+  const resimId = (await page.getByTestId("run-id").textContent()) ?? "";
+  await expect(page.getByTestId(`stored-run-inputs-${resimId}`)).toHaveText("2 inputs");
 });

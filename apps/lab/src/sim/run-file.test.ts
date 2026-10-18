@@ -83,4 +83,22 @@ describe("a recorded run exported and imported replays as the same run", () => {
     expect(back.value.records.length).toBe(bundle.value.records.length);
     expect(back.value.header.importedFrom).toBe("run-000001");
   });
+
+  it("an imported run whose header says it was running is not treated as being recorded: it can be deleted, and it is read as a recording (no sim head, no gap)", async () => {
+    const { ports } = await recorded(40);
+    const bundle = await readRunBundle(ports, "run-000001");
+    if (!bundle.ok) throw new Error(bundle.error.message);
+    const other = createMemoryPorts();
+    const written = await writeRunBundle(other, { ...bundle.value, header: { ...bundle.value.header, status: "running" } });
+    if (!written.ok) throw new Error(written.error.message);
+    expect((await other.runs.get(written.value.runId))?.status).toBe("running"); // kept as it was
+    const { src } = await replayOf(other, written.value.runId, 2);
+    const view = src.snapshot();
+    expect(view.replay?.simHeadS).toBeUndefined(); // only a run the sim is running, with the recorder attached, has a gap
+    expect(view.persistedHeadTick).toBe(view.simHeadTick);
+    src.dispose();
+    // The storage worker refuses to delete only the run its own recorder writes to; this is not that run.
+    expect((await other.runs.delete(written.value.runId)).ok).toBe(true);
+    expect(await other.runs.get(written.value.runId)).toBeUndefined();
+  });
 });

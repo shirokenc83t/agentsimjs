@@ -213,8 +213,8 @@ describe("sim host: scenario runs (F1 e2, protocol v2)", () => {
     expect(h.states().at(-1)?.tick).toBe(3);
   });
 
-  // F1 known limitation (2026-10-09, item 5): what a replay of a stored realtime run reproduces.
-  it("replaying a realtime run reproduces its state at every tick, but not its degradation records", () => {
+  // F1 known limitation (2026-10-09, item 5): what a re-simulation of a stored realtime run reproduces.
+  it("re-simulating a realtime run reproduces its state at every tick, but not its degradation records", () => {
     const realtime = { ...demo(), runConfig: { ...f1DemoRunConfig(1), timeMode: "realtime" } };
     const lastStats = (h: ReturnType<typeof harness>) => h.out.filter((m): m is Extract<SimToMain, { type: "stats" }> => m.type === "stats").at(-1);
 
@@ -233,7 +233,7 @@ describe("sim host: scenario runs (F1 e2, protocol v2)", () => {
     expect(inputs).toHaveLength(1);
     expect(a.trace().ofKind("degradation")).toHaveLength(1);
 
-    // Run B: the stored run replayed (same documents, same inputs), realtime, no stall, paused at the same tick.
+    // Run B: the stored run re-simulated (same documents, same inputs), realtime, no stall, paused at the same tick.
     const b = harness();
     b.send({ type: "init", protocolVersion: SIM_PROTOCOL_VERSION, tickRateHz: 10 });
     b.send({ ...realtime, runId: "run-000008", inputs });
@@ -309,7 +309,7 @@ describe("sim host: scenario runs (F1 e2, protocol v2)", () => {
     expect(h.out.at(-1)).toMatchObject({ type: "error", code: "unknown_agent" });
   });
 
-  it("a run stored by F1 replays to the same checkpoint hashes (stored inputs never had the message's shape: ADR-0019 addition of 2026-10-12)", () => {
+  it("a run stored by F1 re-simulates to the same checkpoint hashes (stored inputs never had the message's shape: ADR-0019 addition of 2026-10-12)", () => {
     // The F1 stored form, written out: the same inputs the live run below is given as commands.
     const f1Stored = [
       { inputId: "inp-000001", tick: 1, agentId: "ugv-001", name: "goTo", params: { xM: 50, yM: 10 } },
@@ -548,7 +548,7 @@ describe("sim host: scenario runs (F1 e2, protocol v2)", () => {
     expect(h.out.filter((m) => m.type === "input").map((m) => (m.type === "input" ? m.input.name : ""))).toEqual(["takeoff", "explore", "hold", "land"]);
   });
 
-  it("a load with stored inputs replays them: same input IDs reported back, same hash as the live run", () => {
+  it("a load with stored inputs applies them again: same input IDs reported back, same hash as the live run", () => {
     const live = harness();
     live.send({ type: "init", protocolVersion: SIM_PROTOCOL_VERSION, tickRateHz: 10 });
     live.send(demo());

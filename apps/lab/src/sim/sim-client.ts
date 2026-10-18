@@ -306,7 +306,7 @@ export class SimClient {
     return this.trails.path(this.trailIndex.get(agentId) ?? -1);
   }
 
-  /** Called for every run input the worker records (live commands and replayed inputs), in order. */
+  /** Called for every run input the worker records (live commands and the inputs of a re-simulation), in order. */
   onInput(l: (m: SimInputMessage) => void): () => void {
     this.inputListeners.add(l);
     return () => this.inputListeners.delete(l);

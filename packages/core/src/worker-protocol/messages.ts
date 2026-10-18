@@ -84,7 +84,7 @@ export const SimLoad = Type.Object({
   scenario: Type.Unknown(),
   scenarioVersion: Type.Integer({ minimum: 1, maximum: 0x7fffffff }),
   runConfig: Type.Unknown(),
-  /** Recorded inputs to replay (a stored run), scheduled at their ticks in input order. */
+  /** Recorded inputs to apply again (re-simulating a stored run), scheduled at their ticks in input order. */
   inputs: Type.Optional(Type.Array(RunInputMessage, { maxItems: 100_000 })),
   /**
    * How the run is recorded (ADR-0035 addition of 2026-10-17, item 6): `stored` with the resolved recording profile (the worker
@@ -344,7 +344,7 @@ export const SimTrail = Type.Object({
   ),
 });
 
-/** A run input was recorded (live command or replayed): the main thread stores it with the run. */
+/** A run input was recorded (live command or the input of a re-simulation): the main thread stores it with the run. */
 export const SimInput = Type.Object({ type: Type.Literal("input"), runId: RunId, input: RunInputMessage });
 
 /** A preset built on request: the document (passed through by the main thread, never parsed there) and its content hash. */

@@ -18,9 +18,9 @@ export interface RunPopoverProps {
   /** The 1 km² / 0.5 m reference world (built in the sim worker). */
   onLoadReference: () => void;
   onRerun: () => void;
-  /** Stored runs that can be replayed (newest first), with their recorded input counts. */
+  /** Stored runs that can be re-simulated (newest first), with their recorded input counts. */
   listRuns: () => Promise<{ runId: string; label: string; inputs: number }[]>;
-  onReplay: (runId: string) => void;
+  onResimulate: (runId: string) => void;
 }
 
 /**
@@ -128,8 +128,8 @@ export function RunPopover(props: RunPopoverProps) {
                 <span className="mono" data-testid={`stored-run-inputs-${r.runId}`}>
                   {r.inputs} input{r.inputs === 1 ? "" : "s"}
                 </span>{" "}
-                <Button size="small" variant="text" onClick={() => !busy && props.onReplay(r.runId)} aria-disabled={busy} data-testid={`replay-${r.runId}`}>
-                  Replay
+                <Button size="small" variant="text" onClick={() => !busy && props.onResimulate(r.runId)} aria-disabled={busy} data-testid={`resimulate-${r.runId}`} title="Run it again from its scenario version, run configuration and inputs: a new run (to look at a recording, open it from the Storage browser)">
+                  Re-simulate
                 </Button>
               </li>
             ))}

@@ -71,7 +71,7 @@ async function presetVersion(storage: StorageClient, id: string, document: unkno
 
 /**
  * Stores the run inputs of the current run as the worker records them (ADR-0015 clarification): like the seed
- * and the run configuration, they are part of what the run ran, so a run reloaded after a restart replays
+ * and the run configuration, they are part of what the run ran, so a run reloaded after a restart is re-simulated
  * identically. Inputs reported before the run header exists are buffered; appends are chained so they stay in
  * order. A failed append is reported, never dropped silently.
  */
@@ -130,7 +130,7 @@ export function inputsStored(): Promise<string | undefined> {
 /**
  * Starts a run: a new run ID from storage, the documents loaded and validated by the sim worker, then the
  * run header stored, then its run inputs as they are recorded. Runs need storage (memory fallback included);
- * if storage failed, nothing starts. `inputs` replays a stored run's inputs.
+ * if storage failed, nothing starts. `inputs` re-simulates a stored run: its inputs are applied again.
  */
 export async function startRun(
   storage: StorageClient,
@@ -159,21 +159,21 @@ export async function startRun(
 }
 
 /**
- * Replays a stored run as a new run (after a reload, a browser restart or an import): its scenario version,
+ * Re-simulates a stored run as a new run, run again from its inputs (after a reload, a browser restart or an import): its scenario version,
  * its own copy of the run configuration and its recorded inputs. Deterministic runs reach the same state hashes.
  */
-export async function replayStoredRun(storage: StorageClient, sim: SimClient, runId: string): Promise<LabRun> {
+export async function resimulateRun(storage: StorageClient, sim: SimClient, runId: string): Promise<LabRun> {
   const header = await storage.ports.runs.get(runId);
   if (!header) throw new Error(`unknown_run: ${runId}`);
-  if (header.scenarioId === undefined || header.scenarioVersion === undefined) throw new Error(`not_replayable: ${runId} has no scenario`);
+  if (header.scenarioId === undefined || header.scenarioVersion === undefined) throw new Error(`not_resimulatable: ${runId} has no scenario`);
   const stored = await storage.ports.scenarios.get(header.scenarioId, header.scenarioVersion);
   if (!stored) throw new Error(`scenario_version_not_found: ${header.scenarioId} v${header.scenarioVersion}`);
   const inputs = await storage.ports.runs.inputs(runId);
-  return startRun(storage, sim, stored.document, header.scenarioVersion, header.runConfig, `replay of ${runId}`, inputs);
+  return startRun(storage, sim, stored.document, header.scenarioVersion, header.runConfig, `re-simulation of ${runId}`, inputs);
 }
 
-/** Stored runs that can be replayed (they name a scenario version), newest first. */
-export async function replayableRuns(storage: StorageClient): Promise<{ runId: string; label: string; inputs: number }[]> {
+/** Stored runs that can be re-simulated (they name a scenario version), newest first. */
+export async function resimulatableRuns(storage: StorageClient): Promise<{ runId: string; label: string; inputs: number }[]> {
   const runs = (await storage.ports.runs.list()).filter((r) => r.scenarioId !== undefined).reverse();
   return Promise.all(runs.slice(0, 8).map(async (r) => ({ runId: r.runId, label: r.label, inputs: (await storage.ports.runs.inputs(r.runId)).length })));
 }

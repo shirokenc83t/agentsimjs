@@ -706,7 +706,7 @@ export function ScenarioEditorPanel() {
                 Run saved version
               </Button>
             </div>
-            {(!saved || dirty) && <p className="muted hint">Save first: runs start from a stored version, so they can be replayed.</p>}
+            {(!saved || dirty) && <p className="muted hint">Save first: runs start from a stored version, so they can be re-simulated.</p>}
           </section>
         )}
       </aside>

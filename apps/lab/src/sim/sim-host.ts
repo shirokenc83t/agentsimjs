@@ -548,7 +548,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     recorder?.collect(0, 0); // what genesis emitted (start events, first requests, configuration records): held until the header is stored
     scope.postMessage(r.value.loaded);
     scope.postMessage(r.value.gridMessage());
-    // Replay of a stored run: its inputs, in input order at their ticks (the world assigns the same IDs).
+    // Re-simulation of a stored run: its inputs, in input order at their ticks (the world assigns the same IDs).
     for (const input of m.inputs ?? []) {
       const ri = world.inject({ agentId: input.agentId, name: input.name, params: input.params }, input.tick);
       if (!ri.ok) {

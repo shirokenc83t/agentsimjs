@@ -64,8 +64,8 @@ export function App() {
     () => startRun(async () => (await loadRunController()).startPresetRun(storage, sim, "f1-reference-1km")),
     [startRun, storage, sim],
   );
-  const listRuns = useCallback(async () => (await loadRunController()).replayableRuns(storage), [storage]);
-  const replay = useCallback((runId: string) => startRun(async () => (await loadRunController()).replayStoredRun(storage, sim, runId)), [startRun, storage, sim]);
+  const listRuns = useCallback(async () => (await loadRunController()).resimulatableRuns(storage), [storage]);
+  const resimulate = useCallback((runId: string) => startRun(async () => (await loadRunController()).resimulateRun(storage, sim, runId)), [startRun, storage, sim]);
   const rerunCurrent = useCallback(() => run && startRun(async () => (await loadRunController()).rerun(storage, sim, run)), [startRun, storage, sim, run]);
   const rerunInMode = useCallback(
     (mode: "lockstep" | "realtime") => run && startRun(async () => (await loadRunController()).rerunInMode(storage, sim, run, mode)),
@@ -192,7 +192,7 @@ export function App() {
                 onLoadReference={loadReference}
                 onRerun={() => rerunCurrent()}
                 listRuns={listRuns}
-                onReplay={replay}
+                onResimulate={resimulate}
               />
             </Suspense>
           )}

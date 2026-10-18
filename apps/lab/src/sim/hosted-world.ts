@@ -56,7 +56,7 @@ export interface HostedWorld extends Steppable {
   /** Executed-path points recorded from tick states since the previous call (scenario runs only). */
   drainTrail(): SimTrailMessage | undefined;
   /**
-   * Records a researcher command as a run input for the next tick, or for `atTick` when replaying a stored
+   * Records a researcher command as a run input for the next tick, or for `atTick` when re-simulating a stored
    * run (scenario runs only).
    */
   inject(cmd: { agentId: string; name: string; params: unknown }, atTick?: number): Result<RunInput, CodedError>;
@@ -222,7 +222,7 @@ export class ScenarioHostedWorld implements HostedWorld {
 
   inject(cmd: { agentId: string; name: string; params: unknown }, atTick?: number): Result<RunInput, CodedError> {
     if (!this.entityIds.includes(cmd.agentId)) return { ok: false, error: { code: "unknown_agent", message: `no agent ${cmd.agentId} in this run` } };
-    // The closed set is checked before anything is recorded: a run input is a replayable fact, never a refused name.
+    // The closed set is checked before anything is recorded: a run input is a fact that can be applied again, never a refused name.
     if (!this.run.runtime.isInjectable(cmd.name)) return { ok: false, error: { code: "not_injectable", message: `${cmd.name.slice(0, 32)} is not a researcher command` } };
     if (atTick !== undefined && atTick <= this.run.world.tick) return { ok: false, error: { code: "past_tick", message: `tick ${atTick} has already run` } };
     return { ok: true, value: this.run.world.inject(cmd, atTick) };
