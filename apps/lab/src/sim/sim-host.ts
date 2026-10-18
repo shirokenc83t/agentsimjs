@@ -16,7 +16,7 @@ import {
   type ValidationError,
 } from "@agentsim/core";
 import { f1DemoScenario, f1ReferenceWorldScenario, f2DiscoveryScenario, f2PriorReferenceScenario, f2TwentyAgentsScenario, type StrategyTestError, type StrategyTestRequest, type StrategyTestResult, type StrategyTestRun } from "@agentsim/scenarios";
-import type { TraceBuffer } from "@agentsim/trace";
+import { parseRecordingProfile, RunRecorder, type PersistedHead, type TraceBuffer } from "@agentsim/trace";
 import { DummyHostedWorld, ScenarioHostedWorld, type HostedWorld } from "./hosted-world.ts";
 
 /** The scenario document of a preset, built here (off the main thread): the large ones take tens of ms. */
@@ -34,6 +34,19 @@ function buildPresetDocument(preset: PresetId): unknown {
       return f2PriorReferenceScenario();
   }
 }
+
+/** The sim worker's end of the recorder channel: a `MessagePort` in a worker, a fake in tests. */
+interface RecorderPort {
+  postMessage(message: unknown): void;
+  addEventListener(type: "message", listener: (e: MessageEvent<unknown>) => void): void;
+  start?(): void;
+}
+
+/** What storage tells the recorder (ADR-0019 addition of 2026-10-17). */
+type FromStorage =
+  | { readonly type: "header"; readonly runId: string }
+  | { readonly type: "persisted"; readonly head: PersistedHead }
+  | { readonly type: "rejected"; readonly runId: string; readonly code: string; readonly message: string };
 
 /** What the host needs from a worker scope (keeps it unit-testable). */
 export interface SimScope {
@@ -90,6 +103,10 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   const tickTimes: number[] = [];
   let ticksThisWindow = 0;
   let windowStart = clock.now();
+  /** Recording: the channel to the storage worker (from the main thread), and the recorder of the loaded run when it is recorded. */
+  let recorderPort: RecorderPort | undefined;
+  let recorder: RunRecorder | undefined;
+  let headerWaiters: (() => void)[] = [];
 
   const poseFloats = () => world.entityIds.length * POSE_STRIDE;
 
@@ -179,7 +196,8 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
       const r = trail.replace;
       scope.postMessage(trail, r ? [trail.agents.buffer, trail.points.buffer, r.agents.buffer, r.offsets.buffer, r.points.buffer] : [trail.agents.buffer, trail.points.buffer]);
     }
-    const records = world.drainRecords();
+    // A recorded run shows what the recorder gathered (profile applied), whole; a run without one reads its cache from a cursor.
+    const records = recorder ? recorder.takePanel() : world.drainRecords();
     if (records.length > 0 && world.runId) scope.postMessage({ type: "events", runId: world.runId, records });
     postAgentView();
     postResearcher();
@@ -267,8 +285,10 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   const loop = () => {
     if (!running) return;
     const t0 = clock.now();
-    const n = deciding ? 0 : driver.advance(t0);
+    // Header first: a recorded run does not step until the storage worker has its header (like a wait for decisions, it is not a backlog).
+    const n = deciding || recorder?.awaitingHeader ? 0 : driver.advance(t0);
     recordTicks(n, clock.now() - t0);
+    if (n > 0) recorder?.collect(world.tick, world.simTimeS);
     if (n > 0) postState();
     else postPanels(false);
     if (world.outstandingCount > 0) awaitDecisions();
@@ -289,16 +309,38 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   function pause() {
     running = false;
     clock.clearTimer(timer);
+    recorder?.collect(world.tick, world.simTimeS);
     postStats();
   }
+
+  /** Resolves when the recorder of the loaded run has its header (at once when there is no recorder or it has it). */
+  const headerStored = (): Promise<void> => (recorder?.awaitingHeader ? new Promise<void>((resolve) => headerWaiters.push(resolve)) : Promise.resolve());
+
+  const onFromStorage = (m: FromStorage) => {
+    if (m.type === "header") {
+      if (!recorder || m.runId !== world.runId) return;
+      recorder.headerStored();
+      if (running) driver.start(clock.now()); // the wait for the header is not a backlog
+      const waiting = headerWaiters;
+      headerWaiters = [];
+      for (const w of waiting) w();
+    } else if (m.type === "persisted") {
+      recorder?.persisted(m.head);
+    } else if (m.type === "rejected") {
+      scope.postMessage({ type: "error", code: "recording_failed", message: `the recording of ${m.runId} failed (${m.code}): ${m.message}` });
+      if (running) pause();
+    }
+  };
 
   /** Runs `count` ticks now (paused afterwards). Lockstep semantics: decisions are awaited between ticks. */
   const step = async (count: number) => {
     if (running) pause();
+    if (recorder?.awaitingHeader) await headerStored();
     for (let i = 0; i < count; i++) {
       if (world.outstandingCount > 0) await world.decide();
       scheduler.step();
     }
+    recorder?.collect(world.tick, world.simTimeS);
     postState(true);
     postStats();
   };
@@ -338,6 +380,19 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   };
 
   const load = (m: Extract<MainToSim, { type: "load" }>) => {
+    // A recorded run needs the channel to the storage worker and a valid profile; refused before anything changes.
+    let profile: ReturnType<typeof parseRecordingProfile> | undefined;
+    if (m.recording?.mode === "stored") {
+      if (!recorderPort) {
+        scope.postMessage({ type: "error", code: "recording_unavailable", message: "a recorded run needs the recorder channel to the storage worker, which was not set up" });
+        return;
+      }
+      profile = parseRecordingProfile(JSON.stringify(m.recording.profile));
+      if (!profile.ok) {
+        scope.postMessage({ type: "error", code: "invalid_recording_profile", message: profile.error.message });
+        return;
+      }
+    }
     const r = ScenarioHostedWorld.load(m, () => clock.epochNow());
     if (!r.ok) {
       scope.postMessage({ type: "error", code: r.error.code, message: r.error.message });
@@ -355,6 +410,11 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     if (running) pause();
     dropSandbox();
     world = r.value;
+    // The recorder of a recorded run sits next to the run's trace; it waits for the header before it sends. Runs that are opted out or not
+    // asked about have none: their cache forgets at capacity and counts.
+    const channel = recorderPort;
+    headerWaiters = [];
+    recorder = profile?.ok && channel ? new RunRecorder({ buffer: world.trace, profile: profile.value, send: (batch) => channel.postMessage({ type: "batch", batch }) }) : undefined;
     scheduler = new Scheduler(world, world.dtS);
     // The run's declared time mode (run configuration, in its header and runConfigHash), not the previous one.
     mode = r.value.loaded.timeMode;
@@ -369,6 +429,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     budgetPosts = 0;
     overlayWatch = { agentId: null, rays: false, topology: false };
     rayPosts = 0;
+    recorder?.collect(0, 0); // what genesis emitted (start events, first requests, configuration records): held until the header is stored
     scope.postMessage(r.value.loaded);
     scope.postMessage(r.value.gridMessage());
     // Replay of a stored run: its inputs, in input order at their ticks (the world assigns the same IDs).
@@ -401,6 +462,13 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
         scope.postMessage({ type: "ready", protocolVersion: SIM_PROTOCOL_VERSION, tickRateHz });
         play();
         break;
+      case "recorderPort": {
+        const port = m.port as RecorderPort;
+        recorderPort = port;
+        port.addEventListener("message", (e) => onFromStorage(e.data as FromStorage));
+        port.start?.();
+        break;
+      }
       case "load":
         load(m);
         break;

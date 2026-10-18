@@ -246,6 +246,15 @@ export class SimClient {
   }
 
   /** Loads a scenario run in the worker; resolves with what was loaded, rejects with the worker's error code. */
+  /** True once the sim worker has its end of the recorder channel (a recorded run needs it). */
+  recorderAttached = false;
+
+  /** Hands the sim worker its end of the recorder channel; the other end goes to the storage worker. The port is transferred. */
+  attachRecorderPort(port: MessagePort): void {
+    this.post({ type: "recorderPort", port }, [port]);
+    this.recorderAttached = true;
+  }
+
   load(m: Omit<SimLoadMessage, "type">): Promise<SimLoadedMessage> {
     return new Promise((resolve, reject) => {
       this.loadWaiters.push({ runId: m.runId, resolve, reject });

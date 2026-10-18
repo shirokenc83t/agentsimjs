@@ -222,6 +222,8 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     seq: c("next record sequence number"),
     lastSimTime: c("trace time never goes backwards"),
     droppedCount: s("statistic of the in-memory buffer"),
+    holding: r("set when the run's recorder attaches (a recorded run's cache forgets only what is persisted); a restored run builds its own"),
+    persistedSeq: s("cache bookkeeping: how far the storage worker has saved the run's records"),
     tracers: r("cache of handles by source"),
   },
   TraceBufferSink: { buffer: r(WIRING) },

@@ -4,7 +4,7 @@ import { initTheme, UiThemeProvider, useUiContext } from "@agentsim/ui";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
-import { resolveEnvironment } from "./config/environment.ts";
+import { connectRecorder, resolveEnvironment } from "./config/environment.ts";
 import { probeEnabled } from "./probe.ts";
 import { ServicesProvider } from "./services.tsx";
 
@@ -17,6 +17,7 @@ initTheme();
 const env = resolveEnvironment(import.meta.env["VITE_AGENTSIM_ENV"] as string | undefined);
 const storage = env.createStorage();
 const sim = env.createSim(10);
+connectRecorder(sim, storage);
 
 if (probeEnabled()) {
   window.__agentsim = {

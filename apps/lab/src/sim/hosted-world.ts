@@ -511,16 +511,11 @@ export class ScenarioHostedWorld implements HostedWorld {
     return out;
   }
 
+  /** The records the cache holds from the last one given on: for a run without a recorder (the opted-out run's panel stream). */
   drainRecords(): TraceRecord[] {
-    const all = this.trace.all();
-    const out: TraceRecord[] = [];
-    for (let k = all.length - 1; k >= 0; k--) {
-      const r = all[k] as TraceRecord;
-      if (r.seq <= this.drained) break;
-      out.push(r);
-    }
-    out.reverse();
-    if (out.length > 0) this.drained = (out[out.length - 1] as TraceRecord).seq;
+    const out = this.trace.since(this.drained + 1);
+    const last = out[out.length - 1];
+    if (last) this.drained = last.seq;
     return out;
   }
 }

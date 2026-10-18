@@ -40,6 +40,16 @@ const local: Environment = {
     new SimClient(new Worker(new URL("../workers/sim.worker.ts", import.meta.url), { type: "module", name: "sim" }), tickRateHz),
 };
 
+/**
+ * Sets up the direct channel between the sim worker's recorder and the storage worker (ADR-0019 addition of 2026-10-17): one MessageChannel,
+ * a port to each worker, none kept here, so trace records never pass through the main thread.
+ */
+export function connectRecorder(sim: SimClient, storage: StorageClient): void {
+  const channel = new MessageChannel();
+  sim.attachRecorderPort(channel.port1);
+  storage.attachRecorderPort(channel.port2);
+}
+
 export function resolveEnvironment(mode: string | undefined): Environment {
   if (mode === undefined || mode === "" || mode === "local") return local;
   if (mode === "hosted") throw new Error("The 'hosted' environment needs the remote storage adapters, which arrive in phase FB.");

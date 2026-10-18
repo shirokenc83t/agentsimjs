@@ -1,7 +1,7 @@
 import type { PresetId, SimLoadedMessage } from "@agentsim/core";
 import { F1_DEMO_ID, F1_REFERENCE_WORLD_ID, F2_DISCOVERY_ID, F2_PRIOR_REFERENCE_ID, F2_TWENTY_AGENTS_ID, f1DemoRunConfig, f1ReferenceWorldRunConfig, f2PriorRunConfig, f2RunConfig } from "@agentsim/scenarios";
 import type { StorageClient, StoredRunInput } from "@agentsim/storage";
-import { TRACE_SCHEMA_VERSION, type RunHeader } from "@agentsim/trace";
+import { DEFAULT_RECORDING_PRESET, RECORDING_PRESETS, recordingProfileHash, TRACE_SCHEMA_VERSION, type RecordingProfile, type RunHeader } from "@agentsim/trace";
 import type { SimClient } from "./sim-client.ts";
 import { SIMULATOR_VERSION } from "./simulator-version.ts";
 
@@ -17,7 +17,22 @@ export interface LabRun {
  * The reproducibility header of a run started from the lab (ADR-0028): scenario version, the run's own copy
  * of its run configuration, both hashes (computed by the worker that resolved them) and the simulator version.
  */
-export function headerOf(loaded: SimLoadedMessage, runConfig: unknown, label: string, createdAtWallMs: number, simulatorVersion = SIMULATOR_VERSION): RunHeader {
+/**
+ * How a run is recorded (ADR-0035 addition of 2026-10-17, item 6): with a recording profile (by default `default-research`), or not at
+ * all: the researcher's explicit opt-out, never a default and never a fallback.
+ */
+export type RecordingChoice = { readonly mode: "stored"; readonly profile: RecordingProfile } | { readonly mode: "none" };
+
+export const DEFAULT_RECORDING: RecordingChoice = { mode: "stored", profile: RECORDING_PRESETS[DEFAULT_RECORDING_PRESET] };
+
+export function headerOf(
+  loaded: SimLoadedMessage,
+  runConfig: unknown,
+  label: string,
+  createdAtWallMs: number,
+  simulatorVersion = SIMULATOR_VERSION,
+  recording: RecordingChoice = DEFAULT_RECORDING,
+): RunHeader {
   return {
     runId: loaded.runId,
     schemaVersion: TRACE_SCHEMA_VERSION,
@@ -34,6 +49,9 @@ export function headerOf(loaded: SimLoadedMessage, runConfig: unknown, label: st
     simulatorVersion,
     // As resolved by the worker for this run, never re-derived later (ADR-0028 addition of 2026-10-10).
     idealAgents: [...loaded.idealAgents],
+    // A recorded run records its resolved profile and the profile's hash, next to the run configuration's; an opted-out run says only that.
+    recording: recording.mode,
+    ...(recording.mode === "stored" ? { recordingProfile: recording.profile, recordingProfileHash: recordingProfileHash(recording.profile) } : {}),
   };
 }
 
@@ -129,15 +147,18 @@ export async function startRun(
   runConfig: unknown,
   label: string,
   inputs: readonly StoredRunInput[] = [],
+  recording: RecordingChoice = DEFAULT_RECORDING,
 ): Promise<LabRun> {
   if (storage.status().state !== "ready") throw new Error("storage_unavailable: runs need storage (see the status line)");
+  // A recorded run needs the direct channel between the sim worker and the storage worker; there is no silent fallback to "not recorded".
+  if (recording.mode === "stored" && !(sim.recorderAttached && storage.recorderAttached)) throw new Error("recorder_unavailable: the recorder channel between the workers is not set up");
   const runId = await storage.ports.runs.allocateRunId();
   await recorder?.flushed();
   recorder?.dispose();
   recorder = new InputRecorder(storage, sim, runId);
-  const loaded = await sim.load({ runId, scenario, scenarioVersion, runConfig, ...(inputs.length > 0 ? { inputs: [...inputs] } : {}) });
+  const loaded = await sim.load({ runId, scenario, scenarioVersion, runConfig, ...(inputs.length > 0 ? { inputs: [...inputs] } : {}), recording });
   // Wall time is run metadata only; it never reaches the simulation (ADR-0002).
-  const header = headerOf(loaded, runConfig, label, Date.now());
+  const header = headerOf(loaded, runConfig, label, Date.now(), SIMULATOR_VERSION, recording);
   const created = await storage.ports.runs.create(header);
   if (!created.ok) throw new Error(`${created.error.code}: ${created.error.message}`);
   await recorder.headerCreated();

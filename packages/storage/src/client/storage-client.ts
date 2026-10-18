@@ -45,6 +45,8 @@ export interface StorageClient {
    * travel through here). The port is transferred.
    */
   attachRecorderPort(port: MessagePort): void;
+  /** True once the storage worker has its end of the recorder channel. */
+  readonly recorderAttached: boolean;
   /** The persisted head of a recorded run, after each flush the storage worker reports (the status line, the timeline). */
   onPersisted(listener: (head: PersistedHead) => void): () => void;
 }
@@ -70,6 +72,7 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
   let current: StorageStatus = { type: "status", state: "loading" };
   const listeners = new Set<(s: StorageStatus) => void>();
   const persistedListeners = new Set<(h: PersistedHead) => void>();
+  let recorderAttached = false;
 
   worker.addEventListener("message", (ev: MessageEvent<StorageResponse | StorageStatus | PersistedHeadMessage>) => {
     const m = ev.data;
@@ -210,9 +213,13 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       });
     },
     probeSecondConnection: () => call("test.openSecondConnection"),
+    get recorderAttached() {
+      return recorderAttached;
+    },
     attachRecorderPort(port) {
       const m: RecorderPortMessage = { type: "recorderPort", port };
       worker.postMessage(m, [port]);
+      recorderAttached = true;
     },
     onPersisted(l) {
       persistedListeners.add(l);

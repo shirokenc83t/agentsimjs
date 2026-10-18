@@ -86,7 +86,22 @@ export const SimLoad = Type.Object({
   runConfig: Type.Unknown(),
   /** Recorded inputs to replay (a stored run), scheduled at their ticks in input order. */
   inputs: Type.Optional(Type.Array(RunInputMessage, { maxItems: 100_000 })),
+  /**
+   * How the run is recorded (ADR-0035 addition of 2026-10-17, item 6): `stored` with the resolved recording profile (the worker
+   * hands the profile's records to the storage worker through the recorder port and holds the run until the header is stored),
+   * or `none`, the researcher's explicit opt-out. Absent: the run is not recorded (headless tests).
+   */
+  recording: Type.Optional(
+    Type.Union([Type.Object({ mode: Type.Literal("none") }, { additionalProperties: false }), Type.Object({ mode: Type.Literal("stored"), profile: Type.Unknown() }, { additionalProperties: false })]),
+  ),
 });
+
+/**
+ * The sim worker's end of the recorder channel (ADR-0019 addition of 2026-10-17): the main thread creates a MessageChannel, keeps
+ * neither port, and hands one to this worker and one to the storage worker, so trace records never pass through it. The port is
+ * transferred (it is a `MessagePort`; the schema cannot say so).
+ */
+export const SimRecorderPort = Type.Object({ type: Type.Literal("recorderPort"), port: Type.Unknown() });
 
 /**
  * Researcher command (ADR-0015 clarification of 2026-10-04 and addition of 2026-10-12): world scope, recorded by the
@@ -174,7 +189,7 @@ export const SimStrategyTest = Type.Object({
   planOn: Type.Union([Type.Literal("belief"), Type.Literal("truth")]),
 });
 
-export const MainToSim = Type.Union([SimInit, SimControl, SimReturnBuffer, SimLoad, SimCommand, SimBuildPreset, SimView, SimResearcherWatch, SimBeliefWatch, SimOverlayWatch, SimStrategyTest]);
+export const MainToSim = Type.Union([SimInit, SimControl, SimReturnBuffer, SimRecorderPort, SimLoad, SimCommand, SimBuildPreset, SimView, SimResearcherWatch, SimBeliefWatch, SimOverlayWatch, SimStrategyTest]);
 export type MainToSim = Static<typeof MainToSim>;
 
 // ---- worker → main ----------------------------------------------------------------------------
