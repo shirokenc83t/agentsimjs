@@ -57,7 +57,7 @@ export {
 export * as detmath from "./numerics/detmath/index.ts";
 export { Rng } from "./numerics/rng.ts";
 export { xxHash32, utf8 } from "./numerics/xxhash32.ts";
-export { contentHash, contentHash128Bytes, contentHash64Bytes } from "./numerics/content-hash.ts";
+export { contentHash, contentHash128Bytes, contentHash64, contentHash64Bytes } from "./numerics/content-hash.ts";
 export {
   SNAPSHOT_VERSION,
   SectionRef,

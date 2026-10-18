@@ -4,12 +4,14 @@ import { describe, expect, it } from "vitest";
 
 // ADR-0005 addition (2026-10-11): beliefVsTruth compares an agent's beliefs with the ground truth and is observer-side
 // only. Nothing a mind can see may import it: the allowed list is the module itself, its export and the one place that
-// builds it for a run (`createRun`, which keeps it out of the world, the brains and the mind view).
+// builds it for a run (`createRun`, which keeps it out of the world, the brains and the mind view). The channel table of the
+// trace package also names the record's op (`belief-vs-truth`, ADR-0035 addition of 2026-10-17, item 1): a string, not the module.
 const ALLOWED = new Set(
   [
     ["packages", "scenarios", "src", "assemble", "belief-vs-truth.ts"],
     ["packages", "scenarios", "src", "assemble", "index.ts"],
     ["packages", "scenarios", "src", "assemble", "run.ts"],
+    ["packages", "trace", "src", "channels.ts"],
   ].map((p) => p.join(sep)),
 );
 const SKIP = new Set(["node_modules", "dist", "coverage", "e2e", "bench"]);
