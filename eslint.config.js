@@ -11,7 +11,7 @@ const DETERMINISTIC = ["core", "spatial", "algorithms", "plans", "policies", "pr
 const STORAGE = ["packages/storage/src/**/*.{ts,tsx}"];
 const NODE_SQLITE_DRIVER = ["packages/storage/src/drivers/node-sql-driver.ts"];
 // The only modules allowed to use dynamic import(): app-level lazy loading of workspaces/panels.
-const LAZY_LOADERS = ["apps/*/src/workspaces/registry.tsx", "packages/storage/src/worker/load-sqlite.ts"];
+const LAZY_LOADERS = ["apps/*/src/workspaces/registry.tsx", "apps/*/src/workers/replay-registry.ts", "packages/storage/src/worker/load-sqlite.ts"];
 
 const msg = {
   sqlite: "SQLite is accessed only inside packages/storage, through the storage ports (ADR-0010).",
