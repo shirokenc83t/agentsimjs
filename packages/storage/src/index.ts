@@ -53,3 +53,5 @@ export { storageMessageChecks, type StorageMessageChecks } from "./worker/messag
 export type { RecorderPortMessage, RecorderToStorage, StorageToRecorder, PersistedHeadMessage, QuotaMessage, RecorderPortLike } from "./worker/recorder-protocol.ts";
 export { QuotaGuard, QUOTA_PAUSE_FRACTION, QUOTA_RESUME_FRACTION, MEMORY_FALLBACK_LIMIT_BYTES, type QuotaMeasure } from "./worker/quota.ts";
 export { recorderAppend, reportCommit, type RecorderAppend } from "./worker/recorder-ingest.ts";
+export { poseWindowQuery, type PoseWindow } from "./replay-queries.ts";
+export type { ReplayBelief, ReplayWorld, ReplayError, ReplayErrorCode, ReplayHandlers, ReplayClient, StorageExtensions } from "./replay.ts";

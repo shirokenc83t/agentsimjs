@@ -1,5 +1,6 @@
 import type { CodedError, Result } from "@agentsim/core";
 import type { StoragePorts } from "../ports.ts";
+import type { ReplayClient } from "../replay.ts";
 import {
   STORAGE_PROTOCOL_VERSION,
   type StorageInfo,
@@ -36,6 +37,8 @@ export interface StorageAdmin {
 
 export interface StorageClient {
   readonly ports: StoragePorts;
+  /** Replay reads rebuilt in the storage worker: an agent's belief map at a tick, and the world a run was made in. */
+  readonly replay: ReplayClient;
   readonly admin: StorageAdmin;
   /** Latest status; listeners are called on every change. */
   status(): StorageStatus;
@@ -200,6 +203,7 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
 
   return {
     ports,
+    replay: rpc("replay", ["beliefAt", "world"]) as unknown as ReplayClient,
     admin,
     status: () => current,
     onStatus(l) {

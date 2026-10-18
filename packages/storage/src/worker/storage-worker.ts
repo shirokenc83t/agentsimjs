@@ -3,6 +3,7 @@ import type { RecorderItem, RunHeader, RunStatus, TraceRecord } from "@agentsim/
 import type { Database, SAHPoolUtil, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { openWasmSqlDriver, SecondConnectionError } from "../drivers/wasm-sql-driver.ts";
 import type { BeliefFrame, BeliefFrameQuery, CachedResponse, SnapshotWrite, StoragePorts, StoredBlob, StoredRunInput } from "../ports.ts";
+import type { ReplayHandlers, StorageExtensions } from "../replay.ts";
 import type { SqlDriver } from "../sql/driver.ts";
 import { LATEST_SCHEMA_VERSION, migrate } from "../sql/migrations.ts";
 import { createSqlPorts } from "../sql/sql-storage.ts";
@@ -222,7 +223,9 @@ class Engine {
 }
 
 /** Runs the storage worker on `scope` (the module worker's global scope in production). */
-export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChecks): void {
+export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChecks, extensions?: StorageExtensions): void {
+  /** The replay module, once the first replay read asked for it. */
+  let replayModule: Promise<ReplayHandlers> | undefined;
   let engine: Engine | undefined;
   let release: (() => void) | undefined;
   const queue: (StorageRequest | RecorderAppend | RecorderSide)[] = [];
@@ -509,6 +512,17 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "beliefFrames.append": value = await s.beliefFrames.append(String(a), Array.isArray(b) ? (b as BeliefFrame[]) : []); break;
         case "beliefFrames.query": value = await s.beliefFrames.query(a as BeliefFrameQuery); break;
         case "beliefFrames.keyframeAtOrBefore": value = await s.beliefFrames.keyframeAtOrBefore(String(a), String(b), Number(req.args[2])); break;
+        case "replay.beliefAt":
+        case "replay.world": {
+          // Rebuilt here, in the worker, from the stored frames and scenario; the module is loaded on the first read.
+          if (!extensions?.replay) return fail(req.id, "unsupported", "this storage worker has no replay module");
+          replayModule ??= extensions.replay();
+          const mod = await replayModule;
+          const r = req.op === "replay.world" ? await mod.world(s, String(a)) : await mod.beliefAt(s, String(a), String(b), Number(req.args[2]));
+          value = r;
+          if (r.ok) transfer = [r.value.coords.buffer as ArrayBuffer, r.value.data.buffer as ArrayBuffer];
+          break;
+        }
         case "admin.info": value = await e.info(); break;
         case "admin.exportDb": {
           const bytes = e.exportDb();

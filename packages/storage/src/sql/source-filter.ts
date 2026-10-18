@@ -54,3 +54,25 @@ export function sourceFilterMatches(source: TraceQuery["source"], recordSource: 
   if (include && !matchesSource(include, recordSource)) return false;
   return !(exclude && matchesSource(exclude, recordSource));
 }
+
+const MAX_KINDS = 32;
+const MAX_FILTER_TEXT = 200;
+const isText = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= MAX_FILTER_TEXT;
+
+/** Validates the agent, kind and op filters of a trace query (they arrive from another realm); a bad one is a bad request. */
+export function checkRecordFilter(q: Pick<TraceQuery, "agentId" | "kinds" | "op">): void {
+  if (q.agentId !== undefined && !isText(q.agentId)) throw new RangeError("invalid agent filter");
+  if (q.op !== undefined && !isText(q.op)) throw new RangeError("invalid op filter");
+  if (q.kinds !== undefined && (!Array.isArray(q.kinds) || q.kinds.length > MAX_KINDS || !q.kinds.every(isText))) throw new RangeError("invalid kind filter");
+}
+
+/** Same semantics in memory (in-memory adapter): agent, kinds and payload op. */
+export function recordFilterMatches(q: Pick<TraceQuery, "agentId" | "kinds" | "op">, r: { readonly agentId?: string | undefined; readonly kind: string; readonly payload?: unknown }): boolean {
+  if (q.agentId !== undefined && r.agentId !== q.agentId) return false;
+  if (q.kinds !== undefined && !q.kinds.includes(r.kind)) return false;
+  if (q.op !== undefined) {
+    const op = r.payload !== null && typeof r.payload === "object" ? (r.payload as { op?: unknown }).op : undefined;
+    if (op !== q.op) return false;
+  }
+  return true;
+}

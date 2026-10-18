@@ -21,6 +21,12 @@ export interface TraceQuery {
   readonly source?: { readonly include?: readonly SourcePattern[]; readonly exclude?: readonly SourcePattern[] };
   /** Inclusive sim-time window (seconds), mapped to a `seq` range (seq order = sim-time order in a run). */
   readonly simTime?: { readonly from?: number; readonly to?: number };
+  /** Records about this agent (`agent_id`; the subject, not the emitter). */
+  readonly agentId?: string;
+  /** Records of any of these kinds (1 to 32; an empty list matches nothing). */
+  readonly kinds?: readonly string[];
+  /** Records whose payload `op` is this one (a post-filter on top of the others: pose samples are `observation` + `pose`). */
+  readonly op?: string;
 }
 
 export interface TraceStore {

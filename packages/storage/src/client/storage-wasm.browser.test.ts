@@ -48,6 +48,18 @@ describeStorageContract("sqlite-wasm storage worker (opfs-sahpool)", async () =>
 });
 
 describe("storage worker (browser)", () => {
+  it("serves replay reads from a module loaded on the first one: it gets the ports, and the bytes it returns are transferred", async () => {
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    await c.ports.runs.create(header("run-000001"));
+    const belief = await c.replay.beliefAt("run-000001", "uav-001", 7);
+    expect(belief.ok && [belief.value.tick, [...belief.value.data], [...belief.value.coords]]).toEqual([7, [7, 1, 2, 3], [0, 0]]);
+    const world = await c.replay.world("run-000001");
+    expect(world.ok && world.value.data.length).toBe(16);
+    const missing = await c.replay.beliefAt("run-000009", "uav-001", 1);
+    expect(missing).toMatchObject({ ok: false, error: { code: "unknown_run" } });
+  });
+
   it("persists data across close and reopen", async () => {
     const a = spawn({ resetOnOpen: true });
     await a.ready();
