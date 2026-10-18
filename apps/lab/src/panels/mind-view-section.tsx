@@ -1,6 +1,6 @@
 import type { DecisionRequest } from "@agentsim/core";
 import { useEffect, type ReactNode } from "react";
-import type { SimClient } from "../sim/sim-client.ts";
+import type { RunSource } from "../sim/run-source.ts";
 import { useSimStream } from "./use-sim-stream.ts";
 
 /** One row of the section. */
@@ -28,14 +28,14 @@ function parse(text: string): DecisionRequest | undefined {
  * ground truth; researcher-only data (beliefs versus truth) is a separate section. Asking for the view changes
  * nothing in the run.
  */
-export function MindViewSection(props: { sim: SimClient; agentId: string; runId: string }) {
-  const { sim, agentId, runId } = props;
+export function MindViewSection(props: { source: RunSource; agentId: string; runId: string }) {
+  const { source, agentId, runId } = props;
   // Look at this agent while the section is shown; stop when it goes away (agent or run changed, panel closed).
   useEffect(() => {
-    sim.send({ type: "view", agentId });
-    return () => sim.send({ type: "view", agentId: null });
-  }, [sim, agentId, runId]);
-  const msg = useSimStream(sim, "agentView", (m) => m.runId === runId && m.agentId === agentId, [runId, agentId]);
+    source.send({ type: "view", agentId });
+    return () => source.send({ type: "view", agentId: null });
+  }, [source, agentId, runId]);
+  const msg = useSimStream(source, "agentView", (m) => m.runId === runId && m.agentId === agentId, [runId, agentId]);
   const req = msg ? parse(msg.request) : undefined;
   return (
     <section className="inspector-section mind-view" data-testid="inspector-mind-view" aria-label="What the mind receives">

@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
 import { connectRecorder, resolveEnvironment } from "./config/environment.ts";
 import { probeEnabled } from "./probe.ts";
+import { LiveRunSource } from "./sim/live-run-source.ts";
 import { ServicesProvider } from "./services.tsx";
 
 // TypeBox is configured lazily, by the first validate()/isValid() call (ADR-0018 addition 2026-10-08): keeping
@@ -18,6 +19,7 @@ const env = resolveEnvironment(import.meta.env["VITE_AGENTSIM_ENV"] as string | 
 const storage = env.createStorage();
 const sim = env.createSim(10);
 connectRecorder(sim, storage);
+const source = new LiveRunSource(sim, storage);
 
 if (probeEnabled()) {
   window.__agentsim = {
@@ -57,7 +59,7 @@ if (!root) throw new Error("missing #root");
 createRoot(root).render(
   <StrictMode>
     <UiThemeProvider>
-      <ServicesProvider value={{ sim, storage }}>
+      <ServicesProvider value={{ sim, source, storage }}>
         <App />
       </ServicesProvider>
     </UiThemeProvider>

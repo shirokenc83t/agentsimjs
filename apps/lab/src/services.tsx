@@ -3,11 +3,15 @@ import { isThemePreference, setThemePreference, type ThemePreference } from "@ag
 import { createContext, useContext, useEffect, useState } from "react";
 import type { LabRun } from "./sim/run-controller.ts";
 import type { WorkspaceId } from "./workspaces/presets.ts";
+import type { RunSource } from "./sim/run-source.ts";
 import type { SimClient } from "./sim/sim-client.ts";
 
 /** App services shared by panels (constructed once in the composition root). */
 export interface Services {
+  /** The run in the sim worker, for what controls it: play, pause, step, load, presets (live only). */
   readonly sim: SimClient;
+  /** The run as panels read it: live today, a recorded run in replay (ADR-0016). Panels read this, never the client. */
+  readonly source: RunSource;
   readonly storage: StorageClient;
 }
 

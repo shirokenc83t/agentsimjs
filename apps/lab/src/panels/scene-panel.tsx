@@ -3,7 +3,6 @@ import Button from "@mui/material/Button";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import { PerformanceHud, SceneView, useUiContext, type GridViewMode, type HudStats, type SceneRenderer } from "@agentsim/ui";
-import type { TraceRecord } from "@agentsim/trace";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { attachRendererProbe } from "../probe.ts";
 import { usePolled, useServices } from "../services.tsx";
@@ -14,30 +13,12 @@ import { useStagesOverlay } from "./use-stages-overlay.ts";
 import { useBeliefOverlay, type MapOverlay } from "./use-belief-overlay.ts";
 import { useSensorOverlays } from "./use-sensor-overlays.ts";
 
-interface PlanPayload {
-  readonly op?: unknown;
-  readonly status?: unknown;
-  readonly waypoints?: unknown;
-}
-
-/** Latest found plan per agent, from the run's `compute` records (ADR-0004: every planning query is traced). */
-export function latestPlans(records: readonly TraceRecord[]): Map<string, { seq: number; waypoints: [number, number][] }> {
-  const out = new Map<string, { seq: number; waypoints: [number, number][] }>();
-  for (const r of records) {
-    if (r.kind !== "compute" || r.agentId === undefined) continue;
-    const p = r.payload as PlanPayload;
-    if (p.op !== "plan" || p.status !== "found" || !Array.isArray(p.waypoints)) continue;
-    out.set(r.agentId, { seq: r.seq, waypoints: p.waypoints as [number, number][] });
-  }
-  return out;
-}
-
 /**
  * Scene workspace main panel: the grid atlas, agents with labels, zones, planned (dashed) vs executed
  * (solid) paths, picking into the shared UI context (ADR-0016), view modes and the Performance HUD.
  */
 export function ScenePanel() {
-  const { sim } = useServices();
+  const { source } = useServices();
   const [renderer, setRenderer] = useState<SceneRenderer | undefined>(undefined);
   const [interpolation, setInterpolation] = useState(true);
   const [mode, setMode] = useState<GridViewMode>("occupancy");
@@ -46,9 +27,13 @@ export function ScenePanel() {
   const [showTopology, setShowTopology] = useState(false);
   const [showStages, setShowStages] = useState(false);
   // Snapshot at ≤ 10 Hz: entity table, run and grid (agent colours are derived from IDs once per agent).
-  const snap = usePolled(useCallback(() => sim.snapshot(), [sim]), 100);
+  const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const selection = useUiContext((s) => s.selection);
   const selectedAgent = selection?.kind === "agent" ? selection.id : undefined;
+  // Features with no recorded source are off in replay, each with its reason (undefined while the source has them).
+  const noCommands = source.unavailable("commands");
+  const noRays = source.unavailable("rays");
+  const noTopology = source.unavailable("topology");
   // "Send to" mode (ADR-0015 researcher command): the next ground click becomes the selected agent's target.
   const [sendFor, setSendFor] = useState<string | undefined>(undefined);
   const sendRef = useRef<string | undefined>(undefined);
@@ -67,7 +52,7 @@ export function ScenePanel() {
           }
           const agentId = sendRef.current;
           if (agentId !== undefined && p.kind === "cell") {
-            sim.command(agentId, "goTo", { xM: p.xM, yM: p.yM });
+            source.command(agentId, "goTo", { xM: p.xM, yM: p.yM });
             setSendFor(undefined);
             return;
           }
@@ -75,7 +60,7 @@ export function ScenePanel() {
         };
       }
     },
-    [sim],
+    [source],
   );
 
   // G toggles "send to" for the selected agent; Escape cancels. Ignored while typing in a field.
@@ -102,9 +87,9 @@ export function ScenePanel() {
   // The belief overlay (F2): the selected agent's own map, streamed only while it is shown. `ideal` agents have none.
   const ideal = selectedAgent !== undefined && (snap.run?.idealAgents ?? []).includes(selectedAgent);
   const chunksX = snap.grid ? Math.ceil(snap.grid.dims.sizeX / snap.grid.dims.chunkSize) : 0;
-  useBeliefOverlay(sim, renderer, overlay, selectedAgent, !ideal, snap.run?.runId, chunksX);
-  useSensorOverlays(sim, renderer, showRays, showTopology, selectedAgent, snap.run?.runId);
-  useStagesOverlay(sim, renderer, showStages, selectedAgent);
+  useBeliefOverlay(source, renderer, overlay, selectedAgent, !ideal, snap.run?.runId, chunksX);
+  useSensorOverlays(source, renderer, showRays, showTopology, selectedAgent, snap.run?.runId);
+  useStagesOverlay(source, renderer, showStages, selectedAgent);
   useSandboxOverlay(renderer, selectedAgent);
   const sandbox = useSandboxView();
   const picking = useSandboxTarget().picking;
@@ -123,46 +108,46 @@ export function ScenePanel() {
     if (!renderer) return;
     const shown = new Map<string, number>();
     const refresh = () => {
-      for (const [agentId, plan] of latestPlans(sim.records())) {
+      for (const [agentId, plan] of source.plannedPaths()) {
         if (shown.get(agentId) === plan.seq) continue;
         shown.set(agentId, plan.seq);
         renderer.setPlannedPath(agentId, plan.waypoints);
       }
     };
     refresh();
-    return sim.onRecords(refresh);
-  }, [renderer, sim, snap.grid]);
+    return source.onRecords(refresh);
+  }, [renderer, source, snap.grid]);
 
   // Executed paths: points recorded by the worker from tick states; appended as they arrive.
   useEffect(() => {
     if (!renderer) return;
     const refresh = () => {
-      for (const id of sim.snapshot().entityIds) renderer.setExecutedPath(id, sim.executedPath(id));
+      for (const id of source.snapshot().entityIds) renderer.setExecutedPath(id, source.executedPath(id));
     };
     refresh();
-    return sim.onTrail(refresh);
-  }, [renderer, sim, snap.grid, snap.entityIds]);
+    return source.onTrail(refresh);
+  }, [renderer, source, snap.grid, snap.entityIds]);
 
   const getStats = useCallback((): HudStats => {
     const r = renderer;
-    const s = sim.snapshot();
+    const s = source.stats();
     const meanInterval = r?.frameIntervalMs.mean() ?? 0;
     return {
       fps: meanInterval > 0 ? 1000 / meanInterval : 0,
       frameWorkMeanMs: r?.frameWorkMs.mean() ?? 0,
       frameWorkP95Ms: r?.frameWorkMs.percentile(0.95) ?? 0,
       frameIntervalP95Ms: r?.frameIntervalMs.percentile(0.95) ?? 0,
-      simTickRateHz: s.tickRateHz,
-      simTicksPerSecond: s.ticksPerSecond,
-      simTickP95Ms: s.tickTimeP95Ms,
-      stateLatencyP95Ms: sim.stateLatencyMs.percentile(0.95),
-      interpolationIntervalMs: sim.interpolator.intervalEstimateMs,
-      entities: sim.interpolator.entityCount,
+      simTickRateHz: s.simTickRateHz,
+      simTicksPerSecond: s.simTicksPerSecond,
+      simTickP95Ms: s.simTickP95Ms,
+      stateLatencyP95Ms: s.stateLatencyP95Ms,
+      interpolationIntervalMs: s.interpolationIntervalMs,
+      entities: s.entities,
     };
-  }, [sim, renderer]);
+  }, [source, renderer]);
 
   return (
-    <SceneView interpolator={sim.interpolator} onRenderer={onRenderer}>
+    <SceneView interpolator={source.poses} onRenderer={onRenderer}>
       {snap.grid && (
         <div className={`scene-overlay${sendFor ? " sending" : ""}`} data-testid="scene-overlay">
           <div className="row">
@@ -170,11 +155,11 @@ export function ScenePanel() {
               size="small"
               variant={sendFor ? "contained" : "outlined"}
               color="inherit"
-              disabled={!selectedAgent}
+              disabled={!selectedAgent || noCommands !== undefined}
               onClick={() => setSendFor(sendFor ? undefined : selectedAgent)}
               aria-pressed={sendFor !== undefined}
               data-testid="send-to"
-              title="Send the selected agent to a point (G); Esc cancels"
+              title={noCommands ?? "Send the selected agent to a point (G); Esc cancels"}
             >
               {sendFor ? `Click a target for ${sendFor} · Esc` : selectedAgent ? `Send ${selectedAgent} to… (G)` : "Send to… (select an agent)"}
             </Button>
@@ -202,10 +187,10 @@ export function ScenePanel() {
             </ToggleButton>
           </ToggleButtonGroup>
           <ToggleButtonGroup size="small" value={[...(showRays ? ["rays"] : []), ...(showTopology ? ["topology"] : [])]} onChange={(_e, v: string[]) => { setShowRays(v.includes("rays")); setShowTopology(v.includes("topology")); }} aria-label="Sensor and topology overlays">
-            <ToggleButton value="rays" data-testid="overlay-rays" title="The selected agent's lidar rays (decimated)">
+            <ToggleButton value="rays" data-testid="overlay-rays" disabled={noRays !== undefined} title={noRays ?? "The selected agent's lidar rays (decimated)"}>
               ⌁ rays
             </ToggleButton>
-            <ToggleButton value="topology" data-testid="overlay-frontiers" title="The selected agent's regions and frontier groups">
+            <ToggleButton value="topology" data-testid="overlay-frontiers" disabled={noTopology !== undefined} title={noTopology ?? "The selected agent's regions and frontier groups"}>
               ◌ frontiers
             </ToggleButton>
           </ToggleButtonGroup>
@@ -214,6 +199,11 @@ export function ScenePanel() {
               ⑂ stages
             </ToggleButton>
           </ToggleButtonGroup>
+          {(noRays !== undefined || noTopology !== undefined) && (
+            <p className="muted" data-testid="overlay-off-reason">
+              Rays and frontiers are off in replay: {noRays ?? noTopology}
+            </p>
+          )}
           {picking && <p className="muted" data-testid="scene-sandbox-picking">Click a target for the Strategy test · Esc</p>}
           {(showRays || showTopology) && !selectedAgent && <p className="muted">Select an agent to see its rays and frontiers.</p>}
           {overlay !== "truth" && !selectedAgent && <p className="muted">Select an agent to see its map.</p>}
@@ -294,12 +284,12 @@ export function ScenePanel() {
         </div>
       )}
       <PerformanceHud
-        extra={<HudBudgetRows sim={sim} runId={snap.run?.runId} />}
+        extra={<HudBudgetRows source={source} runId={snap.run?.runId} />}
         getStats={getStats}
         interpolation={interpolation}
         onInterpolationChange={(on) => {
           setInterpolation(on);
-          sim.interpolator.setEnabled(on);
+          source.poses.setInterpolation(on);
         }}
       />
     </SceneView>

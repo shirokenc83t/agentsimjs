@@ -4,7 +4,7 @@ import { agentColorIndex, STATE_GLYPH, useUiContext } from "@agentsim/ui";
 import Button from "@mui/material/Button";
 import { useCallback, useState, type ReactNode } from "react";
 import { usePolled, useServices } from "../services.tsx";
-import type { SimClient, SimSnapshot } from "../sim/sim-client.ts";
+import type { RunFeature, RunSnapshot, RunSource } from "../sim/run-source.ts";
 import { AGENT_COMMANDS, commandParams } from "../commands.ts";
 import { actionLabel, actionState, waypointsText, type AgentViews, type CommandView } from "./agent-views.ts";
 import { MindViewSection } from "./mind-view-section.tsx";
@@ -33,6 +33,18 @@ function Row(props: { k: string; children: ReactNode; testId?: string }) {
       <dt>{props.k}</dt>
       <dd data-testid={props.testId}>{props.children}</dd>
     </>
+  );
+}
+
+/** A live-only section: its content while the source has it, else the reason it is off (a recording has no such data). */
+function Unavailable(props: { source: RunSource; feature: RunFeature; title: string; children: ReactNode }) {
+  const why = props.source.unavailable(props.feature);
+  if (why === undefined) return <>{props.children}</>;
+  return (
+    <section className="inspector-section" data-testid={`inspector-off-${props.feature}`}>
+      <h4>{props.title}</h4>
+      <p className="muted">Not available in replay: {why}</p>
+    </section>
   );
 }
 
@@ -70,8 +82,8 @@ function bodyRows(body: Record<string, unknown>): [string, string][] {
  * Researcher commands (ADR-0015 addition of 2026-10-12): world scope, recorded as run inputs. Every button is always
  * available: preconditions still apply, so a command the agent cannot run now is refused with its code, shown here.
  */
-function CommandsSection(props: { id: string; kind: string; body: Record<string, unknown>; sim: SimClient; command: CommandView | undefined }) {
-  const { id, kind, body, sim, command } = props;
+function CommandsSection(props: { id: string; kind: string; body: Record<string, unknown>; source: RunSource; command: CommandView | undefined }) {
+  const { id, kind, body, source, command } = props;
   const [altitude, setAltitude] = useState("");
   const parsed = Number(altitude);
   const altitudeM = altitude.trim() !== "" && Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
@@ -105,7 +117,9 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
             variant="outlined"
             color="inherit"
             sx={{ marginRight: 0.5 }}
-            onClick={() => sim.command(id, c.op, commandParams(c.op, body, altitudeM))}
+            disabled={source.unavailable("commands") !== undefined}
+            title={source.unavailable("commands")}
+            onClick={() => source.command(id, c.op, commandParams(c.op, body, altitudeM))}
             data-testid={`command-${c.op}`}
           >
             {c.title}
@@ -125,16 +139,16 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
   );
 }
 
-function AgentInspector(props: { id: string; snap: SimSnapshot; sim: SimClient; views: Map<string, AgentViews> }) {
-  const { id, snap, sim, views } = props;
-  const queries = usePlanQueries(sim, id);
+function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSource; views: Map<string, AgentViews> }) {
+  const { id, snap, source, views } = props;
+  const queries = usePlanQueries(source, id);
   const picked = useQuerySelection();
   const selectedQuery = picked?.agentId === id && queries.some((q) => q.queryId === picked.queryId) ? picked.queryId : undefined;
   const run = snap.run as SimLoadedMessage;
   const index = snap.entityIds.indexOf(id);
   const agent = run.agents.find((a) => a.id === id);
   if (!agent || index < 0) return <p className="muted">Agent {id} is not in this run.</p>;
-  const pose = sim.pose(index);
+  const pose = source.pose(index);
   const st = snap.agentStatus;
   const o = index * STATUS_STRIDE;
   const v = views.get(id);
@@ -151,7 +165,9 @@ function AgentInspector(props: { id: string; snap: SimSnapshot; sim: SimClient; 
         <span className="agent-swatch" style={{ backgroundColor: `var(--agent-${agentColorIndex(id)})` }} /> <span className="mono">{id}</span>{" "}
         <span className="muted">{agent.key ?? ""} · {agent.kind.toUpperCase()}</span>
       </h3>
-      <MindViewSection sim={sim} agentId={id} runId={run.runId} />
+      <Unavailable source={source} feature="mindView" title="What the mind receives">
+        <MindViewSection source={source} agentId={id} runId={run.runId} />
+      </Unavailable>
       <Section title="Beliefs (initial map)" testId="inspector-beliefs-init">
         <Row k="initial map" testId="inspector-init">
           {ideal ? (
@@ -189,7 +205,7 @@ function AgentInspector(props: { id: string; snap: SimSnapshot; sim: SimClient; 
           </Row>
         )}
       </Section>
-      <CommandsSection id={id} kind={agent.kind} body={body} sim={sim} command={v?.command} />
+      <CommandsSection id={id} kind={agent.kind} body={body} source={source} command={v?.command} />
       <Section title="Last plan" testId="inspector-plan">
         {v?.plan ? (
           <>
@@ -239,8 +255,12 @@ function AgentInspector(props: { id: string; snap: SimSnapshot; sim: SimClient; 
           </Row>
         ))}
       </Section>
-      <StrategyTestSection key={`${run.runId}/${id}`} sim={sim} agentId={id} />
-      <ResearcherSection sim={sim} agentId={id} runId={run.runId} />
+      <Unavailable source={source} feature="strategyTest" title="Strategy test">
+        <StrategyTestSection key={`${run.runId}/${id}`} source={source} agentId={id} />
+      </Unavailable>
+      <Unavailable source={source} feature="researcher" title="Beliefs versus ground truth">
+        <ResearcherSection source={source} agentId={id} runId={run.runId} />
+      </Unavailable>
       {agent.warnings && agent.warnings.length > 0 && (
         <Section title="Body warnings" testId="inspector-warnings">
           {agent.warnings.map((w) => (
@@ -257,12 +277,12 @@ function AgentInspector(props: { id: string; snap: SimSnapshot; sim: SimClient; 
 }
 
 /** Distance (m) from a cell's centre to the nearest occupied cell received so far, searched up to `maxM`. */
-function clearanceM(sim: SimClient, i: number, j: number, res: number, maxM: number): number | undefined {
+function clearanceM(source: RunSource, i: number, j: number, res: number, maxM: number): number | undefined {
   const r = Math.ceil(maxM / res);
   let best: number | undefined;
   for (let dj = -r; dj <= r; dj++) {
     for (let di = -r; di <= r; di++) {
-      const c = sim.cellAt(i + di, j + dj);
+      const c = source.cellAt(i + di, j + dj);
       if (!c || c.occupancy !== 1) continue;
       const d = Math.max(0, Math.hypot(di, dj) - 0.5) * res;
       if (d <= maxM && (best === undefined || d < best)) best = d;
@@ -271,12 +291,12 @@ function clearanceM(sim: SimClient, i: number, j: number, res: number, maxM: num
   return best;
 }
 
-function CellInspector(props: { id: string; snap: SimSnapshot; sim: SimClient }) {
+function CellInspector(props: { id: string; snap: RunSnapshot; source: RunSource }) {
   const [si, sj] = props.id.split(",").map(Number);
   const i = si ?? 0;
   const j = sj ?? 0;
   const res = props.snap.grid?.dims.resolutionM ?? 1;
-  const c = props.sim.cellAt(i, j);
+  const c = props.source.cellAt(i, j);
   if (!c) return <p className="muted">Cell {props.id} is outside the grid or not loaded yet.</p>;
   const occupied = c.occupancy === 1;
   const unknownHeight = occupied && c.heightDm === 0;
@@ -287,7 +307,7 @@ function CellInspector(props: { id: string; snap: SimSnapshot; sim: SimClient })
       : c.defaultObstacleHeightM !== undefined
         ? `unknown height: the scenario assumes ${c.defaultObstacleHeightM} m (defaultObstacleHeightM)`
         : "unknown height: blocks aircraft at any altitude (no defaultObstacleHeightM)";
-  const clear = clearanceM(props.sim, i, j, res, 5);
+  const clear = clearanceM(props.source, i, j, res, 5);
   return (
     <div data-testid="inspector-cell">
       <h3 className="mono">cell {props.id}</h3>
@@ -313,14 +333,14 @@ function CellInspector(props: { id: string; snap: SimSnapshot; sim: SimClient })
  * (ADR-0028), body warnings. Cells: layers, the effective air rule for unknown heights, clearance.
  */
 export function InspectorPanel() {
-  const { sim } = useServices();
-  const snap = usePolled(useCallback(() => sim.snapshot(), [sim]), 100);
-  const views = useAgentViews(sim);
+  const { source } = useServices();
+  const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
+  const views = useAgentViews(source);
   const selection = useUiContext((s) => s.selection);
   let body: ReactNode = <p className="muted">Select an agent or a cell (Scene, Explorer).</p>;
   if (!snap.run) body = <p className="muted">No run loaded.</p>;
-  else if (selection?.kind === "agent") body = <AgentInspector id={selection.id} snap={snap} sim={sim} views={views} />;
-  else if (selection?.kind === "cell") body = <CellInspector id={selection.id} snap={snap} sim={sim} />;
+  else if (selection?.kind === "agent") body = <AgentInspector id={selection.id} snap={snap} source={source} views={views} />;
+  else if (selection?.kind === "cell") body = <CellInspector id={selection.id} snap={snap} source={source} />;
   return (
     <div className="panel inspector" data-testid="inspector">
       {body}

@@ -12,9 +12,9 @@ import { useAgentViews } from "./use-agent-views.ts";
  * (glyph + text). Selecting a row selects the agent everywhere through the UI context.
  */
 export function ExplorerPanel() {
-  const { sim } = useServices();
-  const snap = usePolled(useCallback(() => sim.snapshot(), [sim]), 100);
-  const views = useAgentViews(sim);
+  const { source } = useServices();
+  const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
+  const views = useAgentViews(source);
   const selection = useUiContext((s) => s.selection);
   const agents = snap.run?.agents ?? [];
   const ideal = new Set(snap.run?.idealAgents ?? []);
