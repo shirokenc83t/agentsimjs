@@ -1,6 +1,6 @@
 import { Scheduler, decodeValue, encodeValue, readSnapshot } from "@agentsim/core";
 import { F2_DISCOVERY_ID, F2_TWENTY_AGENTS_ID, f2DiscoveryScenario, f2PriorReferenceScenario, f2PriorRunConfig, f2RunConfig, f2TwentyAgentsScenario, snapshotRun } from "@agentsim/scenarios";
-import { BeliefMap, type BeliefMapSnapshot } from "@agentsim/spatial";
+import { BeliefMap, type BeliefCellDelta, type BeliefMapSnapshot } from "@agentsim/spatial";
 import { RECORDING_PRESETS, RunRecorder, channelOf, estimateRecordBytes, type RecorderBatch, type RecorderItem, type RecordingProfile, type TraceRecord } from "@agentsim/trace";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { expect, it } from "vitest";
@@ -304,24 +304,33 @@ ${table(rows)}`);
   expect(frames.length).toBeGreaterThan(100);
 }, 240_000);
 
-measure_("worst-case rebuild of a belief map at a tick on a fully observed 1 km² map: keyframe plus the longest run of deltas K allows", () => {
+measure_("worst-case rebuild of a belief map at a tick on a fully observed 1 km² map: keyframe plus the longest run of cell deltas K allows", () => {
   const rows: (string | number)[][] = [["map", "keyframe bytes", "deltas", "chunks per delta", "rebuild median", "rebuild max", "within 100 ms"]];
   const metrics: Record<string, ReturnType<typeof summarize>> = {};
   for (const [label, withHeights] of [["1 km², log-odds only (4 KiB per chunk)", false], ["1 km², heights in every chunk (20 KiB per chunk)", true]] as const) {
     const source = fullMap(withHeights);
     const keyframe = encodeValue(source.snapshot());
     for (const [deltas, c] of [[0, 0], [100, 4], [300, 4], [600, 4], [300, 16], [600, 16]] as const) {
-      const delta = deltas === 0 ? new Uint8Array(0) : encodeValue({ chunks: source.chunksSnapshot(Array.from({ length: c }, (_, i) => (i * 37) % 1024).sort((a, b) => a - b).filter((x, i, all) => i === 0 || x !== all[i - 1])) });
+      // A delta as the recording writes it: the cells that changed (about 50 in each of `c` chunks, what the 20-agent run writes), with their heights when the map has them.
+      const live = fullMap(withHeights);
+      live.trackCellChanges();
+      for (let k = 0; k < c * 50; k++) {
+        const chunk = ((k % c) * 37) % 1024;
+        live.observeFree((chunk % 32) * 64 + ((k * 7) % 64), Math.floor(chunk / 32) * 64 + ((k * 13) % 64), 3);
+      }
+      const taken = c === 0 ? undefined : live.takeCellDelta();
+      const delta = deltas === 0 || !taken ? new Uint8Array(0) : encodeValue(taken.delta);
+      const cellsPerDelta = taken?.delta.cells.length ?? 0;
       const times: number[] = [];
       for (let rep = 0; rep < 6; rep++) {
         const t0 = performance.now();
         const map = new BeliefMap(2000, 2000, 64);
         map.restore(decodeValue(keyframe) as BeliefMapSnapshot);
-        for (let d = 0; d < deltas; d++) map.applyChunks((decodeValue(delta) as { chunks: BeliefMapSnapshot["chunks"] }).chunks);
+        for (let d = 0; d < deltas; d++) map.applyCellDelta(decodeValue(delta) as BeliefCellDelta);
         if (rep >= 1) times.push(performance.now() - t0);
       }
       const s = summarize(times);
-      rows.push([label, mb(keyframe.length), deltas, c, ms(s.median), ms(Math.max(...times)), s.median <= 100 ? "yes" : "NO"]);
+      rows.push([label, mb(keyframe.length), deltas, `${c} chunks, ${cellsPerDelta} cells`, ms(s.median), ms(Math.max(...times)), s.median <= 100 ? "yes" : "NO"]);
       metrics[`recording.rebuild.${withHeights ? "heights" : "logodds"}.d${deltas}.c${c}`] = s;
     }
   }
