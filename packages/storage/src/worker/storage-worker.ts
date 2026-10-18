@@ -1,5 +1,5 @@
 import type { CodedError, Result } from "@agentsim/core";
-import type { RunHeader, RunStatus, TraceRecord } from "@agentsim/trace";
+import type { RecorderItem, RunHeader, RunStatus, TraceRecord } from "@agentsim/trace";
 import type { Database, SAHPoolUtil, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { openWasmSqlDriver, SecondConnectionError } from "../drivers/wasm-sql-driver.ts";
 import type { BeliefFrame, BeliefFrameQuery, CachedResponse, SnapshotWrite, StoragePorts, StoredBlob, StoredRunInput } from "../ports.ts";
@@ -17,7 +17,7 @@ import {
   type StorageStatus,
 } from "./protocol.ts";
 import { QuotaGuard, MEMORY_FALLBACK_LIMIT_BYTES, type QuotaMeasure } from "./quota.ts";
-import { recorderAppend, reportCommit, type RecorderAppend } from "./recorder-ingest.ts";
+import { recorderAppend, recorderSide, reportCommit, type RecorderAppend, type RecorderSide } from "./recorder-ingest.ts";
 import type { QuotaMessage, RecorderPortLike, RecorderPortMessage, RecorderToStorage } from "./recorder-protocol.ts";
 import { deserializeToMemory, exportRun, validateImport } from "./transfer.ts";
 
@@ -199,12 +199,12 @@ class Engine {
 export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChecks): void {
   let engine: Engine | undefined;
   let release: (() => void) | undefined;
-  const queue: (StorageRequest | RecorderAppend)[] = [];
+  const queue: (StorageRequest | RecorderAppend | RecorderSide)[] = [];
   /** The direct channel to the sim worker's recorder (ADR-0019 addition of 2026-10-17): batches in, header and persisted head out. */
   let recorderPort: RecorderPortLike | undefined;
   /** Quota (ADR-0035 §6): while paused, the run's batches are held (kept, in order, unsaved) and the recorder is told. */
   const quota = new QuotaGuard();
-  let heldBatches: RecorderAppend[] = [];
+  let heldBatches: (RecorderAppend | RecorderSide)[] = [];
   let quotaTimer: ReturnType<typeof setInterval> | undefined;
   let measuring = false;
   let slowWriterMs = 0;
@@ -229,6 +229,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
     for (const req of queue.splice(0)) {
       fail(req.id, terminal.code, terminal.message);
       if ("recorder" in req) recorderPort?.postMessage({ type: "rejected", runId: req.recorder.runId, code: terminal.code, message: terminal.message });
+      else if ("recorderItem" in req) recorderPort?.postMessage({ type: "rejected", runId: req.recorderItem.runId, code: terminal.code, message: terminal.message });
     }
     pendingAppendRecords = 0;
   }
@@ -261,6 +262,28 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
       void drain();
       await new Promise<void>((resolve) => (release = resolve));
     });
+  }
+
+  /** A snapshot or belief frames of the run, stored in order with the batches around them; a refusal is reported to the recorder. */
+  async function storeRecorderItem(item: RecorderItem): Promise<void> {
+    const e = engine;
+    if (!e) return;
+    const refuse = (code: string, message: string) => recorderPort?.postMessage({ type: "rejected", runId: item.runId, code, message });
+    try {
+      if (item.type === "snapshot") {
+        const r = await e.storage.snapshots.write(item.runId, { seq: item.seq, simTime: item.simTimeS, tick: item.tick, bytes: item.bytes, blobs: item.blobs });
+        // The same state twice (a pause where nothing ran since the last snapshot) is the same snapshot: nothing to refuse.
+        if (!r.ok && r.error.code !== "duplicate_snapshot") refuse(r.error.code, r.error.message);
+      } else {
+        const stored = await e.storage.snapshots.putBlobs(item.runId, item.blobs);
+        if (!stored.ok) return refuse(stored.error.code, stored.error.message);
+        const r = await e.storage.beliefFrames.append(item.runId, item.frames);
+        if (!r.ok) refuse(r.error.code, r.error.message);
+      }
+    } catch (err) {
+      refuse("storage_error", err instanceof Error ? err.message : String(err));
+    }
+    void checkQuota();
   }
 
   function announceQuota(state: QuotaMessage["state"], m: QuotaMeasure): void {
@@ -317,6 +340,13 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
       while (queue.length > 0 && engine) {
         const head = queue[0];
         if (!head) break;
+        if ("recorderItem" in head) {
+          queue.shift();
+          if (quota.paused) heldBatches.push(head);
+          else await storeRecorderItem(head.recorderItem);
+          pendingAppendRecords = queue.reduce((acc, r) => acc + appendSize(r), 0);
+          continue;
+        }
         if ("recorder" in head && quota.paused) {
           heldBatches.push(head);
           queue.shift();
@@ -331,7 +361,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
           }
           let n = 0;
           while (queue[n]?.op === "trace.append") n++;
-          const batch = queue.splice(0, n);
+          const batch = queue.splice(0, n) as (StorageRequest | RecorderAppend)[]; // only appends lead the queue here
           pendingAppendRecords = queue.reduce((acc, r) => acc + appendSize(r), 0);
           flushDue = false;
           // Test-only slow writer (ADR-0035 §6): the commit of recorder batches takes its time, so the backlog builds up.
@@ -348,7 +378,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
     }
   }
 
-  function appendSize(r: StorageRequest | RecorderAppend): number {
+  function appendSize(r: StorageRequest | RecorderAppend | RecorderSide): number {
     return r.op === "trace.append" && Array.isArray(r.args[0]) ? r.args[0].length : 0;
   }
 
@@ -474,10 +504,15 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
     recorderPort = port;
     port.addEventListener("message", (ev) => {
       const msg = ev.data as RecorderToStorage | undefined;
-      if (msg?.type !== "batch" || terminal) return;
-      queue.push(recorderAppend(msg.batch));
-      pendingAppendRecords += msg.batch.records.length;
-      void drain();
+      if (terminal) return;
+      if (msg?.type === "batch") {
+        queue.push(recorderAppend(msg.batch));
+        pendingAppendRecords += msg.batch.records.length;
+        void drain();
+      } else if (msg?.type === "snapshot" || msg?.type === "frames") {
+        queue.push(recorderSide(msg));
+        void drain();
+      }
     });
     port.start?.();
   }

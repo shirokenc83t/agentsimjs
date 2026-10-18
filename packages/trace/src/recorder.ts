@@ -30,6 +30,45 @@ export interface PersistedHead {
   readonly simTimeS: number;
 }
 
+/** A snapshot of the run, as the storage worker takes it: its container and the blobs its sections are, when not stored yet (ADR-0004 addition of 2026-10-18). */
+export interface RecorderSnapshotItem {
+  readonly type: "snapshot";
+  readonly runId: string;
+  /** Seq of the run's `snapshot` trace record. */
+  readonly seq: number;
+  readonly simTimeS: number;
+  readonly tick: number;
+  readonly bytes: Uint8Array;
+  readonly blobs: readonly { readonly id: string; readonly bytes: Uint8Array }[];
+}
+
+/** Belief-map frames of agents (keyframes with their blobs, deltas inline), as the storage worker takes them. */
+export interface RecorderFramesItem {
+  readonly type: "frames";
+  readonly runId: string;
+  readonly frames: readonly {
+    readonly agentId: string;
+    readonly seq: number;
+    readonly tick: number;
+    readonly simTime: number;
+    readonly kind: "keyframe" | "delta";
+    readonly chunks: readonly number[];
+    readonly blobId?: string;
+    readonly data?: Uint8Array;
+  }[];
+  readonly blobs: readonly { readonly id: string; readonly bytes: Uint8Array }[];
+}
+
+/** What a recorder hands over besides batches of records. Items go out in order with the batches, and before the batch that refers to them. */
+export type RecorderItem = RecorderSnapshotItem | RecorderFramesItem;
+
+/** The bytes an item weighs in the backlog. */
+export function itemBytes(i: RecorderItem): number {
+  return i.type === "snapshot"
+    ? i.bytes.length + i.blobs.reduce((n, b) => n + b.bytes.length, 0)
+    : i.blobs.reduce((n, b) => n + b.bytes.length, 0) + i.frames.reduce((n, f) => n + (f.data?.length ?? 0) + f.chunks.length * 4 + 64, 0);
+}
+
 export interface SimHead {
   readonly tick: number;
   readonly simTimeS: number;
@@ -84,6 +123,8 @@ export interface RunRecorderOptions {
   readonly profile: RecordingProfile;
   /** Hands a batch to the storage worker. Called once per `collect` that has something to say. */
   readonly send: (batch: RecorderBatch) => void;
+  /** Hands a snapshot or belief frames to the storage worker (items are refused without it). */
+  readonly sendItem?: (item: RecorderItem) => void;
   /** The marks of the backlog (default: `DEFAULT_FLOW_CONTROL`). */
   readonly flow?: FlowControl;
 }
@@ -99,6 +140,11 @@ export class RunRecorder {
   private readonly profile: RecordingProfile;
   private readonly send: (batch: RecorderBatch) => void;
   private readonly flow: FlowControl;
+  private readonly sendItem: ((item: RecorderItem) => void) | undefined;
+  /** Items given before the header is stored, in order. */
+  private outbox: RecorderItem[] = [];
+  /** Items sent since the last batch: a batch follows them even without records, so the persisted head can pass them. */
+  private itemsSent = 0;
   private cursor = 0;
   private heldBytes = 0;
   private isWaiting = false;
@@ -115,6 +161,7 @@ export class RunRecorder {
     this.profile = o.profile;
     this.send = o.send;
     this.flow = o.flow ?? DEFAULT_FLOW_CONTROL;
+    this.sendItem = o.sendItem;
     // From now on the cache forgets a record only once it is persisted.
     this.buffer.holdUnpersisted();
   }
@@ -157,7 +204,28 @@ export class RunRecorder {
   headerStored(): void {
     if (this.header) return;
     this.header = true;
+    const items = this.outbox;
+    this.outbox = [];
+    for (const i of items) this.dispatch(i);
     this.flush();
+    this.updateWaiting();
+  }
+
+  /**
+   * Hands over a snapshot or belief frames, in order with the batches: held until the header is stored, then sent at once, and before the
+   * batch that holds the records collected after it. Give it after the record that refers to it was emitted and before the next `collect`.
+   */
+  enqueue(item: RecorderItem): void {
+    if (!this.sendItem) throw new Error("this recorder has no channel for snapshots and frames");
+    this.heldBytes += itemBytes(item);
+    if (this.header) this.dispatch(item);
+    else this.outbox.push(item);
+    this.updateWaiting();
+  }
+
+  private dispatch(item: RecorderItem): void {
+    this.itemsSent++;
+    (this.sendItem as (i: RecorderItem) => void)(item);
   }
 
   /**
@@ -188,11 +256,12 @@ export class RunRecorder {
   private flush(): void {
     const records = this.held;
     // Nothing new and nothing waiting to be saved: everything up to this tick is saved already.
-    if (records.length === 0 && this.inFlight.length === 0) {
+    if (records.length === 0 && this.inFlight.length === 0 && this.itemsSent === 0) {
       if (this.persistedAt) this.persistedAt = { ...this.persistedAt, tick: this.sim.tick, simTimeS: this.sim.simTimeS };
       return;
     }
     this.held = [];
+    this.itemsSent = 0;
     this.inFlight.push({ throughSeq: this.lastThroughSeq, records: records.length, bytes: this.heldBytes });
     this.heldBytes = 0;
     this.send({ runId: this.buffer.runId, records, throughSeq: this.lastThroughSeq, tick: this.sim.tick, simTimeS: this.sim.simTimeS });

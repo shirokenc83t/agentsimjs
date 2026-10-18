@@ -46,4 +46,4 @@ export {
 } from "./recording-profile.ts";
 export { dropsRecord, filterRecord, metadataMindIo, summarizeCompute } from "./levels.ts";
 export { redactSecrets, REDACTED } from "./redact.ts";
-export { RunRecorder, gapOf, DEFAULT_FLOW_CONTROL, estimateRecordBytes, type FlowControl, type Backlog, type RecorderBatch, type PersistedHead, type SimHead, type Gap, type GapState, type RunRecorderOptions } from "./recorder.ts";
+export { RunRecorder, gapOf, DEFAULT_FLOW_CONTROL, estimateRecordBytes, itemBytes, type RecorderItem, type RecorderSnapshotItem, type RecorderFramesItem, type FlowControl, type Backlog, type RecorderBatch, type PersistedHead, type SimHead, type Gap, type GapState, type RunRecorderOptions } from "./recorder.ts";

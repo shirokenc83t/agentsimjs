@@ -260,6 +260,54 @@ describe("storage worker (browser)", () => {
     channel.port1.close();
   });
 
+  it("stores snapshots and belief frames from the recorder in order with the batches, and reports a refusal", async () => {
+    const profile = RECORDING_PRESETS["default-research"];
+    const recorded = { ...header("run-000001"), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) };
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    const channel = new MessageChannel();
+    const fromStorage: { type: string; code?: string; head?: { tick: number } }[] = [];
+    channel.port1.onmessage = (ev) => fromStorage.push(ev.data as (typeof fromStorage)[number]);
+    c.attachRecorderPort(channel.port2);
+    await c.ports.runs.create(recorded);
+    const until = async (cond: () => boolean, what: string) => {
+      for (let i = 0; i < 300 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
+      expect(cond(), what).toBe(true);
+    };
+    await until(() => fromStorage.some((m) => m.type === "header"), "header");
+    const external = new Map<string, Uint8Array>();
+    const w = new SnapshotWriter({ external: (h, b) => external.set(h, b) });
+    const container = w.finish({ tick: 0, map: w.section({ chunk: Int8Array.from([1, 2, 3]) }) });
+    const blobs = [...external].map(([id, bytes]) => ({ id, bytes }));
+    const kf = blobs[0];
+    if (!kf) throw new Error("a blob was expected");
+    const post = (m: unknown) => channel.port1.postMessage(m);
+    post({ type: "snapshot", runId: "run-000001", seq: 0, simTimeS: 0, tick: 0, bytes: container, blobs });
+    post({
+      type: "frames",
+      runId: "run-000001",
+      frames: [
+        { agentId: "uav-001", seq: 0, tick: 0, simTime: 0, kind: "keyframe", chunks: [0], blobId: kf.id },
+        { agentId: "uav-001", seq: 1, tick: 1, simTime: 0.1, kind: "delta", chunks: [0], data: Uint8Array.from([9]) },
+      ],
+      blobs: [],
+    });
+    post({ type: "batch", batch: { runId: "run-000001", records: [rec("run-000001", 0)], throughSeq: 0, tick: 1, simTimeS: 0.1 } });
+    await until(() => fromStorage.some((m) => m.type === "persisted" && m.head?.tick === 1), "persisted head");
+    // The head moved only after the items before the batch were stored.
+    const infos = await c.ports.snapshots.list("run-000001");
+    expect(infos).toHaveLength(1);
+    expect((await c.ports.snapshots.read("run-000001", infos[0]?.id ?? ""))?.blobs).toEqual(blobs);
+    expect((await c.ports.beliefFrames.query({ runId: "run-000001", limit: 10 })).map((f) => f.seq)).toEqual([0, 1]);
+    // The same snapshot again (nothing ran since) is not a refusal; frames that name a blob that is not stored are.
+    post({ type: "snapshot", runId: "run-000001", seq: 0, simTimeS: 0, tick: 0, bytes: container, blobs });
+    post({ type: "frames", runId: "run-000001", frames: [{ agentId: "uav-001", seq: 2, tick: 2, simTime: 0.2, kind: "keyframe", chunks: [0], blobId: "f".repeat(32) }], blobs: [] });
+    await until(() => fromStorage.some((m) => m.type === "rejected"), "refusal");
+    expect(fromStorage.filter((m) => m.type === "rejected")).toHaveLength(1);
+    expect(fromStorage.find((m) => m.type === "rejected")?.code).toBe("missing_blob");
+    channel.port1.close();
+  });
+
   it("does not tell a recorder about a run header that is not recorded", async () => {
     const c = spawn({ resetOnOpen: true });
     await c.ready();

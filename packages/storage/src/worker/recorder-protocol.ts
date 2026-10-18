@@ -1,4 +1,4 @@
-import type { PersistedHead, RecorderBatch } from "@agentsim/trace";
+import type { PersistedHead, RecorderBatch, RecorderItem } from "@agentsim/trace";
 
 // The direct channel between the sim worker's recorder and the storage worker (ADR-0019 and ADR-0035 additions of 2026-10-17): the main
 // thread creates a MessageChannel and hands one port to each worker; trace records never travel through the main thread. The messages
@@ -11,7 +11,7 @@ export interface RecorderPortMessage {
 }
 
 /** Sim worker → storage worker. */
-export type RecorderToStorage = { readonly type: "batch"; readonly batch: RecorderBatch };
+export type RecorderToStorage = { readonly type: "batch"; readonly batch: RecorderBatch } | RecorderItem;
 
 /** Storage worker → sim worker. */
 export type StorageToRecorder =
