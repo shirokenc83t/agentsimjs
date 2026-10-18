@@ -20,15 +20,19 @@ export interface Tracer {
 }
 
 /**
- * In-memory trace recorder v0 (F1). Assigns per-run sequence numbers and IDs; persistence through the
- * TraceStore arrives with the F3 recorder. Bounded: the oldest records are dropped beyond `capacity`
- * (counted), which is acceptable only until F3.
+ * The trace of a run in memory (ADR-0004 and ADR-0035 additions of 2026-10-17, item 6): assigns per-run sequence numbers and IDs, and
+ * is the UI cache of the run. In a recorded run (`holdUnpersisted`) it forgets a record only once the record is persisted, down to
+ * `capacity` (it may hold more while records wait for their flush); in an opted-out run it forgets the oldest beyond `capacity` and
+ * counts them (`dropped`).
  */
 export class TraceBuffer {
   private readonly records: TraceRecord[] = [];
   private seq = 0;
   private lastSimTime = 0;
   private droppedCount = 0;
+  /** Recorded run: records leave the cache only once persisted (up to `persistedSeq`, inclusive). */
+  private holding = false;
+  private persistedSeq = -1;
   private readonly tracers = new Map<string, Tracer>();
 
   constructor(
@@ -56,8 +60,11 @@ export class TraceBuffer {
     const rec: TraceRecord = { ...r, source, id: `${this.runId}#${seq}`, runId: this.runId, seq, wallTime: this.nowWallMs() };
     this.records.push(rec);
     if (this.records.length > this.capacity) {
-      this.records.shift();
-      this.droppedCount++;
+      if (this.holding) this.forgetPersisted();
+      else {
+        this.records.shift();
+        this.droppedCount++;
+      }
     }
     return rec;
   }
@@ -89,6 +96,35 @@ export class TraceBuffer {
     if (!Number.isInteger(c.seq) || c.seq < 0 || !(c.lastSimTime >= 0)) throw new RangeError(`bad trace cursor ${JSON.stringify(c)}`);
     this.seq = c.seq;
     this.lastSimTime = c.lastSimTime;
+  }
+
+  /** Recorded run: from now on a record is forgotten only once it is persisted (`markPersisted`). */
+  holdUnpersisted(): void {
+    this.holding = true;
+  }
+
+  /** Records up to `seq` (inclusive) are persisted; the cache may now forget them, oldest first, beyond its capacity. */
+  markPersisted(seq: number): void {
+    this.persistedSeq = Math.max(this.persistedSeq, Math.min(seq, this.seq - 1));
+    if (this.holding) this.forgetPersisted();
+  }
+
+  private forgetPersisted(): void {
+    let n = 0;
+    while (this.records.length - n > this.capacity && (this.records[n] as TraceRecord).seq <= this.persistedSeq) n++;
+    if (n > 0) this.records.splice(0, n);
+  }
+
+  /** Sequence number the next record gets. */
+  get nextSeq(): number {
+    return this.seq;
+  }
+
+  /** The records with `seq` at or after the given one that the cache still holds, in order. */
+  since(seq: number): TraceRecord[] {
+    const first = this.records[0];
+    if (!first) return [];
+    return this.records.slice(Math.max(0, seq - first.seq));
   }
 
   all(): readonly TraceRecord[] {

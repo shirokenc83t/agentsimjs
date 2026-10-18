@@ -45,3 +45,5 @@ export {
   type RecordingProfileError,
 } from "./recording-profile.ts";
 export { dropsRecord, filterRecord, metadataMindIo, summarizeCompute } from "./levels.ts";
+export { redactSecrets, REDACTED } from "./redact.ts";
+export { RunRecorder, gapOf, type RecorderBatch, type PersistedHead, type SimHead, type Gap, type GapState, type RunRecorderOptions } from "./recorder.ts";
