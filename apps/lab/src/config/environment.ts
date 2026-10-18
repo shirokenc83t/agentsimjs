@@ -35,6 +35,12 @@ function simulateNoOpfs(): boolean {
   return new URLSearchParams(location.search).has("simulate-no-opfs");
 }
 
+/** Test switch: `?simulate-slow-writer=<ms>` makes every commit of recorder batches take this long first, so the persisted head trails the sim (the gap, end to end). */
+function slowWriterMs(): number | undefined {
+  const v = Number(new URLSearchParams(location.search).get("simulate-slow-writer"));
+  return v > 0 ? v : undefined;
+}
+
 const local: Environment = {
   mode: "local",
   createStorage: () =>
@@ -42,6 +48,7 @@ const local: Environment = {
       quotaThresholdBytes: readQuotaThreshold(),
       ...(simulateNoOpfs() ? { simulateNoOpfs: true } : {}),
       ...(quotaHeadroom() === undefined ? {} : { simulateQuotaHeadroomBytes: quotaHeadroom() as number }),
+      ...(slowWriterMs() === undefined ? {} : { simulateSlowWriterMs: slowWriterMs() as number }),
     }),
   createSim: (tickRateHz) =>
     new SimClient(new Worker(new URL("../workers/sim.worker.ts", import.meta.url), { type: "module", name: "sim" }), tickRateHz),

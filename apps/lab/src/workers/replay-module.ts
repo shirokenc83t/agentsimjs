@@ -177,7 +177,7 @@ export async function beliefAt(ports: StoragePorts, runId: string, agentId: stri
   // The deltas after the keyframe, up to the tick.
   const deltas: { readonly frame: BeliefFrame; readonly delta: BeliefCellDelta }[] = [];
   let after = keyframe.seq;
-  for (;;) {
+  for (; !view.keyframeOnly; ) {
     const page: BeliefFrame[] = await ports.beliefFrames.query({ runId, agentId, kind: "delta", fromTick: keyframe.tick, toTick: tick, limit: FRAME_PAGE });
     let last = after;
     for (const f of page) {

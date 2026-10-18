@@ -16,7 +16,11 @@
 /* Replay bar (a recording in the Scene): a strip along the top. */
 .replay-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 4px 8px; background: color-mix(in srgb, var(--bg0) 92%, transparent); border-bottom: 1px solid var(--ac); font-size: 12px; }
 .replay-bar input[type="range"] { width: 240px; vertical-align: middle; }
-.scene-host:has(.replay-bar) .scene-overlay { top: 44px; }
+.scene-host:has(.replay-bar) .scene-overlay { top: 112px; }
+.replay-track { position: relative; flex: 1 1 100%; min-width: 240px; height: 14px; background: var(--bg3); border: 1px solid var(--ln); border-radius: var(--radius-control); cursor: pointer; overflow: hidden; }
+.replay-saved { position: absolute; top: 0; bottom: 0; left: 0; background: var(--acbg); }
+.replay-gap { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(45deg, var(--ln) 0 3px, transparent 3px 6px); }
+.replay-cursor-mark { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ac); }
 
 /* Explorer (virtualized list) and Inspector. */
 .explorer { display: flex; flex-direction: column; padding: 0; }

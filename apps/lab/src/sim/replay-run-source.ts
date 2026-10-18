@@ -23,6 +23,12 @@ export interface ReplayDeps {
   readonly cursor: CursorPort;
   /** Panel refresh rate bound in ms (the cursor can move at frame rate; panels see it at ≤ 10 Hz). */
   readonly refreshMs?: number;
+  /**
+   * For a run that is still recording and being scrubbed: the persisted head in sim seconds (it grows as the storage worker flushes) and how to hear it grow,
+   * and the sim's own head (tick). Without them the end of the recording is what is stored when the run is opened.
+   */
+  readonly head?: { get(): number; subscribe(l: () => void): () => void };
+  readonly simHeadTick?: () => number;
 }
 
 export type ReplayOpenError = CodedError<"unknown_run" | "not_recorded" | "no_scenario" | "world_failed" | "no_agents">;
@@ -134,6 +140,7 @@ export class ReplayRunSource implements RunSource {
   private running = 0;
   private disposed = false;
   private readonly offCursor: () => void;
+  private readonly offHead: () => void;
   private readonly watchers = new Set<() => void>();
   private chunkViews = new Map<number, Uint8Array>();
   private defaultObstacleHeightM: number | undefined;
@@ -160,6 +167,18 @@ export class ReplayRunSource implements RunSource {
     for (let k = 0; k < truth.coords.length / 2; k++) this.chunkViews.set((truth.coords[k * 2 + 1] ?? 0) * chunksX + (truth.coords[k * 2] ?? 0), truth.data.subarray(k * bytes, (k + 1) * bytes));
     grid.queue.push(truth.coords, truth.data);
     this.offCursor = deps.cursor.subscribe(() => this.schedule());
+    // A run that is still recording: its end moves as the storage worker saves more.
+    if (deps.head) this.headS = Math.max(this.headS, deps.head.get());
+    this.offHead = deps.head
+      ? deps.head.subscribe(() => {
+          const h = deps.head?.get() ?? 0;
+          if (h <= this.headS) return;
+          this.headS = h;
+          this.version++;
+          for (const l of this.headListeners) l();
+          this.schedule();
+        })
+      : () => {};
     this.schedule(true);
   }
 
@@ -242,9 +261,10 @@ export class ReplayRunSource implements RunSource {
 
   private async loadPosesAround(t: number, mine: number): Promise<void> {
     const wantFrom = Math.max(0, t - POSE_BEHIND_S);
-    const wantTo = t + POSE_AHEAD_S;
+    // Never past the end of what is stored (the persisted head, for a run that is still recording): nothing is asked for a moment that is not there.
+    const wantTo = Math.min(t + POSE_AHEAD_S, this.headS);
     const inside = !Number.isNaN(this.loadedFrom) && t >= this.loadedFrom && t <= this.loadedTo;
-    if (inside && this.loadedTo - t >= POSE_REFILL_S) return;
+    if (inside && (this.loadedTo - t >= POSE_REFILL_S || wantTo <= this.loadedTo)) return;
     // Outside the window (a jump): a fresh window around the cursor. Near its end: the next stretch is added to it.
     const fresh = !inside;
     const from = fresh ? wantFrom : this.loadedTo;
@@ -339,7 +359,8 @@ export class ReplayRunSource implements RunSource {
 
   snapshot(): RunSnapshot {
     const t = this.cursorNow();
-    const key = `${this.version}/${t}`;
+    const simHead = this.deps.simHeadTick?.();
+    const key = `${this.version}/${t}/${simHead ?? ""}`;
     if (this.cached?.key === key) return this.cached.view;
     const dt = this.run.dtS;
     const view: RunSnapshot = {
@@ -353,9 +374,9 @@ export class ReplayRunSource implements RunSource {
       agentStatus: this.status.slice(),
       grid: this.grid,
       error: null,
-      simHeadTick: Math.round(this.headS / dt),
+      simHeadTick: Math.max(Math.round(this.headS / dt), simHead ?? 0),
       persistedHeadTick: Math.round(this.headS / dt),
-      replay: { poseRate: this.poseRate, headS: this.headS },
+      replay: { poseRate: this.poseRate, headS: this.headS, ...(simHead === undefined ? {} : { simHeadS: Math.max(this.headS, simHead * dt) }) },
     };
     this.cached = { key, view };
     return view;
@@ -450,6 +471,10 @@ export class ReplayRunSource implements RunSource {
       if (tick === delivered) return;
       const id = ++mine;
       const seen = new Set<number>();
+      // The nearest keyframe overlay at once (no deltas to apply: the cheapest read), then the same groups as they are at the tick, then the rest.
+      const coarse = await this.deps.replay.beliefAt(runId, agentId, tick, { limit: FIRST_GROUPS, keyframeOnly: true });
+      if (id !== mine) return;
+      if (coarse.ok) push(coarse.value.coords, coarse.value.data, seen);
       const first = await this.deps.replay.beliefAt(runId, agentId, tick, { limit: FIRST_GROUPS });
       if (id !== mine || !first.ok) return;
       push(first.value.coords, first.value.data, seen);
@@ -502,6 +527,7 @@ export class ReplayRunSource implements RunSource {
     this.generation++;
     clearTimeout(this.timer);
     this.offCursor();
+    this.offHead();
     this.recordListeners.clear();
     this.trailListeners.clear();
     this.headListeners.clear();

@@ -17,6 +17,8 @@ export interface ReplayView {
   readonly focus?: { readonly ci: number; readonly cj: number };
   readonly skip?: number;
   readonly limit?: number;
+  /** The keyframe as it was, without the cell deltas after it: the nearest overlay at once, to be refined by a read that applies them. */
+  readonly keyframeOnly?: boolean;
 }
 
 /** An agent's belief map at a tick as the belief overlay takes it: the believed state of every materialized chunk of the groups asked for, one byte per cell. */

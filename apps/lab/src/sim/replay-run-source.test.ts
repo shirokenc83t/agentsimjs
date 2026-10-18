@@ -253,3 +253,141 @@ describe("a recorded run replayed from storage", () => {
 function t0Id(records: TraceRecord[]): string {
   return records.find((r) => r.kind === "observation" && r.agentId !== undefined)?.agentId ?? "";
 }
+
+// ---- scrubbing a live recorded run: the persisted head, the gap, and what is never asked (T-023) ---------------------------------------------
+
+/** Ports and replay reads that remember the latest sim time and tick they were asked for. */
+function watched(ports: StoragePorts) {
+  const asked = { maxSimTime: 0, maxTick: 0, queries: 0 };
+  const trace = {
+    ...ports.trace,
+    query: (q: Parameters<StoragePorts["trace"]["query"]>[0]) => {
+      asked.queries++;
+      asked.maxSimTime = Math.max(asked.maxSimTime, q.simTime?.to ?? 0);
+      return ports.trace.query(q);
+    },
+  };
+  const replay = replayOver(ports);
+  return {
+    asked,
+    ports: { runs: ports.runs, trace },
+    replay: {
+      world: replay.world,
+      beliefAt: (r: string, a: string, t: number, v?: Parameters<typeof beliefAt>[4]) => {
+        asked.maxTick = Math.max(asked.maxTick, t);
+        return replay.beliefAt(r, a, t, v);
+      },
+    },
+  };
+}
+
+describe("scrubbing a live recorded run", () => {
+  it("ends at the persisted head, which grows; a cursor in the gap is held at the head and nothing past it is asked of storage", async () => {
+    resetReplayCache();
+    const { ports, t } = await recorded(100);
+    const w = watched(ports);
+    const c = cursorPort();
+    let persisted = 5; // the storage holds the first 5 s; the sim is at tick 100 (10 s)
+    const listeners = new Set<() => void>();
+    const src = await (async () => {
+      const r = await openReplaySource({ runId: "run-000001", ports: w.ports, replay: w.replay, cursor: c.port, refreshMs: 0, head: { get: () => persisted, subscribe: (l) => (listeners.add(l), () => listeners.delete(l)) }, simHeadTick: () => 100 });
+      if (!r.ok) throw new Error(r.error.message);
+      return r.value;
+    })();
+    expect(src.snapshot()).toMatchObject({ persistedHeadTick: 100, simHeadTick: 100 }); // the open read what the records say: all of it is in this fixture
+    // The head the storage worker reports is the end of what can be shown: a fixture where the report is behind the records changes nothing here.
+    persisted = 0;
+    for (const l of listeners) l();
+    const t0 = w.asked.maxTick;
+    c.set(9.5);
+    await src.settled();
+    expect(w.asked.maxSimTime).toBeLessThanOrEqual(src.headSeconds + 1e-9);
+    expect(src.snapshot().replay?.simHeadS).toBeCloseTo(10, 6);
+    expect(w.asked.maxTick).toBeGreaterThanOrEqual(t0);
+    expect(t.world.entityIds.length).toBeGreaterThan(0);
+    src.dispose();
+    expect(listeners.size).toBe(0);
+  });
+
+  it("with a persisted head behind the sim, the cursor never goes past the head and no read is for a later moment", async () => {
+    resetReplayCache();
+    const { ports } = await recorded(100);
+    // Keep only the first 5 s of the run's records, as a storage that is behind would hold them.
+    const behind = createMemoryPorts();
+    const header = await ports.runs.get("run-000001");
+    if (!header) throw new Error("no header");
+    await behind.scenarios.saveVersion(f2DiscoveryScenario());
+    await behind.runs.create(header);
+    for (const item of [] as never[]) void item;
+    const all = await ports.trace.query({ runId: "run-000001", limit: 10_000 });
+    await behind.trace.append(all.filter((r) => r.simTime <= 5 + 1e-9));
+    const frames = await ports.beliefFrames.query({ runId: "run-000001", limit: 10_000 });
+    const kf = frames.filter((f) => f.kind === "keyframe" && f.tick <= 50);
+    for (const f of kf) {
+      const blob = await ports.snapshots.getBlob("run-000001", f.blobId ?? "");
+      if (blob) await behind.snapshots.putBlobs("run-000001", [blob]);
+    }
+    const w = watched(behind);
+    const c = cursorPort();
+    let persisted = 5;
+    const ls = new Set<() => void>();
+    const r = await openReplaySource({ runId: "run-000001", ports: w.ports, replay: w.replay, cursor: c.port, refreshMs: 0, head: { get: () => persisted, subscribe: (l) => (ls.add(l), () => ls.delete(l)) }, simHeadTick: () => 100 });
+    if (!r.ok) throw new Error(r.error.message);
+    const src = r.value;
+    expect(src.headSeconds).toBeCloseTo(5, 6);
+    expect(src.snapshot()).toMatchObject({ persistedHeadTick: 50, simHeadTick: 100 });
+    expect(src.snapshot().replay).toMatchObject({ headS: 5, simHeadS: 10 });
+    c.set(9); // in the gap
+    await src.settled();
+    expect(src.snapshot().tick).toBe(50); // held at the persisted head
+    expect(w.asked.maxSimTime).toBeLessThanOrEqual(5 + 1e-9);
+    expect(poseAt(src, 0).x).toBeDefined();
+    // The storage flushes more: the head moves, a listener hears it, and the same cursor now shows its own moment.
+    persisted = 8;
+    await behind.trace.append(all.filter((x) => x.simTime > 5 + 1e-9 && x.simTime <= 8 + 1e-9));
+    let heard = 0;
+    src.onHead(() => heard++);
+    for (const l of ls) l();
+    await src.settled();
+    expect(heard).toBe(1);
+    expect(src.headSeconds).toBeCloseTo(8, 6);
+    c.set(8);
+    await src.settled();
+    expect(src.snapshot().tick).toBe(80);
+    expect(w.asked.maxSimTime).toBeLessThanOrEqual(8 + 1e-9);
+    src.dispose();
+  });
+
+  it("answers a burst of cursor moves with a few reads, not one per move, and the last move wins", async () => {
+    resetReplayCache();
+    const { ports, live, t } = await recorded(100);
+    const w = watched(ports);
+    const c = cursorPort();
+    const r = await openReplaySource({ runId: "run-000001", ports: w.ports, replay: w.replay, cursor: c.port, refreshMs: 100 });
+    if (!r.ok) throw new Error(r.error.message);
+    const src = r.value;
+    await src.settled();
+    const before = w.asked.queries;
+    for (let i = 0; i < 60; i++) c.set((i % 20) * 0.5);
+    c.set(7);
+    await src.settled();
+    const used = w.asked.queries - before;
+    expect(used, `reads for 61 moves: ${used}`).toBeLessThanOrEqual(12);
+    const id = t.world.entityIds[0] ?? "";
+    expect(Math.fround(poseAt(src, 0).x ?? 0)).toBe(Math.fround(live.at.get(70)?.get(id)?.x ?? 0));
+    src.dispose();
+  });
+
+  it("shows the nearest keyframe overlay as it was at the keyframe, then the refinement with the deltas", async () => {
+    resetReplayCache();
+    const { ports, t } = await recorded(100);
+    const id = t.driver;
+    const coarse = await beliefAt(ports, "run-000001", id, 100, { keyframeOnly: true });
+    const full = await beliefAt(ports, "run-000001", id, 100);
+    if (!coarse.ok || !full.ok) throw new Error("a read failed");
+    expect(coarse.value.deltasApplied).toBe(0);
+    expect(full.value.deltasApplied).toBeGreaterThan(0);
+    expect(coarse.value.keyframeTick).toBe(full.value.keyframeTick);
+    expect(coarse.value.data).not.toEqual(full.value.data); // the deltas changed something after the keyframe
+  });
+});

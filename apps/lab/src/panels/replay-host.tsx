@@ -22,7 +22,7 @@ const uiCursor: CursorPort = {
  * back; the live run itself was never touched (no message reaches the sim worker from here).
  */
 export function ReplayHost(props: { runId: string }) {
-  const { storage, setReplaySource } = useServices();
+  const { sim, storage, setReplaySource } = useServices();
   const { runId } = props;
   const [failed, setFailed] = useState<string | null>(null);
   const onFailed = setFailed;
@@ -30,7 +30,19 @@ export function ReplayHost(props: { runId: string }) {
     setFailed(null);
     let cancelled = false;
     let opened: { dispose(): void } | undefined;
-    void openReplaySource({ runId, ports: storage.ports, replay: storage.replay, cursor: uiCursor }).then(
+    // The run that is recording right now: its end is the persisted head, which grows; the sim is ahead of it by the gap.
+    const live = sim.snapshot().run?.runId === runId;
+    let persistedS = 0;
+    const head = {
+      get: () => persistedS,
+      subscribe: (l: () => void) =>
+        storage.onRecording((m) => {
+          if (m.type !== "persisted" || m.head.runId !== runId) return;
+          persistedS = Math.max(persistedS, m.head.simTimeS);
+          l();
+        }),
+    };
+    void openReplaySource({ runId, ports: storage.ports, replay: storage.replay, cursor: uiCursor, ...(live ? { head, simHeadTick: () => sim.snapshot().tick } : {}) }).then(
       (r) => {
         if (cancelled) {
           if (r.ok) r.value.dispose();
@@ -52,7 +64,7 @@ export function ReplayHost(props: { runId: string }) {
       opened?.dispose();
       setReplaySource(undefined);
     };
-  }, [storage, runId, setReplaySource]);
+  }, [sim, storage, runId, setReplaySource]);
   return failed === null ? null : (
     <Banner kind="warn" testId="replay-error">
       {failed}

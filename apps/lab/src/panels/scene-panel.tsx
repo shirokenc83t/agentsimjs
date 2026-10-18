@@ -5,7 +5,7 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import { PerformanceHud, SceneView, useUiContext, type GridViewMode, type HudStats, type SceneRenderer } from "@agentsim/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { attachRendererProbe } from "../probe.ts";
-import { usePolled, useSource } from "../services.tsx";
+import { useAppActions, useCurrentRun, usePolled, useSource } from "../services.tsx";
 import { HudBudgetRows } from "./hud-budget.tsx";
 import { ReplayBar } from "./replay-bar.tsx";
 import { sandboxTarget, useSandboxTarget, useSandboxView } from "./sandbox-store.ts";
@@ -30,6 +30,8 @@ export function ScenePanel() {
   // Snapshot at ≤ 10 Hz: entity table, run and grid (agent colours are derived from IDs once per agent).
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const selection = useUiContext((s) => s.selection);
+  const { openReplay } = useAppActions();
+  const recorded = useCurrentRun().run?.header.recording === "stored";
   const selectedAgent = selection?.kind === "agent" ? selection.id : undefined;
   // Features with no recorded source are off in replay, each with its reason (undefined while the source has them).
   const noCommands = source.unavailable("commands");
@@ -152,6 +154,13 @@ export function ScenePanel() {
       {snap.mode === "replay" && <ReplayBar snap={snap} dtS={snap.run?.dtS ?? 0.1} />}
       {snap.grid && (
         <div className={`scene-overlay${sendFor ? " sending" : ""}`} data-testid="scene-overlay">
+          {snap.mode === "live" && recorded && snap.runId && (
+            <div className="row">
+              <Button size="small" variant="outlined" color="inherit" onClick={() => openReplay(snap.runId)} data-testid="scrub-back" title="Look back at the run as it is saved (the run goes on)">
+                ⏪ Scrub back
+              </Button>
+            </div>
+          )}
           <div className="row">
             <Button
               size="small"
