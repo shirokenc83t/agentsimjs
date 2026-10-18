@@ -12,6 +12,8 @@ export interface Services {
   readonly sim: SimClient;
   /** The run as panels read it: live today, a recorded run in replay (ADR-0016). Panels read this, never the client. */
   readonly source: RunSource;
+  /** Puts a recorded run in place of the live one for the panels (a replay session), or the live one back (`undefined`). */
+  readonly setReplaySource: (s: RunSource | undefined) => void;
   readonly storage: StorageClient;
 }
 
@@ -32,8 +34,10 @@ export interface AppActions {
   setTheme(p: ThemePreference): void;
   /** Switches workspace (e.g. to the Scene after starting a run from the editor). */
   openWorkspace(id: WorkspaceId): void;
+  /** Shows a recorded run from storage in the panels (nothing goes to the sim worker); `undefined` goes back to the live run. */
+  openReplay(runId: string | undefined): void;
 }
-const AppActionsContext = createContext<AppActions>({ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {} });
+const AppActionsContext = createContext<AppActions>({ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {} });
 export const AppActionsProvider = AppActionsContext.Provider;
 export const useAppActions = (): AppActions => useContext(AppActionsContext);
 

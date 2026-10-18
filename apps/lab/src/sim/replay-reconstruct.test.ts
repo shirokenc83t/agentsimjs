@@ -2,6 +2,7 @@ import { StateHasher, decodeValue } from "@agentsim/core";
 import { readBeliefSections } from "@agentsim/scenarios";
 import { BeliefMap, type BeliefCellDelta, type BeliefMapSnapshot } from "@agentsim/spatial";
 import { describe, expect, it } from "vitest";
+import { isJump } from "./replay-run-source.ts";
 import { framesOf, profileOf, setup } from "./run-recording-harness.ts";
 
 // F3a M2: replay reads a recorded run from storage alone (ADR-0035 addition of 2026-10-17, item 9; ADR-0019 and ADR-0029 additions of that
@@ -94,5 +95,25 @@ describe("poses at sampled ticks equal the live state", () => {
       expect(live.get(tick), `tick ${tick}`).toBeDefined();
       expect([p.x, p.y, p.heading]).toEqual([live.get(tick)?.x, live.get(tick)?.y, live.get(tick)?.heading]);
     }
+  });
+
+  it("no two consecutive samples of a real run are a jump: replay blends between all of them (the poses at sampled ticks are in replay-run-source.test.ts)", () => {
+    const t = setup(profileOf("default-research", (p) => ({ ...p, channels: { ...p.channels, poses: { rateHz: 10 } } })));
+    t.explore(t.driver);
+    t.step(120);
+    const byAgent = new Map<string, { t: number; x: number; y: number; z: number; heading: number; speed: number }[]>();
+    for (const r of t.records().filter((x) => x.kind === "observation" && x.source.endsWith("/body"))) {
+      const p = r.payload as { x: number; y: number; z: number; heading: number; speedMps: number };
+      byAgent.set(r.agentId ?? "", [...(byAgent.get(r.agentId ?? "") ?? []), { t: r.simTime, x: p.x, y: p.y, z: p.z, heading: p.heading, speed: p.speedMps }]);
+    }
+    for (const [agent, list] of byAgent) {
+      for (let i = 1; i < list.length; i++) {
+        const a = list[i - 1] as (typeof list)[number];
+        const b = list[i] as (typeof list)[number];
+        const sample = (s: typeof a) => ({ ...s, soc: 1, odometerM: 0, airborne: false });
+        expect(isJump(sample(a), sample(b)), `${agent} between ${a.t} and ${b.t}`).toBe(false);
+      }
+    }
+    expect(byAgent.size).toBeGreaterThan(0);
   });
 });

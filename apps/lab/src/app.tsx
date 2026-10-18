@@ -13,7 +13,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStorageStatus, useThemeSetting, type CurrentRun } from "./services.tsx";
 import type { PresetId } from "@agentsim/core";
 import { LAYOUT_NAMESPACE, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
-import { LazyRecordingStatus, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadRunController } from "./workspaces/registry.tsx";
+import { LazyRecordingStatus, LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadRunController } from "./workspaces/registry.tsx";
 import type { LabRun } from "./sim/run-controller.ts";
 import { syncRunContext } from "./sim/run-context.ts";
 
@@ -41,9 +41,12 @@ export function App() {
   const [runBusy, setRunBusy] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [runAnchor, setRunAnchor] = useState<HTMLElement | null>(null);
+  // A replay session: the run being shown from storage (the session itself, and what it says when it cannot open, are in its lazy chunk).
+  const [replayRun, setReplayRun] = useState<string | undefined>(undefined);
 
   const startRun = useCallback(
     (start: () => Promise<LabRun>) => {
+      setReplayRun(undefined); // a run that starts is what the panels show
       setRunBusy(true);
       setRunError(null);
       start().then(
@@ -164,7 +167,7 @@ export function App() {
   const preset = WORKSPACES.find((w) => w.id === workspace) ?? WORKSPACES[0];
 
   return (
-    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace }}>
+    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun }}>
       <CurrentRunProvider value={currentRun}>
       <div className="shell">
         <header className="toolbar" role="toolbar" aria-label="Run control">
@@ -256,6 +259,11 @@ export function App() {
         </header>
 
         <div>
+          {replayRun !== undefined && (
+            <Suspense fallback={null}>
+              <LazyReplayHost runId={replayRun} />
+            </Suspense>
+          )}
           {status.state === "waiting-lock" && (
             <Banner kind="info" testId="db-in-use">
               Database in use in another tab. Storage is paused here and opens automatically when that tab is closed.

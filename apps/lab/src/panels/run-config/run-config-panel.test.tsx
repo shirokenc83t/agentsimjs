@@ -38,7 +38,7 @@ function setup(over: Partial<CurrentRun> = {}) {
   const runWithConfig = vi.fn();
   const current: CurrentRun = { run: labRun(), busy: false, error: null, loadDemo: vi.fn(), runWithConfig, startScenarioRun: vi.fn(), ...over };
   render(
-    <ServicesProvider value={{ storage, sim: {} as SimClient, source: {} as RunSource }}>
+    <ServicesProvider value={{ storage, sim: {} as SimClient, source: {} as RunSource, setReplaySource: () => {} }}>
       <CurrentRunProvider value={current}>
         <RunConfigPanel />
       </CurrentRunProvider>

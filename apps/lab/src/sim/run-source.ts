@@ -42,6 +42,8 @@ export interface RunSnapshot {
   readonly simHeadTick: number;
   /** The newest tick stored for this run (live: from the storage worker; undefined until it reported one or when the run is not recorded). */
   readonly persistedHeadTick: number | undefined;
+  /** In replay: what the UI tells about the recording (how poses were sampled) and where it ends. */
+  readonly replay?: { readonly poseRate: string; readonly headS: number };
 }
 
 /** Figures of the Performance HUD; the sim ones are the live run's and read 0 in replay. */

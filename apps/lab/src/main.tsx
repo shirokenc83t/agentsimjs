@@ -1,12 +1,13 @@
 import "./fonts.css";
 import "@agentsim/ui/theme.css";
 import { initTheme, UiThemeProvider, useUiContext } from "@agentsim/ui";
-import { StrictMode } from "react";
+import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
 import { connectRecorder, resolveEnvironment } from "./config/environment.ts";
 import { probeEnabled } from "./probe.ts";
 import { LiveRunSource } from "./sim/live-run-source.ts";
+import type { RunSource } from "./sim/run-source.ts";
 import { ServicesProvider } from "./services.tsx";
 
 // TypeBox is configured lazily, by the first validate()/isValid() call (ADR-0018 addition 2026-10-08): keeping
@@ -20,6 +21,16 @@ const storage = env.createStorage();
 const sim = env.createSim(10);
 connectRecorder(sim, storage);
 const source = new LiveRunSource(sim, storage);
+
+/** The panels' run source: the live run, or a recorded run while a replay session is open. */
+function Root() {
+  const [replay, setReplay] = useState<RunSource | undefined>(undefined);
+  return (
+    <ServicesProvider value={{ sim, source: replay ?? source, setReplaySource: setReplay, storage }}>
+      <App />
+    </ServicesProvider>
+  );
+}
 
 if (probeEnabled()) {
   window.__agentsim = {
@@ -59,9 +70,7 @@ if (!root) throw new Error("missing #root");
 createRoot(root).render(
   <StrictMode>
     <UiThemeProvider>
-      <ServicesProvider value={{ sim, source, storage }}>
-        <App />
-      </ServicesProvider>
+      <Root />
     </UiThemeProvider>
   </StrictMode>,
 );

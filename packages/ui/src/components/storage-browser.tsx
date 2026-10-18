@@ -11,6 +11,8 @@ export interface StorageBrowserProps {
   readonly nowWallMs?: () => number;
   /** The run being recorded: it cannot be deleted (ADR-0035 addition of 2026-10-17, item 7). */
   readonly currentRunId?: string | undefined;
+  /** Shows a recorded run in the panels, read from storage. Offered for runs that were recorded; the others say why not. */
+  readonly onReplay?: ((runId: string) => void) | undefined;
 }
 
 const totalBytes = (s: RunSizes): number => s.records.bytes + s.blobs.bytes + s.snapshots.bytes + s.beliefFrames.bytes;
@@ -185,6 +187,18 @@ export function StorageBrowser(props: StorageBrowserProps) {
                 {sizes[r.runId] ? holds(sizes[r.runId] as RunSizes) : "…"}
               </td>
               <td>
+                {props.onReplay && (
+                  <button
+                    className="btn"
+                    disabled={busy || r.recording !== "stored"}
+                    title={r.recording === "stored" ? "Replay this run from storage" : r.recording === "none" ? "This run was not recorded: there is nothing to replay" : "This run was stored before recording existed: there is nothing to replay"}
+                    onClick={() => props.onReplay?.(r.runId)}
+                    aria-label={`Replay ${r.runId}`}
+                    data-testid={`replay-${r.runId}`}
+                  >
+                    ▶
+                  </button>
+                )}
                 <button className="btn" disabled={busy} onClick={() => exportOne(r.runId)} aria-label={`Export ${r.runId}`}>
                   ⭳
                 </button>

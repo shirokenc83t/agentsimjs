@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { attachRendererProbe } from "../probe.ts";
 import { usePolled, useServices } from "../services.tsx";
 import { HudBudgetRows } from "./hud-budget.tsx";
+import { ReplayBar } from "./replay-bar.tsx";
 import { sandboxTarget, useSandboxTarget, useSandboxView } from "./sandbox-store.ts";
 import { useSandboxOverlay } from "./use-sandbox-overlay.ts";
 import { useStagesOverlay } from "./use-stages-overlay.ts";
@@ -148,6 +149,7 @@ export function ScenePanel() {
 
   return (
     <SceneView interpolator={source.poses} onRenderer={onRenderer}>
+      {snap.mode === "replay" && <ReplayBar snap={snap} dtS={snap.run?.dtS ?? 0.1} />}
       {snap.grid && (
         <div className={`scene-overlay${sendFor ? " sending" : ""}`} data-testid="scene-overlay">
           <div className="row">

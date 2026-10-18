@@ -29,6 +29,9 @@ export const loadAgentCommands = () => import("../commands.ts");
 /** How the run is recorded, in the status line: loaded when a run exists (ADR-0035 addition of 2026-10-17, item 6). */
 export const LazyRecordingStatus = lazy(() => import("../recording-status.tsx").then((m) => ({ default: m.RecordingStatus })));
 
+/** A replay session (a recorded run in the panels, read from storage), loaded when one is opened (ADR-0035 addition of 2026-10-17, item 9). */
+export const LazyReplayHost = lazy(() => import("../panels/replay-host.tsx").then((m) => ({ default: m.ReplayHost })));
+
 /** The run header popover, loaded on first open (the toolbar keeps only the run label). */
 export const LazyRunPopover = lazy(() => import("../run-info.tsx").then((m) => ({ default: m.RunPopover })));
 
