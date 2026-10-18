@@ -136,6 +136,23 @@ measure_("recording cost per tick: 20 agents exploring, default-research and deb
   expect(base.stepMs.length).toBe(TICKS);
 });
 
+// ---- 1b. the recorder budget, in its short form: part of every `pnpm bench` ------------------------------------------------------------------
+
+// The recorder budget (ADR-0013 addition of 2026-10-18): what recording adds to a tick at the 20-agent reference is at most 1 ms at p95. The metric is measured
+// directly, not as a difference of two runs: per tick, the recording's own hook (poses, deltas, checkpoints, snapshots) plus its share of the poll that hands the
+// batches over (profile, redaction, byte estimate, the copy that postMessage makes), for the default profile. The long measurements above stay behind their switch.
+it("the recorder budget: what recording adds to a tick, 20 agents exploring, default-research (short form)", () => {
+  const TICKS = 500;
+  const profile = RECORDING_PRESETS["default-research"];
+  runMeasured(loadWorld(WORLDS.twenty.doc(), WORLDS.twenty.cfg()), 200, profile); // warm up the JIT
+  const m = runMeasured(loadWorld(WORLDS.twenty.doc(), WORLDS.twenty.cfg()), TICKS, profile);
+  expect(m.hookMs.length).toBe(TICKS);
+  const added = m.hookMs.map((h, i) => h + (m.pollMs[Math.floor(i / 8)] ?? 0) / 8).slice(100); // the first 100 ticks are the warm-up of the world
+  const metric = summarize(added);
+  recordResults("node.json", { "recording.addedPerTick": metric });
+  expect(metric.p95).toBeLessThan(5); // a loose guard here; the budget itself is bench/thresholds.json's
+});
+
 // ---- 2. the cost of the per-record byte estimate (JSON.stringify of each payload) ---------------------------------------------------------
 
 measure_("the per-record byte estimate: what JSON.stringify of each payload costs", () => {
