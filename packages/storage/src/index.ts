@@ -48,5 +48,6 @@ export type { ImportErrorCode } from "./worker/transfer.ts";
 // Worker side. sqlite-wasm itself is loaded lazily inside the worker (load-sqlite.ts).
 export { runStorageWorker, type WorkerScope } from "./worker/storage-worker.ts";
 export { storageMessageChecks, type StorageMessageChecks } from "./worker/message-checks.ts";
-export type { RecorderPortMessage, RecorderToStorage, StorageToRecorder, PersistedHeadMessage, RecorderPortLike } from "./worker/recorder-protocol.ts";
+export type { RecorderPortMessage, RecorderToStorage, StorageToRecorder, PersistedHeadMessage, QuotaMessage, RecorderPortLike } from "./worker/recorder-protocol.ts";
+export { QuotaGuard, QUOTA_PAUSE_FRACTION, QUOTA_RESUME_FRACTION, MEMORY_FALLBACK_LIMIT_BYTES, type QuotaMeasure } from "./worker/quota.ts";
 export { recorderAppend, reportCommit, type RecorderAppend } from "./worker/recorder-ingest.ts";

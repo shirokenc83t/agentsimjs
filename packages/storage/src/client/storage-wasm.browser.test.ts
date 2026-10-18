@@ -177,6 +177,89 @@ describe("storage worker (browser)", () => {
     simEnd.close();
   });
 
+  it("flow control: a slow writer saves every batch, in order, only later (nothing is dropped, nothing reordered)", async () => {
+    const profile = RECORDING_PRESETS["default-research"];
+    const recorded = { ...header("run-000001"), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) };
+    const c = spawn({ resetOnOpen: true, simulateSlowWriterMs: 80 });
+    await c.ready();
+    const channel = new MessageChannel();
+    const heads: { tick: number; at: number }[] = [];
+    let headerSeen = false;
+    channel.port1.onmessage = (ev) => {
+      const m = ev.data as { type: string; head?: { tick: number } };
+      if (m.type === "header") headerSeen = true;
+      if (m.type === "persisted") heads.push({ tick: m.head?.tick ?? -1, at: performance.now() });
+    };
+    c.attachRecorderPort(channel.port2);
+    await c.ports.runs.create(recorded);
+    for (let i = 0; i < 100 && !headerSeen; i++) await new Promise((r) => setTimeout(r, 10));
+    expect(headerSeen).toBe(true);
+    const t0 = performance.now();
+    for (let b = 0; b < 6; b++) {
+      channel.port1.postMessage({ type: "batch", batch: { runId: "run-000001", records: [rec("run-000001", b * 2), rec("run-000001", b * 2 + 1)], throughSeq: b * 2 + 1, tick: b + 1, simTimeS: (b + 1) * 0.1 } });
+    }
+    for (let i = 0; i < 300 && heads.at(-1)?.tick !== 6; i++) await new Promise((r) => setTimeout(r, 10));
+    expect(heads.at(-1)?.tick).toBe(6);
+    expect(heads[0]?.at ?? 0).toBeGreaterThanOrEqual(t0 + 70); // the first commit took its time
+    expect(heads.map((h) => h.tick)).toEqual([...heads.map((h) => h.tick)].sort((a, b) => a - b));
+    expect((await c.ports.trace.query({ runId: "run-000001", limit: 100 })).map((r) => r.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    channel.port1.close();
+  });
+
+  it("quota: near the quota the worker holds the run's batches (saved prefix stays consistent), tells both ends, and stores them in order when space is free", async () => {
+    const profile = RECORDING_PRESETS["default-research"];
+    const recorded = { ...header("run-000001"), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) };
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    const base = (await c.admin.info()).dbFileBytes;
+    await c.setSimulatedQuota(base * 2 + 400_000);
+    const channel = new MessageChannel();
+    const fromStorage: { type: string; state?: string; head?: { tick: number } }[] = [];
+    channel.port1.onmessage = (ev) => fromStorage.push(ev.data as (typeof fromStorage)[number]);
+    const mainQuota: string[] = [];
+    c.onQuota((q) => mainQuota.push(q.state));
+    c.attachRecorderPort(channel.port2);
+    await c.ports.runs.create(recorded);
+    const until = async (cond: () => boolean, what: string) => {
+      for (let i = 0; i < 400 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
+      expect(cond(), what).toBe(true);
+    };
+    await until(() => fromStorage.some((m) => m.type === "header"), "header");
+    const big = (seq: number) => ({ ...rec("run-000001", seq), payload: { seq, pad: "x".repeat(30_000) } });
+    let sent = 0;
+    // Send batches of ten large records until the worker says the quota is near; it takes a few, never an unbounded number.
+    for (let b = 0; b < 60 && !fromStorage.some((m) => m.type === "quota"); b++) {
+      const records = Array.from({ length: 10 }, (_, i) => big(b * 10 + i));
+      channel.port1.postMessage({ type: "batch", batch: { runId: "run-000001", records, throughSeq: b * 10 + 9, tick: b + 1, simTimeS: (b + 1) * 0.1 } });
+      sent = b + 1;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    await until(() => fromStorage.some((m) => m.type === "quota" && m.state === "paused"), "quota paused, to the recorder");
+    expect(mainQuota).toContain("paused");
+    // Two more batches after the pause are held, not stored and not lost.
+    for (let b = sent; b < sent + 2; b++) {
+      const records = Array.from({ length: 10 }, (_, i) => big(b * 10 + i));
+      channel.port1.postMessage({ type: "batch", batch: { runId: "run-000001", records, throughSeq: b * 10 + 9, tick: b + 1, simTimeS: (b + 1) * 0.1 } });
+    }
+    sent += 2;
+    await new Promise((r) => setTimeout(r, 200));
+    const storedWhilePaused = await c.ports.trace.count("run-000001");
+    expect(storedWhilePaused).toBeLessThan(sent * 10);
+    expect(storedWhilePaused % 10).toBe(0); // whole batches only: a consistent prefix
+    const prefix = await c.ports.trace.query({ runId: "run-000001", limit: 10_000 });
+    expect(prefix.map((r) => r.seq)).toEqual([...Array(storedWhilePaused).keys()]);
+    const headAtPause = fromStorage.filter((m) => m.type === "persisted").at(-1)?.head?.tick ?? 0;
+    expect(headAtPause).toBe(storedWhilePaused / 10);
+    // Space is free again: the held batches are stored in order, the head catches up, and both ends are told.
+    await c.setSimulatedQuota(1_000_000_000);
+    await until(() => fromStorage.some((m) => m.type === "quota" && m.state === "ok") && mainQuota.includes("ok"), "quota ok");
+    await until(() => fromStorage.filter((m) => m.type === "persisted").at(-1)?.head?.tick === sent, "head caught up");
+    expect(await c.ports.trace.count("run-000001")).toBe(sent * 10);
+    const all = await c.ports.trace.query({ runId: "run-000001", limit: 10_000 });
+    expect(all.map((r) => r.seq)).toEqual([...Array(sent * 10).keys()]);
+    channel.port1.close();
+  });
+
   it("does not tell a recorder about a run header that is not recorded", async () => {
     const c = spawn({ resetOnOpen: true });
     await c.ready();

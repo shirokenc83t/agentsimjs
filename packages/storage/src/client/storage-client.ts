@@ -9,7 +9,7 @@ import {
   type StorageResponse,
   type StorageStatus,
 } from "../worker/protocol.ts";
-import type { PersistedHeadMessage, RecorderPortMessage } from "../worker/recorder-protocol.ts";
+import type { PersistedHeadMessage, QuotaMessage, RecorderPortMessage } from "../worker/recorder-protocol.ts";
 import type { ImportErrorCode } from "../worker/transfer.ts";
 
 /** Errors surfaced by the client when the worker reports an infrastructure failure. */
@@ -49,6 +49,10 @@ export interface StorageClient {
   readonly recorderAttached: boolean;
   /** The persisted head of a recorded run, after each flush the storage worker reports (the status line, the timeline). */
   onPersisted(listener: (head: PersistedHead) => void): () => void;
+  /** The quota state of recording (`paused` near the quota, `ok` once space is free again), for the status line. */
+  onQuota(listener: (q: QuotaMessage) => void): () => void;
+  /** Test-only: changes the simulated quota (undefined: the browser's). */
+  setSimulatedQuota(bytes: number | undefined): Promise<void>;
 }
 
 export interface StorageClientOptions {
@@ -58,6 +62,10 @@ export interface StorageClientOptions {
   readonly poolName?: string;
   readonly simulateNoOpfs?: boolean;
   readonly resetOnOpen?: boolean;
+  /** Test-only: a quota of this many bytes against the database's own size (ADR-0035 §6). */
+  readonly simulateQuotaBytes?: number;
+  /** Test-only: every commit of recorder batches takes this long first. */
+  readonly simulateSlowWriterMs?: number;
 }
 
 export const DEFAULT_QUOTA_THRESHOLD_BYTES = 256 * 1024 * 1024;
@@ -72,10 +80,15 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
   let current: StorageStatus = { type: "status", state: "loading" };
   const listeners = new Set<(s: StorageStatus) => void>();
   const persistedListeners = new Set<(h: PersistedHead) => void>();
+  const quotaListeners = new Set<(q: QuotaMessage) => void>();
   let recorderAttached = false;
 
-  worker.addEventListener("message", (ev: MessageEvent<StorageResponse | StorageStatus | PersistedHeadMessage>) => {
+  worker.addEventListener("message", (ev: MessageEvent<StorageResponse | StorageStatus | PersistedHeadMessage | QuotaMessage>) => {
     const m = ev.data;
+    if (m.type === "quota") {
+      for (const l of quotaListeners) l(m);
+      return;
+    }
     if (m.type === "persisted") {
       for (const l of persistedListeners) l(m.head);
       return;
@@ -113,6 +126,8 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
     poolName: options.poolName ?? "agentsim-pool",
     ...(options.simulateNoOpfs ? { simulateNoOpfs: true } : {}),
     ...(options.resetOnOpen ? { resetOnOpen: true } : {}),
+    ...(options.simulateQuotaBytes === undefined ? {} : { simulateQuotaBytes: options.simulateQuotaBytes }),
+    ...(options.simulateSlowWriterMs === undefined ? {} : { simulateSlowWriterMs: options.simulateSlowWriterMs }),
   };
   worker.postMessage(init);
 
@@ -225,5 +240,10 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       persistedListeners.add(l);
       return () => persistedListeners.delete(l);
     },
+    onQuota(l) {
+      quotaListeners.add(l);
+      return () => quotaListeners.delete(l);
+    },
+    setSimulatedQuota: (bytes) => call("test.setSimulatedQuota", bytes === undefined ? [] : [bytes]),
   };
 }

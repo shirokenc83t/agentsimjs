@@ -495,7 +495,19 @@ export const SimBudget = Type.Object({
   planningQueries: Type.Number({ minimum: 0 }),
 });
 
-export const SimToMain = Type.Union([SimReady, SimState, SimStats, SimDegradation, SimError, SimLoaded, SimEvents, SimGrid, SimChunks, SimTrail, SimInput, SimPreset, SimPreparing, SimPrepared, SimAgentView, SimResearcherData, SimBeliefChunks, SimRays, SimTopology, SimBudget, SimStrategyTestResult]);
+/**
+ * The state of a recorded run's recording (ADR-0035 §6): `storage_backpressure` while the run waits for the writer (the backlog is above its
+ * high mark), `storage_quota` while it is paused near the storage quota, `ok` otherwise. Sent when it changes; the status line shows it.
+ */
+export const SimRecordingState = Type.Object({
+  type: Type.Literal("recording"),
+  runId: RunId,
+  state: Type.Union([Type.Literal("ok"), Type.Literal("storage_backpressure"), Type.Literal("storage_quota")]),
+  backlogRecords: Type.Integer({ minimum: 0 }),
+  backlogBytes: Type.Integer({ minimum: 0 }),
+});
+
+export const SimToMain = Type.Union([SimReady, SimState, SimStats, SimDegradation, SimError, SimLoaded, SimEvents, SimGrid, SimChunks, SimTrail, SimInput, SimPreset, SimPreparing, SimPrepared, SimAgentView, SimResearcherData, SimBeliefChunks, SimRays, SimTopology, SimBudget, SimRecordingState, SimStrategyTestResult]);
 export type SimToMain = Static<typeof SimToMain>;
 export type SimStateMessage = Static<typeof SimState>;
 export type SimStatsMessage = Static<typeof SimStats>;

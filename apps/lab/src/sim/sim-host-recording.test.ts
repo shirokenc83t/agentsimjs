@@ -1,73 +1,9 @@
-import { MainToSim, SIM_PROTOCOL_VERSION, validate, type SimToMain } from "@agentsim/core";
-import { f1DemoRunConfig, f1DemoScenario } from "@agentsim/scenarios";
-import { RECORDING_PRESETS, type RecorderBatch, type TraceRecord } from "@agentsim/trace";
+import { RECORDING_PRESETS, type RecorderBatch } from "@agentsim/trace";
 import { describe, expect, it } from "vitest";
-import { runSimHost, type SimClock, type SimScope } from "./sim-host.ts";
+import { demo, flush, harness, init, stored } from "./sim-host-harness.ts";
 
 // F3a M2: the recorder in the sim worker (ADR-0035 addition of 2026-10-17, items 6 and 12): header first, batches over a direct port,
 // the panel stream fed from what the recorder gathered, and a run that is the same whether or not it is recorded.
-
-/** Fake clock, scope and recorder port: time moves by hand, messages are collected, the storage end is played by the test. */
-function harness() {
-  let t = 0;
-  let timers: { at: number; fn: () => void; id: number }[] = [];
-  let nextId = 1;
-  const clock: SimClock = {
-    now: () => t,
-    epochNow: () => 1_700_000_000_000 + t,
-    setTimer: (fn, ms) => {
-      const id = nextId++;
-      timers.push({ at: t + ms, fn, id });
-      return id;
-    },
-    clearTimer: (h) => {
-      timers = timers.filter((x) => x.id !== h);
-    },
-  };
-  const out: SimToMain[] = [];
-  let listener: ((e: MessageEvent<unknown>) => void) | undefined;
-  const scope: SimScope = { postMessage: (m) => out.push(m), addEventListener: (_t, l) => (listener = l) };
-  const host = runSimHost(scope, clock, (m) => validate(MainToSim, m));
-  const send = (data: unknown) => listener?.({ data } as MessageEvent<unknown>);
-  const advance = (ms: number) => {
-    const end = t + ms;
-    for (;;) {
-      timers.sort((a, b) => a.at - b.at);
-      const next = timers[0];
-      if (!next || next.at > end) break;
-      timers.shift();
-      t = Math.max(t, next.at);
-      next.fn();
-    }
-    t = end;
-  };
-  // The sim worker's end of the recorder channel.
-  const toStorage: { type: string; batch?: RecorderBatch }[] = [];
-  let portListener: ((e: MessageEvent<unknown>) => void) | undefined;
-  const port = {
-    postMessage: (m: { type: string; batch?: RecorderBatch }) => void toStorage.push(m),
-    addEventListener: (_t: string, l: (e: MessageEvent<unknown>) => void) => (portListener = l),
-    start: () => {},
-  };
-  const fromStorage = (m: unknown) => portListener?.({ data: m } as MessageEvent<unknown>);
-  const batches = () => toStorage.filter((m) => m.type === "batch").map((m) => m.batch as RecorderBatch);
-  const states = () => out.filter((m): m is Extract<SimToMain, { type: "state" }> => m.type === "state");
-  const events = () => out.filter((m): m is Extract<SimToMain, { type: "events" }> => m.type === "events").flatMap((m) => m.records as TraceRecord[]);
-  const errors = () => out.filter((m): m is Extract<SimToMain, { type: "error" }> => m.type === "error");
-  return { send, advance, out, states, events, errors, port, fromStorage, batches, toStorage, trace: host.trace };
-}
-
-const demo = (recording?: unknown, runId = "run-000007") => ({
-  type: "load",
-  runId,
-  scenario: f1DemoScenario(),
-  scenarioVersion: 1,
-  runConfig: f1DemoRunConfig(1),
-  ...(recording === undefined ? {} : { recording }),
-});
-const stored = (name: keyof typeof RECORDING_PRESETS = "default-research") => ({ mode: "stored", profile: RECORDING_PRESETS[name] });
-const init = (h: ReturnType<typeof harness>) => h.send({ type: "init", protocolVersion: SIM_PROTOCOL_VERSION, tickRateHz: 10 });
-const flush = () => new Promise<void>((r) => setTimeout(r, 0));
 
 describe("sim host: recording (header first)", () => {
   it("holds the run at tick 0 until the storage worker has the run header, then runs and hands over everything from the start", () => {

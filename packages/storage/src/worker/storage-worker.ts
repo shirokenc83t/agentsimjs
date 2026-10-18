@@ -16,8 +16,9 @@ import {
   type StorageResponse,
   type StorageStatus,
 } from "./protocol.ts";
+import { QuotaGuard, MEMORY_FALLBACK_LIMIT_BYTES, type QuotaMeasure } from "./quota.ts";
 import { recorderAppend, reportCommit, type RecorderAppend } from "./recorder-ingest.ts";
-import type { RecorderPortLike, RecorderPortMessage, RecorderToStorage } from "./recorder-protocol.ts";
+import type { QuotaMessage, RecorderPortLike, RecorderPortMessage, RecorderToStorage } from "./recorder-protocol.ts";
 import { deserializeToMemory, exportRun, validateImport } from "./transfer.ts";
 
 /** The subset of a DedicatedWorkerGlobalScope the storage worker needs (keeps it testable). */
@@ -41,8 +42,33 @@ class Engine {
   private pool: SAHPoolUtil | undefined;
   mode: StorageMode = "memory-fallback";
   warning: string | null = null;
+  /** Test-only: a quota against the database's own size (`simulateQuotaBytes`, or set by a test). */
+  simulatedQuotaBytes: number | undefined;
 
-  constructor(private readonly sqlite3: Sqlite3Static, private readonly init: StorageInit) {}
+  constructor(private readonly sqlite3: Sqlite3Static, private readonly init: StorageInit) {
+    this.simulatedQuotaBytes = init.simulateQuotaBytes;
+  }
+
+  private dbBytes(): number {
+    return this.driver.get<{ n: number }>("SELECT p.page_count * s.page_size AS n FROM pragma_page_count() p, pragma_page_size() s")?.n ?? 0;
+  }
+
+  /**
+   * Usage and quota for the run's pause rule (ADR-0020 addition of 2026-10-17): the browser's own figures for OPFS, the database's size
+   * against a limit in the in-memory fallback, or against the simulated quota in tests.
+   */
+  async measureQuota(): Promise<QuotaMeasure> {
+    if (this.simulatedQuotaBytes !== undefined) return { usageBytes: this.dbBytes(), quotaBytes: this.simulatedQuotaBytes };
+    if (this.mode === "opfs-sahpool") {
+      try {
+        const e = await navigator.storage.estimate();
+        if (e.quota !== undefined && e.quota > 0) return { usageBytes: e.usage ?? 0, quotaBytes: e.quota };
+      } catch {
+        // estimate() unavailable: fall through to the database's own size.
+      }
+    }
+    return { usageBytes: this.dbBytes(), quotaBytes: MEMORY_FALLBACK_LIMIT_BYTES };
+  }
 
   async open(): Promise<void> {
     const reason = await this.opfsUnavailableReason();
@@ -176,6 +202,12 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
   const queue: (StorageRequest | RecorderAppend)[] = [];
   /** The direct channel to the sim worker's recorder (ADR-0019 addition of 2026-10-17): batches in, header and persisted head out. */
   let recorderPort: RecorderPortLike | undefined;
+  /** Quota (ADR-0035 §6): while paused, the run's batches are held (kept, in order, unsaved) and the recorder is told. */
+  const quota = new QuotaGuard();
+  let heldBatches: RecorderAppend[] = [];
+  let quotaTimer: ReturnType<typeof setInterval> | undefined;
+  let measuring = false;
+  let slowWriterMs = 0;
   let pendingAppendRecords = 0;
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
   let flushDue = false;
@@ -218,6 +250,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         const e = new Engine(sqlite3, init);
         await e.open();
         engine = e;
+        slowWriterMs = init.simulateSlowWriterMs ?? 0;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         status({ type: "status", state: "failed", error: message });
@@ -228,6 +261,39 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
       void drain();
       await new Promise<void>((resolve) => (release = resolve));
     });
+  }
+
+  function announceQuota(state: QuotaMessage["state"], m: QuotaMeasure): void {
+    const msg: QuotaMessage = { type: "quota", state, usageBytes: m.usageBytes, quotaBytes: m.quotaBytes };
+    recorderPort?.postMessage(msg);
+    scope.postMessage(msg);
+  }
+
+  /**
+   * Measures usage against the quota (after commits, and while paused every half second: space may have been freed). Near the quota the
+   * run's batches are held and the recorder told; when usage is clearly lower the held batches are stored, in order, and it is told again.
+   */
+  async function checkQuota(): Promise<void> {
+    const e = engine;
+    if (!e || measuring) return;
+    measuring = true;
+    try {
+      const m = await e.measureQuota();
+      const change = quota.update(m);
+      if (change === "paused") {
+        announceQuota("paused", m);
+        quotaTimer ??= setInterval(() => void checkQuota(), 500);
+      } else if (change === "ok") {
+        clearInterval(quotaTimer);
+        quotaTimer = undefined;
+        queue.unshift(...heldBatches);
+        heldBatches = [];
+        announceQuota("ok", m);
+        void drain();
+      }
+    } finally {
+      measuring = false;
+    }
   }
 
   function scheduleFlush(): void {
@@ -251,6 +317,12 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
       while (queue.length > 0 && engine) {
         const head = queue[0];
         if (!head) break;
+        if ("recorder" in head && quota.paused) {
+          heldBatches.push(head);
+          queue.shift();
+          pendingAppendRecords = queue.reduce((acc, r) => acc + appendSize(r), 0);
+          continue;
+        }
         if (head.op === "trace.append") {
           const onlyAppends = queue.every((r) => r.op === "trace.append");
           if (onlyAppends && pendingAppendRecords < FLUSH_RECORDS && !flushDue) {
@@ -262,7 +334,10 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
           const batch = queue.splice(0, n);
           pendingAppendRecords = queue.reduce((acc, r) => acc + appendSize(r), 0);
           flushDue = false;
+          // Test-only slow writer (ADR-0035 §6): the commit of recorder batches takes its time, so the backlog builds up.
+          if (slowWriterMs > 0 && batch.some((r) => "recorder" in r)) await new Promise<void>((resolve) => setTimeout(resolve, slowWriterMs));
           commitAppends(batch);
+          void checkQuota();
           continue;
         }
         queue.shift();
@@ -381,6 +456,11 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
           return;
         }
         case "test.openSecondConnection": value = e.openSecondConnection(); break;
+        case "test.setSimulatedQuota": {
+          e.simulatedQuotaBytes = typeof a === "number" ? a : undefined;
+          void checkQuota();
+          break;
+        }
         case "trace.append": throw new Error("unreachable: appends are batched");
       }
       respond({ type: "response", id: req.id, ok: true, value }, transfer);

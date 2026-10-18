@@ -16,7 +16,7 @@ import {
   type ValidationError,
 } from "@agentsim/core";
 import { f1DemoScenario, f1ReferenceWorldScenario, f2DiscoveryScenario, f2PriorReferenceScenario, f2TwentyAgentsScenario, type StrategyTestError, type StrategyTestRequest, type StrategyTestResult, type StrategyTestRun } from "@agentsim/scenarios";
-import { parseRecordingProfile, RunRecorder, type PersistedHead, type TraceBuffer } from "@agentsim/trace";
+import { parseRecordingProfile, RunRecorder, type FlowControl, type PersistedHead, type TraceBuffer } from "@agentsim/trace";
 import { DummyHostedWorld, ScenarioHostedWorld, type HostedWorld } from "./hosted-world.ts";
 
 /** The scenario document of a preset, built here (off the main thread): the large ones take tens of ms. */
@@ -46,7 +46,13 @@ interface RecorderPort {
 type FromStorage =
   | { readonly type: "header"; readonly runId: string }
   | { readonly type: "persisted"; readonly head: PersistedHead }
+  | { readonly type: "quota"; readonly state: "paused" | "ok"; readonly usageBytes: number; readonly quotaBytes: number }
   | { readonly type: "rejected"; readonly runId: string; readonly code: string; readonly message: string };
+
+/** Host options (tests set the marks of the backlog). */
+export interface SimHostOptions {
+  readonly flow?: FlowControl;
+}
 
 /** What the host needs from a worker scope (keeps it unit-testable). */
 export interface SimScope {
@@ -87,7 +93,7 @@ const PANEL_INTERVAL_MS = 100;
  * mind's decision is outstanding; realtime drops overrun ticks and traces each drop (ADR-0013). Never waits
  * for the main thread. Before a scenario is loaded it runs the F0 dummy world.
  */
-export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageCheck): { trace: () => TraceBuffer } {
+export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageCheck, options: SimHostOptions = {}): { trace: () => TraceBuffer } {
   let world: HostedWorld = new DummyHostedWorld(() => clock.epochNow());
   let scheduler = new Scheduler(world, world.dtS);
   let tickRateHz = 10;
@@ -106,7 +112,15 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   /** Recording: the channel to the storage worker (from the main thread), and the recorder of the loaded run when it is recorded. */
   let recorderPort: RecorderPort | undefined;
   let recorder: RunRecorder | undefined;
-  let headerWaiters: (() => void)[] = [];
+  let gateWaiters: (() => void)[] = [];
+  /** The storage quota is near its limit: the run is paused until the worker says there is room (`wasPlaying`: it goes on by itself then). */
+  let quotaPaused = false;
+  let wasPlayingBeforeQuota = false;
+  /** Flow control: since when (wall time) the run has been waiting for the writer, and what was last reported to the main thread. */
+  let waitingSince: number | undefined;
+  /** The backlog when the wait began: what caused it (the one reported with the degradation, not the smaller one the wait ended on). */
+  let waitingBacklog: { readonly records: number; readonly bytes: number } | undefined;
+  let reported: "ok" | "storage_backpressure" | "storage_quota" = "ok";
 
   const poseFloats = () => world.entityIds.length * POSE_STRIDE;
 
@@ -286,9 +300,10 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     if (!running) return;
     const t0 = clock.now();
     // Header first: a recorded run does not step until the storage worker has its header (like a wait for decisions, it is not a backlog).
-    const n = deciding || recorder?.awaitingHeader ? 0 : driver.advance(t0);
+    const n = deciding || gated() ? 0 : driver.advance(t0);
     recordTicks(n, clock.now() - t0);
     if (n > 0) recorder?.collect(world.tick, world.simTimeS);
+    syncRecordingState();
     if (n > 0) postState();
     else postPanels(false);
     if (world.outstandingCount > 0) awaitDecisions();
@@ -313,19 +328,66 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     postStats();
   }
 
-  /** Resolves when the recorder of the loaded run has its header (at once when there is no recorder or it has it). */
-  const headerStored = (): Promise<void> => (recorder?.awaitingHeader ? new Promise<void>((resolve) => headerWaiters.push(resolve)) : Promise.resolve());
+  /** The run may not step: the header is not stored, the writer is behind (backlog above its high mark) or the storage quota is near. */
+  const gated = (): boolean => recorder !== undefined && (recorder.awaitingHeader || recorder.waiting || quotaPaused);
+
+  /** Resolves when the run may step (at once when it may now). */
+  const gateOpen = (): Promise<void> => (gated() ? new Promise<void>((resolve) => gateWaiters.push(resolve)) : Promise.resolve());
+
+  const releaseGate = () => {
+    if (gated()) return;
+    const waiting = gateWaiters;
+    gateWaiters = [];
+    for (const w of waiting) w();
+  };
+
+  /** Tells the main thread when the recording's state changes, and in realtime traces the wait for the writer when it ends (ADR-0013 addition). */
+  const syncRecordingState = () => {
+    if (!recorder || !world.runId) return;
+    const b = recorder.backlog;
+    const state = quotaPaused ? "storage_quota" : recorder.waiting ? "storage_backpressure" : "ok";
+    if (recorder.waiting && waitingSince === undefined) {
+      waitingSince = clock.now();
+      waitingBacklog = b;
+    }
+    if (!recorder.waiting && waitingSince !== undefined) {
+      const waitMs = Math.max(0, clock.now() - waitingSince);
+      waitingSince = undefined;
+      // Lockstep (and headless) loses wall time only; realtime traces the wait as a degradation, next to the ticks it makes the driver skip.
+      const cause = waitingBacklog ?? b;
+      waitingBacklog = undefined;
+      if (mode === "realtime") world.trace.storageBackpressure({ tick: world.tick, simTimeS: world.simTimeS, backlogRecords: cause.records, backlogBytes: cause.bytes, waitMs });
+      if (running && mode !== "realtime") driver.start(clock.now()); // the wait is not a backlog of ticks
+    }
+    if (state !== reported) {
+      reported = state;
+      scope.postMessage({ type: "recording", runId: world.runId, state, backlogRecords: b.records, backlogBytes: b.bytes });
+    }
+    releaseGate();
+  };
 
   const onFromStorage = (m: FromStorage) => {
     if (m.type === "header") {
       if (!recorder || m.runId !== world.runId) return;
       recorder.headerStored();
       if (running) driver.start(clock.now()); // the wait for the header is not a backlog
-      const waiting = headerWaiters;
-      headerWaiters = [];
-      for (const w of waiting) w();
+      syncRecordingState();
     } else if (m.type === "persisted") {
       recorder?.persisted(m.head);
+      syncRecordingState();
+    } else if (m.type === "quota") {
+      if (!recorder) return;
+      if (m.state === "paused") {
+        quotaPaused = true;
+        wasPlayingBeforeQuota = running;
+        if (running) pause();
+        syncRecordingState();
+      } else {
+        quotaPaused = false;
+        syncRecordingState();
+        if (wasPlayingBeforeQuota && !running) play();
+        wasPlayingBeforeQuota = false;
+      }
     } else if (m.type === "rejected") {
       scope.postMessage({ type: "error", code: "recording_failed", message: `the recording of ${m.runId} failed (${m.code}): ${m.message}` });
       if (running) pause();
@@ -335,12 +397,18 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   /** Runs `count` ticks now (paused afterwards). Lockstep semantics: decisions are awaited between ticks. */
   const step = async (count: number) => {
     if (running) pause();
-    if (recorder?.awaitingHeader) await headerStored();
     for (let i = 0; i < count; i++) {
+      if (gated()) await gateOpen(); // no await when the run may step: a step stays synchronous
       if (world.outstandingCount > 0) await world.decide();
       scheduler.step();
+      // A recorded run's backlog is judged tick by tick, so a long step waits for the writer too.
+      if (recorder) {
+        recorder.collect(world.tick, world.simTimeS);
+        syncRecordingState();
+      }
     }
     recorder?.collect(world.tick, world.simTimeS);
+    syncRecordingState();
     postState(true);
     postStats();
   };
@@ -413,8 +481,16 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     // The recorder of a recorded run sits next to the run's trace; it waits for the header before it sends. Runs that are opted out or not
     // asked about have none: their cache forgets at capacity and counts.
     const channel = recorderPort;
-    headerWaiters = [];
-    recorder = profile?.ok && channel ? new RunRecorder({ buffer: world.trace, profile: profile.value, send: (batch) => channel.postMessage({ type: "batch", batch }) }) : undefined;
+    gateWaiters = [];
+    quotaPaused = false;
+    wasPlayingBeforeQuota = false;
+    waitingSince = undefined;
+    waitingBacklog = undefined;
+    reported = "ok";
+    recorder =
+      profile?.ok && channel
+        ? new RunRecorder({ buffer: world.trace, profile: profile.value, send: (batch) => channel.postMessage({ type: "batch", batch }), ...(options.flow ? { flow: options.flow } : {}) })
+        : undefined;
     scheduler = new Scheduler(world, world.dtS);
     // The run's declared time mode (run configuration, in its header and runConfigHash), not the previous one.
     mode = r.value.loaded.timeMode;

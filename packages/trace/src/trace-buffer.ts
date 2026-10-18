@@ -80,6 +80,19 @@ export class TraceBuffer {
   }
 
   /**
+   * The wait for the writer in a realtime run (ADR-0035 §6, ADR-0013 addition of 2026-10-17): a `degradation` record `storage_backpressure` with
+   * the backlog that caused it and how long the run waited. (Lockstep and headless runs wait too, but only wall time is lost: no record.)
+   */
+  storageBackpressure(e: { tick: number; simTimeS: number; backlogRecords: number; backlogBytes: number; waitMs: number }): TraceRecord {
+    return this.for("world/sim").append({
+      simTime: e.simTimeS,
+      kind: "degradation",
+      detail: "full",
+      payload: { reason: "storage_backpressure", tick: e.tick, backlogRecords: e.backlogRecords, backlogBytes: e.backlogBytes, waitMs: e.waitMs },
+    });
+  }
+
+  /**
    * Where the buffer's sequence and its sim-time order stand: what a snapshot carries (F3a M1; ADR-0035 addition of
    * 2026-10-17, item 8). The records themselves are output, persisted by the recorder (F3a M2), not run state.
    */

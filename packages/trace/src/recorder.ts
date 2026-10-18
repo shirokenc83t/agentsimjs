@@ -53,23 +53,55 @@ export function gapOf(sim: SimHead, persisted: SimHead | undefined): Gap {
   return ticks === 0 ? { state: "saved", ticks: 0, simTimeS: 0 } : { state: "behind", ticks, simTimeS: Math.max(0, sim.simTimeS - persisted.simTimeS) };
 }
 
+/**
+ * Flow control (ADR-0035 §6): the backlog is the records handed over (or held for the header) and not yet reported saved. Above a high
+ * mark the run waits at the end of the tick; it goes on once the backlog is at or below the low mark. Records are never dropped.
+ */
+export interface FlowControl {
+  readonly highRecords: number;
+  readonly lowRecords: number;
+  readonly highBytes: number;
+  readonly lowBytes: number;
+}
+
+/** The starting values (ADR-0035 §6: "e.g. 50,000 records or 32 MB", the low mark half of it); reported by the F3a M2 measurement. */
+export const DEFAULT_FLOW_CONTROL: FlowControl = { highRecords: 50_000, lowRecords: 25_000, highBytes: 32 * 1024 * 1024, lowBytes: 16 * 1024 * 1024 };
+
+const RECORD_OVERHEAD_BYTES = 160;
+
+/** What a record weighs in the backlog: its fields and its payload as JSON text. An estimate: it only has to be stable and about right. */
+export function estimateRecordBytes(r: TraceRecord): number {
+  return RECORD_OVERHEAD_BYTES + (r.payload === undefined ? 0 : JSON.stringify(r.payload).length);
+}
+
+export interface Backlog {
+  readonly records: number;
+  readonly bytes: number;
+}
+
 export interface RunRecorderOptions {
   readonly buffer: TraceBuffer;
   readonly profile: RecordingProfile;
   /** Hands a batch to the storage worker. Called once per `collect` that has something to say. */
   readonly send: (batch: RecorderBatch) => void;
+  /** The marks of the backlog (default: `DEFAULT_FLOW_CONTROL`). */
+  readonly flow?: FlowControl;
 }
 
 interface InFlight {
   readonly throughSeq: number;
   readonly records: number;
+  readonly bytes: number;
 }
 
 export class RunRecorder {
   private readonly buffer: TraceBuffer;
   private readonly profile: RecordingProfile;
   private readonly send: (batch: RecorderBatch) => void;
+  private readonly flow: FlowControl;
   private cursor = 0;
+  private heldBytes = 0;
+  private isWaiting = false;
   private header = false;
   private held: TraceRecord[] = [];
   private panel: TraceRecord[] = [];
@@ -82,6 +114,7 @@ export class RunRecorder {
     this.buffer = o.buffer;
     this.profile = o.profile;
     this.send = o.send;
+    this.flow = o.flow ?? DEFAULT_FLOW_CONTROL;
     // From now on the cache forgets a record only once it is persisted.
     this.buffer.holdUnpersisted();
   }
@@ -101,7 +134,23 @@ export class RunRecorder {
 
   /** Records handed over and not yet reported saved. */
   get backlogRecords(): number {
-    return this.inFlight.reduce((n, b) => n + b.records, 0) + this.held.length;
+    return this.backlog.records;
+  }
+
+  /** The backlog in records and (estimated) bytes: what was handed over or held for the header, and is not reported saved. */
+  get backlog(): Backlog {
+    return { records: this.inFlight.reduce((n, b) => n + b.records, this.held.length), bytes: this.inFlight.reduce((n, b) => n + b.bytes, this.heldBytes) };
+  }
+
+  /** True from the moment the backlog reaches a high mark until it is at or below both low marks: the run waits at the end of the tick. */
+  get waiting(): boolean {
+    return this.isWaiting;
+  }
+
+  private updateWaiting(): void {
+    const b = this.backlog;
+    if (!this.isWaiting) this.isWaiting = b.records >= this.flow.highRecords || b.bytes >= this.flow.highBytes;
+    else if (b.records <= this.flow.lowRecords && b.bytes <= this.flow.lowBytes) this.isWaiting = false;
   }
 
   /** The storage worker has the run header: what was gathered before goes out now, in one batch. */
@@ -127,11 +176,13 @@ export class RunRecorder {
         if (kept) {
           const safe = redactSecrets(kept);
           this.held.push(safe);
+          this.heldBytes += estimateRecordBytes(safe);
           this.panel.push(safe);
         }
       }
     }
     if (this.header) this.flush();
+    this.updateWaiting();
   }
 
   private flush(): void {
@@ -142,7 +193,8 @@ export class RunRecorder {
       return;
     }
     this.held = [];
-    this.inFlight.push({ throughSeq: this.lastThroughSeq, records: records.length });
+    this.inFlight.push({ throughSeq: this.lastThroughSeq, records: records.length, bytes: this.heldBytes });
+    this.heldBytes = 0;
     this.send({ runId: this.buffer.runId, records, throughSeq: this.lastThroughSeq, tick: this.sim.tick, simTimeS: this.sim.simTimeS });
   }
 
@@ -153,6 +205,7 @@ export class RunRecorder {
     while (this.inFlight.length > 0 && (this.inFlight[0] as InFlight).throughSeq <= head.throughSeq) this.inFlight.shift();
     this.buffer.markPersisted(head.throughSeq);
     this.persistedAt = head;
+    this.updateWaiting();
   }
 
   /** Records for the panel stream (≤ 10 Hz) that it has not had yet, profile applied: fed from what the recorder gathered, not from a ring scan. */

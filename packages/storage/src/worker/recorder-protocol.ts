@@ -19,8 +19,21 @@ export type StorageToRecorder =
   | { readonly type: "header"; readonly runId: string }
   /** Everything up to this head is saved (flushed). */
   | { readonly type: "persisted"; readonly head: PersistedHead }
+  /**
+   * The storage quota state (ADR-0035 §6): `paused` when usage is near the quota (the worker holds the run's batches, unsaved but not
+   * lost, and the run pauses as `storage_quota`), `ok` when space is free again (held batches are stored, the run goes on).
+   */
+  | QuotaMessage
   /** A batch could not be stored: the run's recording is no longer complete. */
   | { readonly type: "rejected"; readonly runId: string; readonly code: string; readonly message: string };
+
+/** Quota state, to the recorder and to the main thread (the status line shows `storage_quota`). */
+export interface QuotaMessage {
+  readonly type: "quota";
+  readonly state: "paused" | "ok";
+  readonly usageBytes: number;
+  readonly quotaBytes: number;
+}
 
 /** Storage worker → main thread, next to the responses: the persisted head, for the status line and the timeline. */
 export interface PersistedHeadMessage {

@@ -18,6 +18,10 @@ export const StorageInit = Type.Object({
   simulateNoOpfs: Type.Optional(Type.Boolean()),
   /** Test-only: wipe the pool before opening, for isolated contract tests. */
   resetOnOpen: Type.Optional(Type.Boolean()),
+  /** Test-only: a quota of this many bytes against the database's own size, instead of the browser's (ADR-0035 §6). */
+  simulateQuotaBytes: Type.Optional(Type.Integer({ minimum: 1 })),
+  /** Test-only: every commit of recorder batches takes this long first, to exercise flow control (ADR-0035 §6). */
+  simulateSlowWriterMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 10_000 })),
 });
 export type StorageInit = Static<typeof StorageInit>;
 
@@ -31,7 +35,7 @@ export const OPS = [
   "snapshots.putBlobs", "snapshots.getBlob", "snapshots.write", "snapshots.list", "snapshots.read",
   "beliefFrames.append", "beliefFrames.query", "beliefFrames.keyframeAtOrBefore",
   "admin.info", "admin.exportDb", "admin.exportRun", "admin.importDb", "admin.close",
-  "test.openSecondConnection",
+  "test.openSecondConnection", "test.setSimulatedQuota",
 ] as const;
 export type StorageOp = (typeof OPS)[number];
 
