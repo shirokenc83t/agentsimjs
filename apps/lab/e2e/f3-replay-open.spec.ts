@@ -38,8 +38,13 @@ test("a recorded run opens in the panels from the Storage browser; the sim worke
   await expect(page.getByTestId(`replay-${first}`)).toBeEnabled();
   const mark = (await simMessages(page)).length;
   await page.getByTestId(`replay-${first}`).click();
-  await openWorkspace(page, "scene");
+  // The Data workspace has no Scene: opening a recording takes the user to the Debug workspace, where the replay bar of that run is, without navigating by hand.
+  await expect(page.getByTestId("workspace-debug")).toBeVisible();
   await expect(page.getByTestId("replay-bar")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("replay-label")).toContainText(first);
+  await expect(page.getByTestId("timeline-canvas")).toBeVisible();
+  await openWorkspace(page, "scene");
+  await expect(page.getByTestId("replay-bar")).toBeVisible();
   await expect(page.getByTestId("replay-label")).toContainText(first);
   await expect(page.getByTestId("replay-pose-rate")).toContainText("Hz");
   await expect(page.getByTestId("replay-time")).toContainText("20.0 s"); // the recording ends at tick 200

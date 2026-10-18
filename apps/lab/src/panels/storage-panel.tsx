@@ -6,7 +6,7 @@ export function StoragePanel() {
   const { storage } = useServices();
   const status = useStorageStatus(storage);
   const { run } = useCurrentRun();
-  const { openReplay } = useAppActions();
+  const { openReplay, openWorkspace } = useAppActions();
   if (status.state !== "ready") {
     return (
       <div className="panel muted" data-testid="storage-unavailable">
@@ -19,5 +19,9 @@ export function StoragePanel() {
     );
   }
   // The run being recorded cannot be deleted from under its recorder.
-  return <StorageBrowser client={storage} currentRunId={run?.header.recording === "stored" ? run.header.runId : undefined} onReplay={openReplay} />;
+  return <StorageBrowser client={storage} currentRunId={run?.header.recording === "stored" ? run.header.runId : undefined} onReplay={(runId) => {
+      // The Storage browser is a panel of the Data workspace, which has no Scene: the recording is shown where it can be seen.
+      openReplay(runId);
+      openWorkspace("debug");
+    }} />;
 }

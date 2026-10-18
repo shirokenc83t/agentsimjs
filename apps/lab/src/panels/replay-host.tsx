@@ -25,9 +25,11 @@ export function ReplayHost(props: { runId: string }) {
   const { sim, storage, setReplaySource } = useServices();
   const { runId } = props;
   const [failed, setFailed] = useState<string | null>(null);
+  const [opening, setOpening] = useState(true);
   const onFailed = setFailed;
   useEffect(() => {
     setFailed(null);
+    setOpening(true);
     let cancelled = false;
     let opened: { dispose(): void } | undefined;
     // The run that is recording right now: its end is the persisted head, which grows; the sim is ahead of it by the gap.
@@ -49,13 +51,16 @@ export function ReplayHost(props: { runId: string }) {
           return;
         }
         if (!r.ok) {
+          setOpening(false);
           onFailed(`Cannot replay ${runId}: ${r.error.message}`);
           return;
         }
         opened = r.value;
         setReplaySource(r.value);
+        setOpening(false);
       },
       (e: unknown) => {
+        if (!cancelled) setOpening(false);
         if (!cancelled) onFailed(`Cannot replay ${runId}: ${e instanceof Error ? e.message : String(e)}`);
       },
     );
@@ -65,9 +70,16 @@ export function ReplayHost(props: { runId: string }) {
       setReplaySource(undefined);
     };
   }, [sim, storage, runId, setReplaySource]);
-  return failed === null ? null : (
-    <Banner kind="warn" testId="replay-error">
-      {failed}
+  if (failed !== null) {
+    return (
+      <Banner kind="warn" testId="replay-error">
+        {failed}
+      </Banner>
+    );
+  }
+  return opening ? (
+    <Banner kind="info" testId="replay-opening">
+      Opening {runId}…
     </Banner>
-  );
+  ) : null;
 }
