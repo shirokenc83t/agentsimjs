@@ -107,6 +107,10 @@
       "report": true,
       "$comment": "run header popover, loaded on first open"
     },
+    "bundle.lazy.recording.gzip": {
+      "report": true,
+      "$comment": "recording status in the status line (loaded when a run exists) and the recording choice store (F3a M2); the choice controls ride in the run popover chunk"
+    },
     "bundle.lazy.sharedMui.gzip": {
       "report": true,
       "$comment": "MUI controls shared by the lazy panels (TextField, ToggleButtonGroup, Popover, FormControlLabel)"
