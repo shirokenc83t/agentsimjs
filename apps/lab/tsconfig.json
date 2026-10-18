@@ -6,5 +6,5 @@
     "jsx": "react-jsx"
   },
   "include": ["src"],
-  "exclude": ["src/workers"]
+  "exclude": ["src/workers", "src/**/*.bench.ts"]
 }
