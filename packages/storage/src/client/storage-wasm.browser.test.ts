@@ -1,5 +1,7 @@
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import { afterEach, describe, expect, it } from "vitest";
+import { SnapshotWriter } from "@agentsim/core";
+import { RECORDING_PRESETS, recordingProfileHash } from "@agentsim/trace";
 import { describeStorageContract } from "../testing/contract.ts";
 import { LATEST_SCHEMA_VERSION } from "../sql/migrations.ts";
 import { createStorageClient, type StorageClient, type StorageClientOptions } from "./storage-client.ts";
@@ -99,6 +101,48 @@ describe("storage worker (browser)", () => {
     expect(await c.ports.runs.inputs("run-000001")).toEqual([goTo]);
   });
 
+  it("exports and imports a run with snapshots, blobs and belief frames, and exports one run alone", async () => {
+    const profile = RECORDING_PRESETS["default-research"];
+    const recorded = { ...header("run-000001"), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) };
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    await c.ports.runs.create(recorded);
+    await c.ports.runs.create(header("run-000002"));
+    const external = new Map<string, Uint8Array>();
+    const w = new SnapshotWriter({ external: (h, b) => external.set(h, b) });
+    const container = w.finish({ tick: 0, map: w.section({ chunk: Int8Array.from([1, 2, 3]) }) });
+    const blobs = [...external].map(([id, bytes]) => ({ id, bytes }));
+    const written = await c.ports.snapshots.write("run-000001", { seq: 0, simTime: 0, tick: 0, bytes: container, blobs });
+    expect(written.ok).toBe(true);
+    const kf = blobs[0];
+    if (!kf) throw new Error("a blob was expected");
+    const frames = [
+      { agentId: "uav-001", seq: 0, tick: 0, simTime: 0, kind: "keyframe" as const, chunks: [0], blobId: kf.id },
+      { agentId: "uav-001", seq: 1, tick: 5, simTime: 0.5, kind: "delta" as const, chunks: [0], data: Uint8Array.from([7, 8]) },
+    ];
+    expect((await c.ports.beliefFrames.append("run-000001", frames)).ok).toBe(true);
+    const whole = await c.admin.exportDb();
+    const one = await c.admin.exportRun("run-000001");
+    expect(one.ok).toBe(true);
+    await c.ports.snapshots.putBlobs("run-000002", [kf]);
+    expect((await c.admin.importDb(whole)).ok).toBe(true);
+    expect(await c.ports.snapshots.getBlob("run-000002", kf.id)).toBeUndefined(); // the import replaced the database
+    expect(await c.ports.runs.get("run-000001")).toEqual(recorded);
+    const loaded = written.ok ? await c.ports.snapshots.read("run-000001", written.value.id) : undefined;
+    expect(loaded?.container).toEqual(container);
+    expect(loaded?.blobs).toEqual(blobs);
+    expect(await c.ports.beliefFrames.query({ runId: "run-000001", limit: 10 })).toEqual(frames);
+    // A run exported alone is a database of its own that imports and keeps its recording.
+    if (!one.ok) return;
+    await shutdown(c); // one connection per database file: release it for the second worker
+    const d = spawn({ resetOnOpen: true });
+    await d.ready();
+    expect((await d.admin.importDb(one.value)).ok).toBe(true);
+    expect(await d.ports.beliefFrames.query({ runId: "run-000001", limit: 10 })).toEqual(frames);
+    expect((await d.ports.snapshots.list("run-000001")).map((s) => s.tick)).toEqual([0]);
+    expect((await d.ports.snapshots.getBlob("run-000001", kf.id))?.bytes).toEqual(kf.bytes);
+  });
+
   it("rejects bad imports with stable codes and leaves the database untouched", async () => {
     const c = spawn({ resetOnOpen: true });
     await c.ready();
@@ -126,6 +170,7 @@ describe("storage worker (browser)", () => {
       [craft("CREATE TRIGGER t AFTER INSERT ON runs BEGIN DELETE FROM runs; END"), "unexpected_objects"],
       [craft("CREATE VIEW v AS SELECT 1"), "unexpected_objects"],
       [craft("INSERT INTO schema_migrations VALUES (99, 'future', 0)"), "unknown_schema_version"],
+      [craft("INSERT INTO blobs (run_id, id, data) VALUES ('run-000001', '00000000000000000000000000000000', x'01')"), "broken_recording"],
       [
         craft(
           "INSERT INTO runs (run_id, schema_version, created_at_wall_ms, label, status) VALUES ('run-000009', 0, 0, 'x', 'completed');" +

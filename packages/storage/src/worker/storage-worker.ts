@@ -1,7 +1,7 @@
 import type { RunHeader, RunStatus, TraceRecord } from "@agentsim/trace";
 import type { Database, SAHPoolUtil, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { openWasmSqlDriver, SecondConnectionError } from "../drivers/wasm-sql-driver.ts";
-import type { CachedResponse, StoragePorts, StoredRunInput } from "../ports.ts";
+import type { BeliefFrame, BeliefFrameQuery, CachedResponse, SnapshotWrite, StoragePorts, StoredBlob, StoredRunInput } from "../ports.ts";
 import type { SqlDriver } from "../sql/driver.ts";
 import { LATEST_SCHEMA_VERSION, migrate } from "../sql/migrations.ts";
 import { createSqlPorts } from "../sql/sql-storage.ts";
@@ -316,6 +316,14 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "runConfigs.get": value = await s.runConfigs.get(String(a), typeof b === "number" ? b : undefined); break;
         case "runConfigs.saveVersion": value = await s.runConfigs.saveVersion(a as { id: string; name: string; document: unknown }); break;
         case "runConfigs.delete": value = await s.runConfigs.delete(String(a)); break;
+        case "snapshots.putBlobs": value = await s.snapshots.putBlobs(String(a), Array.isArray(b) ? (b as StoredBlob[]) : []); break;
+        case "snapshots.getBlob": value = await s.snapshots.getBlob(String(a), String(b)); break;
+        case "snapshots.write": value = await s.snapshots.write(String(a), b as SnapshotWrite); break;
+        case "snapshots.list": value = await s.snapshots.list(String(a)); break;
+        case "snapshots.read": value = await s.snapshots.read(String(a), String(b)); break;
+        case "beliefFrames.append": value = await s.beliefFrames.append(String(a), Array.isArray(b) ? (b as BeliefFrame[]) : []); break;
+        case "beliefFrames.query": value = await s.beliefFrames.query(a as BeliefFrameQuery); break;
+        case "beliefFrames.keyframeAtOrBefore": value = await s.beliefFrames.keyframeAtOrBefore(String(a), String(b), Number(req.args[2])); break;
         case "admin.info": value = await e.info(); break;
         case "admin.exportDb": {
           const bytes = e.exportDb();

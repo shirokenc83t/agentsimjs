@@ -2,7 +2,9 @@ import { err, isValid, ok } from "@agentsim/core";
 import { firstNonMonotonicRecord, formatRunId, isValidTraceRecord, RunHeader, type RunStatus, type TraceRecord } from "@agentsim/trace";
 import { checkSourceFilter, sourceFilterMatches } from "../sql/source-filter.ts";
 import type { CachedResponse, DocumentSummary, RunSummary, StoragePorts, StoredDocument, TraceQuery } from "../ports.ts";
+import { checkRunRecording } from "../recording.ts";
 import { checkRunReferences } from "../run-references.ts";
+import { memoryRecordingStores } from "./memory-recording.ts";
 import { checkRunInputs, type StoredRunInput } from "../run-inputs.ts";
 import { checkRunConfigPreset, checkScenarioEnvelope } from "../scenario-envelope.ts";
 
@@ -63,8 +65,10 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
   const udKey = (ns: string, k: string) => `${ns}\u0000${k}`;
   const scenarios = versionedDocs(nowWallMs);
   const runConfigs = versionedDocs(nowWallMs);
+  const recording = memoryRecordingStores((runId) => runs.has(runId));
 
   return {
+    ...recording,
     scenarios: {
       list: async () => scenarios.list(),
       get: async (id, version) => scenarios.get(id, version),
@@ -143,6 +147,8 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
         if (!isValid(RunHeader, header)) return err({ code: "invalid_header" as const, message: "invalid run header" });
         const refs = checkRunReferences(header);
         if (!refs.ok) return refs;
+        const recorded = checkRunRecording(header);
+        if (!recorded.ok) return recorded;
         if (runs.has(header.runId)) return err({ code: "duplicate_run" as const, message: `run ${header.runId} exists` });
         if (header.scenarioId !== undefined && !scenarios.get(header.scenarioId, header.scenarioVersion)) {
           return err({ code: "scenario_version_not_found" as const, message: `scenario ${header.scenarioId} v${header.scenarioVersion ?? "?"} not found` });

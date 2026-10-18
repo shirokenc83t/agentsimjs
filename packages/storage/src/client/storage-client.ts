@@ -137,6 +137,18 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       saveVersion: (preset) => call("runConfigs.saveVersion", [preset]),
       delete: (id) => call("runConfigs.delete", [id]),
     },
+    snapshots: {
+      putBlobs: (runId, blobs) => call("snapshots.putBlobs", [runId, blobs]),
+      getBlob: (runId, id) => call("snapshots.getBlob", [runId, id]),
+      write: (runId, s) => call("snapshots.write", [runId, s]),
+      list: (runId) => call("snapshots.list", [runId]),
+      read: (runId, id) => call("snapshots.read", [runId, id]),
+    },
+    beliefFrames: {
+      append: (runId, frames) => call("beliefFrames.append", [runId, frames]),
+      query: (q) => call("beliefFrames.query", [q]),
+      keyframeAtOrBefore: (runId, agentId, tick) => call("beliefFrames.keyframeAtOrBefore", [runId, agentId, tick]),
+    },
   };
 
   const admin: StorageAdmin = {

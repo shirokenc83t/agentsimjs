@@ -20,8 +20,10 @@ import type {
 } from "../ports.ts";
 import { checkRunConfigPreset, checkScenarioEnvelope } from "../scenario-envelope.ts";
 import { checkRunInputs, RUN_INPUT_LIMITS, type RunInputError, type StoredRunInput } from "../run-inputs.ts";
+import { checkRunRecording } from "../recording.ts";
 import { checkRunReferences } from "../run-references.ts";
 import type { SqlDriver, SqlValue } from "./driver.ts";
+import { SqlBeliefFrameStore, SqlSnapshotStore } from "./recording-stores.ts";
 import { compileSourceFilter } from "./source-filter.ts";
 import { buildTraceQuery, timeWindowToSeqRange, type SeqRange } from "./trace-query.ts";
 
@@ -36,7 +38,7 @@ type RunRow = {
   scenario: string | null; seed: number | null; status: string; record_count?: number;
   scenario_id: string | null; scenario_version: number | null; run_config: string | null;
   run_config_hash: string | null; effective_config_hash: string | null; simulator_version: string | null;
-  ideal_agents: string | null;
+  ideal_agents: string | null; recording: string | null; recording_profile: string | null; recording_profile_hash: string | null;
 };
 
 const opt = <K extends string, V>(key: K, v: V | null | undefined): { [P in K]?: V } =>
@@ -62,6 +64,9 @@ function rowToRun(r: RunRow): RunHeader {
     ...opt("runConfigHash", r.run_config_hash), ...opt("effectiveConfigHash", r.effective_config_hash),
     ...opt("simulatorVersion", r.simulator_version),
     ...opt("idealAgents", r.ideal_agents === null ? null : (JSON.parse(r.ideal_agents) as string[])),
+    ...opt("recording", r.recording as "stored" | "none" | null),
+    ...opt("recordingProfile", r.recording_profile === null ? null : (JSON.parse(r.recording_profile) as unknown)),
+    ...opt("recordingProfileHash", r.recording_profile_hash),
   };
 }
 
@@ -175,6 +180,8 @@ class SqlRunStore implements RunStore {
     if (!isValid(RunHeader, header)) return err({ code: "invalid_header" as const, message: "invalid run header" });
     const refs = checkRunReferences(header);
     if (!refs.ok) return refs;
+    const recording = checkRunRecording(header);
+    if (!recording.ok) return recording;
     if (this.db.get("SELECT 1 AS x FROM runs WHERE run_id = ?", [header.runId])) {
       return err({ code: "duplicate_run" as const, message: `run ${header.runId} exists` });
     }
@@ -186,13 +193,15 @@ class SqlRunStore implements RunStore {
     }
     this.db.run(
       `INSERT INTO runs (run_id, schema_version, created_at_wall_ms, label, scenario, seed, status,
-                         scenario_id, scenario_version, run_config, run_config_hash, effective_config_hash, simulator_version, ideal_agents)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                         scenario_id, scenario_version, run_config, run_config_hash, effective_config_hash, simulator_version, ideal_agents,
+                         recording, recording_profile, recording_profile_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         header.runId, header.schemaVersion, header.createdAtWallMs, header.label, header.scenario ?? null, header.seed ?? null, header.status,
         header.scenarioId ?? null, header.scenarioVersion ?? null, header.runConfig === undefined ? null : JSON.stringify(header.runConfig),
         header.runConfigHash ?? null, header.effectiveConfigHash ?? null, header.simulatorVersion ?? null,
         header.idealAgents === undefined ? null : JSON.stringify(header.idealAgents),
+        header.recording ?? null, header.recordingProfile === undefined ? null : JSON.stringify(header.recordingProfile), header.recordingProfileHash ?? null,
       ],
     );
     return ok(undefined);
@@ -412,5 +421,7 @@ export function createSqlPorts(db: SqlDriver, nowWallMs: () => number): StorageP
     userData: new SqlUserDataStore(db, nowWallMs),
     scenarios: new SqlScenarioStore(db, nowWallMs),
     runConfigs: new SqlRunConfigStore(db, nowWallMs),
+    snapshots: new SqlSnapshotStore(db),
+    beliefFrames: new SqlBeliefFrameStore(db),
   };
 }

@@ -1,6 +1,7 @@
 import { parseSourceFilter, type RunHeader, type TraceRecord } from "@agentsim/trace";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { StoragePorts } from "../ports.ts";
+import { describeRecordingContract } from "./recording-contract.ts";
 
 /**
  * Shared contract suite for every StoragePorts implementation (CLAUDE.md: contract tests per port).
@@ -391,5 +392,7 @@ export function describeStorageContract(name: string, create: () => Promise<Cont
         expect(await h.ports.userData.keys("layout")).toEqual(["data"]);
       });
     });
+
+    describeRecordingContract(() => h.ports);
   });
 }

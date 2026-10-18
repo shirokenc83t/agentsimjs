@@ -4,6 +4,7 @@ import runConfigs0003 from "../../schema/0003_run_configs.sql?raw";
 import traceSource0004 from "../../schema/0004_trace_source.sql?raw";
 import runInputs0005 from "../../schema/0005_run_inputs.sql?raw";
 import idealAgents0006 from "../../schema/0006_ideal_agents.sql?raw";
+import recording0007 from "../../schema/0007_recording.sql?raw";
 import type { SqlDriver } from "./driver.ts";
 
 export interface Migration {
@@ -20,6 +21,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 4, name: "0004_trace_source", sql: traceSource0004 },
   { version: 5, name: "0005_run_inputs", sql: runInputs0005 },
   { version: 6, name: "0006_ideal_agents", sql: idealAgents0006 },
+  { version: 7, name: "0007_recording", sql: recording0007 },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.length;

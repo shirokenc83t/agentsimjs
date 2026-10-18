@@ -18,7 +18,19 @@ export type {
   StoragePorts,
   StoredRunInput,
   RunInputError,
+  StoredBlob,
+  SnapshotWrite,
+  SnapshotInfo,
+  LoadedSnapshot,
+  SnapshotStore,
+  BeliefFrame,
+  BeliefFrameQuery,
+  BeliefFrameStore,
+  BeliefFrameError,
+  BlobWriteError,
+  SnapshotWriteError,
 } from "./ports.ts";
+export { RECORDING_LIMITS } from "./recording.ts";
 export { createMemoryPorts } from "./adapters/memory.ts";
 export type { SqlDriver, SqlValue, SqlRow } from "./sql/driver.ts";
 export { MIGRATIONS, LATEST_SCHEMA_VERSION, migrate } from "./sql/migrations.ts";

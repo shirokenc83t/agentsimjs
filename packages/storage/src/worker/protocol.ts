@@ -28,6 +28,8 @@ export const OPS = [
   "userData.get", "userData.set", "userData.delete", "userData.keys",
   "scenarios.list", "scenarios.get", "scenarios.saveVersion", "scenarios.delete",
   "runConfigs.list", "runConfigs.get", "runConfigs.saveVersion", "runConfigs.delete",
+  "snapshots.putBlobs", "snapshots.getBlob", "snapshots.write", "snapshots.list", "snapshots.read",
+  "beliefFrames.append", "beliefFrames.query", "beliefFrames.keyframeAtOrBefore",
   "admin.info", "admin.exportDb", "admin.exportRun", "admin.importDb", "admin.close",
   "test.openSecondConnection",
 ] as const;
