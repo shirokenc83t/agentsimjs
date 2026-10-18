@@ -9,12 +9,14 @@ async function hashAt(page: Page, tick: number): Promise<string> {
 
 /**
  * The run's trace without what legitimately differs between two runs: the run ID, the informational wall time,
- * and the run prefix of record IDs (`run-000001#7` → `#7`, also in `parentId` and `causeIds`).
+ * and the run prefix of record IDs (`run-000001#7` → `#7`, also in `parentId` and `causeIds`). The snapshot and checkpoint records the
+ * recording adds are left out: a replay schedules its inputs before its first tick, so its start snapshot is not the live run's.
  */
 async function traceOf(page: Page): Promise<unknown[]> {
   return page.evaluate(() => {
     const local = (id: unknown) => (typeof id === "string" ? id.replace(/^[^#]*#/, "#") : id);
-    return (window.__agentsim?.records?.() ?? []).map((r) => {
+    const recorded = (r: unknown) => (r as { kind?: string }).kind === "snapshot" || (r as { payload?: { op?: string } }).payload?.op === "checkpoint";
+    return (window.__agentsim?.records?.() ?? []).filter((r) => !recorded(r)).map((r) => {
       const { runId: _r, wallTime: _w, id, parentId, causeIds, ...rest } = r as Record<string, unknown>;
       return {
         ...rest,

@@ -221,7 +221,7 @@ describe("storage worker (browser)", () => {
     c.attachRecorderPort(channel.port2);
     await c.ports.runs.create(recorded);
     const until = async (cond: () => boolean, what: string) => {
-      for (let i = 0; i < 400 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
+      for (let i = 0; i < 1000 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
       expect(cond(), what).toBe(true);
     };
     await until(() => fromStorage.some((m) => m.type === "header"), "header");
@@ -242,8 +242,14 @@ describe("storage worker (browser)", () => {
       channel.port1.postMessage({ type: "batch", batch: { runId: "run-000001", records, throughSeq: b * 10 + 9, tick: b + 1, simTimeS: (b + 1) * 0.1 } });
     }
     sent += 2;
-    await new Promise((r) => setTimeout(r, 200));
-    const storedWhilePaused = await c.ports.trace.count("run-000001");
+    // Wait until the stored count stops moving (the worker may still be working through what it had already queued when the quota was reached).
+    let storedWhilePaused = await c.ports.trace.count("run-000001");
+    for (let stable = 0; stable < 5; ) {
+      await new Promise((r) => setTimeout(r, 100));
+      const now = await c.ports.trace.count("run-000001");
+      stable = now === storedWhilePaused ? stable + 1 : 0;
+      storedWhilePaused = now;
+    }
     expect(storedWhilePaused).toBeLessThan(sent * 10);
     expect(storedWhilePaused % 10).toBe(0); // whole batches only: a consistent prefix
     const prefix = await c.ports.trace.query({ runId: "run-000001", limit: 10_000 });

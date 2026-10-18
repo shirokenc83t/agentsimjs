@@ -155,4 +155,45 @@ describe("BeliefMap snapshot and restore (F3a M1)", () => {
     expect(view(b)).toEqual(view(a));
     expect(b.snapshot().chunks).toEqual([]);
   });
+
+  it("chunksSnapshot gives the content of the named chunks, and applying it to a copy of an older state gives the newer state (belief deltas)", () => {
+    const r = Rng.fromSeed(31);
+    const live = new BeliefMap(96, 80, 16);
+    observe(live, r, 800);
+    const replay = new BeliefMap(96, 80, 16);
+    replay.restore(roundTrip(live.snapshot())); // a keyframe
+    for (let step = 0; step < 12; step++) {
+      const before = live.version;
+      observe(live, r, 40 + step * 7);
+      const changed = live.chunksChangedSince(before);
+      const delta = decodeValue(encodeValue({ chunks: live.chunksSnapshot(changed) })) as { chunks: ReturnType<BeliefMap["chunksSnapshot"]> };
+      replay.applyChunks(delta.chunks);
+      expect(hashOf(replay), `after delta ${step}`).toBe(hashOf(live));
+    }
+    expect(replay.materializedChunks).toBe(live.materializedChunks);
+  });
+
+  it("chunksSnapshot copies (later changes do not reach it), refuses a chunk out of range, and is empty for no chunks", () => {
+    const m = new BeliefMap(64, 64, 16);
+    m.observeHit(3, 3, 1, 50);
+    const [first] = m.chunksSnapshot([0]);
+    const before = first?.logOdds.slice();
+    m.observeFree(3, 3, 100);
+    expect(first?.logOdds).toEqual(before);
+    expect(m.chunksSnapshot([])).toEqual([]);
+    expect(m.materializedIndices()).toEqual([0]);
+    m.observeFree(40, 3, 5);
+    expect(m.materializedIndices()).toEqual([0, 2]);
+    expect(m.chunksSnapshot([5])).toEqual([]); // not materialized: nothing to say
+    expect(() => m.chunksSnapshot([16])).toThrow(/out of range/);
+  });
+
+  it("applyChunks refuses an entry out of range or of the wrong size, and leaves the map as it was", () => {
+    const m = new BeliefMap(64, 64, 16);
+    m.observeHit(3, 3, 1, 50);
+    const h = hashOf(m);
+    expect(() => m.applyChunks([{ index: 99, logOdds: new Int8Array(256), knownMinDm: undefined, knownMaxDm: undefined }])).toThrow(/out of range/);
+    expect(() => m.applyChunks([{ index: 1, logOdds: new Int8Array(3), knownMinDm: undefined, knownMaxDm: undefined }])).toThrow(/wrong size/);
+    expect(hashOf(m)).toBe(h);
+  });
 });

@@ -16,8 +16,9 @@ import {
   type ValidationError,
 } from "@agentsim/core";
 import { f1DemoScenario, f1ReferenceWorldScenario, f2DiscoveryScenario, f2PriorReferenceScenario, f2TwentyAgentsScenario, type StrategyTestError, type StrategyTestRequest, type StrategyTestResult, type StrategyTestRun } from "@agentsim/scenarios";
-import { parseRecordingProfile, RunRecorder, type FlowControl, type PersistedHead, type TraceBuffer } from "@agentsim/trace";
+import { parseRecordingProfile, RunRecorder, type FlowControl, type PersistedHead, type RecorderItem, type TraceBuffer } from "@agentsim/trace";
 import { DummyHostedWorld, ScenarioHostedWorld, type HostedWorld } from "./hosted-world.ts";
+import { RunRecording } from "./run-recording.ts";
 
 /** The scenario document of a preset, built here (off the main thread): the large ones take tens of ms. */
 function buildPresetDocument(preset: PresetId): unknown {
@@ -37,7 +38,7 @@ function buildPresetDocument(preset: PresetId): unknown {
 
 /** The sim worker's end of the recorder channel: a `MessagePort` in a worker, a fake in tests. */
 interface RecorderPort {
-  postMessage(message: unknown): void;
+  postMessage(message: unknown, transfer?: Transferable[]): void;
   addEventListener(type: "message", listener: (e: MessageEvent<unknown>) => void): void;
   start?(): void;
 }
@@ -48,6 +49,18 @@ type FromStorage =
   | { readonly type: "persisted"; readonly head: PersistedHead }
   | { readonly type: "quota"; readonly state: "paused" | "ok"; readonly usageBytes: number; readonly quotaBytes: number }
   | { readonly type: "rejected"; readonly runId: string; readonly code: string; readonly message: string };
+
+/** The buffers of a snapshot or of belief frames that the worker can take without a copy: those that own their whole buffer. */
+function transferList(item: RecorderItem): Transferable[] {
+  const out = new Set<ArrayBuffer>();
+  const add = (b: Uint8Array | undefined) => {
+    if (b && b.byteOffset === 0 && b.buffer instanceof ArrayBuffer && b.byteLength === b.buffer.byteLength) out.add(b.buffer);
+  };
+  if (item.type === "snapshot") add(item.bytes);
+  for (const b of item.blobs) add(b.bytes);
+  if (item.type === "frames") for (const f of item.frames) add(f.data);
+  return [...out];
+}
 
 /** Host options (tests set the marks of the backlog). */
 export interface SimHostOptions {
@@ -112,6 +125,8 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   /** Recording: the channel to the storage worker (from the main thread), and the recorder of the loaded run when it is recorded. */
   let recorderPort: RecorderPort | undefined;
   let recorder: RunRecorder | undefined;
+  /** What a recorded run writes besides its components' records: checkpoints, snapshots, pose samples, belief keyframes and deltas. */
+  let recording: RunRecording | undefined;
   let gateWaiters: (() => void)[] = [];
   /** The storage quota is near its limit: the run is paused until the worker says there is room (`wasPlaying`: it goes on by itself then). */
   let quotaPaused = false;
@@ -324,8 +339,14 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   function pause() {
     running = false;
     clock.clearTimer(timer);
-    recorder?.collect(world.tick, world.simTimeS);
+    stopRecording();
     postStats();
+  }
+
+  /** The run stops (a pause, the end of a step, another run replacing it): its end snapshot, and what the recorder holds goes out. */
+  function stopRecording(): void {
+    recording?.end();
+    recorder?.collect(world.tick, world.simTimeS);
   }
 
   /** The run may not step: the header is not stored, the writer is behind (backlog above its high mark) or the storage quota is near. */
@@ -407,7 +428,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
         syncRecordingState();
       }
     }
-    recorder?.collect(world.tick, world.simTimeS);
+    stopRecording();
     syncRecordingState();
     postState(true);
     postStats();
@@ -476,6 +497,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     }
     scope.postMessage({ type: "prepared", runId: m.runId, ...prepared.value, ms: Math.max(0, clock.now() - t0) });
     if (running) pause();
+    stopRecording();
     dropSandbox();
     world = r.value;
     // The recorder of a recorded run sits next to the run's trace; it waits for the header before it sends. Runs that are opted out or not
@@ -489,8 +511,14 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     reported = "ok";
     recorder =
       profile?.ok && channel
-        ? new RunRecorder({ buffer: world.trace, profile: profile.value, send: (batch) => channel.postMessage({ type: "batch", batch }), ...(options.flow ? { flow: options.flow } : {}) })
+        ? new RunRecorder({ buffer: world.trace, profile: profile.value, send: (batch) => channel.postMessage({ type: "batch", batch }), sendItem: (item) => channel.postMessage(item, transferList(item)), ...(options.flow ? { flow: options.flow } : {}) })
         : undefined;
+    recording = undefined;
+    if (recorder && profile?.ok && world instanceof ScenarioHostedWorld) {
+      recording = new RunRecording(world.recordingTarget(), recorder, profile.value);
+      const rec = recording;
+      world.setTickHook(() => rec.afterTick());
+    }
     scheduler = new Scheduler(world, world.dtS);
     // The run's declared time mode (run configuration, in its header and runConfigHash), not the previous one.
     mode = r.value.loaded.timeMode;
@@ -505,6 +533,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     budgetPosts = 0;
     overlayWatch = { agentId: null, rays: false, topology: false };
     rayPosts = 0;
+    recording?.start(); // the first snapshot, keyframes, checkpoint and poses: held with the rest until the header is stored
     recorder?.collect(0, 0); // what genesis emitted (start events, first requests, configuration records): held until the header is stored
     scope.postMessage(r.value.loaded);
     scope.postMessage(r.value.gridMessage());

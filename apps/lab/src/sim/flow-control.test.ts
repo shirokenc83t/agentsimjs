@@ -7,8 +7,8 @@ import { demo, flush, harness, init, stored, type Harness } from "./sim-host-har
 // waits at the end of the tick (wall time only in lockstep, a traced `storage_backpressure` degradation in realtime), and a storage quota near
 // its limit pauses the run as `storage_quota`; neither changes what the run does, and no record is dropped or reordered.
 
-// The demo run emits few records (about one every five ticks after its genesis), so the marks are small.
-const tight: FlowControl = { highRecords: 6, lowRecords: 3, highBytes: 100_000_000, lowBytes: 50_000_000 };
+// A recorded demo run writes a few records per second (pose samples, checkpoints, snapshots), so the marks are small.
+const tight: FlowControl = { highRecords: 60, lowRecords: 30, highBytes: 100_000_000, lowBytes: 50_000_000 };
 
 const ack = (h: Harness, b: RecorderBatch) => h.fromStorage({ type: "persisted", head: { runId: b.runId, throughSeq: b.throughSeq, tick: b.tick, simTimeS: b.simTimeS } });
 /** The storage worker saves every batch handed over so far (and not before). */
@@ -25,17 +25,23 @@ function started(options: { flow: FlowControl }, load: () => unknown = () => dem
   return h;
 }
 
-/** What a run wrote that does not depend on the clock: id, kind, source and payload of each record, in order. */
-const written = (h: Harness) => h.batches().flatMap((b) => b.records).map((r: TraceRecord) => JSON.stringify([r.id, r.seq, r.simTime, r.kind, r.source, r.payload]));
+/** What a run wrote that does not depend on the clock or on when it was stopped: time, kind, source and payload of each record, in order. */
+const written = (h: Harness) =>
+  h
+    .batches()
+    .flatMap((b) => b.records)
+    // Snapshots and checkpoints at a stop depend on when the run was stopped, which is not what is compared here.
+    .filter((r) => r.kind !== "snapshot" && (r.payload as { op?: string } | undefined)?.op !== "checkpoint")
+    .map((r: TraceRecord) => JSON.stringify([r.simTime, r.kind, r.source, r.payload]));
 
 describe("flow control: lockstep", () => {
   it("waits at the end of the tick when the backlog is above the high mark, and goes on when it is at or below the low mark: wall time only", () => {
     const h = started({ flow: tight });
     h.send({ type: "control", op: "play" });
-    h.advance(8000); // the writer saves nothing
+    h.advance(15000); // the writer saves nothing
     const stuck = h.states().at(-1)?.tick ?? 0;
     expect(stuck).toBeGreaterThan(0);
-    expect(stuck).toBeLessThan(70); // free-running it would be at tick 80
+    expect(stuck).toBeLessThan(140); // free-running it would be at tick 150
     h.advance(3000);
     expect(h.states().at(-1)?.tick).toBe(stuck); // still waiting
     expect(recordingStates(h)).toEqual(["storage_backpressure"]);
@@ -72,7 +78,7 @@ describe("flow control: lockstep", () => {
     const b = fast.out.filter((m) => m.type === "stats").at(-1);
     expect(a?.type === "stats" && a.tick).toBe(100);
     expect(a?.type === "stats" && a.stateHash).toBe(b?.type === "stats" ? b.stateHash : undefined);
-    expect(written(slow)).toEqual(written(fast));
+    expect(written(slow)).toEqual(written(fast)); // ids and seqs differ: the records of a stop (an end snapshot) fall at other places
     expect(written(slow).length).toBeGreaterThan(0);
     const seqs = slow.batches().flatMap((x) => x.records.map((r) => r.seq));
     expect(seqs).toEqual([...seqs].sort((p, q) => p - q));
@@ -102,14 +108,14 @@ describe("flow control: realtime", () => {
   it("traces the wait as a storage_backpressure degradation with the backlog and the wait, once it ends", () => {
     const h = started({ flow: tight }, realtimeDemo);
     h.send({ type: "control", op: "play" });
-    h.advance(8000);
+    h.advance(15000);
     expect(h.trace().ofKind("degradation").filter((r) => (r.payload as { reason?: string }).reason === "storage_backpressure")).toEqual([]); // still waiting
     saveAll(h);
     h.advance(100);
     const deg = h.trace().ofKind("degradation").filter((r) => (r.payload as { reason?: string }).reason === "storage_backpressure");
     expect(deg).toHaveLength(1);
     const p = deg[0]?.payload as { backlogRecords: number; backlogBytes: number; waitMs: number; tick: number };
-    expect(p.backlogRecords).toBeGreaterThanOrEqual(6);
+    expect(p.backlogRecords).toBeGreaterThanOrEqual(60);
     expect(p.backlogBytes).toBeGreaterThan(0);
     expect(p.waitMs).toBeGreaterThan(1000);
     expect(deg[0]).toMatchObject({ source: "world/sim", kind: "degradation", detail: "full" });
@@ -118,7 +124,7 @@ describe("flow control: realtime", () => {
   it("hands the degradation record over like any other record", () => {
     const h = started({ flow: tight }, realtimeDemo);
     h.send({ type: "control", op: "play" });
-    h.advance(8000);
+    h.advance(15000);
     saveAll(h);
     h.advance(500);
     saveAll(h);

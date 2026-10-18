@@ -1,3 +1,4 @@
+import { channelOf } from "./channels.ts";
 import { filterRecord } from "./levels.ts";
 import { redactSecrets } from "./redact.ts";
 import type { RecordingProfile } from "./recording-profile.ts";
@@ -245,7 +246,8 @@ export class RunRecorder {
           const safe = redactSecrets(kept);
           this.held.push(safe);
           this.heldBytes += estimateRecordBytes(safe);
-          this.panel.push(safe);
+          // Pose samples are for scrubbing, not for reading: the Log's stream does not carry them (the Scene has its own poses).
+          if (channelOf(safe) !== "poses") this.panel.push(safe);
         }
       }
     }

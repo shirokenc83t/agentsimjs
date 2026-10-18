@@ -184,6 +184,40 @@ export class BeliefMap {
   }
 
   /**
+   * The content of the named chunks as plain data, copied (a belief delta of the recording, ADR-0035 addition of 2026-10-17, item 9: the
+   * chunks that changed at a sync point). A chunk that was never observed has no content and is left out.
+   */
+  chunksSnapshot(indices: readonly number[]): BeliefMapSnapshot["chunks"][number][] {
+    const out: BeliefMapSnapshot["chunks"][number][] = [];
+    for (const k of indices) {
+      if (!Number.isInteger(k) || k < 0 || k >= this.chunks.length) throw new RangeError(`chunk ${k} is out of range`);
+      const c = this.chunks[k];
+      if (c) out.push({ index: k, logOdds: c.logOdds.slice(), knownMinDm: c.knownMinDm?.slice(), knownMaxDm: c.knownMaxDm?.slice() });
+    }
+    return out;
+  }
+
+  /**
+   * Replaces the content of the given chunks, in place (a replay rebuilds a map from a keyframe and the deltas after it). Every chunk is
+   * checked before any is changed. The chunks are stamped as changed (so the content hash and overlays see them); the change log of
+   * planning is not touched: a rebuilt map is read by overlays, never planned on.
+   */
+  applyChunks(entries: BeliefMapSnapshot["chunks"]): void {
+    const cells = this.chunkSize * this.chunkSize;
+    for (const c of entries) {
+      if (!Number.isInteger(c.index) || c.index < 0 || c.index >= this.chunks.length) throw new RangeError(`belief chunk ${c.index} is out of range`);
+      if (c.logOdds.length !== cells || (c.knownMinDm && c.knownMinDm.length !== cells) || (c.knownMaxDm && c.knownMaxDm.length !== cells)) throw new RangeError(`belief chunk ${c.index} has the wrong size`);
+    }
+    if (entries.length === 0) return;
+    this.versionCounter++;
+    for (const c of entries) {
+      if (this.chunks[c.index] === undefined) this.materialized++;
+      this.chunks[c.index] = { logOdds: c.logOdds.slice(), knownMinDm: c.knownMinDm?.slice(), knownMaxDm: c.knownMaxDm?.slice() };
+      this.chunkVersion[c.index] = this.versionCounter;
+    }
+  }
+
+  /**
    * Version of what planning reads (ADR-0024 addition of 2026-10-09: views change only when planning would): it
    * moves when a cell's believed state or height bounds change, not on every log-odds step.
    */
@@ -195,6 +229,13 @@ export class BeliefMap {
   chunksPlanChangedSince(planVersion: number): number[] {
     const out: number[] = [];
     for (let k = 0; k < this.chunkPlanVersion.length; k++) if ((this.chunkPlanVersion[k] ?? 0) > planVersion) out.push(k);
+    return out;
+  }
+
+  /** Indices of the chunks that hold any observation, ascending (what a belief keyframe covers). */
+  materializedIndices(): number[] {
+    const out: number[] = [];
+    for (let k = 0; k < this.chunks.length; k++) if (this.chunks[k]) out.push(k);
     return out;
   }
 

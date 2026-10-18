@@ -22,6 +22,7 @@ import { ATLAS_BYTES_PER_CELL, atlasScratch, encodeAtlasChunk, type GridSpace } 
 import { startStrategyTest, type StrategyTestError, type StrategyTestRequest, type StrategyTestRun, agentWarnings, checkSensorNoise, checkSensorRates, createRun, idealAgentsOf, loadScenario, parseRunConfigValue, parseScenarioValue, preparePlanning, resolveRunConfig, type CreatedRun, type ResolvedRunConfig } from "@agentsim/scenarios";
 import { TraceBuffer, type TraceRecord } from "@agentsim/trace";
 import { DUMMY_DT_S, DUMMY_ENTITY_IDS, DUMMY_POSE_FLOATS, writeDummyPoses } from "./dummy-world.ts";
+import type { RecordingTarget } from "./run-recording.ts";
 import { TrailRecorder } from "./trail-recorder.ts";
 
 /**
@@ -317,9 +318,27 @@ export class ScenarioHostedWorld implements HostedWorld {
     return this.run.world.outstandingCount;
   }
 
+  /** Called after each tick, between ticks, by a recorded run's recording (ADR-0035 addition of 2026-10-17): observation only. */
+  private tickHook: (() => void) | undefined;
+
+  setTickHook(hook: (() => void) | undefined): void {
+    this.tickHook = hook;
+  }
+
+  /** What a recorded run's recording reads: the run, its trace, the step and the agents whose beliefs are the ground truth. */
+  recordingTarget(): RecordingTarget {
+    return {
+      run: { ...this.run, trace: this.trace },
+      trace: this.trace,
+      dtS: this.dtS,
+      idealAgents: new Set(this.resolved.agents.filter((a) => a.beliefs.idealized).map((a) => a.agentId)),
+    };
+  }
+
   step(ctx: TickContext): void {
     this.run.world.step(ctx);
     this.recordTrail();
+    this.tickHook?.();
   }
 
   decide(): Promise<void> {

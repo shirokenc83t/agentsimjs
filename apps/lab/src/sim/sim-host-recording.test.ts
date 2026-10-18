@@ -1,3 +1,4 @@
+import { snapshotHash } from "@agentsim/core";
 import { RECORDING_PRESETS, type RecorderBatch } from "@agentsim/trace";
 import { describe, expect, it } from "vitest";
 import { demo, flush, harness, init, stored } from "./sim-host-harness.ts";
@@ -73,7 +74,8 @@ describe("sim host: recording (batches and the panel stream)", () => {
     const sent = h.batches().flatMap((b) => b.records);
     expect(sent.map((r) => r.seq)).toEqual(h.trace().all().map((r) => r.seq));
     expect(sent.length).toBeGreaterThan(0);
-    expect(h.events().map((r) => r.id)).toEqual(sent.map((r) => r.id));
+    // The panel stream carries what was handed over, except pose samples (they are for scrubbing, not for reading).
+    expect(h.events().map((r) => r.id)).toEqual(sent.filter((r) => (r.payload as { op?: string } | undefined)?.op !== "pose").map((r) => r.id));
     expect(h.batches().at(-1)).toMatchObject({ runId: "run-000007", tick: 60 });
   });
 
@@ -95,6 +97,52 @@ describe("sim host: recording (batches and the panel stream)", () => {
     const n = h.states().length;
     h.advance(1000);
     expect(h.states()).toHaveLength(n); // paused
+  });
+});
+
+describe("sim host: snapshots, checkpoints, poses and belief frames (ADR-0035 addition of 2026-10-17, items 8 and 9)", () => {
+  it("hands over the start snapshot before the batch that holds the snapshot record that refers to it, once the header is stored (the demo's agents are ideal: no belief frames)", () => {
+    const h = harness();
+    init(h);
+    h.send({ type: "recorderPort", port: h.port });
+    h.send(demo(stored()));
+    expect(h.toStorage).toEqual([]); // held for the header
+    h.fromStorage({ type: "header", runId: "run-000007" });
+    const kinds = h.toStorage.map((m) => m.type);
+    expect(kinds.slice(0, 2)).toEqual(["snapshot", "batch"]);
+    const snap = h.toStorage[0] as unknown as { bytes: Uint8Array; seq: number; tick: number };
+    const batch = h.toStorage[1]?.batch as RecorderBatch;
+    const record = batch.records.find((r) => r.kind === "snapshot");
+    expect(record).toMatchObject({ worldRef: snapshotHash(snap.bytes), seq: snap.seq });
+    expect(snap.tick).toBe(0);
+  });
+
+  it("writes a checkpoint every 100 ticks and an end snapshot when a step ends, and the run keeps its hash", async () => {
+    const h = harness();
+    init(h);
+    h.send({ type: "recorderPort", port: h.port });
+    h.send(demo(stored()));
+    h.fromStorage({ type: "header", runId: "run-000007" });
+    h.send({ type: "control", op: "step", count: 250 });
+    await flush();
+    const records = h.batches().flatMap((b) => b.records);
+    const ops = (op: string) => records.filter((r) => (r.payload as { op?: string } | undefined)?.op === op);
+    expect(ops("checkpoint").map((r) => (r.payload as { tick: number }).tick)).toEqual([0, 100, 200, 250]);
+    expect(records.filter((r) => r.kind === "snapshot").map((r) => (r.payload as { reason: string }).reason)).toEqual(["start", "end"]);
+    expect(ops("pose").length).toBeGreaterThan(100);
+    // The Log's stream carries none of the pose samples.
+    expect(h.events().some((r) => (r.payload as { op?: string } | undefined)?.op === "pose")).toBe(false);
+  });
+
+  it("an opted-out run writes none of it: no snapshot, no checkpoint, no pose sample, nothing to the storage worker", async () => {
+    const h = harness();
+    init(h);
+    h.send({ type: "recorderPort", port: h.port });
+    h.send(demo({ mode: "none" }));
+    h.send({ type: "control", op: "step", count: 120 });
+    await flush();
+    expect(h.toStorage).toEqual([]);
+    expect(h.trace().all().some((r) => r.kind === "snapshot" || (r.payload as { op?: string } | undefined)?.op === "checkpoint" || (r.payload as { op?: string } | undefined)?.op === "pose")).toBe(false);
   });
 });
 
