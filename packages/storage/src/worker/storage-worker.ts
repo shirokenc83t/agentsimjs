@@ -34,6 +34,12 @@ const FLUSH_RECORDS = 500;
 const FLUSH_DELAY_MS = 16;
 
 const now = () => Date.now();
+/** Free pages worth a VACUUM (at start, or when the Storage browser asks while nothing records). */
+const MIN_COMPACT_BYTES = 1024 * 1024;
+/** A snapshot or a set of belief frames counts as this many records toward the flush mark. */
+const ITEM_WEIGHT = 20;
+/** A run is being recorded while its batches arrive: a compaction waits until none has for this long. */
+const RECORDING_QUIET_MS = 5000;
 
 class Engine {
   private driver!: SqlDriver;
@@ -54,9 +60,21 @@ class Engine {
     return this.driver.get<{ n: number }>("SELECT (p.page_count - f.freelist_count) * s.page_size AS n FROM pragma_page_count() p, pragma_freelist_count() f, pragma_page_size() s")?.n ?? 0;
   }
 
-  /** Gives the space of deleted rows back to the file (after a run is deleted), so usage falls. */
-  compact(): void {
+  /** Bytes of free pages the file still holds (what deleted rows left behind). */
+  freeBytes(): number {
+    return this.driver.get<{ n: number }>("SELECT f.freelist_count * s.page_size AS n FROM pragma_freelist_count() f, pragma_page_size() s")?.n ?? 0;
+  }
+
+  /**
+   * Gives the space of deleted rows back to the file (VACUUM), when there is enough of it to be worth the time; returns the bytes freed. A VACUUM
+   * takes seconds on a large database and the worker serves one request at a time, so it is not done inside a delete: at start, and when
+   * nothing is recording (ADR-0020 addition of 2026-10-18).
+   */
+  compactIfWorth(minFreeBytes = MIN_COMPACT_BYTES): number {
+    const free = this.freeBytes();
+    if (free < minFreeBytes) return 0;
     this.driver.exec("VACUUM");
+    return free;
   }
 
   /**
@@ -95,6 +113,7 @@ class Engine {
       this.warning = reason;
     }
     this.openConnection();
+    this.compactIfWorth(); // what deleted runs left behind in an earlier session
     if (this.simulatedQuotaBytes === undefined && this.init.simulateQuotaHeadroomBytes !== undefined) this.simulatedQuotaBytes = this.dbBytes() + this.init.simulateQuotaHeadroomBytes;
   }
 
@@ -216,6 +235,8 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
   let measuring = false;
   /** The run whose recorder writes to this worker: it cannot be deleted. */
   let recordedRunId: string | undefined;
+  /** When the latest recorder batch arrived (wall clock; a policy input, never part of a run). */
+  let lastBatchAt = 0;
   let slowWriterMs = 0;
   let pendingAppendRecords = 0;
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -292,7 +313,6 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
     } catch (err) {
       refuse("storage_error", err instanceof Error ? err.message : String(err));
     }
-    void checkQuota();
   }
 
   function announceQuota(state: QuotaMessage["state"], m: QuotaMeasure): void {
@@ -349,74 +369,78 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
       while (queue.length > 0 && engine) {
         const head = queue[0];
         if (!head) break;
-        if ("recorderItem" in head) {
-          queue.shift();
-          if (quota.paused) heldBatches.push(head);
-          else await storeRecorderItem(head.recorderItem);
-          pendingAppendRecords = queue.reduce((acc, r) => acc + appendSize(r), 0);
-          continue;
-        }
-        if ("recorder" in head && quota.paused) {
+        // While the quota is near, the run's batches and items are held, in order, not committed.
+        if ((("recorderItem" in head) || ("recorder" in head)) && quota.paused) {
           heldBatches.push(head);
           queue.shift();
           pendingAppendRecords = queue.reduce((acc, r) => acc + appendSize(r), 0);
           continue;
         }
-        if (head.op === "trace.append") {
-          const onlyAppends = queue.every((r) => r.op === "trace.append");
-          if (onlyAppends && pendingAppendRecords < FLUSH_RECORDS && !flushDue) {
+        if (coalescable(head)) {
+          const onlyThese = queue.every(coalescable);
+          if (onlyThese && pendingAppendRecords < FLUSH_RECORDS && !flushDue) {
             scheduleFlush();
             return;
           }
           let n = 0;
-          while (queue[n]?.op === "trace.append") n++;
-          const batch = queue.splice(0, n) as (StorageRequest | RecorderAppend)[]; // only appends lead the queue here
+          while (queue[n] && coalescable(queue[n] as StorageRequest | RecorderAppend | RecorderSide)) n++;
+          // Appends of the main thread and what the recorder handed over (records, snapshots, belief frames) that are waiting go in one
+          // transaction, in order: one commit for a poll's worth instead of one per item (the commit is what an OPFS write costs).
+          const run = queue.splice(0, n);
           pendingAppendRecords = queue.reduce((acc, r) => acc + appendSize(r), 0);
           flushDue = false;
           // Test-only slow writer (ADR-0035 §6): the commit of recorder batches takes its time, so the backlog builds up.
-          if (slowWriterMs > 0 && batch.some((r) => "recorder" in r)) await new Promise<void>((resolve) => setTimeout(resolve, slowWriterMs));
-          commitAppends(batch);
+          if (slowWriterMs > 0 && run.some((r) => "recorder" in r)) await new Promise<void>((resolve) => setTimeout(resolve, slowWriterMs));
+          await commitRun(run);
           void checkQuota();
           continue;
         }
         queue.shift();
-        await handle(head);
+        await handle(head as StorageRequest); // appends and recorder items were committed above
       }
     } finally {
       draining = false;
     }
   }
 
+  /** What waits in the queue to be committed with its neighbours: trace appends and the recorder's items. */
+  const coalescable = (r: StorageRequest | RecorderAppend | RecorderSide): boolean => r.op === "trace.append" || r.op === "recorder.item";
+
+  /** How much a queued entry counts toward the flush mark: its records, or a fixed weight for a snapshot or a set of belief frames. */
   function appendSize(r: StorageRequest | RecorderAppend | RecorderSide): number {
+    if (r.op === "recorder.item") return ITEM_WEIGHT;
     return r.op === "trace.append" && Array.isArray(r.args[0]) ? r.args[0].length : 0;
   }
 
-  function commitAppends(batch: (StorageRequest | RecorderAppend)[]): void {
+  async function commitRun(run: (StorageRequest | RecorderAppend | RecorderSide)[]): Promise<void> {
     const e = engine;
     if (!e) return;
-    const results: { id: number; out: Promise<unknown> }[] = [];
-    const recorded: { batch: RecorderAppend["recorder"]; out: Promise<Result<void, CodedError>> }[] = [];
+    const answers: { id: number; value: unknown }[] = [];
+    const recorded: { batch: RecorderAppend["recorder"]; result: Result<void, CodedError> }[] = [];
     try {
-      e.batch(() => {
-        for (const req of batch) {
-          const out = e.storage.trace.append(req.args[0] as TraceRecord[]);
-          if ("recorder" in req) recorded.push({ batch: req.recorder, out });
-          else results.push({ id: req.id, out });
+      await e.batch(async () => {
+        for (const req of run) {
+          if (req.op === "recorder.item") {
+            await storeRecorderItem((req as RecorderSide).recorderItem);
+            continue;
+          }
+          const result = await e.storage.trace.append(req.args[0] as TraceRecord[]);
+          if ("recorder" in req) recorded.push({ batch: (req as RecorderAppend).recorder, result });
+          else answers.push({ id: req.id, value: result });
         }
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      for (const req of batch) {
+      for (const req of run) {
         fail(req.id, "storage_error", message);
         if ("recorder" in req) recorderPort?.postMessage({ type: "rejected", runId: req.recorder.runId, code: "storage_error", message });
+        else if ("recorderItem" in req) recorderPort?.postMessage({ type: "rejected", runId: req.recorderItem.runId, code: "storage_error", message });
       }
       return;
     }
-    for (const r of results) void r.out.then((value) => respond({ type: "response", id: r.id, ok: true, value }));
-    if (recorded.length > 0) {
-      // The transaction committed; the head is reported once every append has answered (they are synchronous underneath).
-      void Promise.all(recorded.map(async (x) => ({ batch: x.batch, result: await x.out }))).then((items) => reportCommit(items, recorderPort, (m) => scope.postMessage(m)));
-    }
+    for (const a of answers) respond({ type: "response", id: a.id, ok: true, value: a.value });
+    // The transaction committed: the head moves as far as the batches before the first refusal.
+    if (recorded.length > 0) reportCommit(recorded, recorderPort, (m) => scope.postMessage(m));
   }
 
   async function handle(req: StorageRequest | RecorderAppend): Promise<void> {
@@ -447,12 +471,18 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "runs.appendInputs": value = await s.runs.appendInputs(String(a), Array.isArray(b) ? (b as StoredRunInput[]) : []); break;
         case "runs.inputs": value = await s.runs.inputs(String(a)); break;
         case "runs.sizes": value = await s.runs.sizes(String(a)); break;
+        case "admin.compact": {
+          // Only when nothing is recording: a VACUUM stalls the queue the recorder writes through.
+          const recording = recordedRunId !== undefined && now() - lastBatchAt < RECORDING_QUIET_MS;
+          value = { freedBytes: recording ? 0 : e.compactIfWorth(), skipped: recording };
+          break;
+        }
         case "runs.delete": {
           // The run being recorded is not deleted from under its recorder (the Storage browser also disables it).
           if (String(a) === recordedRunId) value = { ok: false, error: { code: "run_recording", message: `${String(a)} is being recorded: stop it or start another run first` } };
           else {
+            // No VACUUM here: it would hold the recorder's batches for seconds, and the quota already counts pages in use.
             value = await s.runs.delete(String(a));
-            if ((value as { ok: boolean }).ok) e.compact();
             void checkQuota(); // freeing space may let a run that paused for it go on
           }
           break;
@@ -527,11 +557,14 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
       const msg = ev.data as RecorderToStorage | undefined;
       if (terminal) return;
       if (msg?.type === "batch") {
+        lastBatchAt = now();
         queue.push(recorderAppend(msg.batch));
         pendingAppendRecords += msg.batch.records.length;
         void drain();
       } else if (msg?.type === "snapshot" || msg?.type === "frames") {
+        lastBatchAt = now();
         queue.push(recorderSide(msg));
+        pendingAppendRecords += ITEM_WEIGHT;
         void drain();
       }
     });

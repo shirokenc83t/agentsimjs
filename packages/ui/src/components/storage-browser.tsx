@@ -41,8 +41,16 @@ export function StorageBrowser(props: StorageBrowserProps) {
   }, [client]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    // Opening the browser is a moment to give back what deleted runs left in the file, if nothing is recording (the worker checks).
+    void (async () => {
+      try {
+        await client.admin.compact();
+      } catch {
+        // Compaction is housekeeping: a failure here is not the browser's.
+      }
+      await refresh();
+    })();
+  }, [client, refresh]);
 
   const act = async (fn: () => Promise<string | void>) => {
     setBusy(true);

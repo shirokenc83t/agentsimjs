@@ -18,6 +18,7 @@ function setup(adminOverrides: Partial<StorageAdmin> = {}, props: { currentRunId
     importDb: vi.fn(async () => ({ ok: true as const, value: undefined })),
     requestPersistence: vi.fn(async () => true),
     close: vi.fn(async () => {}),
+    compact: vi.fn(async () => ({ freedBytes: 0, skipped: false })),
     ...adminOverrides,
   };
   const download = vi.fn();
@@ -100,5 +101,19 @@ describe("StorageBrowser", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Delete run-000001" }));
     await userEvent.click(await screen.findByRole("button", { name: "Delete the run" }));
     expect(await screen.findByTestId("storage-message")).toHaveTextContent("unknown run run-000001");
+  });
+
+  it("gives back the space deleted runs left when it opens, and still lists the runs if that fails", async () => {
+    const compact = vi.fn(async () => ({ freedBytes: 4096, skipped: false }));
+    const { ports } = setup({ compact });
+    await screen.findByTestId("storage-mode");
+    expect(compact).toHaveBeenCalledTimes(1);
+    expect(await ports.runs.list()).toEqual([]);
+    const failing = vi.fn(async () => {
+      throw new Error("busy");
+    });
+    setup({ compact: failing });
+    await waitFor(() => expect(screen.getAllByTestId("storage-mode").length).toBe(2)); // the second browser lists its runs although compaction failed
+    expect(failing).toHaveBeenCalled();
   });
 });

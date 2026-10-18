@@ -36,7 +36,7 @@ export const OPS = [
   "runConfigs.list", "runConfigs.get", "runConfigs.saveVersion", "runConfigs.delete",
   "snapshots.putBlobs", "snapshots.getBlob", "snapshots.write", "snapshots.list", "snapshots.read",
   "beliefFrames.append", "beliefFrames.query", "beliefFrames.keyframeAtOrBefore",
-  "admin.info", "admin.exportDb", "admin.exportRun", "admin.importDb", "admin.close",
+  "admin.info", "admin.compact", "admin.exportDb", "admin.exportRun", "admin.importDb", "admin.close",
   "test.openSecondConnection", "test.setSimulatedQuota",
 ] as const;
 export type StorageOp = (typeof OPS)[number];

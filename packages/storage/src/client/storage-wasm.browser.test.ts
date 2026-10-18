@@ -364,8 +364,34 @@ describe("storage worker (browser)", () => {
     await until(() => fromStorage.some((m) => m.type === "quota" && m.state === "ok") && mainQuota.includes("ok"), "quota ok after the delete");
     expect(await c.ports.runs.get("run-000001")).toBeUndefined();
     expect(await c.ports.trace.count("run-000001")).toBe(0);
-    expect((await c.admin.info()).dbFileBytes).toBeLessThan(full);
+    // The delete did not VACUUM (it would hold the recorder's writes for seconds): the file is as big, its pages are free.
+    expect((await c.admin.info()).dbFileBytes).toBeGreaterThanOrEqual(full * 0.95);
+    // Compaction waits while a run is recording, and gives the space back once none has written for a while.
+    const during = await c.admin.compact();
+    expect(during).toEqual({ freedBytes: 0, skipped: true });
+    await new Promise((r) => setTimeout(r, 5500));
+    const after = await c.admin.compact();
+    expect(after.skipped).toBe(false);
+    expect(after.freedBytes).toBeGreaterThan(500_000);
+    expect((await c.admin.info()).dbFileBytes).toBeLessThan(full * 0.8);
     channel.port1.close();
+  });
+
+  it("compacts when storage starts: what a deleted run left in the file is given back by the next session", async () => {
+    const a = spawn({ resetOnOpen: true });
+    await a.ready();
+    await a.ports.runs.create(header("run-000001"));
+    const pad = "p".repeat(20_000);
+    expect((await a.ports.trace.append(Array.from({ length: 60 }, (_, seq) => ({ ...rec("run-000001", seq), payload: { seq, pad } })))).ok).toBe(true);
+    await a.ports.trace.flush();
+    const full = (await a.admin.info()).dbFileBytes;
+    expect(full).toBeGreaterThan(1_000_000);
+    expect((await a.ports.runs.delete("run-000001")).ok).toBe(true);
+    expect((await a.admin.info()).dbFileBytes).toBeGreaterThanOrEqual(full * 0.95); // no VACUUM in the delete
+    await shutdown(a);
+    const b = spawn();
+    await b.ready();
+    expect((await b.admin.info()).dbFileBytes).toBeLessThan(full * 0.5);
   });
 
   it("does not tell a recorder about a run header that is not recorded", async () => {

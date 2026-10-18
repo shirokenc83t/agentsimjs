@@ -23,6 +23,11 @@ export interface StorageAdmin {
   exportDb(): Promise<Uint8Array>;
   exportRun(runId: string): Promise<Result<Uint8Array, CodedError<"unknown_run">>>;
   importDb(bytes: Uint8Array): Promise<Result<void, CodedError<ImportErrorCode>>>;
+  /**
+   * Gives the space deleted runs left behind back to the browser (VACUUM), unless a run is being recorded (it would hold the recorder's
+   * writes for seconds): `skipped` says so. Also done when storage starts.
+   */
+  compact(): Promise<{ readonly freedBytes: number; readonly skipped: boolean }>;
   /** Requests persistent storage; must run on the main thread (StorageManager.persist is Window-only). */
   requestPersistence(): Promise<boolean>;
   /** Closes the database and releases the ownership lock. */
@@ -175,6 +180,7 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
     info: () => call("admin.info"),
     exportDb: () => call("admin.exportDb"),
     exportRun: (runId) => call("admin.exportRun", [runId]),
+    compact: () => call("admin.compact"),
     importDb: (bytes) => {
       // Copy so the caller keeps its buffer; the copy is transferred (no structured clone).
       const copy = bytes.slice();
