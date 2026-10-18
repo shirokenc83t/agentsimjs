@@ -12,6 +12,7 @@ traces/
 !.env.example
 # Linked in from the private docs repository (tools/link-workspace.ps1 there); never committed.
 .claude/
+.claude
 .mcp.json
 CLAUDE.local.md
 __pycache__/
