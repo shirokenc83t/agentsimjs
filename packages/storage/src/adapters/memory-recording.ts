@@ -1,5 +1,5 @@
 import { contentHash128Bytes, err, ok, readSnapshot } from "@agentsim/core";
-import type { BeliefFrame, BeliefFrameStore, LoadedSnapshot, SnapshotInfo, SnapshotStore, StoredBlob } from "../ports.ts";
+import type { BeliefFrame, BeliefFrameStore, LoadedSnapshot, SizeEntry, SnapshotInfo, SnapshotStore, StoredBlob } from "../ports.ts";
 import { checkBlobs, checkFrameQuery, checkFrames, checkSnapshot, framesKeepOrder } from "../recording.ts";
 
 // Snapshots, blobs and belief frames in memory: the same rules as the SQL adapter (recording-stores.ts), the same contract suite.
@@ -19,7 +19,14 @@ function mapFor<V>(all: Map<string, Map<string, V>>, runId: string): Map<string,
   return made;
 }
 
-export function memoryRecordingStores(runExists: (runId: string) => boolean): { snapshots: SnapshotStore; beliefFrames: BeliefFrameStore } {
+export function memoryRecordingStores(runExists: (runId: string) => boolean): {
+  snapshots: SnapshotStore;
+  beliefFrames: BeliefFrameStore;
+  /** What the run holds here (blobs, snapshots, frames), for its sizes. */
+  sizesOf(runId: string): { blobs: SizeEntry; snapshots: SizeEntry; beliefFrames: SizeEntry };
+  /** Drops everything of the run (deleting the run). */
+  forget(runId: string): void;
+} {
   const blobs = new Map<string, Map<string, Uint8Array>>();
   const snapshots = new Map<string, Map<string, Stored>>();
   const frames = new Map<string, BeliefFrame[]>();
@@ -114,5 +121,19 @@ export function memoryRecordingStores(runExists: (runId: string) => boolean): { 
     },
   };
 
-  return { snapshots: snapshotStore, beliefFrames: frameStore };
+  const sum = (xs: readonly number[]): SizeEntry => ({ count: xs.length, bytes: xs.reduce((a, b) => a + b, 0) });
+  return {
+    snapshots: snapshotStore,
+    beliefFrames: frameStore,
+    sizesOf: (runId) => ({
+      blobs: sum([...(blobs.get(runId)?.values() ?? [])].map((b) => b.length)),
+      snapshots: sum([...(snapshots.get(runId)?.values() ?? [])].map((s) => s.bytes.length)),
+      beliefFrames: sum((frames.get(runId) ?? []).map((f) => f.data?.length ?? 0)),
+    }),
+    forget(runId) {
+      blobs.delete(runId);
+      snapshots.delete(runId);
+      frames.delete(runId);
+    },
+  };
 }

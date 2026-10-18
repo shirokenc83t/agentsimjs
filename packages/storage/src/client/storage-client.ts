@@ -146,6 +146,8 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       setStatus: (id, s) => call("runs.setStatus", [id, s]),
       appendInputs: (id, inputs) => call("runs.appendInputs", [id, inputs]),
       inputs: (id) => call("runs.inputs", [id]),
+      sizes: (id) => call("runs.sizes", [id]),
+      delete: (id) => call("runs.delete", [id]),
     },
     cache: {
       get: (k) => call("cache.get", [k]),

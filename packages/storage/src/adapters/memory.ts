@@ -66,9 +66,12 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
   const scenarios = versionedDocs(nowWallMs);
   const runConfigs = versionedDocs(nowWallMs);
   const recording = memoryRecordingStores((runId) => runs.has(runId));
+  /** Run IDs of deleted runs: never handed out again. */
+  const deleted = new Set<string>();
 
   return {
-    ...recording,
+    snapshots: recording.snapshots,
+    beliefFrames: recording.beliefFrames,
     scenarios: {
       list: async () => scenarios.list(),
       get: async (id, version) => scenarios.get(id, version),
@@ -140,7 +143,7 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
     runs: {
       async allocateRunId() {
         let max = 0;
-        for (const id of runs.keys()) max = Math.max(max, Number(id.slice(4)));
+        for (const id of [...runs.keys(), ...deleted]) max = Math.max(max, Number(id.slice(4)));
         return formatRunId(max + 1);
       },
       async create(header) {
@@ -168,6 +171,20 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
         const r = runs.get(runId);
         if (!r) return err({ code: "unknown_run" as const, message: `unknown run ${runId}` });
         runs.set(runId, { ...r, status });
+        return ok(undefined);
+      },
+      async sizes(runId) {
+        if (!runs.has(runId)) return undefined;
+        const payloadBytes = (records.get(runId) ?? []).map((r) => JSON.stringify(r.payload ?? null).length);
+        return { records: { count: payloadBytes.length, bytes: payloadBytes.reduce((a, b) => a + b, 0) }, ...recording.sizesOf(runId) };
+      },
+      async delete(runId) {
+        if (!runs.has(runId)) return err({ code: "unknown_run" as const, message: `unknown run ${runId}` });
+        runs.delete(runId);
+        records.delete(runId);
+        inputs.delete(runId);
+        recording.forget(runId);
+        deleted.add(runId);
         return ok(undefined);
       },
       async appendInputs(runId, batch) {

@@ -50,7 +50,13 @@ class Engine {
   }
 
   private dbBytes(): number {
-    return this.driver.get<{ n: number }>("SELECT p.page_count * s.page_size AS n FROM pragma_page_count() p, pragma_page_size() s")?.n ?? 0;
+    // Pages the database uses, not the free ones a deletion leaves in the file.
+    return this.driver.get<{ n: number }>("SELECT (p.page_count - f.freelist_count) * s.page_size AS n FROM pragma_page_count() p, pragma_freelist_count() f, pragma_page_size() s")?.n ?? 0;
+  }
+
+  /** Gives the space of deleted rows back to the file (after a run is deleted), so usage falls. */
+  compact(): void {
+    this.driver.exec("VACUUM");
   }
 
   /**
@@ -207,6 +213,8 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
   let heldBatches: (RecorderAppend | RecorderSide)[] = [];
   let quotaTimer: ReturnType<typeof setInterval> | undefined;
   let measuring = false;
+  /** The run whose recorder writes to this worker: it cannot be deleted. */
+  let recordedRunId: string | undefined;
   let slowWriterMs = 0;
   let pendingAppendRecords = 0;
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -427,6 +435,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
           const header = a as RunHeader;
           const created = await s.runs.create(header);
           value = created;
+          if (created.ok) recordedRunId = header.recording === "stored" ? header.runId : undefined; // a new run supersedes the one before
           // Header first: the recorder of a recorded run waits for this before it sends its first batch.
           if (created.ok && header.recording === "stored") recorderPort?.postMessage({ type: "header", runId: header.runId });
           break;
@@ -436,6 +445,17 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "runs.setStatus": value = await s.runs.setStatus(String(a), b as RunStatus); break;
         case "runs.appendInputs": value = await s.runs.appendInputs(String(a), Array.isArray(b) ? (b as StoredRunInput[]) : []); break;
         case "runs.inputs": value = await s.runs.inputs(String(a)); break;
+        case "runs.sizes": value = await s.runs.sizes(String(a)); break;
+        case "runs.delete": {
+          // The run being recorded is not deleted from under its recorder (the Storage browser also disables it).
+          if (String(a) === recordedRunId) value = { ok: false, error: { code: "run_recording", message: `${String(a)} is being recorded: stop it or start another run first` } };
+          else {
+            value = await s.runs.delete(String(a));
+            if ((value as { ok: boolean }).ok) e.compact();
+            void checkQuota(); // freeing space may let a run that paused for it go on
+          }
+          break;
+        }
         case "cache.get": value = await s.cache.get(String(a)); break;
         case "cache.put": value = await s.cache.put(String(a), b as CachedResponse); break;
         case "userData.get": value = await s.userData.get(String(a), String(b)); break;

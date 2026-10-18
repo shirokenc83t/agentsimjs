@@ -6,11 +6,11 @@ describe("migrations", () => {
   it("applies all migrations once and is idempotent", () => {
     const db = openNodeSqlDriver();
     expect(appliedVersions(db)).toEqual([]);
-    expect(migrate(db, () => 123).applied).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(migrate(db, () => 123).applied).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect(migrate(db, () => 456).applied).toEqual([]);
     expect(appliedVersions(db)).toHaveLength(LATEST_SCHEMA_VERSION);
     const tables = db.all<{ name: string }>("SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name").map((r) => r.name);
-    expect(tables).toEqual(["belief_frames", "blobs", "response_cache", "run_configs", "run_inputs", "runs", "scenarios", "schema_migrations", "snapshots", "trace_causes", "trace_records", "user_data"]);
+    expect(tables).toEqual(["belief_frames", "blobs", "deleted_runs", "response_cache", "run_configs", "run_inputs", "runs", "scenarios", "schema_migrations", "snapshots", "trace_causes", "trace_records", "user_data"]);
     db.close();
   });
 
@@ -22,7 +22,7 @@ describe("migrations", () => {
     db.run("INSERT INTO schema_migrations (version, name, applied_at_wall_ms) VALUES (1, '0001_init', 0)");
     db.run("INSERT INTO runs (run_id, schema_version, created_at_wall_ms, label, status) VALUES ('run-000001', 0, 1, 'old', 'completed')");
     db.run("INSERT INTO trace_records (run_id, seq, id, sim_time, wall_time, kind, payload) VALUES ('run-000001', 0, 'r0', 0, 0, 'event', '{}')");
-    expect(migrate(db, () => 1).applied).toEqual([2, 3, 4, 5, 6, 7]);
+    expect(migrate(db, () => 1).applied).toEqual([2, 3, 4, 5, 6, 7, 8]);
     expect(db.get<{ label: string }>("SELECT label FROM runs WHERE run_id = 'run-000001'")?.label).toBe("old");
     // ADR-0031: existing records are backfilled as world/sim.
     expect(db.get("SELECT source_owner, source_component FROM trace_records WHERE id = 'r0'")).toEqual({ source_owner: "world", source_component: "sim" });
@@ -38,7 +38,7 @@ describe("migrations", () => {
       db.run("INSERT INTO schema_migrations (version, name, applied_at_wall_ms) VALUES (?, ?, 0)", [m.version, m.name]);
     }
     db.run("INSERT INTO runs (run_id, schema_version, created_at_wall_ms, label, status) VALUES ('run-000001', 0, 1, 'old', 'completed')");
-    expect(migrate(db, () => 1).applied).toEqual([7]);
+    expect(migrate(db, () => 1).applied).toEqual([7, 8]);
     expect(db.get("SELECT recording, recording_profile, recording_profile_hash FROM runs WHERE run_id = 'run-000001'")).toEqual({ recording: null, recording_profile: null, recording_profile_hash: null });
     expect(() => db.run("UPDATE runs SET recording = 'maybe' WHERE run_id = 'run-000001'")).toThrow();
     db.run("INSERT INTO blobs (run_id, id, data) VALUES ('run-000001', 'a', x'01')");
@@ -57,7 +57,7 @@ describe("migrations", () => {
     expect(isKnownPrefix([2])).toBe(false);
     expect(isKnownPrefix([1, 99])).toBe(false);
     const db = openNodeSqlDriver();
-    db.exec("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT, applied_at_wall_ms INTEGER); INSERT INTO schema_migrations VALUES (8, 'x', 0);");
+    db.exec("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT, applied_at_wall_ms INTEGER); INSERT INTO schema_migrations VALUES (9, 'x', 0);");
     expect(() => migrate(db, () => 0)).toThrow(/unknown schema history/);
     db.close();
   });

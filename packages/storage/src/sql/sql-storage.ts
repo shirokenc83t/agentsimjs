@@ -6,8 +6,10 @@ import type {
   ResponseCache,
   RunConfigStore,
   RunConfigSummary,
+  RunSizes,
   RunStore,
   RunSummary,
+  SizeEntry,
   ScenarioStore,
   ScenarioSummary,
   StoragePorts,
@@ -171,8 +173,11 @@ class SqlRunStore implements RunStore {
   constructor(private readonly db: SqlDriver) {}
 
   async allocateRunId() {
-    // Run IDs are `run-NNNNNN`; the next one follows the highest stored (never reused).
-    const row = this.db.get<{ n: number | null }>("SELECT max(CAST(substr(run_id, 5) AS INTEGER)) AS n FROM runs");
+    // Run IDs are `run-NNNNNN`; the next one follows the highest stored or deleted (never reused).
+    const row = this.db.get<{ n: number | null }>(
+      `SELECT max(n) AS n FROM (SELECT max(CAST(substr(run_id, 5) AS INTEGER)) AS n FROM runs
+                                UNION ALL SELECT max(CAST(substr(run_id, 5) AS INTEGER)) FROM deleted_runs)`,
+    );
     return formatRunId((row?.n ?? 0) + 1);
   }
 
@@ -240,6 +245,31 @@ class SqlRunStore implements RunStore {
           runId, i.inputId, i.tick, i.agentId, i.name, JSON.stringify(i.params ?? null),
         ]);
       }
+    });
+    return ok(undefined);
+  }
+
+  async sizes(runId: string): Promise<RunSizes | undefined> {
+    if (!this.db.get("SELECT 1 AS x FROM runs WHERE run_id = ?", [runId])) return undefined;
+    const one = (sql: string): SizeEntry => {
+      const r = this.db.get<{ n: number; b: number | null }>(sql, [runId]);
+      return { count: r?.n ?? 0, bytes: r?.b ?? 0 };
+    };
+    return {
+      records: one("SELECT count(*) AS n, sum(length(payload)) AS b FROM trace_records WHERE run_id = ?"),
+      blobs: one("SELECT count(*) AS n, sum(length(data)) AS b FROM blobs WHERE run_id = ?"),
+      snapshots: one("SELECT count(*) AS n, sum(length(data)) AS b FROM snapshots WHERE run_id = ?"),
+      beliefFrames: one("SELECT count(*) AS n, sum(length(data)) AS b FROM belief_frames WHERE run_id = ?"),
+    };
+  }
+
+  async delete(runId: string) {
+    if (!this.db.get("SELECT 1 AS x FROM runs WHERE run_id = ?", [runId])) return err({ code: "unknown_run" as const, message: `unknown run ${runId}` });
+    this.db.transaction(() => {
+      // Frames name blobs, so they go first; the run's row goes last, and its ID stays behind so it is never handed out again.
+      for (const table of ["belief_frames", "blobs", "snapshots", "trace_causes", "trace_records", "run_inputs"]) this.db.run(`DELETE FROM ${table} WHERE run_id = ?`, [runId]);
+      this.db.run("DELETE FROM runs WHERE run_id = ?", [runId]);
+      this.db.run("INSERT OR IGNORE INTO deleted_runs (run_id, deleted_at_wall_ms) VALUES (?, ?)", [runId, Date.now()]);
     });
     return ok(undefined);
   }

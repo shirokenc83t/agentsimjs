@@ -249,4 +249,72 @@ export function describeRecordingContract(getPorts: () => StoragePorts): void {
       expect((await p.beliefFrames.append(RUN, [frame("uav-002", 0, 1)])).ok).toBe(true);
     });
   });
+
+  describe("recording: sizes and deleting a run", () => {
+    /** A run with everything a recorded run owns: records and causes, inputs, a snapshot with its blobs, belief frames. */
+    async function fullRun(p: StoragePorts, runId: string) {
+      await p.runs.create({ ...stored(), runId, label: runId });
+      await p.trace.append([
+        { id: `${runId}#0`, runId, seq: 0, simTime: 0, wallTime: 1, source: "world/sim", kind: "event", payload: { op: "x", pad: "y".repeat(100) } },
+        { id: `${runId}#1`, runId, seq: 1, simTime: 0.1, wallTime: 1, source: "world/sim", kind: "event", causeIds: [`${runId}#0`], payload: { op: "z" } },
+      ]);
+      await p.runs.appendInputs(runId, [{ inputId: "inp-000001", tick: 3, agentId: "ugv-001", name: "goTo", params: { xM: 1, yM: 2 } }]);
+      const s = snapshotWith(0, [1, 2]);
+      await p.snapshots.write(runId, { seq: 0, simTime: 0, tick: 0, bytes: s.bytes, blobs: s.blobs });
+      const kf = s.blobs[0] as StoredBlob;
+      const { data: _d, ...kfFrame } = frame("uav-001", 0, 0, { kind: "keyframe", chunks: [0], blobId: kf.id });
+      await p.beliefFrames.append(runId, [kfFrame, frame("uav-001", 1, 1, { data: new Uint8Array(40) })]);
+      return { snapshot: s, kf };
+    }
+
+    it("reports what a run holds: records, blobs, snapshots and belief frames, with counts and bytes", async () => {
+      const p = getPorts();
+      await p.runs.create(header("run-000009"));
+      expect(await p.runs.sizes("run-000009")).toEqual({ records: { count: 0, bytes: 0 }, blobs: { count: 0, bytes: 0 }, snapshots: { count: 0, bytes: 0 }, beliefFrames: { count: 0, bytes: 0 } });
+      const { snapshot } = await fullRun(p, RUN);
+      const sz = await p.runs.sizes(RUN);
+      expect(sz?.records.count).toBe(2);
+      expect(sz?.records.bytes).toBeGreaterThan(100);
+      expect(sz?.blobs).toEqual({ count: snapshot.blobs.length, bytes: snapshot.blobs.reduce((n, b) => n + b.bytes.length, 0) });
+      expect(sz?.snapshots).toEqual({ count: 1, bytes: snapshot.bytes.length });
+      expect(sz?.beliefFrames.count).toBe(2);
+      expect(sz?.beliefFrames.bytes).toBeGreaterThanOrEqual(40);
+      expect(await p.runs.sizes("run-000404")).toBeUndefined();
+    });
+
+    it("deletes a run and everything it owns, and nothing of another run", async () => {
+      const p = getPorts();
+      await fullRun(p, RUN);
+      const other = await fullRun(p, "run-000002"); // the later run is the one being recorded (a storage worker refuses to delete that one)
+      expect((await p.runs.delete(RUN)).ok).toBe(true);
+      expect(await p.runs.get(RUN)).toBeUndefined();
+      expect((await p.runs.list()).map((r) => r.runId)).toEqual(["run-000002"]);
+      expect(await p.trace.count(RUN)).toBe(0);
+      expect(await p.trace.query({ runId: RUN, limit: 10 })).toEqual([]);
+      expect(await p.runs.inputs(RUN)).toEqual([]);
+      expect(await p.snapshots.list(RUN)).toEqual([]);
+      expect(await p.snapshots.getBlob(RUN, other.kf.id)).toBeUndefined();
+      expect(await p.beliefFrames.query({ runId: RUN, limit: 10 })).toEqual([]);
+      expect(await p.runs.sizes(RUN)).toBeUndefined();
+      // The other run is whole.
+      expect(await p.trace.count("run-000002")).toBe(2);
+      expect((await p.snapshots.list("run-000002")).length).toBe(1);
+      expect((await p.beliefFrames.query({ runId: "run-000002", limit: 10 })).length).toBe(2);
+      expect((await p.snapshots.getBlob("run-000002", other.kf.id))?.bytes).toEqual(other.kf.bytes);
+      // A deleted run's id is not reused: the next run gets a new one.
+      expect(await p.runs.allocateRunId()).toBe("run-000003");
+    });
+
+    it("refuses an unknown run, and a deleted run can be deleted no more", async () => {
+      const p = getPorts();
+      const unknown = await p.runs.delete("run-000404");
+      expect(unknown.ok ? null : unknown.error.code).toBe("unknown_run");
+      await p.runs.create(header(RUN));
+      expect((await p.runs.delete(RUN)).ok).toBe(true);
+      const again = await p.runs.delete(RUN);
+      expect(again.ok ? null : again.error.code).toBe("unknown_run");
+      // The deleted run's ID is not handed out again, even though no stored run holds it.
+      expect(await p.runs.allocateRunId()).toBe("run-000002");
+    });
+  });
 }

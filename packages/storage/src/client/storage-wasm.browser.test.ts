@@ -314,6 +314,52 @@ describe("storage worker (browser)", () => {
     channel.port1.close();
   });
 
+  it("deleting an old run frees space: a run paused for the quota goes on, and the run being recorded cannot be deleted", async () => {
+    const profile = RECORDING_PRESETS["default-research"];
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    // An old run with a good deal of data.
+    await c.ports.runs.create(header("run-000001"));
+    const pad = "p".repeat(20_000);
+    const old = Array.from({ length: 60 }, (_, seq) => ({ ...rec("run-000001", seq), payload: { seq, pad } }));
+    expect((await c.ports.trace.append(old)).ok).toBe(true);
+    await c.ports.trace.flush();
+    const full = (await c.admin.info()).dbFileBytes;
+    expect(full).toBeGreaterThan(1_000_000);
+    expect((await c.ports.runs.sizes("run-000001"))?.records.count).toBe(60);
+    // A recorded run that fills what is left of a small quota.
+    await c.setSimulatedQuota(Math.round(full * 1.12));
+    const channel = new MessageChannel();
+    const fromStorage: { type: string; state?: string }[] = [];
+    channel.port1.onmessage = (ev) => fromStorage.push(ev.data as (typeof fromStorage)[number]);
+    const mainQuota: string[] = [];
+    c.onQuota((q) => mainQuota.push(q.state));
+    c.attachRecorderPort(channel.port2);
+    const recorded = { ...header("run-000002"), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) };
+    await c.ports.runs.create(recorded);
+    const until = async (cond: () => boolean, what: string) => {
+      for (let i = 0; i < 1000 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
+      expect(cond(), what).toBe(true);
+    };
+    await until(() => fromStorage.some((m) => m.type === "header"), "header");
+    for (let b = 0; b < 8 && !fromStorage.some((m) => m.type === "quota"); b++) {
+      const records = Array.from({ length: 3 }, (_, i) => ({ ...rec("run-000002", b * 3 + i), payload: { pad } }));
+      channel.port1.postMessage({ type: "batch", batch: { runId: "run-000002", records, throughSeq: b * 3 + 2, tick: b + 1, simTimeS: (b + 1) * 0.1 } });
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    await until(() => fromStorage.some((m) => m.type === "quota" && m.state === "paused"), "paused for the quota");
+    // The run being recorded is not deleted from under its recorder.
+    const refused = await c.ports.runs.delete("run-000002");
+    expect(refused.ok ? null : refused.error.code).toBe("run_recording");
+    // Deleting the old run frees its space: the paused run goes on.
+    expect((await c.ports.runs.delete("run-000001")).ok).toBe(true);
+    await until(() => fromStorage.some((m) => m.type === "quota" && m.state === "ok") && mainQuota.includes("ok"), "quota ok after the delete");
+    expect(await c.ports.runs.get("run-000001")).toBeUndefined();
+    expect(await c.ports.trace.count("run-000001")).toBe(0);
+    expect((await c.admin.info()).dbFileBytes).toBeLessThan(full);
+    channel.port1.close();
+  });
+
   it("does not tell a recorder about a run header that is not recorded", async () => {
     const c = spawn({ resetOnOpen: true });
     await c.ready();

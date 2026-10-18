@@ -3,6 +3,8 @@ export type {
   TraceQuery,
   RunStore,
   RunSummary,
+  RunSizes,
+  SizeEntry,
   ResponseCache,
   CachedResponse,
   UserDataStore,

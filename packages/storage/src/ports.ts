@@ -55,6 +55,27 @@ export interface RunStore {
   appendInputs(runId: string, inputs: readonly StoredRunInput[]): Promise<Result<void, RunInputError>>;
   /** The run's inputs in input-ID order (empty for an unknown run). */
   inputs(runId: string): Promise<StoredRunInput[]>;
+  /** What the run holds, for the Storage browser; undefined for an unknown run. */
+  sizes(runId: string): Promise<RunSizes | undefined>;
+  /**
+   * Deletes the run and everything it owns: its header, trace records and causes, run inputs, snapshots, blobs and belief frames (the way
+   * to free space, ADR-0035 addition of 2026-10-17, item 7). Its ID is never handed out again. Whether the run is the one being recorded is
+   * the caller's to check (the storage worker refuses it).
+   */
+  delete(runId: string): Promise<Result<void, CodedError<"unknown_run">>>;
+}
+
+/** Count and stored bytes of one kind of data of a run (the heavy column: payload text, blob or frame bytes, snapshot container). */
+export interface SizeEntry {
+  readonly count: number;
+  readonly bytes: number;
+}
+
+export interface RunSizes {
+  readonly records: SizeEntry;
+  readonly blobs: SizeEntry;
+  readonly snapshots: SizeEntry;
+  readonly beliefFrames: SizeEntry;
 }
 
 export interface CachedResponse {
