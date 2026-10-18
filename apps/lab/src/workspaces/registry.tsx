@@ -29,6 +29,9 @@ export const loadAgentCommands = () => import("../commands.ts");
 /** How the run is recorded, in the status line: loaded when a run exists (ADR-0035 addition of 2026-10-17, item 6). */
 export const LazyRecordingStatus = lazy(() => import("../recording-status.tsx").then((m) => ({ default: m.RecordingStatus })));
 
+/** The live run source (the panels' view of the run in the sim worker): loaded right after first paint, so the shell does not carry it. */
+export const loadLiveSource = () => import("../sim/live-run-source.ts");
+
 /** A replay session (a recorded run in the panels, read from storage), loaded when one is opened (ADR-0035 addition of 2026-10-17, item 9). */
 export const LazyReplayHost = lazy(() => import("../panels/replay-host.tsx").then((m) => ({ default: m.ReplayHost })));
 

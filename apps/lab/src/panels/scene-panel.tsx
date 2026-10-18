@@ -5,7 +5,7 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import { PerformanceHud, SceneView, useUiContext, type GridViewMode, type HudStats, type SceneRenderer } from "@agentsim/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { attachRendererProbe } from "../probe.ts";
-import { usePolled, useServices } from "../services.tsx";
+import { usePolled, useSource } from "../services.tsx";
 import { HudBudgetRows } from "./hud-budget.tsx";
 import { ReplayBar } from "./replay-bar.tsx";
 import { sandboxTarget, useSandboxTarget, useSandboxView } from "./sandbox-store.ts";
@@ -19,7 +19,7 @@ import { useSensorOverlays } from "./use-sensor-overlays.ts";
  * (solid) paths, picking into the shared UI context (ADR-0016), view modes and the Performance HUD.
  */
 export function ScenePanel() {
-  const { source } = useServices();
+  const source = useSource();
   const [renderer, setRenderer] = useState<SceneRenderer | undefined>(undefined);
   const [interpolation, setInterpolation] = useState(true);
   const [mode, setMode] = useState<GridViewMode>("occupancy");

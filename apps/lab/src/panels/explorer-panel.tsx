@@ -2,7 +2,7 @@ import "./panels.css";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { agentColorIndex, KIND_STYLE, ROW_PX, STATE_GLYPH, useUiContext } from "@agentsim/ui";
 import { useCallback, useEffect, useRef, type KeyboardEvent } from "react";
-import { usePolled, useServices } from "../services.tsx";
+import { usePolled, useSource } from "../services.tsx";
 import { actionLabel, actionState } from "./agent-views.ts";
 import { useAgentViews } from "./use-agent-views.ts";
 
@@ -12,7 +12,7 @@ import { useAgentViews } from "./use-agent-views.ts";
  * (glyph + text). Selecting a row selects the agent everywhere through the UI context.
  */
 export function ExplorerPanel() {
-  const { source } = useServices();
+  const source = useSource();
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const views = useAgentViews(source);
   const selection = useUiContext((s) => s.selection);

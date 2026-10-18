@@ -3,7 +3,7 @@ import { STATUS_STRIDE, type SimLoadedMessage } from "@agentsim/core";
 import { agentColorIndex, STATE_GLYPH, useUiContext } from "@agentsim/ui";
 import Button from "@mui/material/Button";
 import { useCallback, useState, type ReactNode } from "react";
-import { usePolled, useServices } from "../services.tsx";
+import { usePolled, useSource } from "../services.tsx";
 import type { RunFeature, RunSnapshot, RunSource } from "../sim/run-source.ts";
 import { AGENT_COMMANDS, commandParams } from "../commands.ts";
 import { actionLabel, actionState, waypointsText, type AgentViews, type CommandView } from "./agent-views.ts";
@@ -333,7 +333,7 @@ function CellInspector(props: { id: string; snap: RunSnapshot; source: RunSource
  * (ADR-0028), body warnings. Cells: layers, the effective air rule for unknown heights, clearance.
  */
 export function InspectorPanel() {
-  const { source } = useServices();
+  const source = useSource();
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const views = useAgentViews(source);
   const selection = useUiContext((s) => s.selection);

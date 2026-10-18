@@ -10,8 +10,8 @@ import type { SimClient } from "./sim/sim-client.ts";
 export interface Services {
   /** The run in the sim worker, for what controls it: play, pause, step, load, presets (live only). */
   readonly sim: SimClient;
-  /** The run as panels read it: live today, a recorded run in replay (ADR-0016). Panels read this, never the client. */
-  readonly source: RunSource;
+  /** The run as panels read it: live, or a recorded run in replay (ADR-0016). Panels read this, never the client. Undefined for the moment the live source loads. */
+  readonly source: RunSource | undefined;
   /** Puts a recorded run in place of the live one for the panels (a replay session), or the live one back (`undefined`). */
   readonly setReplaySource: (s: RunSource | undefined) => void;
   readonly storage: StorageClient;
@@ -20,6 +20,13 @@ export interface Services {
 const ServicesContext = createContext<Services | null>(null);
 
 export const ServicesProvider = ServicesContext.Provider;
+
+/** The run source, in the panels (they mount once it is there: the workspace waits for it). */
+export function useSource(): RunSource {
+  const s = useServices().source;
+  if (!s) throw new Error("the run source is not ready");
+  return s;
+}
 
 export function useServices(): Services {
   const s = useContext(ServicesContext);

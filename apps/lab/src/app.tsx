@@ -8,14 +8,13 @@ import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Tooltip from "@mui/material/Tooltip";
 import { LATEST_SCHEMA_VERSION, type StorageInfo } from "@agentsim/storage";
-import { Banner, CommandPalette, downloadBytes, formatBytes, formatSimTime, useUiContext, type Command } from "@agentsim/ui";
+import { Banner, CommandPalette, downloadBytes, formatBytes, formatSimTime, type Command } from "@agentsim/ui";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStorageStatus, useThemeSetting, type CurrentRun } from "./services.tsx";
 import type { PresetId } from "@agentsim/core";
 import { LAYOUT_NAMESPACE, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
 import { LazyRecordingStatus, LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadRunController } from "./workspaces/registry.tsx";
 import type { LabRun } from "./sim/run-controller.ts";
-import { syncRunContext } from "./sim/run-context.ts";
 
 const SPEEDS = [
   { label: "×0.5", hz: 5 },
@@ -30,9 +29,6 @@ export function App() {
   const status = useStorageStatus(storage);
   const setTheme = useThemeSetting(storage);
   const snap = usePolled(useCallback(() => sim.snapshot(), [sim]), 100);
-  // The shared UI context follows the run source: run start, mode, and (live) the cursor (ADR-0016).
-  const view = usePolled(useCallback(() => source.snapshot(), [source]), 100);
-  useEffect(() => syncRunContext(useUiContext, view), [view]);
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceId>("scene");
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -125,7 +121,7 @@ export function App() {
     if (paletteOpen && !agentCommandsModule) void loadAgentCommands().then(setAgentCommandsModule);
   }, [paletteOpen, agentCommandsModule]);
   const agentCommands = useMemo<Command[]>(
-    () => (paletteOpen && agentCommandsModule ? agentCommandsModule.agentPaletteCommands(source, !!run, startPreset, runBusy) : []),
+    () => (paletteOpen && agentCommandsModule && source ? agentCommandsModule.agentPaletteCommands(source, !!run, startPreset, runBusy) : []),
     [paletteOpen, agentCommandsModule, source, run, startPreset, runBusy],
   );
   const commands = useMemo<Command[]>(
