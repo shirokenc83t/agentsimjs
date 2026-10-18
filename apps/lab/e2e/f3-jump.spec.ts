@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { loadF2, openWorkspace, runCommand, step } from "./helpers.ts";
 
-// F3a M3 (T-024): a click on a row of the event list moves the shared cursor: the Scene's agents and the belief overlay go to that instant. The overlay at the
+// F3a M3: a click on a row of the event list moves the shared cursor: the Scene's agents and the belief overlay go to that instant. The overlay at the
 // instant equals that of a live run paused at the same tick (exact), and the agent's position equals the live one (a record of an action is also a pose
 // sample: the transition samples), so the replay shows what the run showed.
 

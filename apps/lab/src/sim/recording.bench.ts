@@ -380,7 +380,7 @@ measure_("snapshot of the 1 km² prior-map run: container, belief sections and e
   expect(sizes[0]?.[1]).toBeGreaterThan(0);
 }, 240_000);
 
-// ---- 6. belief chunk groups: the size of a group (T-027) ------------------------------------------------------------------------------------
+// ---- 6. belief chunk groups: the size of a group ------------------------------------------------------------------------------------
 
 measure_("belief chunk groups of 4, 8 and 16 chunks per side: bytes of keyframes and snapshots with sharing, on the 20-agent exploring run and on the 1 km² prior run", () => {
   const TICKS = 2400;

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { openWorkspace, runCommand, step, waitForStorageReady } from "./helpers.ts";
 
-// F3a M2 (T-016): when storage nears its quota the run pauses as `storage_quota`, with the state shown in the status line, and it goes on when
+// F3a M2: when storage nears its quota the run pauses as `storage_quota`, with the state shown in the status line, and it goes on when
 // space is freed: here by deleting an old run in the Storage browser (ADR-0035 §6 and addition of 2026-10-17, item 7). The quota is simulated
 // (`?simulate-quota-headroom=`: what the database holds when it opens, plus a little).
 

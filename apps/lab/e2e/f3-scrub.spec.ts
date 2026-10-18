@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { loadF2, openWorkspace, runCommand, setReplayCursor, step } from "./helpers.ts";
 
-// F3a M3 (T-026, acceptance 3): a recorded run is scrubbed from storage. The cursor reaches the tick it was sent to (the Inspector shows the same state at a
+// F3a M3 (acceptance 3): a recorded run is scrubbed from storage. The cursor reaches the tick it was sent to (the Inspector shows the same state at a
 // moment before and after a detour through other moments), and no query blocks a frame: while the cursor is dragged about, the render loop keeps producing frames.
 
 const AGENT = "ugv-001";

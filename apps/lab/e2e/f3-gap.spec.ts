@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { sceneSettled, step, waitForStorageReady } from "./helpers.ts";
 
-// F3a M3 (T-023, ADR-0035 addition of 2026-10-17, item 12): a live recorded run can be scrubbed back up to its persisted head. With the test-only slow writer the
+// F3a M3 (ADR-0035 addition of 2026-10-17, item 12): a live recorded run can be scrubbed back up to its persisted head. With the test-only slow writer the
 // storage is behind the sim: the Timeline shows the gap, a click in it lands on the persisted head with a notice and no error, and once the writer has caught up
 // the same click lands on its moment.
 

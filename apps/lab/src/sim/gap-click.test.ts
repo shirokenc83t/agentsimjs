@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { gapLabel, resolveGapClick } from "./gap-click.ts";
 
-// F3a M3 (T-023): a click in the gap lands on the persisted head, with the notice, and asks for nothing that is not stored.
+// F3a M3: a click in the gap lands on the persisted head, with the notice, and asks for nothing that is not stored.
 
 describe("resolveGapClick", () => {
   it("a target at or before the persisted head resolves to itself, without a notice", () => {

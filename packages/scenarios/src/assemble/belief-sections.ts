@@ -5,7 +5,7 @@ import { BELIEF_MANIFEST_FORMAT, joinBeliefSnapshot, splitBeliefSnapshot, type B
 // content-addressed section of its own, and a manifest (the map's meta, the group size and the hash of each group's section) is the section the snapshot
 // or the keyframe refers to. A snapshot and a keyframe of the same map are the same sections: a group that did not change is stored once.
 
-/** Chunks per side of a group: chosen by measurement (F3a M3, T-027). The manifest records the size it was written with, so a reader never assumes it. */
+/** Chunks per side of a group: chosen by measurement (F3a M3). The manifest records the size it was written with, so a reader never assumes it. */
 export const BELIEF_GROUP_CHUNKS = 8;
 
 /** Writes a map's group sections and its manifest section into `w`; returns the manifest's reference. */

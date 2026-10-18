@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { step, waitForStorageReady } from "./helpers.ts";
 
-// F3a M2 (T-016): the recording profile is chosen at launch, next to the run configuration, and the status line says how the run is recorded:
+// F3a M2: the recording profile is chosen at launch, next to the run configuration, and the status line says how the run is recorded:
 // the profile with its hash and the run configuration's, and how far the run is saved (ADR-0035 addition of 2026-10-17, items 2, 6 and 12).
 
 // Pinned hashes of the presets (packages/trace, recording-profile.test.ts): a run records the one it ran under.

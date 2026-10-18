@@ -9,7 +9,7 @@ import { migrate } from "./sql/migrations.ts";
 import { BELIEF_MANIFEST_FORMAT_STORED } from "./sql/recording-integrity.ts";
 import { createSqlPorts } from "./sql/sql-storage.ts";
 
-// F3a M3 (T-025): one run as a file, added to a database as a new run (ADR-0035 addition of 2026-10-17, item 11).
+// F3a M3: one run as a file, added to a database as a new run (ADR-0035 addition of 2026-10-17, item 11).
 
 const profile = RECORDING_PRESETS["default-research"];
 const scenarioDoc = (extra = 0) => ({ schemaVersion: 1, id: "demo", name: "Demo", world: { sizeCells: { x: 8, y: 8 }, extra }, zones: [], agents: [] });

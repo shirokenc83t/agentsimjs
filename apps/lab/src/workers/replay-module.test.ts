@@ -118,7 +118,7 @@ describe("replay module: the world a run was made in", () => {
   });
 });
 
-// ---- chunk groups: views, the keyframe cache, reading ahead, sharing (T-027) -------------------------------------------------------------
+// ---- chunk groups: views, the keyframe cache, reading ahead, sharing -------------------------------------------------------------
 
 const AGENT = "uav-001";
 

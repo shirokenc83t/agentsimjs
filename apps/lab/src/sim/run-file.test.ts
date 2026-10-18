@@ -4,7 +4,7 @@ import { beliefAt } from "../workers/replay-module.ts";
 import { openReplaySource, type ReplayRunSource } from "./replay-run-source.ts";
 import { cursorPort, recorded, replayOver } from "./replay-test-support.ts";
 
-// F3a M3 (T-025, acceptance 1): a recorded run exported as a file and added to a database again replays as the same run: the same records (modulo the run ID),
+// F3a M3 (acceptance 1): a recorded run exported as a file and added to a database again replays as the same run: the same records (modulo the run ID),
 // the poses at sampled ticks, the belief maps and the checkpoint hashes.
 
 async function replayOf(ports: StoragePorts, runId: string, cursorS: number): Promise<{ src: ReplayRunSource; cursor: ReturnType<typeof cursorPort> }> {

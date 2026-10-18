@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { loadDemo, openWorkspace, runCommand, step, waitForStorageReady } from "./helpers.ts";
 
-// F3a M2 (T-013): a run is recorded by default. The recorder in the sim worker hands its records to the storage worker over a direct
+// F3a M2: a run is recorded by default. The recorder in the sim worker hands its records to the storage worker over a direct
 // channel (they never pass through the main thread), the run waits for its header, and what the lab shows is what the storage holds.
 test("a run is recorded by default: the storage holds at least every record the lab received, and no record is lost on the way", async ({ page }) => {
   await loadDemo(page);

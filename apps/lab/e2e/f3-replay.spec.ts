@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { countSimMessages, loadF2, openWorkspace, runCommand, setReplayCursor, simMessages, step, waitForStorageReady } from "./helpers.ts";
 
-// F3a M3 (T-025, acceptance 1): record a run, export it (JSON lines and per-run SQLite), delete it, reload the page, import the files: each is added as a new run
+// F3a M3 (acceptance 1): record a run, export it (JSON lines and per-run SQLite), delete it, reload the page, import the files: each is added as a new run
 // with a fresh ID (the deleted ID is not reused) and replays as the same run: the same Inspector state at moments of the run, the same events and the same
 // checkpoint hash. The sim worker receives no run message while the imported runs are replayed.
 

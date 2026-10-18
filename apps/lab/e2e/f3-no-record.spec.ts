@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { openWorkspace, step, waitForStorageReady } from "./helpers.ts";
 
-// F3a M2 (T-016): "Don't record this run" is the researcher's explicit choice for one run: labelled `○ not recorded` in the status line, nothing of it
+// F3a M2: "Don't record this run" is the researcher's explicit choice for one run: labelled `○ not recorded` in the status line, nothing of it
 // stored, and it runs exactly as a recorded one (the same state hash). The run after it is recorded again (ADR-0035 addition of 2026-10-17, item 6).
 
 async function openRun(page: Page) {

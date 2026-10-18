@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { countSimMessages, loadDemo, openWorkspace, setReplayCursor as setCursor, simMessages, step } from "./helpers.ts";
 
-// F3a M3 (T-022): a recorded run is opened in the panels from the Storage browser and read from storage alone. The sim worker receives no `load`,
+// F3a M3: a recorded run is opened in the panels from the Storage browser and read from storage alone. The sim worker receives no `load`,
 // `step`, `control` or `command` message during the session; the pose, battery and path of an agent at the cursor are what the live run had at that time.
 
 const FORBIDDEN = ["load", "control", "command", "buildPreset", "strategyTest", "step"];

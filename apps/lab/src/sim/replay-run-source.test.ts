@@ -202,7 +202,7 @@ function t0Id(records: TraceRecord[]): string {
   return records.find((r) => r.kind === "observation" && r.agentId !== undefined)?.agentId ?? "";
 }
 
-// ---- scrubbing a live recorded run: the persisted head, the gap, and what is never asked (T-023) ---------------------------------------------
+// ---- scrubbing a live recorded run: the persisted head, the gap, and what is never asked ---------------------------------------------
 
 /** Ports and replay reads that remember the latest sim time and tick they were asked for. */
 function watched(ports: StoragePorts) {
