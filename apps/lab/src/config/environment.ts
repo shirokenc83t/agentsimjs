@@ -24,6 +24,12 @@ export function writeQuotaThreshold(bytes: number): void {
   writeBootSetting("storage.quotaThreshold", String(Math.max(0, Math.round(bytes))));
 }
 
+/** Test switch: `?simulate-quota-headroom=<bytes>` gives storage a quota of what it holds plus this much (the quota pause, end to end). */
+function quotaHeadroom(): number | undefined {
+  const v = Number(new URLSearchParams(location.search).get("simulate-quota-headroom"));
+  return v > 0 ? v : undefined;
+}
+
 /** Test switch: `?simulate-no-opfs` exercises the fallback path end to end. */
 function simulateNoOpfs(): boolean {
   return new URLSearchParams(location.search).has("simulate-no-opfs");
@@ -35,6 +41,7 @@ const local: Environment = {
     createStorageClient(new Worker(new URL("../workers/storage.worker.ts", import.meta.url), { type: "module", name: "storage" }), {
       quotaThresholdBytes: readQuotaThreshold(),
       ...(simulateNoOpfs() ? { simulateNoOpfs: true } : {}),
+      ...(quotaHeadroom() === undefined ? {} : { simulateQuotaHeadroomBytes: quotaHeadroom() as number }),
     }),
   createSim: (tickRateHz) =>
     new SimClient(new Worker(new URL("../workers/sim.worker.ts", import.meta.url), { type: "module", name: "sim" }), tickRateHz),

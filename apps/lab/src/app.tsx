@@ -13,7 +13,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStorageStatus, useThemeSetting, type CurrentRun } from "./services.tsx";
 import type { PresetId } from "@agentsim/core";
 import { LAYOUT_NAMESPACE, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
-import { LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadRunController } from "./workspaces/registry.tsx";
+import { LazyRecordingStatus, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadRunController } from "./workspaces/registry.tsx";
 import type { LabRun } from "./sim/run-controller.ts";
 
 const SPEEDS = [
@@ -284,6 +284,11 @@ export function App() {
             <span data-testid="status-storage-size">
               {formatBytes(info.dbFileBytes)} · {formatBytes(info.usageBytes)} / {formatBytes(info.quotaBytes)} · schema v{LATEST_SCHEMA_VERSION}
             </span>
+          )}
+          {run && (
+            <Suspense fallback={null}>
+              <LazyRecordingStatus header={run.header} snap={snap} />
+            </Suspense>
           )}
           {snap.preparing && (
             <span data-testid="status-preparing" title="Planning views and HPA* graphs are built before tick 0 (ADR-0024)">

@@ -9,7 +9,8 @@ export { createUiContextStore, useUiContext, type UiContextState, type Selection
 export { formatBytes, formatSimTime, formatMs } from "./format.ts";
 export { CommandPalette, filterCommands, type Command } from "./components/command-palette.tsx";
 export { PerformanceHud, type HudStats } from "./components/performance-hud.tsx";
-export { StorageBrowser, downloadBytes, type StorageBrowserProps } from "./components/storage-browser.tsx";
+export { StorageBrowser, type StorageBrowserProps } from "./components/storage-browser.tsx";
+export { downloadBytes } from "./download.ts";
 export { SceneView } from "./components/scene-view.tsx";
 export { Banner } from "./components/banner.tsx";
 export {

@@ -26,6 +26,9 @@ export const loadRunController = () => import("../sim/run-controller.ts");
 /** Palette commands on the selected agent (ADR-0015 addition of 2026-10-12), loaded when the palette first opens. */
 export const loadAgentCommands = () => import("../commands.ts");
 
+/** How the run is recorded, in the status line: loaded when a run exists (ADR-0035 addition of 2026-10-17, item 6). */
+export const LazyRecordingStatus = lazy(() => import("../recording-status.tsx").then((m) => ({ default: m.RecordingStatus })));
+
 /** The run header popover, loaded on first open (the toolbar keeps only the run label). */
 export const LazyRunPopover = lazy(() => import("../run-info.tsx").then((m) => ({ default: m.RunPopover })));
 

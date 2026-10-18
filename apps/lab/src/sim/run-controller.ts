@@ -1,7 +1,8 @@
 import type { PresetId, SimLoadedMessage } from "@agentsim/core";
 import { F1_DEMO_ID, F1_REFERENCE_WORLD_ID, F2_DISCOVERY_ID, F2_PRIOR_REFERENCE_ID, F2_TWENTY_AGENTS_ID, f1DemoRunConfig, f1ReferenceWorldRunConfig, f2PriorRunConfig, f2RunConfig } from "@agentsim/scenarios";
 import type { StorageClient, StoredRunInput } from "@agentsim/storage";
-import { DEFAULT_RECORDING_PRESET, RECORDING_PRESETS, recordingProfileHash, TRACE_SCHEMA_VERSION, type RecordingProfile, type RunHeader } from "@agentsim/trace";
+import { recordingProfileHash, TRACE_SCHEMA_VERSION, type RunHeader } from "@agentsim/trace";
+import { DEFAULT_RECORDING, takeRecordingChoice, type RecordingChoice } from "./recording-choice.ts";
 import type { SimClient } from "./sim-client.ts";
 import { SIMULATOR_VERSION } from "./simulator-version.ts";
 
@@ -17,14 +18,6 @@ export interface LabRun {
  * The reproducibility header of a run started from the lab (ADR-0028): scenario version, the run's own copy
  * of its run configuration, both hashes (computed by the worker that resolved them) and the simulator version.
  */
-/**
- * How a run is recorded (ADR-0035 addition of 2026-10-17, item 6): with a recording profile (by default `default-research`), or not at
- * all: the researcher's explicit opt-out, never a default and never a fallback.
- */
-export type RecordingChoice = { readonly mode: "stored"; readonly profile: RecordingProfile } | { readonly mode: "none" };
-
-export const DEFAULT_RECORDING: RecordingChoice = { mode: "stored", profile: RECORDING_PRESETS[DEFAULT_RECORDING_PRESET] };
-
 export function headerOf(
   loaded: SimLoadedMessage,
   runConfig: unknown,
@@ -147,11 +140,11 @@ export async function startRun(
   runConfig: unknown,
   label: string,
   inputs: readonly StoredRunInput[] = [],
-  recording: RecordingChoice = DEFAULT_RECORDING,
+  recording: RecordingChoice = takeRecordingChoice(),
 ): Promise<LabRun> {
   if (storage.status().state !== "ready") throw new Error("storage_unavailable: runs need storage (see the status line)");
   // A recorded run needs the direct channel between the sim worker and the storage worker; there is no silent fallback to "not recorded".
-  if (recording.mode === "stored" && !(sim.recorderAttached && storage.recorderAttached)) throw new Error("recorder_unavailable: the recorder channel between the workers is not set up");
+  if (recording.mode === "stored" && !sim.recorderAttached) throw new Error("recorder_unavailable: the recorder channel between the workers is not set up");
   const runId = await storage.ports.runs.allocateRunId();
   await recorder?.flushed();
   recorder?.dispose();
@@ -221,3 +214,5 @@ export function rerunInMode(storage: StorageClient, sim: SimClient, run: LabRun,
 export function rerun(storage: StorageClient, sim: SimClient, run: LabRun): Promise<LabRun> {
   return startRun(storage, sim, run.scenario, run.loaded.scenarioVersion, run.runConfig, run.header.label);
 }
+
+export type { RecordingChoice } from "./recording-choice.ts";

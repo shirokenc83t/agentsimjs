@@ -15,6 +15,14 @@ function spawn(opts: Partial<StorageClientOptions> = {}): StorageClient {
   return client;
 }
 
+/** Test-only: changes the simulated quota of the worker behind `client` (a raw request: the client has no such method). */
+async function setQuota(client: StorageClient, bytes: number | undefined): Promise<void> {
+  const entry = workers.find((w) => w.client === client);
+  if (!entry) throw new Error("no worker for this client");
+  entry.worker.postMessage({ type: "request", id: 900_000 + Math.floor(Math.random() * 90_000), op: "test.setSimulatedQuota", args: bytes === undefined ? [] : [bytes] });
+  await client.admin.info(); // answered after the request above: the worker serves its queue in order
+}
+
 async function shutdown(client: StorageClient): Promise<void> {
   const i = workers.findIndex((w) => w.client === client);
   const entry = workers[i];
@@ -153,7 +161,7 @@ describe("storage worker (browser)", () => {
     const fromStorage: { type: string; head?: { tick: number; throughSeq: number } }[] = [];
     simEnd.onmessage = (ev) => fromStorage.push(ev.data as (typeof fromStorage)[number]);
     const mainSaw: { tick: number; throughSeq: number }[] = [];
-    c.onPersisted((h) => mainSaw.push({ tick: h.tick, throughSeq: h.throughSeq }));
+    c.onRecording((m) => m.type === "persisted" && mainSaw.push({ tick: m.head.tick, throughSeq: m.head.throughSeq }));
     c.attachRecorderPort(channel.port2);
     const until = async (cond: () => boolean) => {
       for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
@@ -212,12 +220,12 @@ describe("storage worker (browser)", () => {
     const c = spawn({ resetOnOpen: true });
     await c.ready();
     const base = (await c.admin.info()).dbFileBytes;
-    await c.setSimulatedQuota(base * 2 + 400_000);
+    await setQuota(c, base * 2 + 400_000);
     const channel = new MessageChannel();
     const fromStorage: { type: string; state?: string; head?: { tick: number } }[] = [];
     channel.port1.onmessage = (ev) => fromStorage.push(ev.data as (typeof fromStorage)[number]);
     const mainQuota: string[] = [];
-    c.onQuota((q) => mainQuota.push(q.state));
+    c.onRecording((m) => m.type === "quota" && mainQuota.push(m.state));
     c.attachRecorderPort(channel.port2);
     await c.ports.runs.create(recorded);
     const until = async (cond: () => boolean, what: string) => {
@@ -257,7 +265,7 @@ describe("storage worker (browser)", () => {
     const headAtPause = fromStorage.filter((m) => m.type === "persisted").at(-1)?.head?.tick ?? 0;
     expect(headAtPause).toBe(storedWhilePaused / 10);
     // Space is free again: the held batches are stored in order, the head catches up, and both ends are told.
-    await c.setSimulatedQuota(1_000_000_000);
+    await setQuota(c, 1_000_000_000);
     await until(() => fromStorage.some((m) => m.type === "quota" && m.state === "ok") && mainQuota.includes("ok"), "quota ok");
     await until(() => fromStorage.filter((m) => m.type === "persisted").at(-1)?.head?.tick === sent, "head caught up");
     expect(await c.ports.trace.count("run-000001")).toBe(sent * 10);
@@ -328,12 +336,12 @@ describe("storage worker (browser)", () => {
     expect(full).toBeGreaterThan(1_000_000);
     expect((await c.ports.runs.sizes("run-000001"))?.records.count).toBe(60);
     // A recorded run that fills what is left of a small quota.
-    await c.setSimulatedQuota(Math.round(full * 1.12));
+    await setQuota(c, Math.round(full * 1.12));
     const channel = new MessageChannel();
     const fromStorage: { type: string; state?: string }[] = [];
     channel.port1.onmessage = (ev) => fromStorage.push(ev.data as (typeof fromStorage)[number]);
     const mainQuota: string[] = [];
-    c.onQuota((q) => mainQuota.push(q.state));
+    c.onRecording((m) => m.type === "quota" && mainQuota.push(m.state));
     c.attachRecorderPort(channel.port2);
     const recorded = { ...header("run-000002"), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) };
     await c.ports.runs.create(recorded);

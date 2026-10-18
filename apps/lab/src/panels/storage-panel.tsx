@@ -1,10 +1,11 @@
 import { StorageBrowser } from "@agentsim/ui";
-import { useServices, useStorageStatus } from "../services.tsx";
+import { useCurrentRun, useServices, useStorageStatus } from "../services.tsx";
 
 /** Data workspace: Storage browser (F0); SQL console arrives in F3. */
 export function StoragePanel() {
   const { storage } = useServices();
   const status = useStorageStatus(storage);
+  const { run } = useCurrentRun();
   if (status.state !== "ready") {
     return (
       <div className="panel muted" data-testid="storage-unavailable">
@@ -16,5 +17,6 @@ export function StoragePanel() {
       </div>
     );
   }
-  return <StorageBrowser client={storage} />;
+  // The run being recorded cannot be deleted from under its recorder.
+  return <StorageBrowser client={storage} currentRunId={run?.header.recording === "stored" ? run.header.runId : undefined} />;
 }

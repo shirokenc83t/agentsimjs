@@ -1,16 +1,7 @@
-import type { RunSummary, StorageClient, StorageInfo } from "@agentsim/storage";
+import type { RunSizes, RunSummary, StorageClient, StorageInfo } from "@agentsim/storage";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { downloadBytes } from "../download.ts";
 import { formatBytes } from "../format.ts";
-
-/** Triggers a browser download of `bytes` (UI edge; no storage access on the render path). */
-export function downloadBytes(bytes: Uint8Array, filename: string, type = "application/vnd.sqlite3"): void {
-  const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
 
 export interface StorageBrowserProps {
   readonly client: Pick<StorageClient, "ports" | "admin">;
@@ -18,12 +9,24 @@ export interface StorageBrowserProps {
   readonly onImported?: () => void;
   readonly download?: (bytes: Uint8Array, filename: string) => void;
   readonly nowWallMs?: () => number;
+  /** The run being recorded: it cannot be deleted (ADR-0035 addition of 2026-10-17, item 7). */
+  readonly currentRunId?: string | undefined;
+}
+
+const totalBytes = (s: RunSizes): number => s.records.bytes + s.blobs.bytes + s.snapshots.bytes + s.beliefFrames.bytes;
+
+/** What a run holds, as the browser lists it: count and size of each kind of data. */
+function holds(s: RunSizes): string {
+  const part = (name: string, e: { count: number; bytes: number }) => `${name} ${e.count} · ${formatBytes(e.bytes)}`;
+  return [part("records", s.records), part("blobs", s.blobs), part("snapshots", s.snapshots), part("belief frames", s.beliefFrames)].join(" · ");
 }
 
 /** Storage browser (UI-SPEC §4, ADR-0010): runs, size, quota, export/import of `.sqlite`. */
 export function StorageBrowser(props: StorageBrowserProps) {
   const { client, download = downloadBytes, nowWallMs = Date.now } = props;
   const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [sizes, setSizes] = useState<Record<string, RunSizes>>({});
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -31,8 +34,10 @@ export function StorageBrowser(props: StorageBrowserProps) {
 
   const refresh = useCallback(async () => {
     const [r, i] = await Promise.all([client.ports.runs.list(), client.admin.info()]);
+    const sz = await Promise.all(r.map(async (x) => [x.runId, await client.ports.runs.sizes(x.runId)] as const));
     setRuns(r);
     setInfo(i);
+    setSizes(Object.fromEntries(sz.flatMap(([id, v]) => (v ? [[id, v] as const] : []))));
   }, [client]);
 
   useEffect(() => {
@@ -80,6 +85,15 @@ export function StorageBrowser(props: StorageBrowserProps) {
       if (!r.ok) throw new Error(r.error.message);
       download(r.value, `${runId}.sqlite`);
       return `exported ${runId}`;
+    });
+
+  /** Deletes a run and everything it owns, the way to free space (the dialog named it and its size first). */
+  const deleteRun = (runId: string) =>
+    act(async () => {
+      setConfirming(null);
+      const r = await client.ports.runs.delete(runId);
+      if (!r.ok) throw new Error(r.error.message);
+      return `deleted ${runId}`;
     });
 
   const importFile = (file: File) =>
@@ -148,6 +162,7 @@ export function StorageBrowser(props: StorageBrowserProps) {
             <th>label</th>
             <th>status</th>
             <th>records</th>
+            <th>holds</th>
             <th />
           </tr>
         </thead>
@@ -158,22 +173,50 @@ export function StorageBrowser(props: StorageBrowserProps) {
               <td>{r.label}</td>
               <td>{r.status}</td>
               <td>{r.recordCount}</td>
+              <td className="muted" data-testid={`run-size-${r.runId}`}>
+                {sizes[r.runId] ? holds(sizes[r.runId] as RunSizes) : "…"}
+              </td>
               <td>
                 <button className="btn" disabled={busy} onClick={() => exportOne(r.runId)} aria-label={`Export ${r.runId}`}>
                   ⭳
+                </button>
+                <button
+                  className="btn"
+                  disabled={busy || r.runId === props.currentRunId}
+                  title={r.runId === props.currentRunId ? "This run is being recorded" : "Delete this run and everything it holds"}
+                  onClick={() => setConfirming(r.runId)}
+                  aria-label={`Delete ${r.runId}`}
+                >
+                  🗑
                 </button>
               </td>
             </tr>
           ))}
           {runs.length === 0 && (
             <tr>
-              <td colSpan={5} className="muted">
+              <td colSpan={6} className="muted">
                 No runs stored yet.
               </td>
             </tr>
           )}
         </tbody>
       </table>
+      {confirming !== null && (
+        <div role="alertdialog" aria-modal="true" aria-label={`Delete ${confirming}`} className="panel" data-testid="delete-run-dialog">
+          <p>
+            Delete {confirming} ({sizes[confirming] ? formatBytes(totalBytes(sizes[confirming] as RunSizes)) : "size unknown"})? Its records, snapshots, blobs and belief frames go with it, and it cannot
+            be restored.
+          </p>
+          <div className="row">
+            <button className="btn" onClick={() => setConfirming(null)}>
+              Cancel
+            </button>
+            <button className="btn danger" disabled={busy} onClick={() => void deleteRun(confirming)}>
+              Delete the run
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

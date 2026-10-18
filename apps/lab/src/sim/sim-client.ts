@@ -34,6 +34,8 @@ export interface SimSnapshot {
   readonly grid: GridSpec | undefined;
   /** Planning views being built before tick 0 (ADR-0024), while a load is in progress. */
   readonly preparing?: { readonly runId: string; readonly done: number; readonly total: number };
+  /** The recording's latest state for the loaded run (ADR-0035 §6): `ok`, or why the run waits (the writer is behind, the storage quota is near). */
+  readonly recording?: { readonly runId: string; readonly state: "ok" | "storage_backpressure" | "storage_quota"; readonly backlogRecords: number };
   /** What the last load prepared, and its wall time (never in the trace or a hash). */
   readonly prepared?: { readonly runId: string; readonly views: number; readonly graphs: number; readonly ms: number };
 }
@@ -167,6 +169,9 @@ export class SimClient {
         break;
       case "degradation":
         this.snap = { ...this.snap, degradations: this.snap.degradations + 1, lastSkippedTicks: m.skippedTicks };
+        break;
+      case "recording":
+        this.snap = { ...this.snap, recording: { runId: m.runId, state: m.state, backlogRecords: m.backlogRecords } };
         break;
       case "preparing":
         this.snap = { ...this.snap, preparing: { runId: m.runId, done: m.done, total: m.total } };

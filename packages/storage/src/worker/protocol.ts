@@ -20,6 +20,8 @@ export const StorageInit = Type.Object({
   resetOnOpen: Type.Optional(Type.Boolean()),
   /** Test-only: a quota of this many bytes against the database's own size, instead of the browser's (ADR-0035 §6). */
   simulateQuotaBytes: Type.Optional(Type.Integer({ minimum: 1 })),
+  /** Test-only: a quota of what the database holds when it opens plus this many bytes (a page that starts near its limit, whatever it holds). */
+  simulateQuotaHeadroomBytes: Type.Optional(Type.Integer({ minimum: 1 })),
   /** Test-only: every commit of recorder batches takes this long first, to exercise flow control (ADR-0035 §6). */
   simulateSlowWriterMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 10_000 })),
 });

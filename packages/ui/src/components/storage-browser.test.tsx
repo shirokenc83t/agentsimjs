@@ -9,7 +9,7 @@ const info: StorageInfo = {
   quotaBytes: 1e9, persisted: true, quotaThresholdBytes: 256 * 1024 * 1024, warning: null,
 };
 
-function setup(adminOverrides: Partial<StorageAdmin> = {}) {
+function setup(adminOverrides: Partial<StorageAdmin> = {}, props: { currentRunId?: string } = {}) {
   const ports = createMemoryPorts();
   const admin: StorageAdmin = {
     info: vi.fn(async () => info),
@@ -21,7 +21,7 @@ function setup(adminOverrides: Partial<StorageAdmin> = {}) {
     ...adminOverrides,
   };
   const download = vi.fn();
-  render(<StorageBrowser client={{ ports, admin }} download={download} nowWallMs={() => 1_700_000_000_000} />);
+  render(<StorageBrowser client={{ ports, admin }} download={download} nowWallMs={() => 1_700_000_000_000} {...props} />);
   return { ports, admin, download };
 }
 
@@ -54,5 +54,51 @@ describe("StorageBrowser", () => {
     const input = await screen.findByTestId("import-file");
     await userEvent.upload(input, new File([new Uint8Array([0])], "bad.sqlite"));
     expect(await screen.findByTestId("storage-message")).toHaveTextContent("import rejected (not_sqlite)");
+  });
+
+  it("shows what each run holds: records, blobs, snapshots and belief frames, with their sizes", async () => {
+    const { ports } = setup();
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    const size = await screen.findByTestId("run-size-run-000001");
+    expect(size).toHaveTextContent(/records 100/);
+    expect(size).toHaveTextContent(/blobs 0/);
+    expect(size).toHaveTextContent(/snapshots 0/);
+    expect(size).toHaveTextContent(/belief frames 0/);
+    expect((await ports.runs.sizes("run-000001"))?.records.count).toBe(100);
+  });
+
+  it("deletes a run after a confirmation that names the run and its size, and not before", async () => {
+    const { ports } = setup();
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    await userEvent.click(await screen.findByRole("button", { name: "Delete run-000001" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("run-000001");
+    expect(dialog).toHaveTextContent(/\d+(\.\d+)? (B|KB|MB)/);
+    expect(await ports.runs.get("run-000001")).toBeDefined(); // asking is not deleting
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(await ports.runs.get("run-000001")).toBeDefined();
+    await userEvent.click(screen.getByRole("button", { name: "Delete run-000001" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Delete the run" }));
+    await waitFor(() => expect(screen.queryByTestId("run-row-run-000001")).toBeNull());
+    expect(await ports.runs.get("run-000001")).toBeUndefined();
+    expect(await screen.findByTestId("storage-message")).toHaveTextContent("deleted run-000001");
+  });
+
+  it("does not offer to delete the run being recorded", async () => {
+    setup({}, { currentRunId: "run-000001" });
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    const button = await screen.findByRole("button", { name: "Delete run-000001" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", expect.stringMatching(/being recorded/));
+  });
+
+  it("shows why a delete was refused", async () => {
+    const { ports } = setup();
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    vi.spyOn(ports.runs, "delete").mockResolvedValue({ ok: false, error: { code: "unknown_run", message: "unknown run run-000001" } } as never);
+    await userEvent.click(await screen.findByRole("button", { name: "Delete run-000001" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Delete the run" }));
+    expect(await screen.findByTestId("storage-message")).toHaveTextContent("unknown run run-000001");
   });
 });

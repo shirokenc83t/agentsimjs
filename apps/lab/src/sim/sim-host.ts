@@ -386,10 +386,17 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     }
     if (state !== reported) {
       reported = state;
-      scope.postMessage({ type: "recording", runId: world.runId, state, backlogRecords: b.records, backlogBytes: b.bytes });
+      postRecordingState();
     }
     releaseGate();
   };
+
+  /** The recording's state, as a message, when it changes (the client keeps the latest). */
+  function postRecordingState(): void {
+    if (!recorder || !world.runId) return;
+    const b = recorder.backlog;
+    scope.postMessage({ type: "recording", runId: world.runId, state: reported, backlogRecords: b.records, backlogBytes: b.bytes });
+  }
 
   const onFromStorage = (m: FromStorage) => {
     if (m.type === "header") {

@@ -95,6 +95,7 @@ class Engine {
       this.warning = reason;
     }
     this.openConnection();
+    if (this.simulatedQuotaBytes === undefined && this.init.simulateQuotaHeadroomBytes !== undefined) this.simulatedQuotaBytes = this.dbBytes() + this.init.simulateQuotaHeadroomBytes;
   }
 
   private async opfsUnavailableReason(): Promise<string | null> {

@@ -1,5 +1,4 @@
 import type { CodedError, Result } from "@agentsim/core";
-import type { PersistedHead } from "@agentsim/trace";
 import type { StoragePorts } from "../ports.ts";
 import {
   STORAGE_PROTOCOL_VERSION,
@@ -45,14 +44,11 @@ export interface StorageClient {
    * travel through here). The port is transferred.
    */
   attachRecorderPort(port: MessagePort): void;
-  /** True once the storage worker has its end of the recorder channel. */
-  readonly recorderAttached: boolean;
-  /** The persisted head of a recorded run, after each flush the storage worker reports (the status line, the timeline). */
-  onPersisted(listener: (head: PersistedHead) => void): () => void;
-  /** The quota state of recording (`paused` near the quota, `ok` once space is free again), for the status line. */
-  onQuota(listener: (q: QuotaMessage) => void): () => void;
-  /** Test-only: changes the simulated quota (undefined: the browser's). */
-  setSimulatedQuota(bytes: number | undefined): Promise<void>;
+  /**
+   * What the storage worker reports about recording: the persisted head after each flush (the status line, the timeline) and the quota state
+   * (`paused` near the quota, `ok` once space is free again).
+   */
+  onRecording(listener: (m: PersistedHeadMessage | QuotaMessage) => void): () => void;
 }
 
 export interface StorageClientOptions {
@@ -64,6 +60,8 @@ export interface StorageClientOptions {
   readonly resetOnOpen?: boolean;
   /** Test-only: a quota of this many bytes against the database's own size (ADR-0035 §6). */
   readonly simulateQuotaBytes?: number;
+  /** Test-only: a quota of what the database holds when it opens plus this many bytes. */
+  readonly simulateQuotaHeadroomBytes?: number;
   /** Test-only: every commit of recorder batches takes this long first. */
   readonly simulateSlowWriterMs?: number;
 }
@@ -79,18 +77,12 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
   const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   let current: StorageStatus = { type: "status", state: "loading" };
   const listeners = new Set<(s: StorageStatus) => void>();
-  const persistedListeners = new Set<(h: PersistedHead) => void>();
-  const quotaListeners = new Set<(q: QuotaMessage) => void>();
-  let recorderAttached = false;
+  const recordingListeners = new Set<(m: PersistedHeadMessage | QuotaMessage) => void>();
 
   worker.addEventListener("message", (ev: MessageEvent<StorageResponse | StorageStatus | PersistedHeadMessage | QuotaMessage>) => {
     const m = ev.data;
-    if (m.type === "quota") {
-      for (const l of quotaListeners) l(m);
-      return;
-    }
-    if (m.type === "persisted") {
-      for (const l of persistedListeners) l(m.head);
+    if (m.type === "quota" || m.type === "persisted") {
+      for (const l of recordingListeners) l(m);
       return;
     }
     if (m.type === "status") {
@@ -127,9 +119,12 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
     ...(options.simulateNoOpfs ? { simulateNoOpfs: true } : {}),
     ...(options.resetOnOpen ? { resetOnOpen: true } : {}),
     ...(options.simulateQuotaBytes === undefined ? {} : { simulateQuotaBytes: options.simulateQuotaBytes }),
+    ...(options.simulateQuotaHeadroomBytes === undefined ? {} : { simulateQuotaHeadroomBytes: options.simulateQuotaHeadroomBytes }),
     ...(options.simulateSlowWriterMs === undefined ? {} : { simulateSlowWriterMs: options.simulateSlowWriterMs }),
   };
   worker.postMessage(init);
+
+  const rpc = (group: string, names: readonly string[]) => Object.fromEntries(names.map((n) => [n, (...args: unknown[]) => call(`${group}.${n}` as StorageOp, args)]));
 
   const ports: StoragePorts = {
     trace: {
@@ -171,18 +166,9 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       saveVersion: (preset) => call("runConfigs.saveVersion", [preset]),
       delete: (id) => call("runConfigs.delete", [id]),
     },
-    snapshots: {
-      putBlobs: (runId, blobs) => call("snapshots.putBlobs", [runId, blobs]),
-      getBlob: (runId, id) => call("snapshots.getBlob", [runId, id]),
-      write: (runId, s) => call("snapshots.write", [runId, s]),
-      list: (runId) => call("snapshots.list", [runId]),
-      read: (runId, id) => call("snapshots.read", [runId, id]),
-    },
-    beliefFrames: {
-      append: (runId, frames) => call("beliefFrames.append", [runId, frames]),
-      query: (q) => call("beliefFrames.query", [q]),
-      keyframeAtOrBefore: (runId, agentId, tick) => call("beliefFrames.keyframeAtOrBefore", [runId, agentId, tick]),
-    },
+    // The recording ports forward every call as it is (same arguments, in order): one table instead of a lambda each, to keep the initial chunk small.
+    snapshots: rpc("snapshots", ["putBlobs", "getBlob", "write", "list", "read"]) as unknown as StoragePorts["snapshots"],
+    beliefFrames: rpc("beliefFrames", ["append", "query", "keyframeAtOrBefore"]) as unknown as StoragePorts["beliefFrames"],
   };
 
   const admin: StorageAdmin = {
@@ -230,22 +216,13 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       });
     },
     probeSecondConnection: () => call("test.openSecondConnection"),
-    get recorderAttached() {
-      return recorderAttached;
-    },
     attachRecorderPort(port) {
       const m: RecorderPortMessage = { type: "recorderPort", port };
       worker.postMessage(m, [port]);
-      recorderAttached = true;
     },
-    onPersisted(l) {
-      persistedListeners.add(l);
-      return () => persistedListeners.delete(l);
+    onRecording(l) {
+      recordingListeners.add(l);
+      return () => recordingListeners.delete(l);
     },
-    onQuota(l) {
-      quotaListeners.add(l);
-      return () => quotaListeners.delete(l);
-    },
-    setSimulatedQuota: (bytes) => call("test.setSimulatedQuota", bytes === undefined ? [] : [bytes]),
   };
 }

@@ -52,6 +52,8 @@ const LAZY_GROUPS = {
   explorer: (n) => n === "explorer-panel",
   commands: (n) => n === "commands",
   runInfo: (n) => n === "run-info",
+  // F3a M2: the recording status in the status line and the recording choice in the run popover (report only).
+  recording: (n) => n === "recording-status" || n === "recording-controls" || n === "recording-choice",
   sharedMui: (n) => ["TextField", "ToggleButtonGroup", "Popover", "FormControlLabel"].includes(n),
   sharedContracts: (n) => n === "dist" || n === "model",
 };
