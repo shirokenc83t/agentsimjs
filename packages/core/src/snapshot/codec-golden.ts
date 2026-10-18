@@ -2,7 +2,7 @@
 // below touches every tag of the format; `CODEC_GOLDEN` was generated in Node and is checked in Node
 // (`codec.test.ts`) and in Chromium and Firefox (`codec.xengine.test.ts`). A change here means the format changed:
 // bump `SNAPSHOT_VERSION` and say so in the report.
-import { contentHash64Bytes } from "../numerics/content-hash.ts";
+import { contentHash128Bytes } from "../numerics/content-hash.ts";
 import { SnapshotWriter, SectionRef, encodeValue, inOrder, snapshotHash } from "./codec.ts";
 
 /** A value with every kind the codec writes, with the numbers plain JSON loses. */
@@ -47,16 +47,16 @@ export function encodeCodecGolden(): { value: { length: number; hash: string }; 
   const inline = build(false);
   const external = build(true);
   return {
-    value: { length: value.length, hash: contentHash64Bytes(value) },
+    value: { length: value.length, hash: contentHash128Bytes(value) },
     snapshot: { length: inline.bytes.length, hash: snapshotHash(inline.bytes), sections: inline.sections },
     external: { length: external.bytes.length, hash: snapshotHash(external.bytes) },
   };
 }
 
 export const CODEC_GOLDEN = {
-  // Regenerated in F3a M1 when object keys went from sorted to insertion order (the format was not in use yet).
-  value: { length: 497, hash: "20b3a30e85df43cf" },
-  snapshot: { length: 618, hash: "4e78a6014aefabbd", sections: ["1a1b26e2bb691418", "20b3a30e85df43cf"] },
+  // Regenerated in F3a M1 when section ids went from 64 to 128 bits (the format was not in use yet).
+  value: { length: 497, hash: "20b3a30e85df43cf749e1ecf01347cdf" },
+  snapshot: { length: 666, hash: "66d5dd8f138ec23795e48d821a3e94d0", sections: ["1a1b26e2bb691418139585ff63141a66", "20b3a30e85df43cf749e1ecf01347cdf"] },
   // Same hash as the inline container: the sections' place does not change the snapshot's content hash.
-  external: { length: 98, hash: "4e78a6014aefabbd" },
+  external: { length: 146, hash: "66d5dd8f138ec23795e48d821a3e94d0" },
 };

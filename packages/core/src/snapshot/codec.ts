@@ -11,12 +11,12 @@
 //   Functions, symbols, bigints, class instances and cycles are refused with the path that holds them.
 //
 // A snapshot is a container: magic "ASNP", a format version, the root value, and content-addressed **sections** (a value
-// encoded on its own and named by the 64-bit content hash of its bytes). The root refers to a section by its hash, so
+// encoded on its own and named by the 128-bit content hash of its bytes). The root refers to a section by its hash, so
 // a large unchanged piece (a belief map) is stored once, however many snapshots or agents refer to it. In M1 the
 // sections are stored inside the container; in M2 the writer's `external` callback hands them to the belief keyframe
 // blob store instead and the container keeps only their hashes: the container's content hash (`snapshotHash`) is
 // the same either way, so the split needs no format change.
-import { contentHash64Bytes } from "../numerics/content-hash.ts";
+import { contentHash128Bytes } from "../numerics/content-hash.ts";
 import { utf8 } from "../numerics/xxhash32.ts";
 
 /** Container format version, byte 4 of every snapshot. A reader refuses any other. */
@@ -93,10 +93,10 @@ const KINDS: readonly TypedKind[] = [
 ];
 const KIND_BY_TAG = new Map(KINDS.map((k) => [k.tag, k]));
 
-/** Reference to a section of the snapshot that holds it, by the content hash of the section's bytes (16 hex digits). */
+/** Reference to a section of the snapshot that holds it, by the content hash of the section's bytes (32 hex digits). */
 export class SectionRef {
   constructor(readonly hash: string) {
-    if (!/^[0-9a-f]{16}$/.test(hash)) throw new RangeError(`section hash must be 16 lowercase hex digits: ${hash}`);
+    if (!/^[0-9a-f]{32}$/.test(hash)) throw new RangeError(`section hash must be 32 lowercase hex digits: ${hash}`);
   }
 }
 
@@ -473,7 +473,7 @@ class Reader {
         return out;
       }
       case TAG.ref:
-        return new SectionRef(bytesToHex(this.take(8)));
+        return new SectionRef(bytesToHex(this.take(16)));
       default: {
         const kind = KIND_BY_TAG.get(tag);
         if (!kind) throw new RangeError(`unknown tag 0x${tag.toString(16)} at byte ${this.pos - 1}`);
@@ -582,7 +582,7 @@ export class SnapshotWriter {
     e.value(value);
     if (e.refs.length > 0) throw new TypeError("a section cannot refer to another section");
     const bytes = e.finish();
-    const hash = contentHash64Bytes(bytes);
+    const hash = contentHash128Bytes(bytes);
     if (!this.sections.has(hash)) {
       this.sections.set(hash, bytes);
       this.options.external?.(hash, bytes);
@@ -652,7 +652,7 @@ function parseContainer(bytes: Uint8Array): Container {
   if (count * 13 > r.remaining) throw new RangeError("snapshot section table exceeds the bytes left");
   const sections: SnapshotSection[] = [];
   for (let i = 0; i < count; i++) {
-    const hash = bytesToHex(r.take(8));
+    const hash = bytesToHex(r.take(16));
     const inline = r.u8() === 1;
     const length = r.u32();
     sections.push({ hash, length, bytes: inline ? r.take(length) : undefined });
@@ -674,14 +674,14 @@ export function readSnapshot(bytes: Uint8Array, options: ReadSnapshotOptions = {
       if (!entry) throw new RangeError(`unknown section ${ref.hash}`);
       const data = entry.bytes ?? options.resolve?.(ref.hash);
       if (!data) throw new RangeError(`section ${ref.hash} is not inline and no resolver supplied it`);
-      if (data.length !== entry.length || contentHash64Bytes(data) !== ref.hash) throw new RangeError(`section ${ref.hash}: content hash does not match its bytes`);
+      if (data.length !== entry.length || contentHash128Bytes(data) !== ref.hash) throw new RangeError(`section ${ref.hash}: content hash does not match its bytes`);
       return decodeValue(data);
     },
   };
 }
 
 /**
- * Content hash (16 hex digits) of a snapshot: of its format version, root bytes and the (hash, length) of each section, so
+ * Content hash (32 hex digits) of a snapshot: of its format version, root bytes and the (hash, length) of each section, so
  * it is the same whether the sections are inside the container or stored outside it. This is the hash a checkpoint
  * record carries next to the state hash (ADR-0035 item 8). It does not read section bytes: a section is checked
  * against its own hash when it is read.
@@ -696,5 +696,5 @@ export function snapshotHash(bytes: Uint8Array): string {
     w.bytes(hexToBytes(s.hash));
     w.u32(s.length);
   }
-  return contentHash64Bytes(w.finish());
+  return contentHash128Bytes(w.finish());
 }

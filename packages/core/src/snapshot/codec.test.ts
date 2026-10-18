@@ -306,6 +306,21 @@ describe("snapshot codec: container and content-addressed sections", () => {
     expect(readSnapshot(w.finish({ a: r1, b: r2 })).sections).toHaveLength(1);
   });
 
+  it("names sections by a 128-bit id (32 hex digits); sections that differ in one byte get different ids", () => {
+    const base = Uint8Array.from({ length: 300 }, (_, i) => (i * 37) & 255);
+    const w = new SnapshotWriter();
+    const ids = new Set<string>([w.section({ data: base }).hash]);
+    expect([...ids][0]).toMatch(/^[0-9a-f]{32}$/);
+    for (let i = 0; i < base.length; i++) {
+      const flipped = base.slice();
+      flipped[i] = (flipped[i] ?? 0) ^ 1;
+      ids.add(w.section({ data: flipped }).hash);
+    }
+    expect(ids.size).toBe(base.length + 1);
+    for (const id of ids) expect(id).toMatch(/^[0-9a-f]{32}$/);
+    expect(() => new SectionRef("0123456789abcdef")).toThrow(/32 lowercase hex digits/);
+  });
+
   it("can leave sections outside the container (M2 belief keyframe blobs) with no format change and the same snapshot hash", () => {
     const value = (w: SnapshotWriter) => w.finish({ tick: 30, maps: [w.section(beliefLike(1)), w.section(beliefLike(2))] });
     const inline = value(new SnapshotWriter());
@@ -324,7 +339,7 @@ describe("snapshot codec: container and content-addressed sections", () => {
 
   it("refuses a section reference the snapshot does not contain, and foreign or newer containers", () => {
     const w = new SnapshotWriter();
-    expect(() => w.finish({ ref: new SectionRef("00000000deadbeef") })).toThrow(/unknown section/);
+    expect(() => w.finish({ ref: new SectionRef("00000000deadbeef00000000deadbeef") })).toThrow(/unknown section/);
     expect(() => readSnapshot(Uint8Array.from([1, 2, 3, 4, 5, 6]))).toThrow(/not a snapshot/);
     const bytes = new SnapshotWriter().finish({});
     const newer = bytes.slice();
