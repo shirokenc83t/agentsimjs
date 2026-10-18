@@ -21,7 +21,8 @@ export function ReplayBar(props: { snap: RunSnapshot; dtS: number }) {
   const simHead = snap.replay?.simHeadS;
   const live = simHead !== undefined;
   const scale = Math.max(simHead ?? 0, head, dtS);
-  const [follow, setFollow] = useState(live);
+  // Scrubbing a live run starts on the persisted head; coming from a jump to an earlier moment (a click on the Timeline or the list) it stays there.
+  const [follow, setFollow] = useState(live && useUiContext.getState().simTime >= head);
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const track = useRef<HTMLDivElement>(null);
   const persistedTick = Math.round(head / dtS);

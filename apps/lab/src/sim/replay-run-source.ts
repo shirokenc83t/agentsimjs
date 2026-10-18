@@ -46,6 +46,8 @@ interface Sample {
   readonly airborne: boolean;
 }
 
+/** Sim times are sums of ticks, a cursor is a tick times the tick period: a sample or a record at the cursor's tick is at the cursor, up to float noise. */
+const TIME_EPS = 1e-6;
 const PAGE = 10_000;
 /** Poses are kept for this window of sim time around the cursor: behind it for the executed path, ahead of it for interpolation. */
 const POSE_BEHIND_S = 120;
@@ -241,7 +243,7 @@ export class ReplayRunSource implements RunSource {
     // Going back: records after the cursor are cut (they are in seq order, so in sim-time order).
     if (t < this.recordsLoadedTo) {
       let keep = this.recordList.length;
-      while (keep > 0 && (this.recordList[keep - 1] as TraceRecord).simTime > t) keep--;
+      while (keep > 0 && (this.recordList[keep - 1] as TraceRecord).simTime > t + TIME_EPS) keep--;
       this.recordList.length = keep;
       this.recordsThroughSeq = keep > 0 ? (this.recordList[keep - 1] as TraceRecord).seq : -1;
       this.recordsLoadedTo = t;
@@ -249,7 +251,7 @@ export class ReplayRunSource implements RunSource {
       if (keep === 0) this.recordsThroughSeq = -1;
     }
     for (;;) {
-      const page = await this.deps.ports.trace.query({ runId: this.deps.runId, afterSeq: this.recordsThroughSeq, limit: PAGE, simTime: { to: t }, source: BODY_ONLY });
+      const page = await this.deps.ports.trace.query({ runId: this.deps.runId, afterSeq: this.recordsThroughSeq, limit: PAGE, simTime: { to: t + TIME_EPS }, source: BODY_ONLY });
       if (this.disposed || mine !== this.generation) return;
       for (const r of page) this.recordList.push(r);
       if (page.length > 0) this.recordsThroughSeq = (page[page.length - 1] as TraceRecord).seq;
@@ -542,7 +544,7 @@ function lastAtOrBefore(list: readonly Sample[], t: number): number {
   let found = -1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    if ((list[mid] as Sample).t <= t) {
+    if ((list[mid] as Sample).t <= t + TIME_EPS) {
       found = mid;
       lo = mid + 1;
     } else hi = mid - 1;

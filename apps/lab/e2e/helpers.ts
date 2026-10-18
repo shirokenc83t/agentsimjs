@@ -27,7 +27,7 @@ export async function waitForStorageReady(page: Page): Promise<void> {
   await expect(page.getByTestId("status-storage")).toHaveText(/db: (opfs-sahpool|memory-fallback)/, { timeout: 30_000 });
 }
 
-export async function openWorkspace(page: Page, id: "scene" | "author" | "data" | "settings"): Promise<void> {
+export async function openWorkspace(page: Page, id: "scene" | "debug" | "author" | "data" | "settings"): Promise<void> {
   await page.getByTestId(`tab-${id}`).click();
   await expect(page.getByTestId(`workspace-${id}`)).toBeVisible();
 }

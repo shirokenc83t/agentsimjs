@@ -54,6 +54,10 @@ const LAZY_GROUPS = {
   runInfo: (n) => n === "run-info",
   // F3a M2: the recording status in the status line and the recording choice in the run popover (report only).
   recording: (n) => n === "recording-status" || n === "recording-controls" || n === "recording-choice",
+  // F3a M3: the Debug workspace panels, the replay source and the replay bar (report only).
+  timeline: (n) => n === "timeline-panel" || n === "use-run-marks" || n === "use-jump",
+  eventList: (n) => n === "event-list-panel",
+  replay: (n) => n === "replay-host" || n === "replay-bar" || n === "replay-run-source",
   sharedMui: (n) => ["TextField", "ToggleButtonGroup", "Popover", "FormControlLabel"].includes(n),
   sharedContracts: (n) => n === "dist" || n === "model",
 };

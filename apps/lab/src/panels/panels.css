@@ -22,6 +22,20 @@
 .replay-gap { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(45deg, var(--ln) 0 3px, transparent 3px 6px); }
 .replay-cursor-mark { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ac); }
 
+/* Debug workspace: the Timeline (a canvas of lanes) and the event list with its detail. */
+.timeline { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.timeline-head { display: flex; gap: 12px; align-items: center; padding: 2px 8px; font-size: 12px; border-bottom: 1px solid var(--ln); }
+.timeline-lanes { overflow: auto; flex: 1; }
+.timeline-lanes canvas { display: block; cursor: pointer; }
+.event-list { display: flex; flex-direction: column; padding: 0; }
+.event-filters { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--ln); font-size: 12px; }
+.event-scroller { flex: 1; min-height: 80px; overflow: auto; outline: none; }
+.event-scroller:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
+.event-row { display: grid; grid-template-columns: 62px 96px 34px 1fr; align-items: center; gap: 8px; padding: 0 8px; cursor: pointer; font-size: var(--type-mono-size); border-bottom: 1px solid var(--ln); white-space: nowrap; overflow: hidden; }
+.event-row:hover { background: var(--bg3); }
+.event-row[aria-selected="true"] { background: var(--acbg); box-shadow: inset 2px 0 0 var(--ac); }
+.event-detail { margin: 0; max-height: 40%; overflow: auto; padding: 6px 8px; border-top: 1px solid var(--ln); font-size: 11px; white-space: pre-wrap; }
+
 /* Explorer (virtualized list) and Inspector. */
 .explorer { display: flex; flex-direction: column; padding: 0; }
 .explorer-list { flex: 1; overflow: auto; outline: none; }

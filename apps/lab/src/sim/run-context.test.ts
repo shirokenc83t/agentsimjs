@@ -37,10 +37,35 @@ describe("syncRunContext", () => {
     expect(store.getState().simTime).toBe(12.5);
   });
 
-  it("a switch from live to replay of the same run changes the mode and starts the cursor afresh", () => {
+  it("a switch from live to replay of the same run changes the mode and keeps the cursor where it was; a replay of another run starts afresh", () => {
     const store = createUiContextStore();
     syncRunContext(store, { mode: "live", runId: "run-000001", simTimeS: 8 });
     syncRunContext(store, { mode: "replay", runId: "run-000001", simTimeS: 8 });
-    expect(store.getState()).toMatchObject({ mode: "replay", simTime: 0 });
+    expect(store.getState()).toMatchObject({ mode: "replay", simTime: 8 });
+    syncRunContext(store, { mode: "replay", runId: "run-000009", simTimeS: 8 });
+    expect(store.getState()).toMatchObject({ mode: "replay", runId: "run-000009", simTime: 0 });
+  });
+
+  it("a live cursor the user moved is not dragged back to the sim head; one that follows keeps following", () => {
+    const store = createUiContextStore();
+    syncRunContext(store, { mode: "live", runId: "run-000001", simTimeS: 0 });
+    syncRunContext(store, { mode: "live", runId: "run-000001", simTimeS: 1 });
+    expect(store.getState().simTime).toBe(1); // following
+    store.getState().setSimTime(0.4); // the user moves it (a click on the Timeline)
+    syncRunContext(store, { mode: "live", runId: "run-000001", simTimeS: 2 });
+    syncRunContext(store, { mode: "live", runId: "run-000001", simTimeS: 3 });
+    expect(store.getState().simTime).toBe(0.4);
+  });
+
+  it("scrubbing the live run back (the same run, now a replay) keeps the cursor and the selection where they are", () => {
+    const store = createUiContextStore();
+    syncRunContext(store, { mode: "live", runId: "run-000001", simTimeS: 0 });
+    store.getState().select({ kind: "agent", id: "uav-001" });
+    store.getState().setSimTime(6.5);
+    syncRunContext(store, { mode: "replay", runId: "run-000001", simTimeS: 9 });
+    expect(store.getState()).toMatchObject({ mode: "replay", runId: "run-000001", simTime: 6.5, selection: { kind: "agent", id: "uav-001" } });
+    // A replay of another run starts afresh.
+    syncRunContext(store, { mode: "replay", runId: "run-000002", simTimeS: 0 });
+    expect(store.getState()).toMatchObject({ runId: "run-000002", simTime: 0, selection: undefined });
   });
 });

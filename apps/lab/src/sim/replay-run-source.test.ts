@@ -301,7 +301,7 @@ describe("scrubbing a live recorded run", () => {
     const t0 = w.asked.maxTick;
     c.set(9.5);
     await src.settled();
-    expect(w.asked.maxSimTime).toBeLessThanOrEqual(src.headSeconds + 1e-9);
+    expect(w.asked.maxSimTime).toBeLessThanOrEqual(src.headSeconds + 1e-5);
     expect(src.snapshot().replay?.simHeadS).toBeCloseTo(10, 6);
     expect(w.asked.maxTick).toBeGreaterThanOrEqual(t0);
     expect(t.world.entityIds.length).toBeGreaterThan(0);
@@ -340,7 +340,7 @@ describe("scrubbing a live recorded run", () => {
     c.set(9); // in the gap
     await src.settled();
     expect(src.snapshot().tick).toBe(50); // held at the persisted head
-    expect(w.asked.maxSimTime).toBeLessThanOrEqual(5 + 1e-9);
+    expect(w.asked.maxSimTime).toBeLessThanOrEqual(5 + 1e-5);
     expect(poseAt(src, 0).x).toBeDefined();
     // The storage flushes more: the head moves, a listener hears it, and the same cursor now shows its own moment.
     persisted = 8;
@@ -354,7 +354,7 @@ describe("scrubbing a live recorded run", () => {
     c.set(8);
     await src.settled();
     expect(src.snapshot().tick).toBe(80);
-    expect(w.asked.maxSimTime).toBeLessThanOrEqual(8 + 1e-9);
+    expect(w.asked.maxSimTime).toBeLessThanOrEqual(8 + 1e-5);
     src.dispose();
   });
 
