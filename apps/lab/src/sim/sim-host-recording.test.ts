@@ -1,7 +1,7 @@
 import { snapshotHash } from "@agentsim/core";
 import { RECORDING_PRESETS, type RecorderBatch } from "@agentsim/trace";
 import { describe, expect, it } from "vitest";
-import { demo, flush, harness, init, stored } from "./sim-host-harness.ts";
+import { demo, discovery, flush, harness, init, stored } from "./sim-host-harness.ts";
 
 // F3a M2: the recorder in the sim worker (ADR-0035 addition of 2026-10-17, items 6 and 12): header first, batches over a direct port,
 // the panel stream fed from what the recorder gathered, and a run that is the same whether or not it is recorded.
@@ -117,7 +117,7 @@ describe("sim host: snapshots, checkpoints, poses and belief frames (ADR-0035 ad
     expect(snap.tick).toBe(0);
   });
 
-  it("writes a checkpoint every 100 ticks and an end snapshot when a step ends, and the run keeps its hash", async () => {
+  it("writes a checkpoint every 100 ticks and no snapshot when a step ends, and the run keeps its hash", async () => {
     const h = harness();
     init(h);
     h.send({ type: "recorderPort", port: h.port });
@@ -127,8 +127,8 @@ describe("sim host: snapshots, checkpoints, poses and belief frames (ADR-0035 ad
     await flush();
     const records = h.batches().flatMap((b) => b.records);
     const ops = (op: string) => records.filter((r) => (r.payload as { op?: string } | undefined)?.op === op);
-    expect(ops("checkpoint").map((r) => (r.payload as { tick: number }).tick)).toEqual([0, 100, 200, 250]);
-    expect(records.filter((r) => r.kind === "snapshot").map((r) => (r.payload as { reason: string }).reason)).toEqual(["start", "end"]);
+    expect(ops("checkpoint").map((r) => (r.payload as { tick: number }).tick)).toEqual([0, 100, 200]);
+    expect(records.filter((r) => r.kind === "snapshot").map((r) => (r.payload as { reason: string }).reason)).toEqual(["start"]);
     expect(ops("pose").length).toBeGreaterThan(100);
     // The Log's stream carries none of the pose samples.
     expect(h.events().some((r) => (r.payload as { op?: string } | undefined)?.op === "pose")).toBe(false);
@@ -143,6 +143,61 @@ describe("sim host: snapshots, checkpoints, poses and belief frames (ADR-0035 ad
     await flush();
     expect(h.toStorage).toEqual([]);
     expect(h.trace().all().some((r) => r.kind === "snapshot" || (r.payload as { op?: string } | undefined)?.op === "checkpoint" || (r.payload as { op?: string } | undefined)?.op === "pose")).toBe(false);
+  });
+});
+
+describe("sim host: what is stored does not depend on when the researcher paused or stepped (ADR-0035 addition of 2026-10-17, item 8)", () => {
+  /** The same run to tick 100, stopped at the ticks in `stops` (a pause, a manual step), recorded under a profile with periodic snapshots. */
+  async function recordedWith(stops: readonly number[]) {
+    const profile = JSON.parse(JSON.stringify(RECORDING_PRESETS["default-research"])) as (typeof RECORDING_PRESETS)["default-research"];
+    const h = harness();
+    init(h);
+    h.send({ type: "recorderPort", port: h.port });
+    h.send(discovery({ mode: "stored", profile: { ...profile, checkpoints: { everyTicks: 25, snapshotEveryS: 5 } } }));
+    h.fromStorage({ type: "header", runId: "run-000007" });
+    h.send({ type: "command", op: "explore", agentId: "ugv-001" });
+    let at = 0;
+    for (const stop of [...stops, 100]) {
+      h.send({ type: "control", op: "step", count: stop - at });
+      await flush();
+      at = stop;
+      h.send({ type: "control", op: "pause" });
+    }
+    const written = h.toStorage.map((m) => (m.type === "batch" ? { type: "batch", records: (m.batch as RecorderBatch).records } : m));
+    const records = h.batches().flatMap((b) => b.records).map((r) => JSON.stringify([r.seq, r.id, r.simTime, r.kind, r.source, r.agentId, r.detail, r.worldRef, r.payload]));
+    const items = written
+      .filter((m) => m.type === "snapshot" || m.type === "frames")
+      .map((m) => {
+        const x = m as unknown as { type: string; bytes?: Uint8Array; blobs: { id: string; bytes: Uint8Array }[]; frames?: unknown[]; tick?: number; seq?: number };
+        return JSON.stringify([x.type, x.tick, x.seq, x.bytes ? snapshotHash(x.bytes) : null, x.blobs.map((b) => b.id), x.frames]);
+      });
+    return { records, items };
+  }
+
+  it("stores the same records (seqs, kinds, payloads), snapshots and belief frames however the run was paused and stepped", async () => {
+    const straight = await recordedWith([]);
+    const choppy = await recordedWith([1, 7, 30, 31, 64]);
+    expect(straight.records.length).toBeGreaterThan(100);
+    expect(choppy.records).toEqual(straight.records);
+    expect(straight.items.length).toBeGreaterThan(2);
+    expect(choppy.items).toEqual(straight.items);
+  });
+
+  it("takes no snapshot at a pause or at the end of a step, and one when another run replaces the run", async () => {
+    const h = harness();
+    init(h);
+    h.send({ type: "recorderPort", port: h.port });
+    h.send(demo(stored()));
+    h.fromStorage({ type: "header", runId: "run-000007" });
+    h.send({ type: "control", op: "step", count: 30 });
+    await flush();
+    h.send({ type: "control", op: "pause" });
+    const snapshots = () => h.toStorage.filter((m) => m.type === "snapshot").length;
+    expect(snapshots()).toBe(1); // the start snapshot only
+    h.send(demo(stored(), "run-000008")); // another run replaces it
+    expect(snapshots()).toBe(2); // the old run's end snapshot, at tick 30
+    const records = h.batches().flatMap((b) => b.records).filter((r) => r.kind === "snapshot").map((r) => (r.payload as { reason: string; tick: number }));
+    expect(records.map((r) => [r.reason, r.tick])).toEqual([["start", 0], ["end", 30]]);
   });
 });
 

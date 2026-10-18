@@ -1,5 +1,5 @@
 import { MainToSim, SIM_PROTOCOL_VERSION, validate, type SimToMain } from "@agentsim/core";
-import { f1DemoRunConfig, f1DemoScenario } from "@agentsim/scenarios";
+import { F2_DISCOVERY_ID, f1DemoRunConfig, f1DemoScenario, f2DiscoveryScenario, f2RunConfig } from "@agentsim/scenarios";
 import { RECORDING_PRESETS, type RecorderBatch, type TraceRecord } from "@agentsim/trace";
 import { runSimHost, type SimHostOptions, type SimClock, type SimScope } from "./sim-host.ts";
 
@@ -61,6 +61,15 @@ export const demo = (recording?: unknown, runId = "run-000007") => ({
   scenario: f1DemoScenario(),
   scenarioVersion: 1,
   runConfig: f1DemoRunConfig(1),
+  ...(recording === undefined ? {} : { recording }),
+});
+/** The F2 discovery scenario (unknown maps, agents that explore): belief maps to record. */
+export const discovery = (recording?: unknown, runId = "run-000007") => ({
+  type: "load",
+  runId,
+  scenario: f2DiscoveryScenario(),
+  scenarioVersion: 1,
+  runConfig: f2RunConfig(F2_DISCOVERY_ID, 1),
   ...(recording === undefined ? {} : { recording }),
 });
 export const stored = (name: keyof typeof RECORDING_PRESETS = "default-research") => ({ mode: "stored", profile: RECORDING_PRESETS[name] });

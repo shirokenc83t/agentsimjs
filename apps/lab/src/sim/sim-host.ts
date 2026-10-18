@@ -339,12 +339,16 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   function pause() {
     running = false;
     clock.clearTimer(timer);
-    stopRecording();
+    recorder?.collect(world.tick, world.simTimeS); // what the recorder holds goes out; a pause is not the end of the run
     postStats();
   }
 
-  /** The run stops (a pause, the end of a step, another run replacing it): its end snapshot, and what the recorder holds goes out. */
-  function stopRecording(): void {
+  /**
+   * The run ends because another run replaces it: its end snapshot (ADR-0035 addition of 2026-10-17, item 8: start, every S, and the end:
+   * completion, stop, or replacement). A pause or the end of a manual step is not one: what is stored must not depend on when the
+   * researcher clicked.
+   */
+  function endRecording(): void {
     recording?.end();
     recorder?.collect(world.tick, world.simTimeS);
   }
@@ -428,7 +432,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
         syncRecordingState();
       }
     }
-    stopRecording();
+    recorder?.collect(world.tick, world.simTimeS);
     syncRecordingState();
     postState(true);
     postStats();
@@ -497,7 +501,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     }
     scope.postMessage({ type: "prepared", runId: m.runId, ...prepared.value, ms: Math.max(0, clock.now() - t0) });
     if (running) pause();
-    stopRecording();
+    endRecording();
     dropSandbox();
     world = r.value;
     // The recorder of a recorded run sits next to the run's trace; it waits for the header before it sends. Runs that are opted out or not

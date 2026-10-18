@@ -85,7 +85,7 @@ export class RunRecording {
     this.poseCursor = this.trace.nextSeq;
   }
 
-  /** The run stops (a pause, a step ends, another run replaces it): a snapshot, unless the run is where the last one was taken. */
+  /** The run ends (another run replaces it): a snapshot, unless the run is where the last one was taken. */
   end(): void {
     if (this.tick === this.lastSnapshotTick) return;
     const draft: FramesDraft = { frames: [], blobs: [] };
