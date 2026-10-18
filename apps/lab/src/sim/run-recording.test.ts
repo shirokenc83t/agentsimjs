@@ -105,8 +105,13 @@ describe("belief keyframes and deltas", () => {
     expect(mine.filter((f) => f.kind === "keyframe").map((f) => f.tick)).toEqual([0, 40, 80, 120].filter((x) => x <= 120));
     for (const f of mine.filter((x) => x.kind === "delta")) {
       expect(f.chunks.length).toBeGreaterThan(0);
+      // The chunks a frame names are each once and ascending: the storage port refuses anything else.
+      expect(f.chunks).toEqual([...new Set(f.chunks)].sort((x, y) => x - y));
       expect(f.data?.length).toBeGreaterThan(0);
-      expect((decodeValue(f.data ?? new Uint8Array()) as { chunks: { index: number }[] }).chunks.map((c) => c.index)).toEqual(f.chunks.filter((c) => (decodeValue(f.data ?? new Uint8Array()) as { chunks: { index: number }[] }).chunks.some((x) => x.index === c)));
+      // A delta holds the cells that changed, not the chunks they lie in: a handful of bytes per cell, far under one chunk.
+      const cells = (decodeValue(f.data ?? new Uint8Array()) as { cells: Int32Array }).cells;
+      expect(cells.length).toBeGreaterThan(0);
+      expect(f.data?.length ?? 0).toBeLessThan(cells.length * 12 + 200);
     }
     // seq is the agent's own counter, from 0, with ticks never going back.
     expect(mine.map((f) => f.seq)).toEqual(mine.map((_, i) => i));

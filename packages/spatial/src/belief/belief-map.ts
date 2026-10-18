@@ -52,6 +52,17 @@ export interface BeliefMapSnapshot {
 }
 
 /**
+ * The cells that changed between two sync points, with the values they have now (a belief delta of a recording, ADR-0035 addition of
+ * 2026-10-18): cell indices `j · sizeX + i` ascending, their log-odds, and the height bounds of those that lie in a chunk that has them.
+ */
+export interface BeliefCellDelta {
+  readonly cells: Int32Array;
+  readonly logOdds: Int8Array;
+  /** Positions in `cells` that carry height bounds, and the bounds (dm): present when any changed cell lies in a chunk with heights. */
+  readonly heights?: { readonly at: Int32Array; readonly knownMinDm: Uint16Array; readonly knownMaxDm: Uint16Array };
+}
+
+/**
  * An agent's belief occupancy map (ADR-0012 belief map; heights from the ADR-0012 addition of 2026-10-09):
  * per cell, log-odds occupancy (int8, clamped at ±100, 0 = never observed) and an interval [knownMin, knownMax]
  * for an obstacle's top, in dm (a lower bound floored, an upper bound ceiled, so both stay conservative).
@@ -71,6 +82,8 @@ export class BeliefMap {
   private logLength = 0;
   private logFirst = 1;
   private materialized = 0;
+  /** Cells changed since the last `takeCellDelta`, while a recording tracks them (undefined: not tracking, no cost). */
+  private cellLog: Set<number> | undefined;
   /** Chunk version each cached content hash was taken at (−1: never). */
   private readonly hashedAt: Float64Array;
   /** Cached xxHash32 of each chunk's log-odds, knownMin and knownMax arrays. */
@@ -214,6 +227,97 @@ export class BeliefMap {
       if (this.chunks[c.index] === undefined) this.materialized++;
       this.chunks[c.index] = { logOdds: c.logOdds.slice(), knownMinDm: c.knownMinDm?.slice(), knownMaxDm: c.knownMaxDm?.slice() };
       this.chunkVersion[c.index] = this.versionCounter;
+    }
+  }
+
+  /** From now on, the cells that change are remembered until `takeCellDelta` (the recording's belief deltas). Off by default: nothing is kept and nothing costs. */
+  trackCellChanges(): void {
+    this.cellLog ??= new Set<number>();
+  }
+
+  /**
+   * The cells that changed since the last call, with the values they have now, and the chunks they lie in (ascending); undefined when none
+   * changed or when changes are not tracked. A keyframe taken at this point covers the changes, so it also calls this to forget them.
+   */
+  takeCellDelta(): { readonly delta: BeliefCellDelta; readonly chunks: number[] } | undefined {
+    const log = this.cellLog;
+    if (!log || log.size === 0) return undefined;
+    const cells = Int32Array.from(log).sort();
+    log.clear();
+    const logOdds = new Int8Array(cells.length);
+    const at: number[] = [];
+    const inChunks = new Set<number>();
+    for (let k = 0; k < cells.length; k++) {
+      const cell = cells[k] as number;
+      const i = cell % this.sizeX;
+      const j = (cell - i) / this.sizeX;
+      const ci = this.chunkIndex(i, j);
+      inChunks.add(ci);
+      const c = this.chunks[ci];
+      if (!c) continue; // a touched cell always has its chunk
+      const o = this.offset(i, j);
+      logOdds[k] = c.logOdds[o] ?? 0;
+      if (c.knownMinDm && c.knownMaxDm) at.push(k);
+    }
+    const chunks = [...inChunks].sort((a, b) => a - b); // cells are in row-major order, so their chunks are not
+    if (at.length === 0) return { delta: { cells, logOdds }, chunks };
+    const knownMinDm = new Uint16Array(at.length);
+    const knownMaxDm = new Uint16Array(at.length);
+    at.forEach((k, n) => {
+      const cell = cells[k] as number;
+      const i = cell % this.sizeX;
+      const c = this.chunks[this.chunkIndex(i, (cell - i) / this.sizeX)];
+      const o = this.offset(i, (cell - i) / this.sizeX);
+      knownMinDm[n] = c?.knownMinDm?.[o] ?? 0;
+      knownMaxDm[n] = c?.knownMaxDm?.[o] ?? HEIGHT_UNKNOWN;
+    });
+    return { delta: { cells, logOdds, heights: { at: Int32Array.from(at), knownMinDm, knownMaxDm } }, chunks };
+  }
+
+  /**
+   * Sets the cells of a delta to the values it holds, in place (a replay rebuilds a map from a keyframe and the deltas after it). A chunk
+   * that was never observed is made with log-odds 0 everywhere, and one that gains height bounds gets them at their starting values (0 and
+   * unknown) for the cells the delta does not name, which is what the live map had. Everything is checked before anything changes; the changed chunks
+   * are stamped as changed; the planning change log is not touched (a rebuilt map is read by overlays, never planned on).
+   */
+  applyCellDelta(d: BeliefCellDelta): void {
+    const n = d.cells.length;
+    if (d.logOdds.length !== n) throw new RangeError("a cell delta's cells and log-odds must have the same length");
+    const total = this.sizeX * this.sizeY;
+    for (let k = 0; k < n; k++) {
+      const cell = d.cells[k] as number;
+      if (cell < 0 || cell >= total) throw new RangeError(`cell ${cell} is out of range`);
+    }
+    const h = d.heights;
+    if (h) {
+      if (h.knownMinDm.length !== h.at.length || h.knownMaxDm.length !== h.at.length) throw new RangeError("a cell delta's heights must have the same length");
+      for (const p of h.at) if (p < 0 || p >= n) throw new RangeError(`a cell delta's heights name position ${p} of ${n} cells`);
+    }
+    if (n === 0) return;
+    this.versionCounter++;
+    for (let k = 0; k < n; k++) {
+      const cell = d.cells[k] as number;
+      const i = cell % this.sizeX;
+      const j = (cell - i) / this.sizeX;
+      const c = this.materialize(i, j) as Chunk;
+      c.logOdds[this.offset(i, j)] = d.logOdds[k] as number;
+      this.chunkVersion[this.chunkIndex(i, j)] = this.versionCounter;
+    }
+    if (h) {
+      for (let m = 0; m < h.at.length; m++) {
+        const cell = d.cells[h.at[m] as number] as number;
+        const i = cell % this.sizeX;
+        const j = (cell - i) / this.sizeX;
+        const c = this.materialize(i, j) as Chunk;
+        if (!c.knownMinDm || !c.knownMaxDm) {
+          const cells = this.chunkSize * this.chunkSize;
+          c.knownMinDm = new Uint16Array(cells);
+          c.knownMaxDm = new Uint16Array(cells).fill(HEIGHT_UNKNOWN);
+        }
+        const o = this.offset(i, j);
+        c.knownMinDm[o] = h.knownMinDm[m] as number;
+        c.knownMaxDm[o] = h.knownMaxDm[m] as number;
+      }
     }
   }
 
@@ -415,6 +519,7 @@ export class BeliefMap {
   private touch(i: number, j: number): void {
     this.versionCounter++;
     this.chunkVersion[this.chunkIndex(i, j)] = this.versionCounter;
+    this.cellLog?.add(j * this.sizeX + i);
   }
 
   private addLogOdds(i: number, j: number, delta: number): boolean {

@@ -306,6 +306,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     sizeX: r("geometry"),
     sizeY: r("geometry"),
     chunkSize: r("geometry"),
+    cellLog: s("the recording's tracking of cells changed since its last belief delta: observation only; a restored run's recording starts its own"),
     chunks: c("materialized chunks: log-odds Int8 and height bounds Uint16, a content-addressed section per map"),
     chunkVersion: c("change stamp of each chunk: planners and views compare against it"),
     versionCounter: c(""),

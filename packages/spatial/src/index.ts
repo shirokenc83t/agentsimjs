@@ -18,7 +18,7 @@ export { cameraSees, newCameraScratch, type CameraView, type CameraScratch } fro
 export { periodUs, sensorPhaseUs, readsAtTick } from "./sensing/schedule.ts";
 export type { PlanningGrid } from "./grid/planning-grid.ts";
 export { BeliefGrid, missionOf, type MissionData } from "./belief/belief-grid.ts";
-export { BeliefMap, LOGODDS_CLAMP, BELIEF_THRESHOLD, BELIEF_UNKNOWN, BELIEF_FREE, BELIEF_OCCUPIED, type BeliefState, type BeliefMapSnapshot } from "./belief/belief-map.ts";
+export { BeliefMap, LOGODDS_CLAMP, BELIEF_THRESHOLD, BELIEF_UNKNOWN, BELIEF_FREE, BELIEF_OCCUPIED, type BeliefState, type BeliefMapSnapshot, type BeliefCellDelta } from "./belief/belief-map.ts";
 export {
   AgentTopology,
   DEFAULT_TOPOLOGY,

@@ -196,4 +196,103 @@ describe("BeliefMap snapshot and restore (F3a M1)", () => {
     expect(() => m.applyChunks([{ index: 1, logOdds: new Int8Array(3), knownMinDm: undefined, knownMaxDm: undefined }])).toThrow(/wrong size/);
     expect(hashOf(m)).toBe(h);
   });
+
+  describe("cell deltas (the recording's belief deltas, ADR-0035 addition of 2026-10-18)", () => {
+    it("apply to a copy of an older state to give the newer state exactly, at every step, through the codec (seeded workloads, heights, chunks first made by a delta)", () => {
+      for (const seed of [1, 2, 3, 4]) {
+        const r = Rng.fromSeed(seed);
+        const live = new BeliefMap(96, 80, 16);
+        live.trackCellChanges();
+        observe(live, r, 200 * seed);
+        live.takeCellDelta(); // the keyframe covers everything so far
+        const replay = new BeliefMap(96, 80, 16);
+        replay.restore(roundTrip(live.snapshot()));
+        let deltas = 0;
+        for (let step = 0; step < 25; step++) {
+          observe(live, r, 5 + ((step * 7) % 40));
+          const d = live.takeCellDelta();
+          if (!d) {
+            expect(hashOf(replay), `seed ${seed} step ${step} (nothing changed)`).toBe(hashOf(live));
+            continue;
+          }
+          deltas++;
+          replay.applyCellDelta(decodeValue(encodeValue(d.delta)) as typeof d.delta);
+          expect(hashOf(replay), `seed ${seed} after delta ${step}`).toBe(hashOf(live));
+        }
+        expect(deltas).toBeGreaterThan(10);
+        expect(replay.materializedChunks).toBe(live.materializedChunks);
+      }
+    });
+
+    it("hold only the cells that changed: far fewer bytes than the chunks they are in", () => {
+      const m = new BeliefMap(256, 256, 64);
+      for (let i = 0; i < 256; i += 3) for (let j = 0; j < 256; j += 3) m.observeHit(i, j, 1, 50);
+      m.trackCellChanges();
+      m.takeCellDelta();
+      m.observeHit(10, 10, 2, 10); // a few cells in two chunks
+      m.observeFree(11, 10, 5);
+      m.observeContact(130, 70, 1);
+      const d = m.takeCellDelta();
+      expect(d?.chunks).toEqual([0, 6]);
+      expect(d?.delta.cells.length).toBe(3);
+      expect(encodeValue(d?.delta).length).toBeLessThan(200);
+      expect(encodeValue({ chunks: m.chunksSnapshot(d?.chunks ?? []) }).length).toBeGreaterThan(30_000);
+    });
+
+    it("name the chunks they lie in once each and in ascending order, whatever the row-major order of the cells", () => {
+      const m = new BeliefMap(256, 256, 64);
+      m.trackCellChanges();
+      m.observeHit(200, 10, 1, 50); // chunk 3 comes first in cell order (row 10)...
+      m.observeHit(10, 20, 1, 50); // ...then chunk 0 (row 20)
+      m.observeHit(201, 10, 1, 50); // a second cell of chunk 3
+      m.observeHit(130, 70, 1, 50); // chunk 6
+      const d = m.takeCellDelta();
+      expect(d?.chunks).toEqual([0, 3, 6]);
+      expect(d?.delta.cells.length).toBe(4);
+    });
+
+    it("report nothing when tracking is off or nothing changed, and forget what a keyframe covers", () => {
+      const m = new BeliefMap(64, 64, 16);
+      m.observeHit(3, 3, 1, 50);
+      expect(m.takeCellDelta()).toBeUndefined(); // not tracking: no cost, no delta
+      m.trackCellChanges();
+      expect(m.takeCellDelta()).toBeUndefined();
+      m.observeHit(4, 4, 1, 50);
+      expect(m.takeCellDelta()?.delta.cells).toEqual(Int32Array.from([4 * 64 + 4]));
+      expect(m.takeCellDelta()).toBeUndefined(); // taken
+      m.observeFree(40, 40, 3);
+      m.takeCellDelta(); // a keyframe at this point covers the change
+      expect(m.takeCellDelta()).toBeUndefined();
+      // A change that leaves nothing different (already at the clamp) is no delta.
+      for (let k = 0; k < 30; k++) m.observeHit(5, 5, 1, 50);
+      m.takeCellDelta();
+      m.observeHit(5, 5, 1, 50);
+      expect(m.takeCellDelta()).toBeUndefined();
+    });
+
+    it("carry the height bounds of the cells that have them, and a chunk that gains heights through a delta is rebuilt whole and exactly", () => {
+      const live = new BeliefMap(64, 64, 16);
+      live.observeFree(3, 3, 5); // chunk 0 has log-odds only
+      const replay = new BeliefMap(64, 64, 16);
+      replay.restore(live.snapshot());
+      live.trackCellChanges();
+      live.observeHit(4, 3, 2.5, 50); // the first occupied evidence: chunk 0 gains its height arrays
+      live.observeUnder(5, 3, 6, 50);
+      const d = live.takeCellDelta();
+      expect(d?.delta.heights?.at.length).toBeGreaterThan(0);
+      replay.applyCellDelta(decodeValue(encodeValue(d?.delta)) as NonNullable<typeof d>["delta"]);
+      expect(hashOf(replay)).toBe(hashOf(live));
+      expect(view(replay).materialized).toBe(view(live).materialized);
+    });
+
+    it("refuse a cell out of range, arrays that do not agree, and leave the map as it was", () => {
+      const m = new BeliefMap(64, 64, 16);
+      m.observeHit(3, 3, 1, 50);
+      const h = hashOf(m);
+      expect(() => m.applyCellDelta({ cells: Int32Array.from([64 * 64]), logOdds: Int8Array.from([1]) })).toThrow(/out of range/);
+      expect(() => m.applyCellDelta({ cells: Int32Array.from([1, 2]), logOdds: Int8Array.from([1]) })).toThrow(/same length/);
+      expect(() => m.applyCellDelta({ cells: Int32Array.from([1]), logOdds: Int8Array.from([1]), heights: { at: Int32Array.from([3]), knownMinDm: Uint16Array.from([1]), knownMaxDm: Uint16Array.from([1]) } })).toThrow(/heights/);
+      expect(hashOf(m)).toBe(h);
+    });
+  });
 });

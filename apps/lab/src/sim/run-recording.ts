@@ -37,7 +37,6 @@ export class RunRecording {
   private readonly sentBlobs = new Set<string>();
   private lastSnapshotTick = -1;
   private lastKeyframeTick = -1;
-  private readonly lastBeliefVersion = new Map<string, number>();
   private readonly frameSeq = new Map<string, number>();
   private readonly nextPoseDueS = new Map<string, number>();
   private poseCursor = 0;
@@ -162,7 +161,8 @@ export class RunRecording {
   private addKeyframe(draft: FramesDraft, agentId: string, blobId: string): void {
     const belief = this.run.sensing.belief(agentId);
     draft.frames.push({ agentId, seq: this.nextSeq(agentId), tick: this.tick, simTime: this.run.world.simTimeS, kind: "keyframe", chunks: belief.materializedIndices(), blobId });
-    this.lastBeliefVersion.set(agentId, belief.version);
+    belief.trackCellChanges();
+    belief.takeCellDelta(); // the keyframe covers every change so far: the deltas start from here
   }
 
   /** A keyframe every K seconds, deltas (the chunks changed since the last frame) at every other sync point. */
@@ -185,16 +185,12 @@ export class RunRecording {
     this.deltas(draft);
   }
 
+  /** At a sync point where a map changed: the cells that changed, with their values now (not the chunks they lie in). */
   private deltas(draft: FramesDraft): void {
     for (const a of this.beliefAgents()) {
-      const belief = this.run.sensing.belief(a.id);
-      const since = this.lastBeliefVersion.get(a.id) ?? 0;
-      if (belief.version === since) continue;
-      const changed = belief.chunksChangedSince(since);
-      this.lastBeliefVersion.set(a.id, belief.version);
-      if (changed.length === 0) continue;
-      const data = encodeValue({ chunks: belief.chunksSnapshot(changed) });
-      draft.frames.push({ agentId: a.id, seq: this.nextSeq(a.id), tick: this.tick, simTime: this.run.world.simTimeS, kind: "delta", chunks: changed, data });
+      const taken = this.run.sensing.belief(a.id).takeCellDelta();
+      if (!taken) continue;
+      draft.frames.push({ agentId: a.id, seq: this.nextSeq(a.id), tick: this.tick, simTime: this.run.world.simTimeS, kind: "delta", chunks: taken.chunks, data: encodeValue(taken.delta) });
     }
   }
 
