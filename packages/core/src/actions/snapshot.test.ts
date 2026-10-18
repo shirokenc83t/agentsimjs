@@ -230,7 +230,9 @@ describe("action runtime snapshot and restore: behaviours (F3a M1)", () => {
     expect(e.inner?.kind).toBe("goTo");
     expect(e.target).toBeDefined();
     expect(restored.info(b.agent.id)).toMatchObject({ status: "succeeded", result: { reason: "frontier_exhausted", groupsVisited: 2 } });
-  });
+    // This one runs the explore to its end three times over (up to 3,000 ticks each: the uninterrupted run, the continued run, the restored one),
+    // and took 5,049 ms on a shared CI runner against the default 5,000 ms: the check is the same, the time it may take is not 5 s.
+  }, 30_000);
 
   it("explore with unreachable groups: the strikes against each frontier cell and the cells skipped", () => {
     const make = () =>
