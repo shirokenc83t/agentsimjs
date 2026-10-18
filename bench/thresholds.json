@@ -111,6 +111,18 @@
       "report": true,
       "$comment": "recording status in the status line (loaded when a run exists) and the recording choice store (F3a M2); the choice controls ride in the run popover chunk"
     },
+    "bundle.lazy.timeline.gzip": {
+      "report": true,
+      "$comment": "the Debug workspace's Timeline panel with its marks and jump hooks (F3a M3)"
+    },
+    "bundle.lazy.eventList.gzip": {
+      "report": true,
+      "$comment": "the Debug workspace's event list panel (F3a M3)"
+    },
+    "bundle.lazy.replay.gzip": {
+      "report": true,
+      "$comment": "the replay session: its host, the replay bar and the replay run source (F3a M3); the replay module of the storage worker is its own chunk of that worker"
+    },
     "bundle.lazy.sharedMui.gzip": {
       "report": true,
       "$comment": "MUI controls shared by the lazy panels (TextField, ToggleButtonGroup, Popover, FormControlLabel)"
@@ -226,6 +238,33 @@
       "ciStat": "median",
       "ciMax": 1,
       "$comment": "ADR-0035 target for metrics, ADR-0005 addition (M2d4; 2026-10-11): the observer's own work per tick (sampling plus recount, timed directly, zero on ticks when no agent is due) for 20 exploring agents; <= 0.5 ms p95 locally, CI median at 2x. Measured: mean 0.017 ms, p95 0.020 ms, max 1.7 ms (first samples, 77 of 380 ticks do any work)."
+    },
+    "recording.addedPerTick": {
+      "stat": "p95",
+      "max": 1,
+      "ciStat": "median",
+      "ciMax": 2,
+      "$comment": "ADR-0013 addition of 2026-10-18, the recorder budget: what recording adds to a tick at the 20-agent reference (the recording's hook plus its share of the poll that hands batches over, default profile), <= 1 ms p95 locally, CI median at 2x. Measured (F3a close): mean 0.22 ms, median 0.20 ms, p95 0.33 ms"
+    },
+    "render.scrub10min": {
+      "report": true,
+      "required": false,
+      "$comment": "F3a M3, acceptance 3: frame work while the cursor is dragged over a 10-minute recording with the belief overlay on (budget p95 <= 4 ms locally); produced by AGENTSIM_BENCH_SCRUB=1. Measured: p95 0.50 ms"
+    },
+    "render.scrub10min.firstOverlay": {
+      "report": true,
+      "required": false,
+      "$comment": "F3a M3: from a moved cursor to the first updated belief overlay on a 10-minute recording (budget <= 200 ms); produced by AGENTSIM_BENCH_SCRUB=1. Measured: median 37 ms, p95 54 ms"
+    },
+    "render.scrub1km": {
+      "report": true,
+      "required": false,
+      "$comment": "F3a M3: the same frame work on a recording of the 1 km2 world; produced by AGENTSIM_BENCH_SCRUB=1. Measured: p95 0.70 ms"
+    },
+    "render.scrub1km.firstOverlay": {
+      "report": true,
+      "required": false,
+      "$comment": "F3a M3: the same first overlay on the 1 km2 world; produced by AGENTSIM_BENCH_SCRUB=1. Measured: median 20 ms, p95 26 ms"
     },
     "sim.tick20AgentsExploringObserved": {
       "report": true
