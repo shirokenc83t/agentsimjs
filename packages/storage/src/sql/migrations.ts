@@ -7,6 +7,7 @@ import idealAgents0006 from "../../schema/0006_ideal_agents.sql?raw";
 import recording0007 from "../../schema/0007_recording.sql?raw";
 import deletedRuns0008 from "../../schema/0008_deleted_runs.sql?raw";
 import traceAgentKindSeq0009 from "../../schema/0009_trace_agent_kind_seq.sql?raw";
+import importedFrom0010 from "../../schema/0010_imported_from.sql?raw";
 import type { SqlDriver } from "./driver.ts";
 
 export interface Migration {
@@ -26,6 +27,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 7, name: "0007_recording", sql: recording0007 },
   { version: 8, name: "0008_deleted_runs", sql: deletedRuns0008 },
   { version: 9, name: "0009_trace_agent_kind_seq", sql: traceAgentKindSeq0009 },
+  { version: 10, name: "0010_imported_from", sql: importedFrom0010 },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.length;

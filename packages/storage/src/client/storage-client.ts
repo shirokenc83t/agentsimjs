@@ -1,6 +1,7 @@
 import type { CodedError, Result } from "@agentsim/core";
 import type { StoragePorts } from "../ports.ts";
 import type { ReplayClient } from "../replay.ts";
+import type { RunFileErrorCode } from "../run-bundle.ts";
 import {
   STORAGE_PROTOCOL_VERSION,
   type StorageInfo,
@@ -24,6 +25,13 @@ export interface StorageAdmin {
   exportDb(): Promise<Uint8Array>;
   exportRun(runId: string): Promise<Result<Uint8Array, CodedError<"unknown_run">>>;
   importDb(bytes: Uint8Array): Promise<Result<void, CodedError<ImportErrorCode>>>;
+  /** One run as a JSON-lines file: a versioned header line, then its records, snapshots, blobs and belief frames (ADR-0035 addition of 2026-10-17, item 11). */
+  exportRunJsonl(runId: string): Promise<Result<Uint8Array, CodedError<"unknown_run" | "broken_recording">>>;
+  /**
+   * Adds the run of a file (JSON lines, or a per-run `.sqlite`) to the database as a new run, under a fresh run ID, keeping its original in `importedFrom`.
+   * The files are validated like a database import is; nothing is replaced.
+   */
+  importRun(bytes: Uint8Array): Promise<Result<{ readonly runId: string; readonly importedFrom: string }, CodedError<ImportErrorCode | RunFileErrorCode>>>;
   /**
    * Gives the space deleted runs left behind back to the browser (VACUUM), unless a run is being recorded (it would hold the recorder's
    * writes for seconds): `skipped` says so. Also done when storage starts.
@@ -183,6 +191,11 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
     info: () => call("admin.info"),
     exportDb: () => call("admin.exportDb"),
     exportRun: (runId) => call("admin.exportRun", [runId]),
+    exportRunJsonl: (runId) => call("admin.exportRunJsonl", [runId]),
+    importRun: (bytes) => {
+      const copy = bytes.slice();
+      return call("admin.importRun", [copy], [copy.buffer]);
+    },
     compact: () => call("admin.compact"),
     importDb: (bytes) => {
       // Copy so the caller keeps its buffer; the copy is transferred (no structured clone).

@@ -33,6 +33,7 @@ export function StorageBrowser(props: StorageBrowserProps) {
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const runFileInput = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     const [r, i] = await Promise.all([client.ports.runs.list(), client.admin.info()]);
@@ -89,6 +90,22 @@ export function StorageBrowser(props: StorageBrowserProps) {
       return `exported ${formatBytes(bytes.byteLength)}`;
     });
 
+  const exportJsonl = (runId: string) =>
+    act(async () => {
+      const r = await client.admin.exportRunJsonl(runId);
+      if (!r.ok) throw new Error(r.error.message);
+      download(r.value, `${runId}.agentsim.jsonl`);
+      return `exported ${runId} as ${formatBytes(r.value.byteLength)} of JSON lines`;
+    });
+
+  /** A run file (JSON lines or a per-run .sqlite) is ADDED as a new run; the database is not replaced. */
+  const importRunFile = (file: File) =>
+    act(async () => {
+      const r = await client.admin.importRun(new Uint8Array(await file.arrayBuffer()));
+      if (!r.ok) throw new Error(`run file rejected (${r.error.code}): ${r.error.message}`);
+      return `added ${file.name} as ${r.value.runId} (it was ${r.value.importedFrom})`;
+    });
+
   const exportOne = (runId: string) =>
     act(async () => {
       const r = await client.admin.exportRun(runId);
@@ -143,6 +160,21 @@ export function StorageBrowser(props: StorageBrowserProps) {
         <button className="btn" disabled={busy} onClick={() => fileInput.current?.click()} data-testid="import-db">
           ⭱ Import .sqlite
         </button>
+        <button className="btn" disabled={busy} onClick={() => runFileInput.current?.click()} data-testid="import-run" title="Add the run of a .jsonl or per-run .sqlite file as a new run">
+          ⭱ Import run
+        </button>
+        <input
+          ref={runFileInput}
+          type="file"
+          accept=".jsonl,.sqlite,.sqlite3,.db,application/jsonl,application/x-ndjson"
+          hidden
+          data-testid="import-run-file"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) void importRunFile(f);
+          }}
+        />
         <input
           ref={fileInput}
           type="file"
@@ -201,6 +233,9 @@ export function StorageBrowser(props: StorageBrowserProps) {
                 )}
                 <button className="btn" disabled={busy} onClick={() => exportOne(r.runId)} aria-label={`Export ${r.runId}`}>
                   ⭳
+                </button>
+                <button className="btn" disabled={busy} onClick={() => exportJsonl(r.runId)} aria-label={`Export ${r.runId} as JSON lines`} title="Export as a JSON-lines file" data-testid={`export-jsonl-${r.runId}`}>
+                  ⭳ jsonl
                 </button>
                 <button
                   className="btn"

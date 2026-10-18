@@ -40,7 +40,7 @@ type RunRow = {
   scenario: string | null; seed: number | null; status: string; record_count?: number;
   scenario_id: string | null; scenario_version: number | null; run_config: string | null;
   run_config_hash: string | null; effective_config_hash: string | null; simulator_version: string | null;
-  ideal_agents: string | null; recording: string | null; recording_profile: string | null; recording_profile_hash: string | null;
+  ideal_agents: string | null; recording: string | null; recording_profile: string | null; recording_profile_hash: string | null; imported_from: string | null;
 };
 
 const opt = <K extends string, V>(key: K, v: V | null | undefined): { [P in K]?: V } =>
@@ -69,6 +69,7 @@ function rowToRun(r: RunRow): RunHeader {
     ...opt("recording", r.recording as "stored" | "none" | null),
     ...opt("recordingProfile", r.recording_profile === null ? null : (JSON.parse(r.recording_profile) as unknown)),
     ...opt("recordingProfileHash", r.recording_profile_hash),
+    ...opt("importedFrom", r.imported_from),
   };
 }
 
@@ -200,14 +201,15 @@ class SqlRunStore implements RunStore {
     this.db.run(
       `INSERT INTO runs (run_id, schema_version, created_at_wall_ms, label, scenario, seed, status,
                          scenario_id, scenario_version, run_config, run_config_hash, effective_config_hash, simulator_version, ideal_agents,
-                         recording, recording_profile, recording_profile_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                         recording, recording_profile, recording_profile_hash, imported_from)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         header.runId, header.schemaVersion, header.createdAtWallMs, header.label, header.scenario ?? null, header.seed ?? null, header.status,
         header.scenarioId ?? null, header.scenarioVersion ?? null, header.runConfig === undefined ? null : JSON.stringify(header.runConfig),
         header.runConfigHash ?? null, header.effectiveConfigHash ?? null, header.simulatorVersion ?? null,
         header.idealAgents === undefined ? null : JSON.stringify(header.idealAgents),
         header.recording ?? null, header.recordingProfile === undefined ? null : JSON.stringify(header.recordingProfile), header.recordingProfileHash ?? null,
+        header.importedFrom ?? null,
       ],
     );
     return ok(undefined);

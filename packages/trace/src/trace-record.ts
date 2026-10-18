@@ -99,6 +99,8 @@ export const RunHeader = Type.Object({
   /** The resolved recording profile the run used and its hash (8 hex digits), next to `runConfigHash`; only on a `stored` run. */
   recordingProfile: Type.Optional(Type.Unknown()),
   recordingProfileHash: Type.Optional(Type.String({ pattern: "^[0-9a-f]{8}$" })),
+  /** A run that was imported (ADR-0035 addition of 2026-10-17, item 11) keeps the ID it had where it was recorded; its own ID is a fresh one. */
+  importedFrom: Type.Optional(Type.String({ pattern: "^run-[0-9]{6}$" })),
 });
 export type RunHeader = Static<typeof RunHeader>;
 

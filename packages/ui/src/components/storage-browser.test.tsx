@@ -16,6 +16,8 @@ function setup(adminOverrides: Partial<StorageAdmin> = {}, props: { currentRunId
     exportDb: vi.fn(async () => new Uint8Array([1, 2, 3])),
     exportRun: vi.fn(async () => ({ ok: true as const, value: new Uint8Array([4]) })),
     importDb: vi.fn(async () => ({ ok: true as const, value: undefined })),
+    exportRunJsonl: vi.fn(async () => ({ ok: true as const, value: new Uint8Array([6, 7]) })),
+    importRun: vi.fn(async () => ({ ok: true as const, value: { runId: "run-000005", importedFrom: "run-000001" } })),
     requestPersistence: vi.fn(async () => true),
     close: vi.fn(async () => {}),
     compact: vi.fn(async () => ({ freedBytes: 0, skipped: false })),
@@ -115,5 +117,23 @@ describe("StorageBrowser", () => {
     setup({ compact: failing });
     await waitFor(() => expect(screen.getAllByTestId("storage-mode").length).toBe(2)); // the second browser lists its runs although compaction failed
     expect(failing).toHaveBeenCalled();
+  });
+
+  it("exports a run as JSON lines, and adds a run file as a new run (nothing is replaced)", async () => {
+    const { admin, download } = setup();
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    await userEvent.click(await screen.findByTestId("export-jsonl-run-000001"));
+    await waitFor(() => expect(download).toHaveBeenCalledWith(new Uint8Array([6, 7]), "run-000001.agentsim.jsonl"));
+    const file = new File([new Uint8Array([1, 2, 3])], "a-run.agentsim.jsonl");
+    await userEvent.upload(screen.getByTestId("import-run-file"), file);
+    await waitFor(() => expect(admin.importRun).toHaveBeenCalled());
+    expect(await screen.findByTestId("storage-message")).toHaveTextContent("added a-run.agentsim.jsonl as run-000005 (it was run-000001)");
+    expect(admin.importDb).not.toHaveBeenCalled();
+  });
+
+  it("says why a run file was rejected", async () => {
+    setup({ importRun: vi.fn(async () => ({ ok: false as const, error: { code: "broken_recording" as const, message: "snapshot refers to a missing section" } })) });
+    await userEvent.upload(await screen.findByTestId("import-run-file"), new File([new Uint8Array([1])], "bad.jsonl"));
+    expect(await screen.findByTestId("storage-message")).toHaveTextContent("run file rejected (broken_recording): snapshot refers to a missing section");
   });
 });

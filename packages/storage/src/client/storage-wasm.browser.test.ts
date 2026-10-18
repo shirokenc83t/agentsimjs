@@ -61,6 +61,44 @@ describe("storage worker (browser)", () => {
     expect(missing).toMatchObject({ ok: false, error: { code: "unknown_run" } });
   });
 
+  it("adds the run of a JSON-lines file or of a per-run .sqlite file as a new run: the database is not replaced, IDs are fresh, importedFrom keeps the original", async () => {
+    const profile = RECORDING_PRESETS["default-research"];
+    const recorded = { ...header("run-000001"), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) };
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    await c.ports.runs.create(recorded);
+    await c.ports.trace.append([rec("run-000001", 0), rec("run-000001", 1)]);
+    const external = new Map<string, Uint8Array>();
+    const w = new SnapshotWriter({ external: (h, b) => external.set(h, b) });
+    const group = w.section({ index: 0, chunks: [{ index: 0, logOdds: Int8Array.from([1, 2, 3]) }] });
+    const manifest = w.section({ format: BELIEF_MANIFEST_FORMAT_STORED, groupChunks: 8, meta: {}, groups: [{ index: 0, hash: group.hash }] });
+    const blobs = [...external].map(([id, bytes]) => ({ id, bytes }));
+    await c.ports.snapshots.write("run-000001", { seq: 1, simTime: 1, tick: 1, bytes: w.finish({ tick: 1, map: manifest }), blobs });
+    await c.ports.beliefFrames.append("run-000001", [{ agentId: "uav-001", seq: 0, tick: 1, simTime: 1, kind: "keyframe", chunks: [0], blobId: manifest.hash }]);
+    // JSON lines.
+    const jsonl = await c.admin.exportRunJsonl("run-000001");
+    if (!jsonl.ok) throw new Error(jsonl.error.message);
+    expect(new TextDecoder().decode(jsonl.value.subarray(0, 60))).toContain("agentsim-run-jsonl");
+    const a = await c.admin.importRun(jsonl.value);
+    expect(a).toEqual({ ok: true, value: { runId: "run-000002", importedFrom: "run-000001" } });
+    // A per-run SQLite file.
+    const sqlite = await c.admin.exportRun("run-000001");
+    if (!sqlite.ok) throw new Error(sqlite.error.message);
+    const b = await c.admin.importRun(sqlite.value);
+    expect(b).toEqual({ ok: true, value: { runId: "run-000003", importedFrom: "run-000001" } });
+    expect((await c.ports.runs.list()).map((r) => r.runId)).toEqual(["run-000001", "run-000002", "run-000003"]);
+    for (const id of ["run-000002", "run-000003"]) {
+      expect(await c.ports.trace.count(id)).toBe(2);
+      expect((await c.ports.snapshots.getBlob(id, manifest.hash))?.bytes).toEqual(blobs.find((x) => x.id === manifest.hash)?.bytes);
+      expect((await c.ports.beliefFrames.query({ runId: id, limit: 10 })).length).toBe(1);
+      expect((await c.ports.runs.get(id))?.importedFrom).toBe("run-000001");
+    }
+    // What is not a run file is refused, and nothing was added.
+    expect(await c.admin.importRun(new TextEncoder().encode("hello"))).toMatchObject({ ok: false, error: { code: "not_run_file" } });
+    expect(await c.admin.importRun(new Uint8Array(200).fill(7))).toMatchObject({ ok: false });
+    expect((await c.ports.runs.list()).length).toBe(3);
+  });
+
   it("persists data across close and reopen", async () => {
     const a = spawn({ resetOnOpen: true });
     await a.ready();

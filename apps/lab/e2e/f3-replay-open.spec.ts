@@ -1,42 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, openWorkspace, step } from "./helpers.ts";
+import { countSimMessages, loadDemo, openWorkspace, setReplayCursor as setCursor, simMessages, step } from "./helpers.ts";
 
 // F3a M3 (T-022): a recorded run is opened in the panels from the Storage browser and read from storage alone. The sim worker receives no `load`,
 // `step`, `control` or `command` message during the session; the pose, battery and path of an agent at the cursor are what the live run had at that time.
 
 const FORBIDDEN = ["load", "control", "command", "buildPreset", "strategyTest", "step"];
-
-async function countSimMessages(page: Page) {
-  await page.addInitScript(() => {
-    const W = window.Worker;
-    const log: string[] = [];
-    (window as unknown as { __simMsgs: string[] }).__simMsgs = log;
-    const Patched = function (this: Worker, url: string | URL, opts?: WorkerOptions) {
-      const w = new W(url, opts);
-      if (opts?.name === "sim") {
-        const post = w.postMessage.bind(w) as (m: unknown, t?: unknown) => void;
-        w.postMessage = ((m: { type?: string }, t?: unknown) => {
-          log.push(m?.type ?? "?");
-          post(m, t);
-        }) as Worker["postMessage"];
-      }
-      return w;
-    } as unknown as typeof Worker;
-    Patched.prototype = W.prototype;
-    window.Worker = Patched;
-  });
-}
-
-const simMessages = (page: Page) => page.evaluate(() => (window as unknown as { __simMsgs: string[] }).__simMsgs.slice());
-
-async function setCursor(page: Page, seconds: number) {
-  await page.getByTestId("replay-cursor").evaluate((el, v) => {
-    const input = el as HTMLInputElement;
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, String(v));
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  }, seconds);
-  await expect(page.getByTestId("replay-time")).toContainText(`${seconds.toFixed(1)} s /`);
-}
 
 async function stateOf(page: Page, agent: string): Promise<string> {
   await page.getByTestId(`explorer-row-${agent}`).click();

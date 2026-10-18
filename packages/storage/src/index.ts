@@ -56,3 +56,4 @@ export { recorderAppend, reportCommit, type RecorderAppend } from "./worker/reco
 export { poseWindowQuery, type PoseWindow } from "./replay-queries.ts";
 export type { ReplayView, ReplayBelief, ReplayWorld, ReplayError, ReplayErrorCode, ReplayHandlers, ReplayClient, StorageExtensions } from "./replay.ts";
 export { BELIEF_MANIFEST_FORMAT_STORED } from "./sql/recording-integrity.ts";
+export { bundleFromJsonl, bundleProblem, bundleToJsonl, exportRunJsonl, importRunJsonl, readRunBundle, writeRunBundle, RUN_JSONL_FORMAT, RUN_JSONL_VERSION, MAX_RUN_FILE_BYTES, type RunBundle, type RunFileError, type RunFileErrorCode } from "./run-bundle.ts";

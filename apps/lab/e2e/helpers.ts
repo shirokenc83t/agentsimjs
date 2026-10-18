@@ -155,3 +155,37 @@ export async function openPanelTab(page: Page, title: string) {
   await page.getByRole("tab", { name: title, exact: true }).click();
   await expect(page.getByRole("tab", { name: title, exact: true })).toHaveAttribute("aria-selected", "true");
 }
+
+/** Counts what the main thread posts to the sim worker (`window.__simMsgs`): install before the page loads. */
+export async function countSimMessages(page: Page) {
+  await page.addInitScript(() => {
+    const W = window.Worker;
+    const log: string[] = [];
+    (window as unknown as { __simMsgs: string[] }).__simMsgs = log;
+    const Patched = function (this: Worker, url: string | URL, opts?: WorkerOptions) {
+      const w = new W(url, opts);
+      if (opts?.name === "sim") {
+        const post = w.postMessage.bind(w) as (m: unknown, t?: unknown) => void;
+        w.postMessage = ((m: { type?: string }, t?: unknown) => {
+          log.push(m?.type ?? "?");
+          post(m, t);
+        }) as Worker["postMessage"];
+      }
+      return w;
+    } as unknown as typeof Worker;
+    Patched.prototype = W.prototype;
+    window.Worker = Patched;
+  });
+}
+
+export const simMessages = (page: Page) => page.evaluate(() => (window as unknown as { __simMsgs: string[] }).__simMsgs.slice());
+
+export async function setReplayCursor(page: Page, seconds: number) {
+  await page.getByTestId("replay-cursor").evaluate((el, v) => {
+    const input = el as HTMLInputElement;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, String(v));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }, seconds);
+  await expect(page.getByTestId("replay-time")).toContainText(`${seconds.toFixed(1)} s /`);
+}
+

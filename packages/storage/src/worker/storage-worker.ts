@@ -1,4 +1,4 @@
-import type { CodedError, Result } from "@agentsim/core";
+import { err, type CodedError, type Result } from "@agentsim/core";
 import type { RecorderItem, RunHeader, RunStatus, TraceRecord } from "@agentsim/trace";
 import type { Database, SAHPoolUtil, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { openWasmSqlDriver, SecondConnectionError } from "../drivers/wasm-sql-driver.ts";
@@ -6,6 +6,7 @@ import type { BeliefFrame, BeliefFrameQuery, CachedResponse, SnapshotWrite, Stor
 import type { ReplayHandlers, ReplayView, StorageExtensions } from "../replay.ts";
 import type { SqlDriver } from "../sql/driver.ts";
 import { LATEST_SCHEMA_VERSION, migrate } from "../sql/migrations.ts";
+import { exportRunJsonl, importRunJsonl, readRunBundle, writeRunBundle, type RunFileErrorCode } from "../run-bundle.ts";
 import { createSqlPorts } from "../sql/sql-storage.ts";
 import { loadSqlite } from "./load-sqlite.ts";
 import type { StorageMessageChecks } from "./message-checks.ts";
@@ -20,7 +21,7 @@ import {
 import { QuotaGuard, MEMORY_FALLBACK_LIMIT_BYTES, type QuotaMeasure } from "./quota.ts";
 import { recorderAppend, recorderSide, reportCommit, type RecorderAppend, type RecorderSide } from "./recorder-ingest.ts";
 import type { QuotaMessage, RecorderPortLike, RecorderPortMessage, RecorderToStorage } from "./recorder-protocol.ts";
-import { deserializeToMemory, exportRun, validateImport } from "./transfer.ts";
+import { deserializeToMemory, exportRun, validateImport, type ImportErrorCode } from "./transfer.ts";
 
 /** The subset of a DedicatedWorkerGlobalScope the storage worker needs (keeps it testable). */
 export interface WorkerScope {
@@ -189,6 +190,34 @@ class Engine {
 
   exportRun(runId: string) {
     return exportRun(this.sqlite3, this.driver, runId);
+  }
+
+  /** A run as a JSON-lines file (ADR-0035 addition of 2026-10-17, item 11). */
+  exportRunJsonl(runId: string) {
+    return exportRunJsonl(this.ports, runId);
+  }
+
+  /**
+   * Adds the run of a file to the database as a new run: a JSON-lines run file, or a per-run SQLite file (validated as a database import is, then read
+   * through the ports of an in-memory copy). Written in one transaction on the worker's queue: the recorder's batches wait for it.
+   */
+  async importRun(bytes: Uint8Array): Promise<Result<{ readonly runId: string; readonly importedFrom: string }, CodedError<ImportErrorCode | RunFileErrorCode>>> {
+    if (bytes.byteLength >= 16 && new TextDecoder().decode(bytes.subarray(0, 16)) === "SQLite format 3\u0000") {
+      const v = validateImport(this.sqlite3, bytes);
+      if (!v.ok) return v;
+      const mem = deserializeToMemory(this.sqlite3, bytes);
+      try {
+        const source = createSqlPorts(mem.driver, now);
+        const runs = await source.runs.list();
+        if (runs.length !== 1) return err({ code: "not_run_file", message: `the file holds ${runs.length} runs: a run file holds one (a whole database is imported with "Import .sqlite")` });
+        const bundle = await readRunBundle(source, (runs[0] as { runId: string }).runId);
+        if (!bundle.ok) return bundle;
+        return await this.batch(() => writeRunBundle(this.ports, bundle.value));
+      } finally {
+        mem.driver.close();
+      }
+    }
+    return await this.batch(() => importRunJsonl(this.ports, bytes));
   }
 
   async importDb(bytes: Uint8Array) {
@@ -534,6 +563,17 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
           const r = e.exportRun(String(a));
           value = r;
           if (r.ok) transfer = [r.value.buffer];
+          break;
+        }
+        case "admin.exportRunJsonl": {
+          const r = await e.exportRunJsonl(String(a));
+          value = r;
+          if (r.ok) transfer = [r.value.buffer as ArrayBuffer];
+          break;
+        }
+        case "admin.importRun": {
+          if (!(a instanceof Uint8Array)) return fail(req.id, "invalid_args", "expected Uint8Array");
+          value = await e.importRun(a);
           break;
         }
         case "admin.importDb": {
