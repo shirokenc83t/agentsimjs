@@ -18,6 +18,9 @@ async function replayOf(ports: StoragePorts, runId: string, cursorS: number): Pr
 
 const strip = (s: string, id: string) => s.split(id).join("run-X");
 
+// Each test records a run and imports it again: about 2 s here, more on a shared runner (the project's timeout is raised for the same reason; stated here too).
+const SLOW = 60_000;
+
 describe("a recorded run exported and imported replays as the same run", () => {
   it("through a JSON-lines file: the records, the poses at sampled ticks, the checkpoints and the belief maps are the same", async () => {
     const { ports, t } = await recorded(120);
@@ -66,7 +69,7 @@ describe("a recorded run exported and imported replays as the same run", () => {
     const w1 = await replayOver(ports).world("run-000001");
     const w2 = await replayOver(ports).world("run-000002");
     expect(w1.ok && w2.ok && w2.value.data.length === w1.value.data.length).toBe(true);
-  });
+  }, SLOW);
 
   it("a bundle written to another database and read back is the bundle that was written (what a per-run SQLite file goes through)", async () => {
     const { ports } = await recorded(60);
@@ -82,7 +85,7 @@ describe("a recorded run exported and imported replays as the same run", () => {
     expect(back.value.snapshots).toEqual(bundle.value.snapshots);
     expect(back.value.records.length).toBe(bundle.value.records.length);
     expect(back.value.header.importedFrom).toBe("run-000001");
-  });
+  }, SLOW);
 
   it("an imported run whose header says it was running is not treated as being recorded: it can be deleted, and it is read as a recording (no sim head, no gap)", async () => {
     const { ports } = await recorded(40);
@@ -100,5 +103,5 @@ describe("a recorded run exported and imported replays as the same run", () => {
     // The storage worker refuses to delete only the run its own recorder writes to; this is not that run.
     expect((await other.runs.delete(written.value.runId)).ok).toBe(true);
     expect(await other.runs.get(written.value.runId)).toBeUndefined();
-  });
+  }, SLOW);
 });
