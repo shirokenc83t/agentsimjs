@@ -1,4 +1,5 @@
 import type { CodedError, Result } from "@agentsim/core";
+import type { PersistedHead } from "@agentsim/trace";
 import type { StoragePorts } from "../ports.ts";
 import {
   STORAGE_PROTOCOL_VERSION,
@@ -8,6 +9,7 @@ import {
   type StorageResponse,
   type StorageStatus,
 } from "../worker/protocol.ts";
+import type { PersistedHeadMessage, RecorderPortMessage } from "../worker/recorder-protocol.ts";
 import type { ImportErrorCode } from "../worker/transfer.ts";
 
 /** Errors surfaced by the client when the worker reports an infrastructure failure. */
@@ -38,6 +40,13 @@ export interface StorageClient {
   ready(): Promise<Extract<StorageStatus, { state: "ready" }>>;
   /** Test-only probe of the one-connection invariant. */
   probeSecondConnection(): Promise<string>;
+  /**
+   * Hands the storage worker its end of the recorder channel (the main thread created it with the sim worker's end: trace records never
+   * travel through here). The port is transferred.
+   */
+  attachRecorderPort(port: MessagePort): void;
+  /** The persisted head of a recorded run, after each flush the storage worker reports (the status line, the timeline). */
+  onPersisted(listener: (head: PersistedHead) => void): () => void;
 }
 
 export interface StorageClientOptions {
@@ -60,9 +69,14 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
   const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   let current: StorageStatus = { type: "status", state: "loading" };
   const listeners = new Set<(s: StorageStatus) => void>();
+  const persistedListeners = new Set<(h: PersistedHead) => void>();
 
-  worker.addEventListener("message", (ev: MessageEvent<StorageResponse | StorageStatus>) => {
+  worker.addEventListener("message", (ev: MessageEvent<StorageResponse | StorageStatus | PersistedHeadMessage>) => {
     const m = ev.data;
+    if (m.type === "persisted") {
+      for (const l of persistedListeners) l(m.head);
+      return;
+    }
     if (m.type === "status") {
       current = m;
       for (const l of listeners) l(m);
@@ -196,5 +210,13 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       });
     },
     probeSecondConnection: () => call("test.openSecondConnection"),
+    attachRecorderPort(port) {
+      const m: RecorderPortMessage = { type: "recorderPort", port };
+      worker.postMessage(m, [port]);
+    },
+    onPersisted(l) {
+      persistedListeners.add(l);
+      return () => persistedListeners.delete(l);
+    },
   };
 }

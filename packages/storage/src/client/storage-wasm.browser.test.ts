@@ -143,6 +143,54 @@ describe("storage worker (browser)", () => {
     expect((await d.ports.snapshots.getBlob("run-000001", kf.id))?.bytes).toEqual(kf.bytes);
   });
 
+  it("takes recorder batches over a direct port: header first, records stored, the persisted head reported to both ends", async () => {
+    const profile = RECORDING_PRESETS["default-research"];
+    const recorded = { ...header("run-000001"), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) };
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    const channel = new MessageChannel();
+    const simEnd = channel.port1;
+    const fromStorage: { type: string; head?: { tick: number; throughSeq: number } }[] = [];
+    simEnd.onmessage = (ev) => fromStorage.push(ev.data as (typeof fromStorage)[number]);
+    const mainSaw: { tick: number; throughSeq: number }[] = [];
+    c.onPersisted((h) => mainSaw.push({ tick: h.tick, throughSeq: h.throughSeq }));
+    c.attachRecorderPort(channel.port2);
+    const until = async (cond: () => boolean) => {
+      for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
+      expect(cond()).toBe(true);
+    };
+    // The run header is stored by the main thread's client; the storage worker tells the recorder.
+    expect((await c.ports.runs.create(recorded)).ok).toBe(true);
+    await until(() => fromStorage.some((m) => m.type === "header"));
+    simEnd.postMessage({ type: "batch", batch: { runId: "run-000001", records: [rec("run-000001", 0), rec("run-000001", 1)], throughSeq: 1, tick: 1, simTimeS: 0.1 } });
+    simEnd.postMessage({ type: "batch", batch: { runId: "run-000001", records: [rec("run-000001", 2)], throughSeq: 3, tick: 2, simTimeS: 0.2 } });
+    await until(() => fromStorage.some((m) => m.type === "persisted" && m.head?.tick === 2) && mainSaw.some((h) => h.tick === 2));
+    expect((await c.ports.trace.query({ runId: "run-000001", limit: 10 })).map((r) => r.seq)).toEqual([0, 1, 2]);
+    const heads = fromStorage.filter((m) => m.type === "persisted").map((m) => m.head?.tick);
+    expect(heads.at(-1)).toBe(2);
+    expect(heads).toEqual([...heads].sort((a, b) => (a ?? 0) - (b ?? 0))); // heads never go back
+    expect(mainSaw.at(-1)).toEqual({ tick: 2, throughSeq: 3 });
+    // A batch the store refuses (a seq already stored) is reported to the recorder, not lost silently, and moves no head.
+    simEnd.postMessage({ type: "batch", batch: { runId: "run-000001", records: [rec("run-000001", 2)], throughSeq: 2, tick: 3, simTimeS: 0.3 } });
+    await until(() => fromStorage.some((m) => m.type === "rejected"));
+    expect(fromStorage.filter((m) => m.type === "persisted").at(-1)?.head?.tick).toBe(2);
+    simEnd.close();
+  });
+
+  it("does not tell a recorder about a run header that is not recorded", async () => {
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    const channel = new MessageChannel();
+    const got: string[] = [];
+    channel.port1.onmessage = (ev) => got.push((ev.data as { type: string }).type);
+    c.attachRecorderPort(channel.port2);
+    expect((await c.ports.runs.create({ ...header("run-000001"), recording: "none" as const })).ok).toBe(true);
+    await c.ports.runs.get("run-000001");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(got).toEqual([]);
+    channel.port1.close();
+  });
+
   it("rejects bad imports with stable codes and leaves the database untouched", async () => {
     const c = spawn({ resetOnOpen: true });
     await c.ready();

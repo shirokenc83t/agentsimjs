@@ -1,3 +1,4 @@
+import type { CodedError, Result } from "@agentsim/core";
 import type { RunHeader, RunStatus, TraceRecord } from "@agentsim/trace";
 import type { Database, SAHPoolUtil, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { openWasmSqlDriver, SecondConnectionError } from "../drivers/wasm-sql-driver.ts";
@@ -15,6 +16,8 @@ import {
   type StorageResponse,
   type StorageStatus,
 } from "./protocol.ts";
+import { recorderAppend, reportCommit, type RecorderAppend } from "./recorder-ingest.ts";
+import type { RecorderPortLike, RecorderPortMessage, RecorderToStorage } from "./recorder-protocol.ts";
 import { deserializeToMemory, exportRun, validateImport } from "./transfer.ts";
 
 /** The subset of a DedicatedWorkerGlobalScope the storage worker needs (keeps it testable). */
@@ -170,7 +173,9 @@ class Engine {
 export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChecks): void {
   let engine: Engine | undefined;
   let release: (() => void) | undefined;
-  const queue: StorageRequest[] = [];
+  const queue: (StorageRequest | RecorderAppend)[] = [];
+  /** The direct channel to the sim worker's recorder (ADR-0019 addition of 2026-10-17): batches in, header and persisted head out. */
+  let recorderPort: RecorderPortLike | undefined;
   let pendingAppendRecords = 0;
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
   let flushDue = false;
@@ -181,14 +186,18 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
 
   const status = (s: StorageStatus) => scope.postMessage(s);
   const respond = (r: StorageResponse, transfer?: Transferable[]) => scope.postMessage(r, transfer);
-  const fail = (id: number, code: string, message: string) => respond({ type: "response", id, ok: false, error: { code, message } });
+  // Id 0 is a recorder batch: nobody is waiting for a response to it (the recorder is told through its port).
+  const fail = (id: number, code: string, message: string) => (id === 0 ? undefined : respond({ type: "response", id, ok: false, error: { code, message } }));
 
   /** Rejects every queued request: nothing may hang or be dropped silently (ADR-0004). */
   function failQueued(): void {
     if (!terminal) return;
     clearTimeout(flushTimer);
     flushTimer = undefined;
-    for (const req of queue.splice(0)) fail(req.id, terminal.code, terminal.message);
+    for (const req of queue.splice(0)) {
+      fail(req.id, terminal.code, terminal.message);
+      if ("recorder" in req) recorderPort?.postMessage({ type: "rejected", runId: req.recorder.runId, code: terminal.code, message: terminal.message });
+    }
     pendingAppendRecords = 0;
   }
 
@@ -264,26 +273,39 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
     }
   }
 
-  function appendSize(r: StorageRequest): number {
+  function appendSize(r: StorageRequest | RecorderAppend): number {
     return r.op === "trace.append" && Array.isArray(r.args[0]) ? r.args[0].length : 0;
   }
 
-  function commitAppends(batch: StorageRequest[]): void {
+  function commitAppends(batch: (StorageRequest | RecorderAppend)[]): void {
     const e = engine;
     if (!e) return;
     const results: { id: number; out: Promise<unknown> }[] = [];
+    const recorded: { batch: RecorderAppend["recorder"]; out: Promise<Result<void, CodedError>> }[] = [];
     try {
       e.batch(() => {
-        for (const req of batch) results.push({ id: req.id, out: e.storage.trace.append(req.args[0] as TraceRecord[]) });
+        for (const req of batch) {
+          const out = e.storage.trace.append(req.args[0] as TraceRecord[]);
+          if ("recorder" in req) recorded.push({ batch: req.recorder, out });
+          else results.push({ id: req.id, out });
+        }
       });
     } catch (err) {
-      for (const req of batch) fail(req.id, "storage_error", err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      for (const req of batch) {
+        fail(req.id, "storage_error", message);
+        if ("recorder" in req) recorderPort?.postMessage({ type: "rejected", runId: req.recorder.runId, code: "storage_error", message });
+      }
       return;
     }
     for (const r of results) void r.out.then((value) => respond({ type: "response", id: r.id, ok: true, value }));
+    if (recorded.length > 0) {
+      // The transaction committed; the head is reported once every append has answered (they are synchronous underneath).
+      void Promise.all(recorded.map(async (x) => ({ batch: x.batch, result: await x.out }))).then((items) => reportCommit(items, recorderPort, (m) => scope.postMessage(m)));
+    }
   }
 
-  async function handle(req: StorageRequest): Promise<void> {
+  async function handle(req: StorageRequest | RecorderAppend): Promise<void> {
     const e = engine;
     if (!e) return fail(req.id, "not_ready", "storage not ready");
     const [a, b] = req.args;
@@ -296,7 +318,14 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "trace.query": value = await s.trace.query(a as { runId: string; limit: number }); break;
         case "trace.count": value = await s.trace.count(String(a)); break;
         case "runs.allocateRunId": value = await s.runs.allocateRunId(); break;
-        case "runs.create": value = await s.runs.create(a as RunHeader); break;
+        case "runs.create": {
+          const header = a as RunHeader;
+          const created = await s.runs.create(header);
+          value = created;
+          // Header first: the recorder of a recorded run waits for this before it sends its first batch.
+          if (created.ok && header.recording === "stored") recorderPort?.postMessage({ type: "header", runId: header.runId });
+          break;
+        }
         case "runs.get": value = await s.runs.get(String(a)); break;
         case "runs.list": value = await s.runs.list(); break;
         case "runs.setStatus": value = await s.runs.setStatus(String(a), b as RunStatus); break;
@@ -360,8 +389,22 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
     }
   }
 
+  function attachRecorder(m: RecorderPortMessage): void {
+    const port = m.port as unknown as RecorderPortLike;
+    recorderPort = port;
+    port.addEventListener("message", (ev) => {
+      const msg = ev.data as RecorderToStorage | undefined;
+      if (msg?.type !== "batch" || terminal) return;
+      queue.push(recorderAppend(msg.batch));
+      pendingAppendRecords += msg.batch.records.length;
+      void drain();
+    });
+    port.start?.();
+  }
+
   scope.addEventListener("message", (ev) => {
     const msg = ev.data as { type?: unknown };
+    if (msg?.type === "recorderPort") return attachRecorder(msg as RecorderPortMessage);
     if (msg?.type === "init") {
       const init = checks ? checks.init(msg) : ({ ok: true, value: msg as StorageInit } as const);
       if (!init.ok) return status({ type: "status", state: "failed", error: init.error.message });
