@@ -48,7 +48,13 @@ export type RunConfigError = CodedError<RunConfigErrorCode> & { readonly path?: 
 
 /** Precedence levels, lowest first (ADR-0028); `runtime` = a world-scope change during the run. */
 export type ConfigLevel = "builtin" | "scenario" | "default" | "byKind" | "byAgent" | "runtime";
-export type PlanningField = "algorithm" | "onboardComputeExpansionsPerTick" | "totalBudget" | "costProfile";
+export type PlanningField = "algorithm" | "onboardComputeExpansionsPerTick" | "totalBudget" | "costProfile" | "radiusM" | "windowMarginM";
+
+/**
+ * Built-in exploration scope (ADR-0040): the radius of an iteration of `explore` per vehicle kind, and the margin of its search windows.
+ * Placeholders until the measurements of F2c M1 fix them.
+ */
+export const EXPLORE_BUILTIN = { radiusM: { uav: 80, ugv: 40 }, windowMarginM: 10 } as const;
 
 /**
  * A planning strategy as resolved for an agent (ADR-0037 §4): what it does (id, version, tree) and its content hash.
@@ -77,6 +83,10 @@ export interface EffectiveAgentConfig {
     readonly onboardComputeExpansionsPerTick: number;
     readonly totalBudget: number;
     readonly costProfile: CostProfile;
+    /** Radius of an iteration of `explore`, metres (ADR-0040). */
+    readonly radiusM: number;
+    /** Margin of the search windows of `explore`, metres (ADR-0040). */
+    readonly windowMarginM: number;
   };
   /** Which level supplied each planning field (Inspector, ADR-0028). */
   readonly planningSources: Readonly<Record<PlanningField, ConfigLevel>>;
@@ -200,7 +210,7 @@ export function toPlanningConfig(a: EffectiveAgentConfig): PlanningConfig {
   };
 }
 
-const FIELDS: readonly PlanningField[] = ["algorithm", "onboardComputeExpansionsPerTick", "totalBudget", "costProfile"];
+const FIELDS: readonly PlanningField[] = ["algorithm", "onboardComputeExpansionsPerTick", "totalBudget", "costProfile", "radiusM", "windowMarginM"];
 
 /**
  * Applies `entry` over `base` field by field, recording `level` as the source of each field it sets. `algorithm` and
@@ -322,13 +332,15 @@ export function resolveRunConfig(
     // Drive overrides (ADR-0033), same precedence as planning: default → byKind → byAgent, over the scenario body.
     const drive = { ...doc.drive?.default, ...doc.drive?.byKind?.ugv, ...(a.key === undefined ? {} : doc.drive?.byAgent?.[a.key]) };
     const body = a.kind === "uav" ? resolveBody("uav", a.body, bodies) : resolveBody("ugv", a.body, bodies, drive);
-    const sources: Record<PlanningField, ConfigLevel> = { algorithm: "builtin", onboardComputeExpansionsPerTick: "builtin", totalBudget: "builtin", costProfile: "builtin" };
+    const sources: Record<PlanningField, ConfigLevel> = { algorithm: "builtin", onboardComputeExpansionsPerTick: "builtin", totalBudget: "builtin", costProfile: "builtin", radiusM: "builtin", windowMarginM: "builtin" };
     let planning: EffectiveAgentConfig["planning"] = {
       algorithm: fromPlanningAlgorithm(builtin.algorithm),
       // The body's built-in compute is the built-in level for this field (ADR-0024 clarification).
       onboardComputeExpansionsPerTick: bodies[a.kind].onboardComputeExpansionsPerTick,
       totalBudget: builtin.totalBudget,
       costProfile: builtin.costProfile ?? DEFAULT_COST_PROFILE,
+      radiusM: EXPLORE_BUILTIN.radiusM[a.kind],
+      windowMarginM: EXPLORE_BUILTIN.windowMarginM,
     };
     const scenarioCompute = a.body.onboardComputeExpansionsPerTick;
     const apply = (entry: PlanningEntry | undefined, level: ConfigLevel) => {

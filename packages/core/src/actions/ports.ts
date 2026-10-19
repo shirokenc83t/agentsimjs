@@ -11,6 +11,16 @@ export interface PlanQuery {
   readonly to: { readonly x: number; readonly y: number };
   /** UAV only: altitude the path is planned at. */
   readonly cruiseAltitudeM?: number;
+  /** A search window (ADR-0040): the planner never expands outside this rectangle (metres; `x1`, `y1` exclusive), so a query that cannot be answered ends after its cells. */
+  readonly window?: PlanWindow;
+}
+
+/** A rectangle of the map in metres: `x0 <= x < x1`, `y0 <= y < y1`. */
+export interface PlanWindow {
+  readonly x0: number;
+  readonly y0: number;
+  readonly x1: number;
+  readonly y1: number;
 }
 
 /**
@@ -21,6 +31,8 @@ export interface PlanMap {
   readonly version: number;
   /** Distance from (x, y) to the nearest cell this vehicle cannot occupy on this map (or its edge), capped at `maxM`. */
   clearanceM(x: number, y: number, maxM: number): number;
+  /** Whether the planner can place the vehicle at (x, y) on this map: the planning view's passability, inflation included. False outside the map. */
+  passableAt(x: number, y: number): boolean;
 }
 
 export interface PlanResult {
@@ -84,6 +96,8 @@ export interface PlannerPort {
    * than its agent knows, and the physical outcome comes later, when it happens.
    */
   knownSpace(agentId: string): KnownSpace;
+  /** The agent's exploration scope (ADR-0040): the radius of an iteration and the margin its search windows add, from its planning configuration. */
+  exploreParams(agentId: string): { readonly radiusM: number; readonly windowMarginM: number };
 }
 
 /** What an agent's own map says about a point (see `PlannerPort.knownSpace`); zones and limits are mission data. */
@@ -107,6 +121,8 @@ export interface FrontierCandidate {
   readonly point: number;
   readonly xM: number;
   readonly yM: number;
+  /** Marked unreachable for the current iteration only (ADR-0040): not a target until an iteration ends or the map changes around it. */
+  readonly temporary: boolean;
 }
 
 /**
@@ -119,10 +135,12 @@ export interface FrontierPort {
   hasRegion(agentId: string, region: string): boolean;
   /** Region rectangle in metres, or undefined for an unknown region. */
   regionRect(agentId: string, region: string): { readonly x0: number; readonly y0: number; readonly x1: number; readonly y1: number } | undefined;
-  /** Unmarked frontier groups, in a stable order (regions by index, groups by lowest cell). */
+  /** Frontier groups not marked unreachable, in a stable order (regions by index, groups by lowest cell); the temporarily marked ones are flagged. */
   candidates(agentId: string): readonly FrontierCandidate[];
-  /** Groups currently marked unreachable. */
+  /** Groups currently marked unreachable (permanent marks). */
   markedCount(agentId: string): number;
+  /** Centre of a grid cell (index `j · sizeX + i`) in metres. */
+  cellCentre(agentId: string, cell: number): { readonly xM: number; readonly yM: number };
   /** Whether the cell is still a frontier cell (known free, next to unknown). */
   isFrontier(agentId: string, cell: number): boolean;
   /** Whether the point is known (observed) on the agent's map: before its first reading, nothing is. */
@@ -134,6 +152,13 @@ export interface FrontierPort {
   regionHasReachableUnknown(agentId: string, region: string, xM: number, yM: number): boolean;
   /** Marks unreachable the frontier group holding the cell at (x, y), if any (traced); returns whether it did. */
   markAt(agentId: string, xM: number, yM: number, simTime: number): boolean;
+  /**
+   * Marks the group holding the cell at (x, y) unreachable for the current iteration (ADR-0040): it stays a candidate
+   * flagged `temporary`, and the mark clears when the map changes around it like a permanent one, or at `clearTemporary`.
+   */
+  markTemporaryAt(agentId: string, xM: number, yM: number, simTime: number): boolean;
+  /** Clears every temporary mark of the agent (an iteration ended, or the action did). */
+  clearTemporary(agentId: string, simTime: number): void;
 }
 
 /** Ground-truth spatial queries for one vehicle class (the runtime's physical checks, not the mind's view). */

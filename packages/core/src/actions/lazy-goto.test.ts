@@ -320,8 +320,8 @@ describe("stopping, preempting and the F2 rules", () => {
     }
   });
 
-  it("explore marks a frontier whose lazy plan turns out unreachable after the vehicle started, and skips one that runs out of budget", () => {
-    for (const [status, marks] of [["not_found", 1], ["budget_exceeded", 0]] as const) {
+  it("explore treats a lazy plan that turns out unreachable, or out of budget, after the vehicle started as unreachable for now, and for good at the third travel", () => {
+    for (const [status, marks] of [["not_found", 1], ["budget_exceeded", 1]] as const) {
       const a = makeUgv(10, 10);
       const e = env();
       const fr = e.frontiers(a);

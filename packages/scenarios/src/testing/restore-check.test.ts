@@ -97,13 +97,18 @@ describe("restore recipes cover what they claim (F3a M1)", () => {
     expect(f(160).outstanding).toBeGreaterThan(0);
   }, 120_000);
 
-  it("explore: unreachable marks and a belief change the planner has not seen, a query in flight, a back-off", async () => {
+  it("explore: inside an iteration, a belief change the planner has not seen, a query in flight, a back-off", async () => {
     const f = await at("explore-unknown-map");
-    expect(f(140).marks).toBeGreaterThan(0);
+    expect(f(140).explores.some((e) => e.iterating && e.mode === "iterate" && e.inner)).toBe(true);
     expect(f(140).queries.some((q) => q.pending && q.overlap), "a change through what the search read").toBe(true);
     expect(f(179).queries.some((q) => q.pending && !q.overlap), "a change away from what it read").toBe(true);
     expect(f(355).actions.some((a) => a.name === "explore" && a.phase === "planning")).toBe(true);
     expect(f(590).goTo.some((g) => g.backingOff)).toBe(true);
+  }, 120_000);
+
+  it("explore with a small radius: travelling to the next centre with a goTo in flight, and between iterations", async () => {
+    const f = await at("explore-small-radius");
+    for (const t of [3, 30, 120, 300]) expect(f(t).explores.some((e) => e.mode === "travel" && e.inner && !e.iterating), `tick ${t}`).toBe(true);
   }, 120_000);
 
   it("strategy: mid stage 1, then mid stage 2", async () => {
@@ -154,7 +159,7 @@ describe("restore recipes cover what they claim (F3a M1)", () => {
         expect(Math.max(...r.snapshotTicks)).toBeLessThan(r.endTick);
       }
     }
-    expect(SHORT_RECIPES.map((r) => r.name)).toHaveLength(8);
+    expect(SHORT_RECIPES.map((r) => r.name)).toHaveLength(9);
     expect(LONG_RECIPES.every((r) => r.endTick >= 1000)).toBe(true);
     expect(LONG_RECIPES.some((r) => r.name === "twenty-agents")).toBe(true);
   });

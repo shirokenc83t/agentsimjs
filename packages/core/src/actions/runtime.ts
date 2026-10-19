@@ -10,7 +10,7 @@ import type { AllowedAction, UnavailableAction } from "../world/mind-view.ts";
 import { err, ok, type CodedError, type Result } from "../result.ts";
 import { agentPosition, type SimAgent, type UavBodyParams } from "./agent.ts";
 import type { Pose, Reflex, ReflexTrigger } from "../reflexes/reflex.ts";
-import type { CapabilityPort, ContactPort, FrontierCandidate, FrontierPort, PlanLeg, PlanMap, PlannerPort, PlanProgress, PlanResult, ProximityPort, Scope, SpatialPort, TraceSink } from "./ports.ts";
+import type { CapabilityPort, ContactPort, FrontierCandidate, FrontierPort, PlanLeg, PlanMap, PlannerPort, PlanProgress, PlanResult, PlanWindow, ProximityPort, Scope, SpatialPort, TraceSink } from "./ports.ts";
 import { predictTracking, type PredriveOutcome } from "./predrive.ts";
 
 /** Action lifecycle (ROADMAP appendix): running → succeeded | failed(reason) | preempted. */
@@ -164,6 +164,8 @@ export interface GoToSnapshot {
   readonly legsPending: boolean;
   readonly holdStartS: number | undefined;
   readonly predictedEnd: PredriveOutcome["end"] | undefined;
+  /** The search window of every query of this goTo (an explore target's), absent for a plain goTo. */
+  readonly window: PlanWindow | undefined;
 }
 
 export interface ExploreSnapshot {
@@ -174,16 +176,26 @@ export interface ExploreSnapshot {
   /** The cruise altitude every goTo of this explore uses (a UAV's height when the action started): kept, not read from the agent again. */
   readonly cruise: number;
   readonly inner: GoToSnapshot | undefined;
+  /** The radius of an iteration and the margin of its windows, fixed when the action started (ADR-0040). */
+  readonly radiusM: number;
+  readonly marginM: number;
   readonly target: FrontierCandidate | undefined;
-  readonly markable: boolean;
+  /** What the current target is for: a group of the iteration, or the travel to the next centre. */
+  readonly mode: "iterate" | "travel";
+  /** The centre the current target's failure counts against. */
+  readonly originKey: string;
+  /** The search window of the current target's queries. */
+  readonly targetWindow: PlanWindow | undefined;
+  /** The iteration in progress, absent between iterations (while travelling to the next centre). */
+  readonly iteration: ExploreIteration | undefined;
+  /** Iterations begun so far. */
+  readonly iterations: number;
   readonly visited: number;
   readonly marked: number;
   readonly distanceM: number;
   readonly waitedS: number;
-  /** Strikes per frontier cell, ascending by cell. */
-  readonly strikes: readonly (readonly [number, number])[];
-  /** Frontier cells skipped for the rest of the action, ascending. */
-  readonly skipped: readonly number[];
+  /** What was learnt of the groups that could not be reached: their cells (ascending, one entry per distinct record), the centres they failed from and the travels that failed. */
+  readonly failures: readonly { readonly cells: readonly number[]; readonly centres: readonly string[]; readonly travels: number }[];
 }
 
 export type BehaviorSnapshot = HoldSnapshot | TakeoffSnapshot | LandSnapshot | GoToSnapshot | ExploreSnapshot;
@@ -542,7 +554,7 @@ export class ActionRuntime {
       case "land":
         return this.land(agent);
       case "explore":
-        return this.explore(agent, p["region"] as string | undefined, (p["strategy"] as "nearest" | "largest" | undefined) ?? "nearest");
+        return this.explore(agent, p["region"] as string | undefined, (p["strategy"] as "nearest" | "largest" | undefined) ?? "nearest", p["radiusM"] as number | undefined);
       default:
         return err({ code: "unknown_capability", message: `no behavior for ${name}` });
     }
@@ -644,8 +656,8 @@ export class ActionRuntime {
   }
 
   /** A goTo wired to this runtime's context: its trace notes, the reflex guard, and what to do when the target is unreachable. */
-  private goToFor(agent: SimAgent, tx: number, ty: number, cruise: number, returning: boolean, onUnreachable: ((simTime: number) => void) | undefined): GoToBehavior {
-    return new GoToBehavior(this.ports, agent, tx, ty, cruise, returning, (t, payload) => this.emit(agent, t, "full", payload), (ctx, from, to, map) => this.guard(ctx, from, to, map, agent), onUnreachable);
+  private goToFor(agent: SimAgent, tx: number, ty: number, cruise: number, returning: boolean, onUnreachable: ((simTime: number) => void) | undefined, window?: PlanWindow): GoToBehavior {
+    return new GoToBehavior(this.ports, agent, tx, ty, cruise, returning, (t, payload) => this.emit(agent, t, "full", payload), (ctx, from, to, map) => this.guard(ctx, from, to, map, agent), onUnreachable, window);
   }
 
   /** A goTo towards a frontier group's point that is unreachable marks the group for this agent (ADR-0039 §1). */
@@ -655,17 +667,30 @@ export class ActionRuntime {
   }
 
   /** explore (ADR-0039 addition of 2026-10-10): frontier targets on the agent's own map, reached by goTo navigation. */
-  private explore(agent: SimAgent, region: string | undefined, strategy: "nearest" | "largest"): Result<Behavior, ActionFailure> {
+  private explore(agent: SimAgent, region: string | undefined, strategy: "nearest" | "largest", radiusM: number | undefined): Result<Behavior, ActionFailure> {
     const frontiers = this.ports.frontiers;
     if (!frontiers) return err({ code: "unknown_capability", message: "explore needs the agent's frontier layer" });
     if (region !== undefined && !frontiers.hasRegion(agent.id, region)) return err({ code: "unknown_region", message: `no region ${region}` });
-    return ok(this.exploreFor(frontiers, agent, region, strategy, agent.kind === "uav" ? agent.state.z : 0));
+    // The scope comes from the agent's planning configuration as it is now; `radiusM` of the action overrides the radius for this action only.
+    const scope = this.ports.planner.exploreParams(agent.id);
+    return ok(this.exploreFor(frontiers, agent, region, strategy, agent.kind === "uav" ? agent.state.z : 0, radiusM ?? scope.radiusM, scope.windowMarginM));
   }
 
   /** The explore behaviour wired to this runtime's context; its goTo navigation keeps the cruise altitude the action started with. */
-  private exploreFor(frontiers: FrontierPort, agent: SimAgent, region: string | undefined, strategy: "nearest" | "largest", cruise: number): ExploreBehavior {
+  private exploreFor(frontiers: FrontierPort, agent: SimAgent, region: string | undefined, strategy: "nearest" | "largest", cruise: number, radiusM: number, marginM: number): ExploreBehavior {
     const note = (t: number, payload: unknown) => this.emit(agent, t, "full", payload);
-    return new ExploreBehavior(frontiers, agent, region, strategy, cruise, note, (tx, ty, onMarkable, cruiseOverride) => this.goToFor(agent, tx, ty, cruiseOverride ?? cruise, false, onMarkable));
+    return new ExploreBehavior(
+      frontiers,
+      agent,
+      region,
+      strategy,
+      cruise,
+      radiusM,
+      marginM,
+      note,
+      () => this.ports.planner.currentMap(agent.id, agent.kind === "uav" ? cruise : undefined),
+      (tx, ty, window, cruiseOverride) => this.goToFor(agent, tx, ty, cruiseOverride ?? cruise, false, undefined, window),
+    );
   }
 
   // ---- snapshot and restore (F3a M1; ADR-0035 addition of 2026-10-17, item 8) ----------------------------------
@@ -730,14 +755,14 @@ export class ActionRuntime {
         return b;
       }
       case "goTo": {
-        const b = this.goToFor(agent, snap.tx, snap.ty, snap.cruise, snap.returning, this.markerFor(agent, snap.tx, snap.ty));
+        const b = this.goToFor(agent, snap.tx, snap.ty, snap.cruise, snap.returning, this.markerFor(agent, snap.tx, snap.ty), snap.window);
         b.restoreFrom(snap);
         return b;
       }
       case "explore": {
         const frontiers = this.ports.frontiers;
         if (!frontiers) throw new RangeError("snapshot has an explore action but the runtime has no frontier layer");
-        const b = this.exploreFor(frontiers, agent, snap.region, snap.strategy, snap.cruise);
+        const b = this.exploreFor(frontiers, agent, snap.region, snap.strategy, snap.cruise, snap.radiusM, snap.marginM);
         b.restoreFrom(snap);
         return b;
       }
@@ -745,32 +770,69 @@ export class ActionRuntime {
   }
 }
 
-/** Strikes after which a frontier group is skipped for the rest of an explore action (2026-10-10). */
-const EXPLORE_STRIKES = 3;
 /** Sim seconds explore waits for a first reading of the agent's own position before failing `no_map_data`. */
 const EXPLORE_PERCEPTION_WAIT_S = 2;
+/** Distinct centres from which a frontier group may fail before it is marked unreachable for good (ADR-0040). */
+const EXPLORE_CENTRES = 3;
+/** Travels to a group that may fail before it is marked for good; the window margin of each is this many times the one before. */
+const EXPLORE_TRAVELS = 3;
+const EXPLORE_WINDOW_GROWTH = 4;
+
+/** An iteration in progress (ADR-0040): its centre where the agent stood when it began, and the window of every query inside it. */
+export interface ExploreIteration {
+  readonly no: number;
+  readonly cx: number;
+  readonly cy: number;
+  /** The centre as a key (its metre cell), so two iterations from the same place are one centre. */
+  readonly key: string;
+  readonly window: PlanWindow;
+  readonly visited: number;
+}
+
+/** What explore remembers of a frontier group that could not be reached: the centres it failed from and the travels that failed. */
+interface ExploreFailure {
+  readonly centres: string[];
+  travels: number;
+}
+
+/** A metre cell as a key: the identity of a centre. */
+function centreKey(x: number, y: number): string {
+  return `${Math.floor(x)}:${Math.floor(y)}`;
+}
 
 /**
- * explore (ADR-0039 addition of 2026-10-10). Repeatedly selects a frontier group of the agent's own map and reaches
- * its point with goTo navigation; reselects on arrival, or when the group stops being a frontier (seen on the way).
- * - `unreachable`, or `kinematically_infeasible` from the pre-drive check, marks the group (agent state) and
- *   counts a strike for its cells; a group whose cells all have 3 strikes is skipped until the action ends.
- * - `planning_budget` skips the group for the rest of the action.
+ * explore (ADR-0039 addition of 2026-10-10, amended by ADR-0040). Works in iterations of radius R around a centre: the groups of
+ * the frontier within R of it, nearest first (or largest), each reached with a goTo whose search window is the square of side
+ * 2 (R + margin) around the centre. When none is left the next centre is the nearest group anywhere: the agent travels there
+ * (window: the box of agent and target plus a margin) and a new iteration begins, until no group is left.
+ * - A goal blocked in the planning view moves to the group's nearest passable cell inside the window; with none the group is marked
+ *   without a search.
+ * - A query that ends `not_found` or `budget_exceeded` inside its window marks the group for the iteration (a temporary mark: it is a
+ *   candidate again from another centre or when the map changes around it); from three different centres, or at its third failed
+ *   travel (each with a window four times the margin of the one before), it is marked for good, as ADR-0039 does.
+ * - `kinematically_infeasible` marks the group like an unreachable one and exploration goes on.
  * - Scope limits targets, not paths; an unexplored region is approached through the group nearest to it.
- * - Every selection is traced. Ends `region_explored` or `frontier_exhausted`; other failures end it.
+ * - Every selection and every mark is traced. Ends `region_explored` or `frontier_exhausted`; other failures end it.
  */
 class ExploreBehavior implements Behavior {
   phase = "selecting";
   private inner: GoToBehavior | undefined;
   private target: FrontierCandidate | undefined;
-  private markable = false;
+  /** What the current target is for: a group of the iteration, or the travel to the next centre. */
+  private mode: "iterate" | "travel" = "iterate";
+  /** The centre the current target's failure counts against: the iteration's, or the place the travel started from. */
+  private originKey = "";
+  private iteration: ExploreIteration | undefined;
+  private iterations = 0;
   private visited = 0;
   private marked = 0;
   private distanceM = 0;
   /** Sim seconds spent waiting for a first reading of the agent's own position. */
   private waitedS = 0;
-  private readonly strikes = new Map<number, number>();
-  private readonly skipped = new Set<number>();
+  /** By frontier cell. */
+  private readonly failures = new Map<number, ExploreFailure>();
+  /** The search window of the current target's queries, kept for the trace of a mark after its goTo is gone. */
+  private targetWindow: PlanWindow | undefined;
 
   constructor(
     private readonly frontiers: FrontierPort,
@@ -779,51 +841,72 @@ class ExploreBehavior implements Behavior {
     private readonly strategy: "nearest" | "largest",
     /** The cruise altitude of the goTo navigation: a UAV's height when the action started (0 for a ground vehicle). */
     private readonly cruise: number,
+    /** The radius of an iteration and the margin of its windows, fixed when the action started. */
+    private readonly radiusM: number,
+    private readonly marginM: number,
     private readonly note: (simTime: number, payload: unknown) => void,
-    /** Builds the goTo towards a target; `cruiseOverride` is for a restore, which gives the inner goTo the cruise altitude it had. */
-    private readonly navigate: (tx: number, ty: number, onMarkable: (simTime: number) => void, cruiseOverride?: number) => GoToBehavior,
+    /** The agent's planning view as it is now (a cheap rejection asks it which cells the planner can use). */
+    private readonly planMap: () => PlanMap,
+    /** Builds the goTo towards a target with its search window; `cruiseOverride` is for a restore, which gives the inner goTo the cruise altitude it had. */
+    private readonly navigate: (tx: number, ty: number, window: PlanWindow, cruiseOverride?: number) => GoToBehavior,
   ) {}
 
   stop(simTime: number): void {
     this.inner?.stop(simTime);
+    // The temporary marks belong to the iteration: they end with the action.
+    this.frontiers.clearTemporary(this.agent.id, simTime);
   }
 
   snapshot(): ExploreSnapshot {
+    // Failures with the same record are written once, with their cells.
+    const byRecord = new Map<string, { cells: number[]; centres: string[]; travels: number }>();
+    for (const [cell, f] of [...this.failures].sort((a, b) => a[0] - b[0])) {
+      const k = JSON.stringify([f.centres, f.travels]);
+      const e = byRecord.get(k);
+      if (e) e.cells.push(cell);
+      else byRecord.set(k, { cells: [cell], centres: [...f.centres], travels: f.travels });
+    }
     return {
       kind: "explore",
       phase: this.phase,
       region: this.region,
       strategy: this.strategy,
       cruise: this.cruise,
+      radiusM: this.radiusM,
+      marginM: this.marginM,
       inner: this.inner?.snapshot(),
       target: this.target ? { ...this.target, cells: [...this.target.cells] } : undefined,
-      markable: this.markable,
+      mode: this.mode,
+      originKey: this.originKey,
+      targetWindow: this.targetWindow ? { ...this.targetWindow } : undefined,
+      iteration: this.iteration ? { ...this.iteration, window: { ...this.iteration.window } } : undefined,
+      iterations: this.iterations,
       visited: this.visited,
       marked: this.marked,
       distanceM: this.distanceM,
       waitedS: this.waitedS,
-      strikes: [...this.strikes].sort((a, b) => a[0] - b[0]),
-      skipped: [...this.skipped].sort((a, b) => a - b),
+      failures: [...byRecord.values()],
     };
   }
 
-  /** Puts a snapshot back in place; the inner goTo is built again by `navigate`, with the marker that sets `markable`. */
+  /** Puts a snapshot back in place; the inner goTo is built again by `navigate`, with the window it had. */
   restoreFrom(s: ExploreSnapshot): void {
     this.phase = s.phase;
     this.target = s.target ? { ...s.target, cells: [...s.target.cells] } : undefined;
-    this.markable = s.markable;
+    this.mode = s.mode;
+    this.originKey = s.originKey;
+    this.targetWindow = s.targetWindow ? { ...s.targetWindow } : undefined;
+    this.iteration = s.iteration ? { ...s.iteration, window: { ...s.iteration.window } } : undefined;
+    this.iterations = s.iterations;
     this.visited = s.visited;
     this.marked = s.marked;
     this.distanceM = s.distanceM;
     this.waitedS = s.waitedS;
-    this.strikes.clear();
-    for (const [cell, n] of s.strikes) this.strikes.set(cell, n);
-    this.skipped.clear();
-    for (const cell of s.skipped) this.skipped.add(cell);
+    this.failures.clear();
+    for (const f of s.failures) for (const cell of f.cells) this.failures.set(cell, { centres: [...f.centres], travels: f.travels });
     if (s.inner) {
-      const inner = this.navigate(s.inner.tx, s.inner.ty, () => {
-        this.markable = true;
-      }, s.inner.cruise);
+      if (!s.inner.window) throw new RangeError("snapshot of an explore has a goTo without its window");
+      const inner = this.navigate(s.inner.tx, s.inner.ty, s.inner.window, s.inner.cruise);
       inner.restoreFrom(s.inner);
       this.inner = inner;
     } else this.inner = undefined;
@@ -858,45 +941,102 @@ class ExploreBehavior implements Behavior {
       return RUNNING;
     }
     const code = s.failure.code;
-    if (this.markable) {
-      // Unreachable for this vehicle: marked (agent state), and a strike for each of its cells.
-      this.markable = false;
-      if (this.frontiers.markAt(a.id, target.xM, target.yM, ctx.simTime)) this.marked++;
-      for (const c of target.cells) {
-        const n = (this.strikes.get(c) ?? 0) + 1;
-        this.strikes.set(c, n);
-        if (n >= EXPLORE_STRIKES) this.skipped.add(c);
-      }
+    // No answer inside the window (or none within its budget): unreachable for now.
+    if (code === "unreachable" || code === "planning_budget") {
+      this.failed(ctx, target, code === "unreachable" ? "not_found" : "budget_exceeded");
       return RUNNING;
     }
-    if (code === "planning_budget") {
-      for (const c of target.cells) this.skipped.add(c);
+    // The vehicle cannot follow the path, or cannot plan from where it stands (ADR-0041): marked like an unreachable target, exploration goes on.
+    if (code === "kinematically_infeasible") {
+      this.markForGood(ctx, target, "kinematically_infeasible", this.targetWindow);
       return RUNNING;
     }
     return s;
   }
 
-  private isSkipped(c: FrontierCandidate): boolean {
-    return c.cells.every((cell) => this.skipped.has(cell));
+  /** A target's failure inside its window: remembered against the centre it came from, then marked for now or for good. */
+  private failed(ctx: TickCtx, target: FrontierCandidate, why: "not_found" | "budget_exceeded"): void {
+    const rec = this.recordOf(target);
+    if (!rec.centres.includes(this.originKey)) rec.centres.push(this.originKey);
+    if (this.mode === "travel") rec.travels++;
+    for (const c of target.cells) this.failures.set(c, { centres: [...rec.centres], travels: rec.travels });
+    if (rec.centres.length >= EXPLORE_CENTRES) this.markForGood(ctx, target, "three_centres", this.targetWindow, rec.centres.length);
+    else if (this.mode === "travel" && rec.travels >= EXPLORE_TRAVELS) this.markForGood(ctx, target, "failed_travels", this.targetWindow, rec.centres.length);
+    else {
+      this.frontiers.markTemporaryAt(this.agent.id, target.xM, target.yM, ctx.simTime);
+      this.note(ctx.simTime, { op: "explore-target", event: "marked", mark: "temporary", reason: why, group: target.point, mode: this.mode, iteration: this.iteration?.no ?? 0, centres: rec.centres.length, ...(this.targetWindow ? { window: windowArray(this.targetWindow) } : {}) });
+    }
   }
 
-  /** Selects the next target and starts navigating to it, or returns the end of the action. */
-  private select(ctx: TickCtx): Step | undefined {
-    const a = this.agent;
-    const all = this.frontiers.candidates(a.id).filter((c) => !this.isSkipped(c));
-    const inScope = this.region === undefined ? all : all.filter((c) => c.region === this.region);
-    let pick: FrontierCandidate | undefined;
-    let approach = false;
-    if (inScope.length > 0) pick = this.choose(inScope);
-    else if (this.region !== undefined && all.length > 0 && this.frontiers.regionHasReachableUnknown(a.id, this.region, a.state.x, a.state.y)) {
-      // A region not seen yet: approach it through the group nearest to its rectangle.
-      const r = this.frontiers.regionRect(a.id, this.region);
-      if (r) {
-        approach = true;
-        pick = nearestBy(all, (c) => distToRect(c.xM, c.yM, r));
+  private markForGood(ctx: TickCtx, target: FrontierCandidate, reason: string, window: PlanWindow | undefined, centres?: number): void {
+    if (this.frontiers.markAt(this.agent.id, target.xM, target.yM, ctx.simTime)) this.marked++;
+    this.note(ctx.simTime, { op: "explore-target", event: "marked", mark: "permanent", reason, group: target.point, mode: this.mode, iteration: this.iteration?.no ?? 0, ...(centres === undefined ? {} : { centres }), ...(window ? { window: windowArray(window) } : {}) });
+  }
+
+  /** What is remembered of a group: the records of its cells, merged. */
+  private recordOf(c: FrontierCandidate): ExploreFailure {
+    const centres: string[] = [];
+    let travels = 0;
+    if (this.failures.size > 0) {
+      for (const cell of c.cells) {
+        const f = this.failures.get(cell);
+        if (!f) continue;
+        for (const k of f.centres) if (!centres.includes(k)) centres.push(k);
+        travels = Math.max(travels, f.travels);
       }
     }
-    const skippedCount = this.frontiers.candidates(a.id).length - all.length;
+    return { centres, travels };
+  }
+
+  private failedFrom(c: FrontierCandidate, key: string): boolean {
+    return this.failures.size > 0 && this.recordOf(c).centres.includes(key);
+  }
+
+  private withinRadius(c: FrontierCandidate, it: ExploreIteration): boolean {
+    const dx = c.xM - it.cx;
+    const dy = c.yM - it.cy;
+    return dx * dx + dy * dy <= this.radiusM * this.radiusM;
+  }
+
+  /** Selects the next target and starts navigating to it, or returns the end of the action. `fresh`: an iteration was just begun. */
+  private select(ctx: TickCtx, fresh = false): Step | undefined {
+    const a = this.agent;
+    const scoped = (): readonly FrontierCandidate[] => {
+      const all = this.frontiers.candidates(a.id);
+      return this.region === undefined ? all : all.filter((c) => c.region === this.region);
+    };
+    // 1. Inside an iteration: the groups within its radius that are not marked for it and did not already fail from this centre.
+    if (this.iteration) {
+      const it = this.iteration;
+      const cands = scoped().filter((c) => !c.temporary && this.withinRadius(c, it) && !this.failedFrom(c, it.key));
+      const pick = this.choose(cands);
+      if (pick) return this.begin(ctx, pick, "iterate", it.window, cands.length, false);
+      this.endIteration(ctx);
+    }
+    // 2. The next centre: the nearest group left anywhere (unmarked, and not one a travel just failed to reach).
+    let inScope = scoped();
+    let pool = inScope.filter((c) => !c.temporary);
+    if (pool.length === 0 && inScope.some((c) => c.temporary)) {
+      // Every group left failed its travel this round: another round, the windows grown.
+      this.frontiers.clearTemporary(a.id, ctx.simTime);
+      inScope = scoped();
+      pool = inScope.filter((c) => !c.temporary);
+    }
+    let pick: FrontierCandidate | undefined;
+    let approach = false;
+    if (pool.length > 0) pick = nearestBy(pool, (c) => this.d2(c));
+    else if (this.region !== undefined && inScope.length === 0) {
+      // A region not seen yet: approach it through the group nearest to its rectangle.
+      const all = this.frontiers.candidates(a.id).filter((c) => !c.temporary);
+      if (all.length > 0 && this.frontiers.regionHasReachableUnknown(a.id, this.region, a.state.x, a.state.y)) {
+        const r = this.frontiers.regionRect(a.id, this.region);
+        if (r) {
+          approach = true;
+          pick = nearestBy(all, (c) => distToRect(c.xM, c.yM, r));
+          pool = all;
+        }
+      }
+    }
     // Before its first reading an agent knows nothing, so it has no frontier yet: that is not exhaustion. It waits
     // until its own position is known on its map; if it still is not after EXPLORE_PERCEPTION_WAIT_S, the action
     // fails `no_map_data` (its sensors read nothing): never a success with frontier_exhausted.
@@ -912,40 +1052,119 @@ class ExploreBehavior implements Behavior {
     if (!pick) {
       // A region ends explored when other frontiers remain (none in it, nothing reachable left to approach) or it has
       // no reachable unknown cells; with no frontier left anywhere, exploration is exhausted.
+      const others = this.frontiers.candidates(a.id).length;
       const reason =
-        this.region === undefined ? "frontier_exhausted" : all.length > 0 || !this.frontiers.regionHasReachableUnknown(a.id, this.region, a.state.x, a.state.y) ? "region_explored" : "frontier_exhausted";
-      this.note(ctx.simTime, { op: "explore-end", reason, candidates: all.length, marked: this.frontiers.markedCount(a.id), skipped: skippedCount });
+        this.region === undefined ? "frontier_exhausted" : others > 0 || !this.frontiers.regionHasReachableUnknown(a.id, this.region, a.state.x, a.state.y) ? "region_explored" : "frontier_exhausted";
+      this.note(ctx.simTime, { op: "explore-end", reason, candidates: others, marked: this.frontiers.markedCount(a.id), iterations: this.iterations });
       return { kind: "succeeded", result: { reason, groupsVisited: this.visited, groupsMarked: this.marked, distanceM: this.distanceM, position: agentPosition(a) } };
+    }
+    // A group within the radius that has not failed from here starts an iteration here; otherwise the agent travels to it.
+    if (!approach && !fresh && this.d2(pick) <= this.radiusM * this.radiusM && !this.failedFrom(pick, centreKey(a.state.x, a.state.y))) {
+      this.beginIteration(ctx);
+      return this.select(ctx, true);
+    }
+    return this.begin(ctx, pick, "travel", this.travelWindow(pick), pool.length, approach);
+  }
+
+  private d2(c: FrontierCandidate): number {
+    const a = this.agent;
+    return (c.xM - a.state.x) * (c.xM - a.state.x) + (c.yM - a.state.y) * (c.yM - a.state.y);
+  }
+
+  /** The window of the travel to a group: the box of the agent and the group plus a margin that grows with the travels that failed. */
+  private travelWindow(c: FrontierCandidate): PlanWindow {
+    const a = this.agent;
+    let m = this.marginM;
+    for (let k = this.recordOf(c).travels; k > 0; k--) m *= EXPLORE_WINDOW_GROWTH; // exact: a power of four of the margin, no engine-approximated pow
+    return { x0: Math.min(a.state.x, c.xM) - m, y0: Math.min(a.state.y, c.yM) - m, x1: Math.max(a.state.x, c.xM) + m, y1: Math.max(a.state.y, c.yM) + m };
+  }
+
+  private beginIteration(ctx: TickCtx): void {
+    const a = this.agent;
+    // The temporary marks of the iteration before (and of the travels since) end: its groups are candidates again from here.
+    this.frontiers.clearTemporary(a.id, ctx.simTime);
+    const h = this.radiusM + this.marginM;
+    const no = ++this.iterations;
+    const it: ExploreIteration = { no, cx: a.state.x, cy: a.state.y, key: centreKey(a.state.x, a.state.y), window: { x0: a.state.x - h, y0: a.state.y - h, x1: a.state.x + h, y1: a.state.y + h }, visited: this.visited };
+    this.iteration = it;
+    const inside = this.frontiers.candidates(a.id).filter((c) => (this.region === undefined || c.region === this.region) && this.withinRadius(c, it)).length;
+    this.note(ctx.simTime, { op: "explore-iteration", event: "start", iteration: no, centre: [a.state.x, a.state.y], radiusM: this.radiusM, marginM: this.marginM, window: windowArray(it.window), candidates: inside });
+  }
+
+  private endIteration(ctx: TickCtx): void {
+    const it = this.iteration;
+    if (!it) return;
+    this.iteration = undefined;
+    this.frontiers.clearTemporary(this.agent.id, ctx.simTime);
+    this.note(ctx.simTime, { op: "explore-iteration", event: "end", iteration: it.no, centre: [it.cx, it.cy], radiusM: this.radiusM, visited: this.visited - it.visited, marked: this.frontiers.markedCount(this.agent.id) });
+  }
+
+  /**
+   * Starts navigating to a group inside `window`, or marks it without a search: a goal the planner cannot use (blocked in the
+   * agent's planning view, e.g. inside the inflated band) moves to the group's nearest cell that it can, inside the window.
+   */
+  private begin(ctx: TickCtx, c: FrontierCandidate, mode: "iterate" | "travel", window: PlanWindow, candidates: number, approach: boolean): Step | undefined {
+    const a = this.agent;
+    let gx = c.xM;
+    let gy = c.yM;
+    const map = this.planMap();
+    if (!map.passableAt(gx, gy)) {
+      let bestD = Number.POSITIVE_INFINITY;
+      let best: { readonly xM: number; readonly yM: number } | undefined;
+      for (const cell of c.cells) {
+        const p = this.frontiers.cellCentre(a.id, cell);
+        if (p.xM < window.x0 || p.xM >= window.x1 || p.yM < window.y0 || p.yM >= window.y1 || !map.passableAt(p.xM, p.yM)) continue;
+        const d = (p.xM - c.xM) * (p.xM - c.xM) + (p.yM - c.yM) * (p.yM - c.yM);
+        if (d < bestD) {
+          bestD = d;
+          best = p;
+        }
+      }
+      if (!best) {
+        this.mode = mode;
+        this.markForGood(ctx, c, "blocked_in_view", window);
+        this.phase = "selecting";
+        return undefined;
+      }
+      gx = best.xM;
+      gy = best.yM;
     }
     this.note(ctx.simTime, {
       op: "explore-target",
+      event: "selected",
       strategy: this.strategy,
-      group: pick.point,
-      region: pick.region,
+      group: c.point,
+      region: c.region,
       ...(approach ? { approach: this.region } : {}),
-      candidates: inScope.length,
+      iteration: this.iteration?.no ?? 0,
+      mode,
+      window: windowArray(window),
+      ...(gx === c.xM && gy === c.yM ? {} : { goal: [gx, gy] }),
+      candidates,
       marked: this.frontiers.markedCount(a.id),
-      skipped: skippedCount,
     });
-    this.target = pick;
-    this.markable = false;
-    this.inner = this.navigate(pick.xM, pick.yM, () => {
-      this.markable = true;
-    });
+    this.target = c;
+    this.mode = mode;
+    this.originKey = mode === "iterate" && this.iteration ? this.iteration.key : centreKey(a.state.x, a.state.y);
+    this.targetWindow = window;
+    this.inner = this.navigate(gx, gy, window);
     this.phase = this.inner.phase;
     return undefined;
   }
 
   private choose(cands: readonly FrontierCandidate[]): FrontierCandidate | undefined {
-    const a = this.agent;
-    const d2 = (c: FrontierCandidate) => (c.xM - a.state.x) * (c.xM - a.state.x) + (c.yM - a.state.y) * (c.yM - a.state.y);
-    if (this.strategy === "nearest") return nearestBy(cands, d2);
+    if (this.strategy === "nearest") return nearestBy(cands, (c) => this.d2(c));
     let best: FrontierCandidate | undefined;
     for (const c of cands) {
-      if (!best || c.cells.length > best.cells.length || (c.cells.length === best.cells.length && (d2(c) < d2(best) || (d2(c) === d2(best) && c.id < best.id)))) best = c;
+      if (!best || c.cells.length > best.cells.length || (c.cells.length === best.cells.length && (this.d2(c) < this.d2(best) || (this.d2(c) === this.d2(best) && c.id < best.id)))) best = c;
     }
     return best;
   }
+}
+
+/** A window as the trace writes it: x0, y0, x1, y1 in metres. */
+function windowArray(w: PlanWindow): number[] {
+  return [w.x0, w.y0, w.x1, w.y1];
 }
 
 /** The candidate with the smallest key, ties by ID (deterministic). */
@@ -1006,6 +1225,8 @@ class GoToBehavior implements Behavior {
     private readonly guard: MoveGuard,
     /** Called when the target turns out unreachable for this vehicle: no path, or the pre-drive check failed. */
     private readonly onUnreachable?: (simTime: number) => void,
+    /** The search window of every query (explore, ADR-0040): the planner never leaves it. Absent: the whole map. */
+    private readonly window?: PlanWindow,
   ) {}
 
   stop(simTime: number): void {
@@ -1035,6 +1256,7 @@ class GoToBehavior implements Behavior {
       legsPending: this.legsPending,
       holdStartS: this.holdStartS,
       predictedEnd: this.predictedEnd ? { ...this.predictedEnd } : undefined,
+      window: this.window ? { ...this.window } : undefined,
     };
   }
 
@@ -1136,7 +1358,7 @@ class GoToBehavior implements Behavior {
           return fail("kinematically_infeasible", "too close to obstacles to plan, and neither a clear straight reverse nor an escape path gets the vehicle out");
         }
       }
-      const q = planner.submit(a.id, { from: { x: a.state.x, y: a.state.y }, to: { x: this.tx, y: this.ty }, ...(a.kind === "uav" ? { cruiseAltitudeM: this.cruise } : {}) }, ctx.tick);
+      const q = planner.submit(a.id, { from: { x: a.state.x, y: a.state.y }, to: { x: this.tx, y: this.ty }, ...(a.kind === "uav" ? { cruiseAltitudeM: this.cruise } : {}), ...(this.window ? { window: this.queryWindow() } : {}) }, ctx.tick);
       // Configuration errors are rejected when the run starts (ADR-0028); an endpoint outside the
       // planner's map is the only refusal expected here.
       if (!q.ok) return fail(q.error.code === "invalid_endpoint" ? "unreachable" : q.error.code, q.error.message);
@@ -1156,6 +1378,13 @@ class GoToBehavior implements Behavior {
     }
     if (r.status === "budget_exceeded") return fail("planning_budget", `planning exceeded its budget (${r.expansionsCharged} expansions)`);
     return this.beginFollowing(r, ctx);
+  }
+
+  /** The window of a query: the goTo's own, grown to hold the vehicle where it stands (a replan starts from wherever it is) and the goal. */
+  private queryWindow(): PlanWindow {
+    const w = this.window as PlanWindow;
+    const a = this.agent;
+    return { x0: Math.min(w.x0, a.state.x - 0.5, this.tx - 0.5), y0: Math.min(w.y0, a.state.y - 0.5, this.ty - 0.5), x1: Math.max(w.x1, a.state.x + 0.5, this.tx + 0.5), y1: Math.max(w.y1, a.state.y + 0.5, this.ty + 0.5) };
   }
 
   private beginFollowing(r: PlanResult, ctx: TickCtx): Step {

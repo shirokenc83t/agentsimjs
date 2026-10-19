@@ -1,4 +1,4 @@
-import { decodeValue, encodeValue, runLockstep, type SimAgent } from "@agentsim/core";
+import { decodeValue, encodeValue, runLockstep, StateHasher, type SimAgent } from "@agentsim/core";
 import { describe, expect, it } from "vitest";
 import { buildPresetRun, type PresetRunOptions } from "../testing/preset-run.ts";
 import type { ReferenceRun } from "../testing/reference-run.ts";
@@ -94,7 +94,7 @@ function takeSnapshots(run: ReferenceRun): Taken {
 }
 
 /** Runs A to `n` (marking one frontier of the rover on the way), restores B from A's snapshot, continues both for `after` ticks. */
-function check(n: number, after: number, markAt?: number) {
+function check(n: number, after: number, markAt?: number, temporaryAt?: number) {
   const a = buildPresetRun(OPTIONS);
   for (let t = 1; t <= n; t++) {
     phase(a, t);
@@ -103,6 +103,12 @@ function check(n: number, after: number, markAt?: number) {
       const c = rover ? a.topology.candidates(rover.id)[0] : undefined;
       if (!rover || !c) throw new Error("no frontier to mark");
       expect(a.topology.markAt(rover.id, c.xM, c.yM, t * DT)).toBe(true);
+    }
+    if (t === temporaryAt) {
+      const rover = a.agents.find((x) => x.key === "rover");
+      const c = rover ? a.topology.candidates(rover.id)[0] : undefined;
+      if (!rover || !c) throw new Error("no frontier to mark");
+      expect(a.topology.markTemporaryAt(rover.id, c.xM, c.yM, t * DT)).toBe(true);
     }
   }
   const taken = takeSnapshots(a);
@@ -154,6 +160,42 @@ describe("sensing, topology and the observer restore from their snapshots (F3a M
     const rover = taken.topology.agents.find((x) => x.marks && x.marks.cells.length > 0);
     expect(rover?.marks?.cells.length).toBeGreaterThan(0);
     expect(markedAtRestore.some((n) => n > 0)).toBe(true); // marked groups right after the restore (later the view changes and clears them, in both runs)
+  }, 240_000);
+
+  it("with temporary marks (ADR-0040): they come back flagged on the candidates, and clear with the explore iteration or a change around them", () => {
+    const { a, b, taken } = check(40, 80, undefined, 40);
+    const rover = taken.topology.agents.find((x) => x.temporary && x.temporary.cells.length > 0);
+    expect(rover?.temporary?.cells.length).toBeGreaterThan(0);
+    // A temporary mark is not a permanent one: the group is still an unmarked candidate, flagged.
+    expect(taken.topology.agents.every((x) => !x.marks || x.marks.cells.length === 0)).toBe(true);
+    for (const run of [a, b]) {
+      const r = run.agents.find((x) => x.key === "rover");
+      if (!r) throw new Error("rover");
+      run.topology.clearTemporary(r.id, 0);
+      expect(run.topology.candidates(r.id).some((c) => c.temporary)).toBe(false);
+    }
+  }, 240_000);
+
+  it("a mark for good replaces the temporary one; temporary marks enter the state hash only while they exist", () => {
+    const a = buildPresetRun(OPTIONS);
+    for (let t = 1; t <= 40; t++) phase(a, t);
+    const rover = a.agents.find((x) => x.key === "rover");
+    const c = rover ? a.topology.candidates(rover.id)[0] : undefined;
+    if (!rover || !c) throw new Error("no frontier");
+    const hashOf = (): number => {
+      const h = new StateHasher();
+      a.topology.hashInto(h);
+      return h.digest();
+    };
+    const before = hashOf();
+    expect(a.topology.markTemporaryAt(rover.id, c.xM, c.yM, 0)).toBe(true);
+    const during = hashOf();
+    expect(during).not.toBe(before);
+    expect(a.topology.candidates(rover.id).find((x) => x.id === c.id)?.temporary).toBe(true);
+    expect(a.topology.markAt(rover.id, c.xM, c.yM, 40 * DT)).toBe(true);
+    expect(a.topology.snapshot().agents.find((x) => x.agentId === rover.id)?.temporary?.cells ?? []).toEqual([]);
+    a.topology.clearTemporary(rover.id, 0);
+    expect(a.topology.candidates(rover.id).every((x) => !x.temporary)).toBe(true);
   }, 240_000);
 
   it("the observer's sample schedule comes back: its trace records appear at the same ticks as the original's", () => {

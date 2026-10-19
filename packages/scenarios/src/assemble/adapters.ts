@@ -3,7 +3,7 @@ import { err, ok, type CapabilityPort, type CodedError, type KnownSpace, type Pl
 import { OCCUPANCY_FREE, TERRAIN_IMPASSABLE, type BeliefGrid, type GridSpace, type PlanningGrid } from "@agentsim/spatial";
 import { capabilityManifest, getCapability, isInjectable, validateParams } from "@agentsim/tools-schema";
 import type { TraceBuffer } from "@agentsim/trace";
-import { toPlanningConfig, type EffectiveAgentConfig } from "../run-config/resolve.ts";
+import { EXPLORE_BUILTIN, toPlanningConfig, type EffectiveAgentConfig } from "../run-config/resolve.ts";
 import { traversalFor } from "../traversal.ts";
 
 /** The state of a `PlanningServiceAdapter` between ticks, as plain data (see `PlanningServiceAdapter.snapshot`). */
@@ -83,12 +83,19 @@ export class PlanningServiceAdapter implements PlannerPort {
 
   currentMap(agentId: string, cruiseAltitudeM?: number): PlanMap {
     const space = this.liveView(agentId, cruiseAltitudeM);
-    if (space) return { version: space.version, clearanceM: (x, y, maxM) => space.clearanceM(x, y, maxM) };
+    if (space) return { version: space.version, clearanceM: (x, y, maxM) => space.clearanceM(x, y, maxM), passableAt: passableOn(space) };
     // No configuration (not an agent of this run): fall back to the map itself.
     const bg = this.beliefGrids.get(agentId);
-    if (bg) return { version: bg.version, clearanceM: (x, y, maxM) => groundClearanceOn(bg, x, y, maxM) };
+    if (bg) return { version: bg.version, clearanceM: (x, y, maxM) => groundClearanceOn(bg, x, y, maxM), passableAt: (x, y) => bg.inBounds(bg.cellI(x), bg.cellJ(y)) && knownSpaceOn(bg).freeForGround(x, y) };
     const m = this.knownMap;
-    return { version: m.version, clearanceM: (x, y, maxM) => m.groundClearanceM(x, y, maxM) };
+    return { version: m.version, clearanceM: (x, y, maxM) => m.groundClearanceM(x, y, maxM), passableAt: (x, y) => m.inBounds(x, y) && m.freeForGround(x, y) };
+  }
+
+  /** The agent's exploration scope (ADR-0040) from its planning configuration as it is now (a `setConfig` applies from the next explore). */
+  exploreParams(agentId: string): { readonly radiusM: number; readonly windowMarginM: number } {
+    const cfg = this.configs.get(agentId);
+    if (!cfg) return { radiusM: EXPLORE_BUILTIN.radiusM.ugv, windowMarginM: EXPLORE_BUILTIN.windowMarginM };
+    return { radiusM: cfg.planning.radiusM, windowMarginM: cfg.planning.windowMarginM };
   }
 
   /** Start-time checks on the agent's own map: its belief grid, or the ground truth for `ideal` agents. */
@@ -164,8 +171,14 @@ export class PlanningServiceAdapter implements PlannerPort {
   submit(agentId: string, q: PlanQuery, tick: number): Result<string, CodedError> {
     const cfg = this.configs.get(agentId);
     if (!cfg) return err({ code: "unknown_agent", message: `no planning configuration for ${agentId}` });
+    // A window in metres becomes the cell rectangle that covers it, clipped to the map (ADR-0040): the planner never leaves it.
+    const grid = this.beliefGrids.get(agentId) ?? this.knownMap.grid;
+    const res = grid.resolutionM;
+    const window = q.window
+      ? { i0: Math.max(0, Math.floor(q.window.x0 / res)), j0: Math.max(0, Math.floor(q.window.y0 / res)), i1: Math.min(grid.sizeX, Math.ceil(q.window.x1 / res)), j1: Math.min(grid.sizeY, Math.ceil(q.window.y1 / res)) }
+      : undefined;
     return this.service.submit(
-      { agentId, traversal: traversalFor(cfg, q.cruiseAltitudeM), config: toPlanningConfig(cfg), from: q.from, to: q.to, ...(this.beliefGrids.has(agentId) ? { mapKey: agentId } : {}) },
+      { agentId, traversal: traversalFor(cfg, q.cruiseAltitudeM), config: toPlanningConfig(cfg), from: q.from, to: q.to, ...(this.beliefGrids.has(agentId) ? { mapKey: agentId } : {}), ...(window ? { window } : {}) },
       tick,
     );
   }
@@ -187,6 +200,7 @@ export class PlanningServiceAdapter implements PlannerPort {
           return space.version;
         },
         clearanceM: (x, y, maxM) => space.clearanceM(x, y, maxM),
+        passableAt: passableOn(space),
       },
     };
   }
@@ -210,6 +224,7 @@ export class PlanningServiceAdapter implements PlannerPort {
           return space.version;
         },
         clearanceM: (x, y, maxM) => space.clearanceM(x, y, maxM),
+        passableAt: passableOn(space),
       },
       expansionsCharged: p.expansionsCharged,
       completedTick: p.completedTick,
@@ -219,6 +234,12 @@ export class PlanningServiceAdapter implements PlannerPort {
   cancel(agentId: string): void {
     this.service.cancel(agentId);
   }
+}
+
+/** Whether the planner can place the vehicle at a point: the planning view's passability (inflation included), false outside the map. */
+function passableOn(space: SearchSpace): (x: number, y: number) => boolean {
+  const res = space.resolutionM;
+  return (x, y) => space.passable(Math.floor(x / res), Math.floor(y / res));
 }
 
 /**

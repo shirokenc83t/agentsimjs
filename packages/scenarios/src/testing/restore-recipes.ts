@@ -23,6 +23,8 @@ const FAR_SCRIPTS: Readonly<Record<string, readonly ScriptStep[]>> = { rover: [g
 const FALLBACK = { schemaVersion: 0, id: "fallback-restore", version: 1, root: { kind: "fallback", stages: [{ kind: "algorithm", algorithm: "astar", stageBudget: 150 }, { kind: "algorithm", algorithm: "hpa" }] } };
 /** A lazy refine: HPA* coarse path, A* legs handed to the action as they complete (ADR-0037 fourth addition). */
 const LAZY = { schemaVersion: 0, id: "lazy-restore", version: 1, root: { kind: "refine", mode: "lazy", coarse: { kind: "algorithm", algorithm: "hpa" }, local: { kind: "algorithm", algorithm: "astar" } } };
+/** The exploration scope of every agent (ADR-0040): the radius of an iteration and the margin of its windows, in metres. */
+const exploreScope = (radiusM: number, windowMarginM: number) => ({ planning: { default: { radiusM, windowMarginM } } }) as unknown as Partial<RunConfigDocument>;
 const planning = (strategy: unknown) => ({ planning: { default: { strategy, onboardComputeExpansionsPerTick: 100 } } }) as unknown as Partial<RunConfigDocument>;
 
 function recipe(name: string, options: PresetRunOptions, endTick: number, snapshotTicks: readonly number[], afterTick?: RestoreRecipe["afterTick"]): RestoreRecipe {
@@ -96,8 +98,15 @@ function recipes(long: boolean): RestoreRecipe[] {
       "explore-unknown-map",
       { preset: "f2-discovery", scripts: { rover: [{ name: "explore", params: {} }], low: [goTo(25, 60)], scout: [takeoff, { name: "explore", params: {} }] }, beliefVsTruth: { everyS: 1 } },
       s(650, 1500),
-      long ? [20, 140, 179, 355, 590, 1100] : [20, 140, 179, 355, 590],
+      long ? [20, 140, 179, 355, 590, 1070, 1100, 1383] : [20, 140, 179, 355, 590],
       changesAt({ 140: "through", 179: "away" }),
+    ),
+    // 3b. Explore with iterations of a small radius: the travel to the next centre in flight, the iteration state and what it remembers.
+    recipe(
+      "explore-small-radius",
+      { preset: "f2-discovery", scripts: { rover: [{ name: "explore", params: {} }], scout: [takeoff, { name: "explore", params: {} }] }, runConfig: exploreScope(10, 1) },
+      s(350, 1000),
+      long ? [3, 30, 120, 300, 700] : [3, 30, 120, 300],
     ),
     // 4. A strategy query mid stage 1 and mid stage 2.
     recipe(

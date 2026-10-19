@@ -194,8 +194,8 @@ export function driveWithRuntime(c: Corridor, body: ResolvedUgvBody): RuntimeOut
   const cfg: EffectiveAgentConfig = {
     agentId: "ugv-001",
     kind: "ugv",
-    planning: { algorithm: "astar", onboardComputeExpansionsPerTick: 1_000_000, totalBudget: 10_000_000, costProfile: { weights: { distance: 1 } } },
-    planningSources: { algorithm: "builtin", onboardComputeExpansionsPerTick: "builtin", totalBudget: "builtin", costProfile: "builtin" },
+    planning: { algorithm: "astar", onboardComputeExpansionsPerTick: 1_000_000, totalBudget: 10_000_000, costProfile: { weights: { distance: 1 } }, radiusM: 40, windowMarginM: 10 },
+    planningSources: { algorithm: "builtin", onboardComputeExpansionsPerTick: "builtin", totalBudget: "builtin", costProfile: "builtin", radiusM: "builtin", windowMarginM: "builtin" },
     body,
     // The corridor tests check tracking on the true map: an ideal agent (ADR-0028 addition of 2026-10-09).
     beliefs: { init: "ideal", idealized: true },
