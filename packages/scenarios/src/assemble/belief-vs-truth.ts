@@ -88,6 +88,14 @@ interface Labels {
   readonly perChunk: Map<number, Int32Array>;
 }
 
+/** The state of the observer between ticks, as plain data (see `snapshot`). */
+export interface ObserverSnapshot {
+  /** Per agent in run order: the sim time of its next sample. */
+  readonly dueS: readonly number[];
+  /** Per agent with a belief map: the connected component of the truth it is counted in (0: none yet). History, see `restore`. */
+  readonly labels: readonly (readonly [string, number])[];
+}
+
 /**
  * Observer-side comparison of beliefs and ground truth (ADR-0005 addition of 2026-10-11, M2d4). **It never reaches a
  * mind**: nothing here is part of a `DecisionRequest` or a `MindView`, and no mind-facing module imports it. It is for
@@ -176,6 +184,37 @@ export class BeliefVsTruth {
     };
   }
 
+  /**
+   * The observer's state between ticks as plain data (F3a M1; ADR-0035 addition of 2026-10-17, item 8): when each
+   * agent's next sample is due, which decides when its trace records appear, and the component each agent is counted in.
+   * The tallies are derived from the belief maps and the truth, and are not captured.
+   */
+  snapshot(): ObserverSnapshot {
+    return { dueS: [...this.dueS], labels: [...this.trackers].map(([id, t]): [string, number] => [id, t.label]) };
+  }
+
+  /** Puts the sample schedule and the components back in place; the tallies are counted again from the restored maps. */
+  restore(s: ObserverSnapshot): void {
+    if (s.dueS.length !== this.dueS.length) throw new RangeError(`snapshot has ${s.dueS.length} sample times, the observer has ${this.dueS.length} agents`);
+    s.dueS.forEach((d, n) => {
+      this.dueS[n] = d;
+    });
+    for (const [id, label] of s.labels) {
+      const t = this.trackers.get(id);
+      if (!t) throw new RangeError(`snapshot has an observer label for unknown agent ${id}`);
+      // The component an agent is counted in follows it only where it stands on a cell that has one: an agent that stands
+      // on none keeps the last, so the label is history, not derivable from where the agent is now.
+      if (label > 0) this.useLabel(t, label);
+      else {
+        t.label = 0;
+        t.reach = new Int32Array(t.reach.length);
+        t.seenVersion = 0;
+        t.tally.fill(0);
+        t.total.fill(0);
+      }
+    }
+  }
+
   /** Forgets the incremental tallies and counts every chunk again: what the incremental path must always equal (tests). */
   recompute(agentId: string): void {
     const t = this.trackers.get(agentId);
@@ -248,6 +287,12 @@ export class BeliefVsTruth {
       }
     }
     if (label === 0 || label === t.label) return;
+    this.useLabel(t, label);
+  }
+
+  /** Counts for a component from scratch: every reachable cell is unknown until the chunks that hold observations are recounted. */
+  private useLabel(t: Tracker, label: number): void {
+    const g = this.truth;
     t.label = label;
     let reach = t.view.perChunk.get(label);
     if (!reach) {

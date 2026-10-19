@@ -34,6 +34,8 @@ export interface SimSnapshot {
   readonly grid: GridSpec | undefined;
   /** Planning views being built before tick 0 (ADR-0024), while a load is in progress. */
   readonly preparing?: { readonly runId: string; readonly done: number; readonly total: number };
+  /** The recording's latest state for the loaded run (ADR-0035 §6): `ok`, or why the run waits (the writer is behind, the storage quota is near). */
+  readonly recording?: { readonly runId: string; readonly state: "ok" | "storage_backpressure" | "storage_quota"; readonly backlogRecords: number };
   /** What the last load prepared, and its wall time (never in the trace or a hash). */
   readonly prepared?: { readonly runId: string; readonly views: number; readonly graphs: number; readonly ms: number };
 }
@@ -168,6 +170,9 @@ export class SimClient {
       case "degradation":
         this.snap = { ...this.snap, degradations: this.snap.degradations + 1, lastSkippedTicks: m.skippedTicks };
         break;
+      case "recording":
+        this.snap = { ...this.snap, recording: { runId: m.runId, state: m.state, backlogRecords: m.backlogRecords } };
+        break;
       case "preparing":
         this.snap = { ...this.snap, preparing: { runId: m.runId, done: m.done, total: m.total } };
         break;
@@ -246,6 +251,15 @@ export class SimClient {
   }
 
   /** Loads a scenario run in the worker; resolves with what was loaded, rejects with the worker's error code. */
+  /** True once the sim worker has its end of the recorder channel (a recorded run needs it). */
+  recorderAttached = false;
+
+  /** Hands the sim worker its end of the recorder channel; the other end goes to the storage worker. The port is transferred. */
+  attachRecorderPort(port: MessagePort): void {
+    this.post({ type: "recorderPort", port }, [port]);
+    this.recorderAttached = true;
+  }
+
   load(m: Omit<SimLoadMessage, "type">): Promise<SimLoadedMessage> {
     return new Promise((resolve, reject) => {
       this.loadWaiters.push({ runId: m.runId, resolve, reject });
@@ -292,7 +306,7 @@ export class SimClient {
     return this.trails.path(this.trailIndex.get(agentId) ?? -1);
   }
 
-  /** Called for every run input the worker records (live commands and replayed inputs), in order. */
+  /** Called for every run input the worker records (live commands and the inputs of a re-simulation), in order. */
   onInput(l: (m: SimInputMessage) => void): () => void {
     this.inputListeners.add(l);
     return () => this.inputListeners.delete(l);

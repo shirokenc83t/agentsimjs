@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { StateInterpolator } from "../scene/interpolator.ts";
+import type { PoseSource } from "../scene/interpolator.ts";
 import { SceneRenderer } from "../scene/scene-renderer.ts";
 import { getThemeState, subscribeTheme } from "../theme/theme-controller.ts";
 import { sceneTokens } from "../theme/tokens.ts";
@@ -9,7 +9,7 @@ import { sceneTokens } from "../theme/tokens.ts";
  * participates in per-frame work.
  */
 export function SceneView(props: {
-  interpolator: StateInterpolator;
+  interpolator: PoseSource;
   /** Entity IDs by pose index (agent colours are derived from them). */
   entityIds?: readonly string[];
   onRenderer?: (r: SceneRenderer | undefined) => void;

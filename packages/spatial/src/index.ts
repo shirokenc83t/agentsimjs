@@ -17,8 +17,21 @@ export { senseRay, newRangeScratch, type RangeRay, type RangeSink, type RangeScr
 export { cameraSees, newCameraScratch, type CameraView, type CameraScratch } from "./sensing/camera.ts";
 export { periodUs, sensorPhaseUs, readsAtTick } from "./sensing/schedule.ts";
 export type { PlanningGrid } from "./grid/planning-grid.ts";
+export {
+  BELIEF_MANIFEST_FORMAT,
+  groupGeometry,
+  groupOfChunk,
+  groupsNearest,
+  joinBeliefSnapshot,
+  splitBeliefSnapshot,
+  type BeliefChunk,
+  type BeliefGroup,
+  type BeliefManifest,
+  type BeliefMapMeta,
+  type GroupGeometry,
+} from "./belief/belief-groups.ts";
 export { BeliefGrid, missionOf, type MissionData } from "./belief/belief-grid.ts";
-export { BeliefMap, LOGODDS_CLAMP, BELIEF_THRESHOLD, BELIEF_UNKNOWN, BELIEF_FREE, BELIEF_OCCUPIED, type BeliefState } from "./belief/belief-map.ts";
+export { BeliefMap, LOGODDS_CLAMP, BELIEF_THRESHOLD, BELIEF_UNKNOWN, BELIEF_FREE, BELIEF_OCCUPIED, type BeliefState, type BeliefMapSnapshot, type BeliefCellDelta } from "./belief/belief-map.ts";
 export {
   AgentTopology,
   DEFAULT_TOPOLOGY,

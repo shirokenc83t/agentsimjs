@@ -141,6 +141,13 @@ export interface PlanRestart {
   readonly interrupted?: true;
 }
 
+/** The union of two ascending lists of chunk indices, ascending, without repeats. */
+function unionAscending(a: readonly number[], b: readonly number[]): number[] {
+  if (a.length === 0) return [...b];
+  if (b.length === 0) return [...a];
+  return [...new Set([...a, ...b])].sort((x, y) => x - y);
+}
+
 /** Cache key of a view: the map it is over, then traversal and profile. */
 function viewKey(mapKey: string, t: VehicleTraversal, profile: CompiledCostProfile): string {
   return `${mapKey}#${SearchSpace.key(t, profile)}`;
@@ -219,6 +226,8 @@ interface ActiveQuery {
   cached?: CachedResult;
   /** Strategy queries (ADR-0037): the runner and the stage in progress; plain queries have none and use `engine`/`cached`. */
   strat?: StrategyExec;
+  /** A restored query's unexamined change, applied at its next slice (ADR-0024 addition of 2026-10-17). */
+  carry?: { readonly chunks: readonly number[]; readonly read: ReadonlySet<number> | undefined } | undefined;
 }
 
 interface CachedResult {
@@ -284,6 +293,16 @@ interface StrategyExec {
   executed: number;
 }
 
+/**
+ * A change of a query's view that the query has not examined yet (ADR-0024 addition of 2026-10-17): the chunks whose
+ * planning content changed since its last slice (ascending) and whether its HPA* graph moved. Views are synced after
+ * sensing and a query reads the change at the start of its next slice, so at a tick boundary this is the normal state.
+ */
+export interface PendingChange {
+  readonly chunks: readonly number[];
+  readonly graphChanged: boolean;
+}
+
 /** What a snapshot keeps of a strategy query beyond its request (ADR-0037 addition, item 9). */
 export interface StrategySnapshot {
   readonly context: Readonly<Record<string, number>>;
@@ -291,6 +310,13 @@ export interface StrategySnapshot {
   readonly current?: { readonly charged: number; readonly startedTick: number };
   /** Lazy refine: how many legs were produced and how many were taken by the action. */
   readonly legs?: { readonly produced: number; readonly taken: number };
+  /** The change of its view the query has not examined (ADR-0037 addition of 2026-10-17); absent when there is none. */
+  readonly pending?: PendingChange;
+  /**
+   * With a non-empty `pending.chunks`, when the query has a read set: the chunks its searches have read so far (the union over
+   * the completed searches and the current stage), ascending. Absent: no read set yet (as for a query without an engine).
+   */
+  readonly read?: readonly number[];
 }
 
 export interface PlanningServiceOptions {
@@ -329,6 +355,10 @@ export interface PlanningSnapshot {
     readonly spent: number;
     /** Strategy queries only. */
     readonly strategy?: StrategySnapshot;
+    /** Plain queries: the change of its view the query has not examined; absent when there is none (ADR-0024 addition of 2026-10-17). */
+    readonly pending?: PendingChange;
+    /** Plain queries, with a non-empty `pending.chunks`: the chunks its search has read so far, ascending; absent: no read set. */
+    readonly read?: readonly number[];
   }[];
 }
 
@@ -624,6 +654,8 @@ export class PlanningService {
   /** What changed under a query since its last slice that it depends on, or undefined (it continues). */
   private changeSinceLastSlice(q: ActiveQuery): { reason: PlanRestart["reason"]; chunks: number[] } | undefined {
     if (q.strat) return this.changeForStrategy(q, q.strat);
+    const carry = q.carry; // a restored query's unexamined change, applied once
+    q.carry = undefined;
     if (q.hpa) {
       const v = q.views.graph?.version ?? 0;
       if (v === q.seen) return undefined;
@@ -631,16 +663,28 @@ export class PlanningService {
       return { reason: "graph_changed", chunks: [] };
     }
     const space = q.views.space;
-    if (space.contentVersion === q.seen) return undefined;
-    const changed = space.changedSince(q.seen);
+    const moved = space.contentVersion !== q.seen;
+    if (!moved && !carry) return undefined;
+    const changed = unionAscending(carry?.chunks ?? [], moved ? space.changedSince(q.seen) : []);
     q.seen = space.contentVersion;
     const read = q.cached ? q.cached.readChunks : q.engine instanceof GridSearch ? q.engine.readChunks : undefined;
-    const overlap = read ? changed.filter((k) => read[k] === 1) : changed;
+    const overlap = read || carry?.read ? changed.filter((k) => read?.[k] === 1 || carry?.read?.has(k) === true) : changed;
     if (overlap.length === 0) {
       q.continuations++;
       return undefined;
     }
     return { reason: "read_set_overlap", chunks: overlap };
+  }
+
+  /**
+   * What the service holds for its caller to take: completed outcomes and restart events (taken every tick by the adapter)
+   * and legs of lazy queries that were produced and not yet taken. Between ticks all are zero; a snapshot of the caller
+   * asserts it (a snapshot does not keep them).
+   */
+  pendingOutputs(): { readonly completed: number; readonly restarts: number; readonly legs: number } {
+    let legs = 0;
+    for (const l of this.lazy.values()) legs += l.pending.length;
+    return { completed: this.completed.length, restarts: this.restartEvents.length, legs };
   }
 
   /** Restarts since the last call, in order (tick, then agent id). */
@@ -742,16 +786,20 @@ export class PlanningService {
       nextQuery: this.nextQuery,
       active: [...this.active.values()]
         .sort((a, b) => (a.request.agentId < b.request.agentId ? -1 : 1))
-        .map((q) => ({
-          queryId: q.queryId,
-          request: q.request,
-          submittedTick: q.submittedTick,
-          charged: q.charged,
-          restarts: q.restarts,
-          continuations: q.continuations,
-          spent: q.spent,
-          ...(q.strat ? { strategy: this.strategySnapshot(q.strat) } : {}),
-        })),
+        .map((q) => {
+          const pc = this.pendingChange(q);
+          const carried = pc ? { pending: pc.pending, ...(pc.read ? { read: pc.read } : {}) } : {};
+          return {
+            queryId: q.queryId,
+            request: q.request,
+            submittedTick: q.submittedTick,
+            charged: q.charged,
+            restarts: q.restarts,
+            continuations: q.continuations,
+            spent: q.spent,
+            ...(q.strat ? { strategy: { ...this.strategySnapshot(q.strat), ...carried } } : carried),
+          };
+        }),
     };
   }
 
@@ -773,7 +821,55 @@ export class PlanningService {
         a.strategy ? { now: a.submittedTick, replay: a.strategy } : undefined,
       );
       if (!r.ok) throw new Error(`snapshot query ${a.queryId} no longer valid: ${r.error.code}`);
+      // The change the query had not examined: its next slice applies the read-set check to these sets.
+      const carried = a.strategy ?? a;
+      if (carried.pending) {
+        r.value.carry = { chunks: [...carried.pending.chunks], read: carried.read ? new Set(carried.read) : undefined };
+        // A moved graph comes back as a last-seen version no graph has (versions start at 0): the next comparison finds it moved,
+        // exactly when the live query's would (a strategy: once an HPA* stage has run, which may be later than the next slice).
+        if (carried.pending.graphChanged) {
+          if (r.value.strat) r.value.strat.seenGraph = -1;
+          else r.value.seen = -1;
+        }
+      }
     }
+  }
+
+  /**
+   * What a query has not examined yet, for a snapshot (ADR-0024 addition of 2026-10-17): the chunks its view changed in
+   * since its last slice and whether its graph moved, with the chunks its search has read. A restored query that has not had
+   * its next slice yet still carries the change it was restored with, so a snapshot of it keeps that change together with any
+   * newer one: `snapshot(restore(s))` equals `s`. Reads, changes nothing.
+   */
+  private pendingChange(q: ActiveQuery): { readonly pending: PendingChange; readonly read: number[] | undefined } | undefined {
+    const st = q.strat;
+    if (!st && q.hpa) return (q.views.graph?.version ?? 0) !== q.seen ? { pending: { chunks: [], graphChanged: true }, read: undefined } : undefined;
+    // A strategy compares the graph's version with the one it last saw even before an HPA* stage has run; the comparison only
+    // acts once one has (`changeForStrategy`), so the plain inequality is what the snapshot keeps.
+    const graphChanged = st !== undefined && (q.views.graph?.version ?? 0) !== st.seenGraph;
+    const space = q.views.space;
+    const seen = st ? st.seenSpace : q.seen;
+    const carry = q.carry;
+    const chunks = unionAscending(carry?.chunks ?? [], space.contentVersion !== seen ? space.changedSince(seen) : []);
+    if (chunks.length === 0 && !graphChanged) return undefined;
+    let flags: readonly (Uint8Array | undefined)[];
+    if (st) {
+      const stage = st.stage;
+      flags = [st.readUnion, stage ? (stage.cached ? stage.cached.readChunks : stage.engine instanceof GridSearch ? stage.engine.readChunks : undefined) : undefined];
+    } else flags = [q.cached ? q.cached.readChunks : q.engine instanceof GridSearch ? q.engine.readChunks : undefined];
+    let read: number[] | undefined;
+    if (chunks.length > 0) {
+      if (carry) {
+        // A restored query that has not sliced yet has read exactly what it was restored with: the search that was replayed on the
+        // changed content may have read other chunks, and it has not advanced since.
+        read = carry.read ? [...carry.read].sort((a, b) => a - b) : undefined;
+      } else if (flags.some((f) => f !== undefined)) {
+        read = [];
+        const n = Math.max(...flags.map((f) => f?.length ?? 0));
+        for (let k = 0; k < n; k++) if (flags.some((f) => f?.[k] === 1)) read.push(k);
+      }
+    }
+    return { pending: { chunks, graphChanged }, read };
   }
 
   // ---- Planning strategies (ADR-0037 and its additions of 2026-10-13) --------------------------------------------------
@@ -1122,6 +1218,8 @@ export class PlanningService {
    * search changed (and, once an hpa search has run, the abstract graph did not); otherwise restart from the root.
    */
   private changeForStrategy(q: ActiveQuery, st: StrategyExec): { reason: PlanRestart["reason"]; chunks: number[] } | undefined {
+    const carry = q.carry; // a restored query's unexamined change, applied once
+    q.carry = undefined;
     let graphChanged = false;
     if (st.usedHpa) {
       const gv = q.views.graph?.version ?? 0;
@@ -1131,14 +1229,15 @@ export class PlanningService {
       }
     }
     const space = q.views.space;
-    if (space.contentVersion === st.seenSpace) return graphChanged ? { reason: "graph_changed", chunks: [] } : undefined;
-    const changed = space.changedSince(st.seenSpace);
+    const moved = space.contentVersion !== st.seenSpace;
+    if (!moved && (carry?.chunks.length ?? 0) === 0) return graphChanged ? { reason: "graph_changed", chunks: [] } : undefined;
+    const changed = unionAscending(carry?.chunks ?? [], moved ? space.changedSince(st.seenSpace) : []);
     st.seenSpace = space.contentVersion;
     if (graphChanged) return { reason: "graph_changed", chunks: [] };
     const stage = st.stage;
     const current = stage ? (stage.cached ? stage.cached.readChunks : stage.engine instanceof GridSearch ? stage.engine.readChunks : undefined) : undefined;
-    const read = st.readUnion !== undefined || current !== undefined;
-    const overlap = read ? changed.filter((k) => st.readUnion?.[k] === 1 || current?.[k] === 1) : [];
+    const read = st.readUnion !== undefined || current !== undefined || carry?.read !== undefined;
+    const overlap = read ? changed.filter((k) => st.readUnion?.[k] === 1 || current?.[k] === 1 || carry?.read?.has(k) === true) : [];
     if (overlap.length > 0) return { reason: "read_set_overlap", chunks: overlap };
     if (read) q.continuations++;
     return undefined;

@@ -4,6 +4,7 @@ import Popover from "@mui/material/Popover";
 import { STATE_GLYPH } from "@agentsim/ui";
 import { useEffect, useState } from "react";
 import type { LabRun } from "./sim/run-controller.ts";
+import { RecordingControls } from "./recording-controls.tsx";
 import type { SimSnapshot } from "./sim/sim-client.ts";
 
 export interface RunPopoverProps {
@@ -17,9 +18,9 @@ export interface RunPopoverProps {
   /** The 1 km² / 0.5 m reference world (built in the sim worker). */
   onLoadReference: () => void;
   onRerun: () => void;
-  /** Stored runs that can be replayed (newest first), with their recorded input counts. */
+  /** Stored runs that can be re-simulated (newest first), with their recorded input counts. */
   listRuns: () => Promise<{ runId: string; label: string; inputs: number }[]>;
-  onReplay: (runId: string) => void;
+  onResimulate: (runId: string) => void;
 }
 
 /**
@@ -80,6 +81,10 @@ export function RunPopover(props: RunPopoverProps) {
             </dd>
             <dt>simulator</dt>
             <dd data-testid="simulator-version">{h.simulatorVersion}</dd>
+            <dt>recording</dt>
+            <dd data-testid="run-recording" title="How the run is recorded (ADR-0035): the profile and its hash, or not at all (the researcher's opt-out)">
+              {h.recording === "stored" ? `${(h.recordingProfile as { name?: string } | undefined)?.name ?? "profile"} · ${h.recordingProfileHash}` : h.recording === "none" ? "○ not recorded" : "—"}
+            </dd>
             {snap.prepared?.runId === h.runId && (
               <>
                 <dt>planning prep</dt>
@@ -96,6 +101,7 @@ export function RunPopover(props: RunPopoverProps) {
         ) : (
           <p className="muted">No scenario loaded: the F0 placeholder world is running.</p>
         )}
+        <RecordingControls realtime={snap.mode === "realtime"} />
         <div className="row">
           {/* Busy buttons stay focusable (aria-disabled, clicks ignored): disabling them would drop focus out of
               the popover, and Escape would no longer close it. */}
@@ -122,8 +128,8 @@ export function RunPopover(props: RunPopoverProps) {
                 <span className="mono" data-testid={`stored-run-inputs-${r.runId}`}>
                   {r.inputs} input{r.inputs === 1 ? "" : "s"}
                 </span>{" "}
-                <Button size="small" variant="text" onClick={() => !busy && props.onReplay(r.runId)} aria-disabled={busy} data-testid={`replay-${r.runId}`}>
-                  Replay
+                <Button size="small" variant="text" onClick={() => !busy && props.onResimulate(r.runId)} aria-disabled={busy} data-testid={`resimulate-${r.runId}`} title="Run it again from its scenario version, run configuration and inputs: a new run (to look at a recording, open it from the Storage browser)">
+                  Re-simulate
                 </Button>
               </li>
             ))}

@@ -8,6 +8,7 @@ import {
   readsAtTick,
   senseRay,
   sensorPhaseUs,
+  type BeliefMapSnapshot,
   type GridSpace,
   type RangeRay,
   type RangeScratch,
@@ -26,6 +27,22 @@ export interface EntityBelief {
   readonly kind: string;
   /** Not observed for `lostAfterS`: a `lost` event was raised. Derived from time, so it is not hashed. */
   readonly lost: boolean;
+}
+
+/** The state of a `SensingService` between ticks, as plain data (see `SensingService.snapshot`). */
+export interface SensingSnapshot {
+  /** Tick of the latest sensing phase: read only by the observation-only ray recorder, kept for completeness. */
+  readonly curTick: number;
+  readonly agents: readonly {
+    readonly agentId: string;
+    readonly belief: BeliefMapSnapshot;
+    /** Entity beliefs in insertion order. */
+    readonly entities: readonly (readonly [string, EntityBelief])[];
+    /** Latest proximity hit points, flat (x, y). */
+    readonly proximity: readonly number[];
+    /** Each sensor by ID order, with the state of its noise stream. */
+    readonly sensors: readonly { readonly id: string; readonly rng: { readonly s: readonly [number, number, number, number]; readonly spareNormal: number }; readonly dropped: boolean }[];
+  }[];
 }
 
 /** Rays kept per lidar reading by the overlay recorder (decimated by a fixed stride) and lidars recorded per agent. */
@@ -374,6 +391,52 @@ export class SensingService implements ProximityPort, ContactPort {
     }
     ids.sort((p, q) => (p.id < q.id ? -1 : p.id > q.id ? 1 : 0));
     for (const e of ids) seen(e.id, e.kind, e.x, e.y, e.z);
+  }
+
+  /**
+   * The sensing state as plain data (F3a M1; ADR-0035 addition of 2026-10-17, item 8), agents in ID order: the belief
+   * map (a large piece the composition stores as a content-addressed section), the entity beliefs in insertion order
+   * (it drives the order of `lost` events and so of the inbox), the latest proximity hits, and each sensor's RNG state and
+   * dropout. Perception events of the tick are taken by the world within the tick: none may be waiting.
+   */
+  snapshot(): SensingSnapshot {
+    if (this.pending.length > 0) throw new Error("cannot snapshot sensing with perception events not yet taken (snapshots are taken between ticks)");
+    return {
+      curTick: this.curTick,
+      agents: this.order.map((s) => ({
+        agentId: s.agent.id,
+        belief: s.belief.snapshot(),
+        entities: [...s.entities].map(([id, e]): [string, EntityBelief] => [id, { ...e }]),
+        proximity: [...s.proximity],
+        sensors: s.sensors.map((st) => ({ id: st.spec.id, rng: st.rng.getState(), dropped: st.dropped })),
+      })),
+    };
+  }
+
+  /**
+   * Puts a snapshot back in place into a service assembled over the same agents and sensors. Each sensor's `Rng` is set in
+   * place (the noise closure keeps drawing from it), the belief map in place (the belief grid, the observer and the planner
+   * share it), and the entity beliefs in the order they were in.
+   */
+  restore(s: SensingSnapshot): void {
+    if (s.agents.length !== this.order.length) throw new RangeError(`snapshot has ${s.agents.length} agents' sensing, the run has ${this.order.length}`);
+    for (const a of s.agents) {
+      const mine = this.byId.get(a.agentId);
+      if (!mine) throw new RangeError(`snapshot has sensing for unknown agent ${a.agentId}`);
+      if (a.sensors.length !== mine.sensors.length) throw new RangeError(`snapshot has ${a.sensors.length} sensors for ${a.agentId}, the agent has ${mine.sensors.length}`);
+      mine.belief.restore(a.belief);
+      mine.entities.clear();
+      for (const [id, e] of a.entities) mine.entities.set(id, { ...e });
+      mine.proximity = [...a.proximity];
+      a.sensors.forEach((ss, k) => {
+        const st = mine.sensors[k];
+        if (!st || st.spec.id !== ss.id) throw new RangeError(`snapshot sensor ${ss.id} of ${a.agentId} is not the agent's ${st?.spec.id}`);
+        st.rng.setState(ss.rng);
+        st.dropped = ss.dropped;
+      });
+    }
+    this.pending = [];
+    this.curTick = s.curTick;
   }
 
   /** ProximityPort: the agent's latest proximity hit points. */

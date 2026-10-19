@@ -1,8 +1,10 @@
 import { err, isValid, ok } from "@agentsim/core";
 import { firstNonMonotonicRecord, formatRunId, isValidTraceRecord, RunHeader, type RunStatus, type TraceRecord } from "@agentsim/trace";
-import { checkSourceFilter, sourceFilterMatches } from "../sql/source-filter.ts";
+import { checkRecordFilter, checkSourceFilter, recordFilterMatches, sourceFilterMatches } from "../sql/source-filter.ts";
 import type { CachedResponse, DocumentSummary, RunSummary, StoragePorts, StoredDocument, TraceQuery } from "../ports.ts";
+import { checkRunRecording } from "../recording.ts";
 import { checkRunReferences } from "../run-references.ts";
+import { memoryRecordingStores } from "./memory-recording.ts";
 import { checkRunInputs, type StoredRunInput } from "../run-inputs.ts";
 import { checkRunConfigPreset, checkScenarioEnvelope } from "../scenario-envelope.ts";
 
@@ -63,8 +65,13 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
   const udKey = (ns: string, k: string) => `${ns}\u0000${k}`;
   const scenarios = versionedDocs(nowWallMs);
   const runConfigs = versionedDocs(nowWallMs);
+  const recording = memoryRecordingStores((runId) => runs.has(runId));
+  /** Run IDs of deleted runs: never handed out again. */
+  const deleted = new Set<string>();
 
   return {
+    snapshots: recording.snapshots,
+    beliefFrames: recording.beliefFrames,
     scenarios: {
       list: async () => scenarios.list(),
       get: async (id, version) => scenarios.get(id, version),
@@ -120,13 +127,14 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
       async flush() {},
       async query(q: TraceQuery) {
         checkSourceFilter(q.source);
+        checkRecordFilter(q);
         const after = q.afterSeq ?? -1;
         const limit = Math.max(0, Math.min(q.limit, 10_000));
         const from = q.simTime?.from ?? Number.NEGATIVE_INFINITY;
         const to = q.simTime?.to ?? Number.POSITIVE_INFINITY;
         const inWindow = (t: number) => t >= from && t <= to; // NaN bounds match nothing, like the SQL mapping
         return clone(
-          (records.get(q.runId) ?? []).filter((r) => r.seq > after && inWindow(r.simTime) && sourceFilterMatches(q.source, r.source)).slice(0, limit),
+          (records.get(q.runId) ?? []).filter((r) => r.seq > after && inWindow(r.simTime) && sourceFilterMatches(q.source, r.source) && recordFilterMatches(q, r)).slice(0, limit),
         );
       },
       async count(runId) {
@@ -136,13 +144,15 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
     runs: {
       async allocateRunId() {
         let max = 0;
-        for (const id of runs.keys()) max = Math.max(max, Number(id.slice(4)));
+        for (const id of [...runs.keys(), ...deleted]) max = Math.max(max, Number(id.slice(4)));
         return formatRunId(max + 1);
       },
       async create(header) {
         if (!isValid(RunHeader, header)) return err({ code: "invalid_header" as const, message: "invalid run header" });
         const refs = checkRunReferences(header);
         if (!refs.ok) return refs;
+        const recorded = checkRunRecording(header);
+        if (!recorded.ok) return recorded;
         if (runs.has(header.runId)) return err({ code: "duplicate_run" as const, message: `run ${header.runId} exists` });
         if (header.scenarioId !== undefined && !scenarios.get(header.scenarioId, header.scenarioVersion)) {
           return err({ code: "scenario_version_not_found" as const, message: `scenario ${header.scenarioId} v${header.scenarioVersion ?? "?"} not found` });
@@ -162,6 +172,20 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
         const r = runs.get(runId);
         if (!r) return err({ code: "unknown_run" as const, message: `unknown run ${runId}` });
         runs.set(runId, { ...r, status });
+        return ok(undefined);
+      },
+      async sizes(runId) {
+        if (!runs.has(runId)) return undefined;
+        const payloadBytes = (records.get(runId) ?? []).map((r) => JSON.stringify(r.payload ?? null).length);
+        return { records: { count: payloadBytes.length, bytes: payloadBytes.reduce((a, b) => a + b, 0) }, ...recording.sizesOf(runId) };
+      },
+      async delete(runId) {
+        if (!runs.has(runId)) return err({ code: "unknown_run" as const, message: `unknown run ${runId}` });
+        runs.delete(runId);
+        records.delete(runId);
+        inputs.delete(runId);
+        recording.forget(runId);
+        deleted.add(runId);
         return ok(undefined);
       },
       async appendInputs(runId, batch) {

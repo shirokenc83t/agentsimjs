@@ -84,9 +84,24 @@ export const SimLoad = Type.Object({
   scenario: Type.Unknown(),
   scenarioVersion: Type.Integer({ minimum: 1, maximum: 0x7fffffff }),
   runConfig: Type.Unknown(),
-  /** Recorded inputs to replay (a stored run), scheduled at their ticks in input order. */
+  /** Recorded inputs to apply again (re-simulating a stored run), scheduled at their ticks in input order. */
   inputs: Type.Optional(Type.Array(RunInputMessage, { maxItems: 100_000 })),
+  /**
+   * How the run is recorded (ADR-0035 addition of 2026-10-17, item 6): `stored` with the resolved recording profile (the worker
+   * hands the profile's records to the storage worker through the recorder port and holds the run until the header is stored),
+   * or `none`, the researcher's explicit opt-out. Absent: the run is not recorded (headless tests).
+   */
+  recording: Type.Optional(
+    Type.Union([Type.Object({ mode: Type.Literal("none") }, { additionalProperties: false }), Type.Object({ mode: Type.Literal("stored"), profile: Type.Unknown() }, { additionalProperties: false })]),
+  ),
 });
+
+/**
+ * The sim worker's end of the recorder channel (ADR-0019 addition of 2026-10-17): the main thread creates a MessageChannel, keeps
+ * neither port, and hands one to this worker and one to the storage worker, so trace records never pass through it. The port is
+ * transferred (it is a `MessagePort`; the schema cannot say so).
+ */
+export const SimRecorderPort = Type.Object({ type: Type.Literal("recorderPort"), port: Type.Unknown() });
 
 /**
  * Researcher command (ADR-0015 clarification of 2026-10-04 and addition of 2026-10-12): world scope, recorded by the
@@ -174,7 +189,7 @@ export const SimStrategyTest = Type.Object({
   planOn: Type.Union([Type.Literal("belief"), Type.Literal("truth")]),
 });
 
-export const MainToSim = Type.Union([SimInit, SimControl, SimReturnBuffer, SimLoad, SimCommand, SimBuildPreset, SimView, SimResearcherWatch, SimBeliefWatch, SimOverlayWatch, SimStrategyTest]);
+export const MainToSim = Type.Union([SimInit, SimControl, SimReturnBuffer, SimRecorderPort, SimLoad, SimCommand, SimBuildPreset, SimView, SimResearcherWatch, SimBeliefWatch, SimOverlayWatch, SimStrategyTest]);
 export type MainToSim = Static<typeof MainToSim>;
 
 // ---- worker → main ----------------------------------------------------------------------------
@@ -329,7 +344,7 @@ export const SimTrail = Type.Object({
   ),
 });
 
-/** A run input was recorded (live command or replayed): the main thread stores it with the run. */
+/** A run input was recorded (live command or the input of a re-simulation): the main thread stores it with the run. */
 export const SimInput = Type.Object({ type: Type.Literal("input"), runId: RunId, input: RunInputMessage });
 
 /** A preset built on request: the document (passed through by the main thread, never parsed there) and its content hash. */
@@ -480,7 +495,19 @@ export const SimBudget = Type.Object({
   planningQueries: Type.Number({ minimum: 0 }),
 });
 
-export const SimToMain = Type.Union([SimReady, SimState, SimStats, SimDegradation, SimError, SimLoaded, SimEvents, SimGrid, SimChunks, SimTrail, SimInput, SimPreset, SimPreparing, SimPrepared, SimAgentView, SimResearcherData, SimBeliefChunks, SimRays, SimTopology, SimBudget, SimStrategyTestResult]);
+/**
+ * The state of a recorded run's recording (ADR-0035 §6): `storage_backpressure` while the run waits for the writer (the backlog is above its
+ * high mark), `storage_quota` while it is paused near the storage quota, `ok` otherwise. Sent when it changes; the status line shows it.
+ */
+export const SimRecordingState = Type.Object({
+  type: Type.Literal("recording"),
+  runId: RunId,
+  state: Type.Union([Type.Literal("ok"), Type.Literal("storage_backpressure"), Type.Literal("storage_quota")]),
+  backlogRecords: Type.Integer({ minimum: 0 }),
+  backlogBytes: Type.Integer({ minimum: 0 }),
+});
+
+export const SimToMain = Type.Union([SimReady, SimState, SimStats, SimDegradation, SimError, SimLoaded, SimEvents, SimGrid, SimChunks, SimTrail, SimInput, SimPreset, SimPreparing, SimPrepared, SimAgentView, SimResearcherData, SimBeliefChunks, SimRays, SimTopology, SimBudget, SimRecordingState, SimStrategyTestResult]);
 export type SimToMain = Static<typeof SimToMain>;
 export type SimStateMessage = Static<typeof SimState>;
 export type SimStatsMessage = Static<typeof SimStats>;

@@ -22,4 +22,25 @@ describe("UI context bus (ADR-0016)", () => {
     store.getState().setSimTime(Number.NaN);
     expect(store.getState().simTime).toBe(0);
   });
+
+  it("carries the run mode: live by default, replay when a run is opened for replay, and a new run starts live again", () => {
+    const store = createUiContextStore();
+    expect(store.getState().mode).toBe("live");
+    store.getState().setRun("run-000003", "replay");
+    expect(store.getState()).toMatchObject({ runId: "run-000003", mode: "replay", simTime: 0 });
+    store.getState().setSimTime(41.2);
+    store.getState().setRun("run-000004");
+    expect(store.getState()).toMatchObject({ runId: "run-000004", mode: "live", simTime: 0 });
+  });
+
+  it("is read imperatively: the cursor is there at any time without a subscriber (the renderer never re-renders on it)", () => {
+    const store = createUiContextStore();
+    const seen = vi.fn();
+    store.getState().setSimTime(7);
+    expect(store.getState().simTime).toBe(7);
+    store.subscribe(seen);
+    store.getState().setSimTime(8);
+    expect(seen).toHaveBeenCalledTimes(1);
+    expect(store.getState().simTime).toBe(8);
+  });
 });

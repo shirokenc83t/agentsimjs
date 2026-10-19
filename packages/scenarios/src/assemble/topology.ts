@@ -18,6 +18,17 @@ interface Marks {
   rev: number;
 }
 
+/** The state of a `TopologyService` between ticks, as plain data (see `TopologyService.snapshot`). */
+export interface TopologySnapshot {
+  readonly agents: readonly {
+    readonly agentId: string;
+    /** Had an unmarked frontier at the last look; undefined before the first look. */
+    readonly hadFrontier: boolean | undefined;
+    /** The cells marked unreachable (ascending) and the change stamp of the marks; undefined when the agent never had a mark. */
+    readonly marks: { readonly cells: readonly number[]; readonly rev: number } | undefined;
+  }[];
+}
+
 /**
  * Every agent's topological layer (ADR-0039), over the map it plans on: its belief grid, or the ground truth for
  * `ideal` agents. Updated in the sensing phase, after the readings and the view sync point. The layer itself is
@@ -38,6 +49,8 @@ export class TopologyService implements FrontierPort {
   private readonly rangeSensors = new Set<string>();
   /** Agent IDs in ID order (update order). */
   private readonly ids: readonly string[];
+  /** Builds an agent's topological layer over its map: assembly, and a restore (the layer is derived data, built again). */
+  private readonly build: (agentId: string) => AgentTopology;
 
   constructor(
     resolved: ResolvedRunConfig,
@@ -48,7 +61,12 @@ export class TopologyService implements FrontierPort {
     /** Where each agent is (to know whether its own position is known on its map). */
     private readonly positionOf: (agentId: string) => { readonly xM: number; readonly yM: number } | undefined = () => undefined,
   ) {
-    for (const a of resolved.agents) this.byAgent.set(a.agentId, new AgentTopology(mapOf(a.agentId), a.topology));
+    this.build = (agentId) => {
+      const a = resolved.agents.find((x) => x.agentId === agentId);
+      if (!a) throw new Error(`no topology configuration for ${agentId}`);
+      return new AgentTopology(mapOf(agentId), a.topology);
+    };
+    for (const a of resolved.agents) this.byAgent.set(a.agentId, this.build(a.agentId));
     this.ids = resolved.agents.map((a) => a.agentId);
     for (const a of resolved.agents) if (a.body.sensors.some((s) => s.type !== "camera")) this.rangeSensors.add(a.agentId);
     // The first build covers every chunk: done at assembly (load time), never inside a tick.
@@ -288,6 +306,67 @@ export class TopologyService implements FrontierPort {
     m.rev++;
     this.emit(agentId, simTime, { op: "frontier-mark", group: group.point, region: group.region, cells: group.cells.length });
     return true;
+  }
+
+  /**
+   * The topology state as plain data (F3a M1; ADR-0035 addition of 2026-10-17, item 8), agents in ID order: whether
+   * the agent had an unmarked frontier at the last look, and the cells it marked unreachable (ascending) with the marks'
+   * change stamp. The layers themselves are derived and are not captured; neither are the caches. Taken between ticks: the
+   * world has taken the agents that ran out of frontiers, and the marks have been checked against the planning view.
+   */
+  snapshot(): TopologySnapshot {
+    if (this.exhausted.length > 0) throw new Error("cannot snapshot topology with exhausted agents not yet taken (snapshots are taken between ticks)");
+    return {
+      agents: this.ids.map((agentId) => {
+        const m = this.marks.get(agentId);
+        if (m && m.byChunk.size > 0) {
+          const view = this.viewOf(agentId);
+          if (view && view.contentVersion !== m.checkedAt) throw new Error(`marks of ${agentId} have a planning-view change not yet checked (snapshots are taken after the tick's topology update)`);
+        }
+        const cells: number[] = [];
+        if (m) for (const e of m.byChunk.values()) for (const c of e.cells) cells.push(c);
+        cells.sort((a, b) => a - b);
+        return { agentId, hadFrontier: this.hadFrontier.get(agentId), marks: m ? { cells, rev: m.rev } : undefined };
+      }),
+    };
+  }
+
+  /**
+   * Puts a snapshot back in place, after the belief maps are restored: each agent's layer is built again over its map and
+   * brought up to date, the marks go back with their stamps re-based on the planning view as it is now (a rebuilt view
+   * counts versions from its own start), and the caches (`witness`, `watchedAt`) start empty, which only costs one look.
+   */
+  restore(s: TopologySnapshot): void {
+    if (s.agents.length !== this.ids.length) throw new RangeError(`snapshot has ${s.agents.length} agents' topology, the run has ${this.ids.length}`);
+    for (const a of s.agents) if (!this.byAgent.has(a.agentId)) throw new RangeError(`snapshot has topology for unknown agent ${a.agentId}`);
+    this.marks.clear();
+    this.hadFrontier.clear();
+    this.witness.clear();
+    this.watchedAt.clear();
+    this.exhausted = [];
+    for (const id of this.ids) {
+      const layer = this.build(id);
+      layer.update();
+      this.byAgent.set(id, layer);
+    }
+    for (const a of s.agents) {
+      if (a.hadFrontier !== undefined) this.hadFrontier.set(a.agentId, a.hadFrontier);
+      if (!a.marks) continue;
+      const g = this.of(a.agentId).grid;
+      const at = this.viewOf(a.agentId)?.contentVersion ?? 0;
+      const byChunk = new Map<number, { cells: Set<number>; at: number }>();
+      const cs = g.chunkSize;
+      for (const c of a.marks.cells) {
+        const k = (((c / g.sizeX) | 0) / cs | 0) * g.chunksX + (((c % g.sizeX) / cs) | 0);
+        let entry = byChunk.get(k);
+        if (!entry) {
+          entry = { cells: new Set(), at };
+          byChunk.set(k, entry);
+        }
+        entry.cells.add(c);
+      }
+      this.marks.set(a.agentId, { byChunk, checkedAt: at, rev: a.marks.rev });
+    }
   }
 
   /** Marks are agent state: added to the state hash only for agents that have any (runs without marks unchanged). */

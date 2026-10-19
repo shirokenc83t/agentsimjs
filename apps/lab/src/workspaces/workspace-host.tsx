@@ -2,7 +2,10 @@ import "dockview-react/dist/styles/dockview.css";
 import "./dockview-theme.css";
 import type { StorageClient } from "@agentsim/storage";
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type DockviewTheme, type SerializedDockview } from "dockview-react";
-import { useEffect, useRef } from "react";
+import { useUiContext } from "@agentsim/ui";
+import { useCallback, useEffect, useRef } from "react";
+import { usePolled, useServices } from "../services.tsx";
+import { syncRunContext } from "../sim/run-context.ts";
 import { DOCK_COMPONENTS, PANELS } from "./registry.tsx";
 import { markWorkspaceVisible } from "../probe.ts";
 import { LAYOUT_NAMESPACE, layoutKey, type WorkspacePreset } from "./presets.ts";
@@ -68,9 +71,16 @@ export function WorkspaceHost(props: { preset: WorkspacePreset; storage: Storage
 
   useEffect(() => () => clearTimeout(saveTimer.current), []);
 
+  // The shared UI context follows the run source: run start, mode, and (live) the cursor (ADR-0016). The panels mount once the source is there.
+  const { source } = useServices();
+  const view = usePolled(useCallback(() => source?.snapshot(), [source]), 100);
+  useEffect(() => {
+    if (view) syncRunContext(useUiContext, view);
+  }, [view]);
+
   return (
     <div className="workspace-fill" data-testid={`workspace-${preset.id}`}>
-      <DockviewReact theme={DOCK_THEME} components={DOCK_COMPONENTS} onReady={onReady} />
+      {source ? <DockviewReact theme={DOCK_THEME} components={DOCK_COMPONENTS} onReady={onReady} /> : null}
     </div>
   );
 }

@@ -19,6 +19,8 @@ export interface CreateRunOptions extends AssembleOptions {
 export interface CreatedRun extends AssembledRun {
   readonly world: World;
   readonly scheduler: Scheduler;
+  /** The minds of the run by agent ID (what a snapshot takes the positions of the scripts from). */
+  readonly brains: ReadonlyMap<string, Brain>;
   /** Present when `beliefVsTruth` was requested. Not reachable from the world, the brains or the mind view. */
   readonly observer?: BeliefVsTruth;
 }
@@ -48,8 +50,9 @@ export function createRun(loaded: LoadedScenario, resolved: ResolvedRunConfig, t
     sensing: senseThenTopology(assembled, observer),
     minDecisionIntervalS: resolved.minDecisionIntervalS,
     mindView: assembled.mindView,
+    ...(opts.genesis === false ? { genesis: false } : {}),
   });
-  return { ...assembled, world, scheduler: new Scheduler(world, opts.dtS), ...(observer ? { observer } : {}) };
+  return { ...assembled, world, scheduler: new Scheduler(world, opts.dtS), brains, ...(observer ? { observer } : {}) };
 }
 
 /** The world's sensing phase: readings first, then each agent's topological layer from what changed (ADR-0039 §4). */

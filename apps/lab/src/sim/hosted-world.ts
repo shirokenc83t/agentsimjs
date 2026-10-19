@@ -22,6 +22,7 @@ import { ATLAS_BYTES_PER_CELL, atlasScratch, encodeAtlasChunk, type GridSpace } 
 import { startStrategyTest, type StrategyTestError, type StrategyTestRequest, type StrategyTestRun, agentWarnings, checkSensorNoise, checkSensorRates, createRun, idealAgentsOf, loadScenario, parseRunConfigValue, parseScenarioValue, preparePlanning, resolveRunConfig, type CreatedRun, type ResolvedRunConfig } from "@agentsim/scenarios";
 import { TraceBuffer, type TraceRecord } from "@agentsim/trace";
 import { DUMMY_DT_S, DUMMY_ENTITY_IDS, DUMMY_POSE_FLOATS, writeDummyPoses } from "./dummy-world.ts";
+import type { RecordingTarget } from "./run-recording.ts";
 import { TrailRecorder } from "./trail-recorder.ts";
 
 /**
@@ -55,7 +56,7 @@ export interface HostedWorld extends Steppable {
   /** Executed-path points recorded from tick states since the previous call (scenario runs only). */
   drainTrail(): SimTrailMessage | undefined;
   /**
-   * Records a researcher command as a run input for the next tick, or for `atTick` when replaying a stored
+   * Records a researcher command as a run input for the next tick, or for `atTick` when re-simulating a stored
    * run (scenario runs only).
    */
   inject(cmd: { agentId: string; name: string; params: unknown }, atTick?: number): Result<RunInput, CodedError>;
@@ -221,7 +222,7 @@ export class ScenarioHostedWorld implements HostedWorld {
 
   inject(cmd: { agentId: string; name: string; params: unknown }, atTick?: number): Result<RunInput, CodedError> {
     if (!this.entityIds.includes(cmd.agentId)) return { ok: false, error: { code: "unknown_agent", message: `no agent ${cmd.agentId} in this run` } };
-    // The closed set is checked before anything is recorded: a run input is a replayable fact, never a refused name.
+    // The closed set is checked before anything is recorded: a run input is a fact that can be applied again, never a refused name.
     if (!this.run.runtime.isInjectable(cmd.name)) return { ok: false, error: { code: "not_injectable", message: `${cmd.name.slice(0, 32)} is not a researcher command` } };
     if (atTick !== undefined && atTick <= this.run.world.tick) return { ok: false, error: { code: "past_tick", message: `tick ${atTick} has already run` } };
     return { ok: true, value: this.run.world.inject(cmd, atTick) };
@@ -317,9 +318,27 @@ export class ScenarioHostedWorld implements HostedWorld {
     return this.run.world.outstandingCount;
   }
 
+  /** Called after each tick, between ticks, by a recorded run's recording (ADR-0035 addition of 2026-10-17): observation only. */
+  private tickHook: (() => void) | undefined;
+
+  setTickHook(hook: (() => void) | undefined): void {
+    this.tickHook = hook;
+  }
+
+  /** What a recorded run's recording reads: the run, its trace, the step and the agents whose beliefs are the ground truth. */
+  recordingTarget(): RecordingTarget {
+    return {
+      run: { ...this.run, trace: this.trace },
+      trace: this.trace,
+      dtS: this.dtS,
+      idealAgents: new Set(this.resolved.agents.filter((a) => a.beliefs.idealized).map((a) => a.agentId)),
+    };
+  }
+
   step(ctx: TickContext): void {
     this.run.world.step(ctx);
     this.recordTrail();
+    this.tickHook?.();
   }
 
   decide(): Promise<void> {
@@ -511,16 +530,11 @@ export class ScenarioHostedWorld implements HostedWorld {
     return out;
   }
 
+  /** The records the cache holds from the last one given on: for a run without a recorder (the opted-out run's panel stream). */
   drainRecords(): TraceRecord[] {
-    const all = this.trace.all();
-    const out: TraceRecord[] = [];
-    for (let k = all.length - 1; k >= 0; k--) {
-      const r = all[k] as TraceRecord;
-      if (r.seq <= this.drained) break;
-      out.push(r);
-    }
-    out.reverse();
-    if (out.length > 0) this.drained = (out[out.length - 1] as TraceRecord).seq;
+    const out = this.trace.since(this.drained + 1);
+    const last = out[out.length - 1];
+    if (last) this.drained = last.seq;
     return out;
   }
 }

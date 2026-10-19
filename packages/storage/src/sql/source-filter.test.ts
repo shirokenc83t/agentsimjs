@@ -69,4 +69,52 @@ describe("source filter compilation (ADR-0031)", () => {
     expect(plan).toContain("trace_records_run_time");
     db.close();
   });
+
+  // F3a M3 (replay reads): agent and kind filters page by seq on indexes that end in seq (migration 0009), like the source ones.
+  function seededByAgentKind() {
+    const db = openNodeSqlDriver();
+    migrate(db, () => 0);
+    db.run("INSERT INTO runs (run_id, schema_version, created_at_wall_ms, label, status) VALUES ('run-000001', 0, 0, 'x', 'running')");
+    const insert = "INSERT INTO trace_records (run_id, seq, id, sim_time, wall_time, agent_id, kind, payload, source_owner, source_component) VALUES (?, ?, ?, ?, 0, ?, ?, '{}', ?, 'body')";
+    db.transaction(() => {
+      for (let i = 0; i < 6000; i++) {
+        const agent = `uav-${String(i % 20).padStart(3, "0")}`;
+        db.run(insert, ["run-000001", i, `r${i}`, Math.floor(i / 20) * 0.1, agent, i % 7 === 0 ? "action" : "observation", agent]);
+      }
+    });
+    return db;
+  }
+
+  it.each([
+    ["agent paged by seq", { agentId: "uav-002" }, "trace_records_run_agent_seq"],
+    ["kind paged by seq", { kinds: ["action"] }, "trace_records_run_kind_seq"],
+    ["agent in a window", { agentId: "uav-002", simTime: { from: 5, to: 12 } }, "trace_records_run_agent_seq"],
+    ["kind in a window", { kinds: ["action"], simTime: { from: 5, to: 12 } }, "trace_records_run_kind_seq"],
+  ] as const)("%s uses an index that ends in seq, with no sort and no table scan", (_, filter, index) => {
+    const db = seededByAgentKind();
+    const q = { runId: "run-000001", afterSeq: 100, limit: 100, ...filter };
+    const range = "simTime" in filter ? timeWindowToSeqRange(db, "run-000001", filter.simTime) : undefined;
+    const built = buildTraceQuery(q, range ?? undefined);
+    const plan = planOf(db, built.sql, built.params);
+    expect(plan).toContain(index);
+    expect(plan).not.toContain("TEMP B-TREE");
+    expect(plan).not.toMatch(/SCAN t(?! USING)/);
+    db.close();
+  });
+
+  it("an agent and a kind together use one of the two and still return seq order", () => {
+    const db = seededByAgentKind();
+    const built = buildTraceQuery({ runId: "run-000001", limit: 10, agentId: "uav-007", kinds: ["action", "observation"] }, undefined);
+    const plan = planOf(db, built.sql, built.params);
+    expect(plan).toMatch(/trace_records_run_(agent|kind)_seq/);
+    expect(plan).not.toContain("TEMP B-TREE FOR ORDER BY");
+    expect(db.all<{ seq: number }>(built.sql, built.params).map((r) => r.seq)).toEqual([7, 27, 47, 67, 87, 107, 127, 147, 167, 187]);
+    db.close();
+  });
+
+  it("the filter values never reach the SQL text", () => {
+    const built = buildTraceQuery({ runId: "run-000001", limit: 5, agentId: "x' OR 1=1 --", kinds: ["a') --"], op: "pose'); DROP" }, undefined);
+    expect(built.sql).not.toMatch(/OR 1=1|DROP|--/);
+    expect(built.params).toEqual(expect.arrayContaining(["x' OR 1=1 --", "a') --", "pose'); DROP"]));
+  });
 });

@@ -1,5 +1,5 @@
 import { useSimStream } from "./use-sim-stream.ts";
-import type { SimClient } from "../sim/sim-client.ts";
+import type { RunSource } from "../sim/run-source.ts";
 
 const ms = (v: number) => (v < 10 ? v.toFixed(2) : v.toFixed(1));
 
@@ -8,9 +8,9 @@ const ms = (v: number) => (v < 10 ? v.toFixed(2) : v.toFixed(1));
  * planner use. They come from the worker's `budget` stream (≈ 3 Hz, wall-time diagnostics that never enter a trace or a
  * hash); the code lives in the lazily loaded Scene panel, not in the shell.
  */
-export function HudBudgetRows(props: { sim: SimClient; runId: string | undefined }) {
-  const { sim, runId } = props;
-  const b = useSimStream(sim, "budget", (m) => m.runId === runId, [runId]);
+export function HudBudgetRows(props: { source: RunSource; runId: string | undefined }) {
+  const { source, runId } = props;
+  const b = useSimStream(source, "budget", (m) => m.runId === runId, [runId]);
   return (
     <>
       <dt>sensing</dt>

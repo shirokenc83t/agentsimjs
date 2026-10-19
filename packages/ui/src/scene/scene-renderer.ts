@@ -36,7 +36,7 @@ import { BeliefAtlas, type BeliefViewMode } from "./belief-atlas.ts";
 import { SensorOverlay } from "./overlay-layers.ts";
 import { StagesOverlay, type StageLine } from "./stages-overlay.ts";
 import { GridAtlas, type GridViewMode } from "./grid-atlas.ts";
-import type { StateInterpolator } from "./interpolator.ts";
+import type { PoseSource } from "./interpolator.ts";
 import { PathLayer, type ExecutedPathView } from "./paths.ts";
 
 const MAX_INSTANCES = 1024;
@@ -121,7 +121,7 @@ export class SceneRenderer {
 
   constructor(
     private readonly container: HTMLElement,
-    private readonly source: StateInterpolator,
+    private readonly source: PoseSource,
     tokens: SceneTokens,
   ) {
     this.tokens = tokens;

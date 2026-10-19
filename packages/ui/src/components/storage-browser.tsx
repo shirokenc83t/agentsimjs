@@ -1,16 +1,7 @@
-import type { RunSummary, StorageClient, StorageInfo } from "@agentsim/storage";
+import type { RunSizes, RunSummary, StorageClient, StorageInfo } from "@agentsim/storage";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { downloadBytes } from "../download.ts";
 import { formatBytes } from "../format.ts";
-
-/** Triggers a browser download of `bytes` (UI edge; no storage access on the render path). */
-export function downloadBytes(bytes: Uint8Array, filename: string, type = "application/vnd.sqlite3"): void {
-  const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
 
 export interface StorageBrowserProps {
   readonly client: Pick<StorageClient, "ports" | "admin">;
@@ -18,26 +9,51 @@ export interface StorageBrowserProps {
   readonly onImported?: () => void;
   readonly download?: (bytes: Uint8Array, filename: string) => void;
   readonly nowWallMs?: () => number;
+  /** The run being recorded: it cannot be deleted (ADR-0035 addition of 2026-10-17, item 7). */
+  readonly currentRunId?: string | undefined;
+  /** Shows a recorded run in the panels, read from storage. Offered for runs that were recorded; the others say why not. */
+  readonly onReplay?: ((runId: string) => void) | undefined;
+}
+
+const totalBytes = (s: RunSizes): number => s.records.bytes + s.blobs.bytes + s.snapshots.bytes + s.beliefFrames.bytes;
+
+/** What a run holds, as the browser lists it: count and size of each kind of data. */
+function holds(s: RunSizes): string {
+  const part = (name: string, e: { count: number; bytes: number }) => `${name} ${e.count} · ${formatBytes(e.bytes)}`;
+  return [part("records", s.records), part("blobs", s.blobs), part("snapshots", s.snapshots), part("belief frames", s.beliefFrames)].join(" · ");
 }
 
 /** Storage browser (UI-SPEC §4, ADR-0010): runs, size, quota, export/import of `.sqlite`. */
 export function StorageBrowser(props: StorageBrowserProps) {
   const { client, download = downloadBytes, nowWallMs = Date.now } = props;
   const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [sizes, setSizes] = useState<Record<string, RunSizes>>({});
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const runFileInput = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     const [r, i] = await Promise.all([client.ports.runs.list(), client.admin.info()]);
+    const sz = await Promise.all(r.map(async (x) => [x.runId, await client.ports.runs.sizes(x.runId)] as const));
     setRuns(r);
     setInfo(i);
+    setSizes(Object.fromEntries(sz.flatMap(([id, v]) => (v ? [[id, v] as const] : []))));
   }, [client]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    // Opening the browser is a moment to give back what deleted runs left in the file, if nothing is recording (the worker checks).
+    void (async () => {
+      try {
+        await client.admin.compact();
+      } catch {
+        // Compaction is housekeeping: a failure here is not the browser's.
+      }
+      await refresh();
+    })();
+  }, [client, refresh]);
 
   const act = async (fn: () => Promise<string | void>) => {
     setBusy(true);
@@ -74,12 +90,37 @@ export function StorageBrowser(props: StorageBrowserProps) {
       return `exported ${formatBytes(bytes.byteLength)}`;
     });
 
+  const exportJsonl = (runId: string) =>
+    act(async () => {
+      const r = await client.admin.exportRunJsonl(runId);
+      if (!r.ok) throw new Error(r.error.message);
+      download(r.value, `${runId}.agentsim.jsonl`);
+      return `exported ${runId} as ${formatBytes(r.value.byteLength)} of JSON lines`;
+    });
+
+  /** A run file (JSON lines or a per-run .sqlite) is ADDED as a new run; the database is not replaced. */
+  const importRunFile = (file: File) =>
+    act(async () => {
+      const r = await client.admin.importRun(new Uint8Array(await file.arrayBuffer()));
+      if (!r.ok) throw new Error(`run file rejected (${r.error.code}): ${r.error.message}`);
+      return `added ${file.name} as ${r.value.runId} (it was ${r.value.importedFrom})`;
+    });
+
   const exportOne = (runId: string) =>
     act(async () => {
       const r = await client.admin.exportRun(runId);
       if (!r.ok) throw new Error(r.error.message);
       download(r.value, `${runId}.sqlite`);
       return `exported ${runId}`;
+    });
+
+  /** Deletes a run and everything it owns, the way to free space (the dialog named it and its size first). */
+  const deleteRun = (runId: string) =>
+    act(async () => {
+      setConfirming(null);
+      const r = await client.ports.runs.delete(runId);
+      if (!r.ok) throw new Error(r.error.message);
+      return `deleted ${runId}`;
     });
 
   const importFile = (file: File) =>
@@ -119,6 +160,21 @@ export function StorageBrowser(props: StorageBrowserProps) {
         <button className="btn" disabled={busy} onClick={() => fileInput.current?.click()} data-testid="import-db">
           ⭱ Import .sqlite
         </button>
+        <button className="btn" disabled={busy} onClick={() => runFileInput.current?.click()} data-testid="import-run" title="Add the run of a .jsonl or per-run .sqlite file as a new run">
+          ⭱ Import run
+        </button>
+        <input
+          ref={runFileInput}
+          type="file"
+          accept=".jsonl,.sqlite,.sqlite3,.db,application/jsonl,application/x-ndjson"
+          hidden
+          data-testid="import-run-file"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) void importRunFile(f);
+          }}
+        />
         <input
           ref={fileInput}
           type="file"
@@ -148,6 +204,7 @@ export function StorageBrowser(props: StorageBrowserProps) {
             <th>label</th>
             <th>status</th>
             <th>records</th>
+            <th>holds</th>
             <th />
           </tr>
         </thead>
@@ -158,22 +215,65 @@ export function StorageBrowser(props: StorageBrowserProps) {
               <td>{r.label}</td>
               <td>{r.status}</td>
               <td>{r.recordCount}</td>
+              <td className="muted" data-testid={`run-size-${r.runId}`}>
+                {sizes[r.runId] ? holds(sizes[r.runId] as RunSizes) : "…"}
+              </td>
               <td>
+                {props.onReplay && (
+                  <button
+                    className="btn"
+                    disabled={busy || r.recording !== "stored"}
+                    title={r.recording === "stored" ? "Replay this run from storage" : r.recording === "none" ? "This run was not recorded: there is nothing to replay" : "This run was stored before recording existed: there is nothing to replay"}
+                    onClick={() => props.onReplay?.(r.runId)}
+                    aria-label={`Replay ${r.runId}`}
+                    data-testid={`replay-${r.runId}`}
+                  >
+                    ▶
+                  </button>
+                )}
                 <button className="btn" disabled={busy} onClick={() => exportOne(r.runId)} aria-label={`Export ${r.runId}`}>
                   ⭳
+                </button>
+                <button className="btn" disabled={busy} onClick={() => exportJsonl(r.runId)} aria-label={`Export ${r.runId} as JSON lines`} title="Export as a JSON-lines file" data-testid={`export-jsonl-${r.runId}`}>
+                  ⭳ jsonl
+                </button>
+                <button
+                  className="btn"
+                  disabled={busy || r.runId === props.currentRunId}
+                  title={r.runId === props.currentRunId ? "This run is being recorded" : "Delete this run and everything it holds"}
+                  onClick={() => setConfirming(r.runId)}
+                  aria-label={`Delete ${r.runId}`}
+                >
+                  🗑
                 </button>
               </td>
             </tr>
           ))}
           {runs.length === 0 && (
             <tr>
-              <td colSpan={5} className="muted">
+              <td colSpan={6} className="muted">
                 No runs stored yet.
               </td>
             </tr>
           )}
         </tbody>
       </table>
+      {confirming !== null && (
+        <div role="alertdialog" aria-modal="true" aria-label={`Delete ${confirming}`} className="panel" data-testid="delete-run-dialog">
+          <p>
+            Delete {confirming} ({sizes[confirming] ? formatBytes(totalBytes(sizes[confirming] as RunSizes)) : "size unknown"})? Its records, snapshots, blobs and belief frames go with it, and it cannot
+            be restored.
+          </p>
+          <div className="row">
+            <button className="btn" onClick={() => setConfirming(null)}>
+              Cancel
+            </button>
+            <button className="btn danger" disabled={busy} onClick={() => void deleteRun(confirming)}>
+              Delete the run
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": { "lib": ["ES2023"], "types": ["node", "vite/client"] },
-  "include": ["packages/*/src/**/*.bench.ts", "tools/bench/**/*.ts"]
+  "include": ["packages/*/src/**/*.bench.ts", "apps/*/src/**/*.bench.ts", "tools/bench/**/*.ts"]
 }

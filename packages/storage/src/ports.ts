@@ -21,6 +21,12 @@ export interface TraceQuery {
   readonly source?: { readonly include?: readonly SourcePattern[]; readonly exclude?: readonly SourcePattern[] };
   /** Inclusive sim-time window (seconds), mapped to a `seq` range (seq order = sim-time order in a run). */
   readonly simTime?: { readonly from?: number; readonly to?: number };
+  /** Records about this agent (`agent_id`; the subject, not the emitter). */
+  readonly agentId?: string;
+  /** Records of any of these kinds (1 to 32; an empty list matches nothing). */
+  readonly kinds?: readonly string[];
+  /** Records whose payload `op` is this one (a post-filter on top of the others: pose samples are `observation` + `pose`). */
+  readonly op?: string;
 }
 
 export interface TraceStore {
@@ -55,6 +61,27 @@ export interface RunStore {
   appendInputs(runId: string, inputs: readonly StoredRunInput[]): Promise<Result<void, RunInputError>>;
   /** The run's inputs in input-ID order (empty for an unknown run). */
   inputs(runId: string): Promise<StoredRunInput[]>;
+  /** What the run holds, for the Storage browser; undefined for an unknown run. */
+  sizes(runId: string): Promise<RunSizes | undefined>;
+  /**
+   * Deletes the run and everything it owns: its header, trace records and causes, run inputs, snapshots, blobs and belief frames (the way
+   * to free space, ADR-0035 addition of 2026-10-17, item 7). Its ID is never handed out again. Whether the run is the one being recorded is
+   * the caller's to check (the storage worker refuses it).
+   */
+  delete(runId: string): Promise<Result<void, CodedError<"unknown_run">>>;
+}
+
+/** Count and stored bytes of one kind of data of a run (the heavy column: payload text, blob or frame bytes, snapshot container). */
+export interface SizeEntry {
+  readonly count: number;
+  readonly bytes: number;
+}
+
+export interface RunSizes {
+  readonly records: SizeEntry;
+  readonly blobs: SizeEntry;
+  readonly snapshots: SizeEntry;
+  readonly beliefFrames: SizeEntry;
 }
 
 export interface CachedResponse {
@@ -134,6 +161,92 @@ export interface RunConfigStore {
   delete(id: string): Promise<Result<void, CodedError<"unknown_run_config">>>;
 }
 
+/** A blob of a run: a snapshot section or a belief keyframe, named by the 128-bit content hash of its bytes (ADR-0004 addition of 2026-10-18). */
+export interface StoredBlob {
+  readonly id: string;
+  readonly bytes: Uint8Array;
+}
+
+/** A snapshot to store: its container (large sections outside it) and the blobs those sections are, when not stored yet. */
+export interface SnapshotWrite {
+  /** Seq of the run's `snapshot` trace record. */
+  readonly seq: number;
+  readonly simTime: number;
+  readonly tick: number;
+  /** The container (`ASNP`); its sections may be inline or refer to blobs of the run. */
+  readonly bytes: Uint8Array;
+  /** Blobs to store with it (those already stored may be left out). Every section outside the container must be stored. */
+  readonly blobs?: readonly StoredBlob[];
+}
+
+export interface SnapshotInfo {
+  /** The snapshot's content hash (`snapshotHash`): the same whether sections are inline or stored as blobs. */
+  readonly id: string;
+  readonly seq: number;
+  readonly simTime: number;
+  readonly tick: number;
+  readonly bytes: number;
+}
+
+export interface LoadedSnapshot extends SnapshotInfo {
+  readonly container: Uint8Array;
+  /** The blobs the container refers to. */
+  readonly blobs: readonly StoredBlob[];
+}
+
+export type BlobWriteError = CodedError<"unknown_run" | "invalid_blob">;
+export type SnapshotWriteError = CodedError<"unknown_run" | "invalid_snapshot" | "invalid_blob" | "missing_blob" | "duplicate_snapshot">;
+
+/** Snapshots and the blobs they and the belief keyframes share (ADR-0035 addition of 2026-10-17, items 8 and 9). */
+export interface SnapshotStore {
+  /** Stores blobs once per run (a blob already stored is left as it is); each must match its id. All or nothing. */
+  putBlobs(runId: string, blobs: readonly StoredBlob[]): Promise<Result<void, BlobWriteError>>;
+  /** A blob by id, verified against its id; undefined if the run has none. */
+  getBlob(runId: string, id: string): Promise<StoredBlob | undefined>;
+  /** Stores a snapshot with its blobs in one step; the container must open and every section outside it must be stored. */
+  write(runId: string, snapshot: SnapshotWrite): Promise<Result<{ readonly id: string }, SnapshotWriteError>>;
+  /** The run's snapshots in tick order (without their bytes). */
+  list(runId: string): Promise<SnapshotInfo[]>;
+  /** A snapshot with the blobs it refers to, or undefined. */
+  read(runId: string, id: string): Promise<LoadedSnapshot | undefined>;
+}
+
+/** One belief-map frame of an agent: a keyframe (every materialized chunk, as a blob) or a delta (the chunks changed at a sync point). */
+export interface BeliefFrame {
+  readonly agentId: string;
+  /** The agent's frame counter, from 0. Seq order is tick order. */
+  readonly seq: number;
+  readonly tick: number;
+  readonly simTime: number;
+  readonly kind: "keyframe" | "delta";
+  /** The chunk indices the frame covers, ascending. */
+  readonly chunks: readonly number[];
+  /** Exactly one of these: the blob that holds the frame's bytes, or the bytes themselves. */
+  readonly blobId?: string;
+  readonly data?: Uint8Array;
+}
+
+export interface BeliefFrameQuery {
+  readonly runId: string;
+  readonly agentId?: string;
+  /** Inclusive tick window. */
+  readonly fromTick?: number;
+  readonly toTick?: number;
+  readonly kind?: "keyframe" | "delta";
+  readonly limit: number;
+}
+
+export type BeliefFrameError = CodedError<"unknown_run" | "invalid_frame" | "duplicate_frame" | "non_monotonic_frame" | "missing_blob">;
+
+export interface BeliefFrameStore {
+  /** Appends frames; all or nothing. A frame that names a blob needs that blob stored. */
+  append(runId: string, frames: readonly BeliefFrame[]): Promise<Result<void, BeliefFrameError>>;
+  /** Frames in (agent, seq) order, filtered by agent, tick window and kind. */
+  query(q: BeliefFrameQuery): Promise<BeliefFrame[]>;
+  /** The latest keyframe of the agent at or before `tick`: where a rebuild at that tick starts. */
+  keyframeAtOrBefore(runId: string, agentId: string, tick: number): Promise<BeliefFrame | undefined>;
+}
+
 export interface StoragePorts {
   readonly trace: TraceStore;
   readonly runs: RunStore;
@@ -141,4 +254,6 @@ export interface StoragePorts {
   readonly userData: UserDataStore;
   readonly scenarios: ScenarioStore;
   readonly runConfigs: RunConfigStore;
+  readonly snapshots: SnapshotStore;
+  readonly beliefFrames: BeliefFrameStore;
 }

@@ -10,7 +10,7 @@ export {
   isValidTraceRecord,
   firstNonMonotonicRecord,
 } from "./trace-record.ts";
-export { TraceBuffer, type Tracer } from "./trace-buffer.ts";
+export { TraceBuffer, type TraceCursor, type Tracer } from "./trace-buffer.ts";
 export {
   SOURCE_COMPONENTS,
   COMPONENTS_BY_OWNER,
@@ -31,3 +31,19 @@ export {
   type SourcePattern,
   type SourceFilterError,
 } from "./source.ts";
+export { CHANNELS, CHANNEL_RULES, channelOf, type Channel, type ChannelRule } from "./channels.ts";
+export {
+  DEFAULT_RECORDING_PRESET,
+  RECORDING_PRESETS,
+  RECORDING_PROFILE_MAX_BYTES,
+  RECORDING_PROFILE_SCHEMA_VERSION,
+  RecordingChannels,
+  RecordingProfile,
+  parseRecordingProfile,
+  recordingProfileHash,
+  type RecordingPresetName,
+  type RecordingProfileError,
+} from "./recording-profile.ts";
+export { dropsRecord, filterRecord, metadataMindIo, summarizeCompute } from "./levels.ts";
+export { redactSecrets, REDACTED } from "./redact.ts";
+export { RunRecorder, gapOf, DEFAULT_FLOW_CONTROL, estimateRecordBytes, itemBytes, type RecorderItem, type RecorderSnapshotItem, type RecorderFramesItem, type FlowControl, type Backlog, type RecorderBatch, type PersistedHead, type SimHead, type Gap, type GapState, type RunRecorderOptions } from "./recorder.ts";

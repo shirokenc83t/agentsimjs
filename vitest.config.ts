@@ -23,6 +23,8 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
+          // Many of these run whole simulations or restore runs (2 to 14 s on a developer machine, more on a shared runner): the 5 s default decided CI twice.
+          testTimeout: 60_000,
           include: ["packages/**/*.test.ts", "tools/**/*.test.ts"],
           exclude: [...excludes, browserTests, "**/*.xengine.test.ts", determinismTests, ...domTests],
         },
@@ -32,6 +34,8 @@ export default defineConfig({
         test: {
           name: "dom",
           environment: "jsdom",
+          // Recorded and replayed runs are built in some of these (2 s and more locally, more on a shared runner): the 5 s default decided CI.
+          testTimeout: 60_000,
           include: domTests,
           exclude: [...excludes, browserTests, determinismTests],
           setupFiles: ["tools/test/setup-dom.ts"],

@@ -66,7 +66,9 @@ test("display rate on the 1 km² reference world with belief, difference, rays a
 
   // The scout (airborne, unknown map) and the rover (known prior) both cross the map; the scout is the viewed agent, so its
   // map keeps growing under the overlay.
-  await sendTo(page, "uav-001", 200, 250);
+  // The target is picked by a click on the canvas (about 1.6 m a pixel), so one next to an obstacle makes the scout's goTo fail in a layout where the
+  // click lands a pixel away: (200, 250) did, once the status line wrapped (the recording status), so the scout goes to (220, 250).
+  await sendTo(page, "uav-001", 220, 250);
   await sendTo(page, "ugv-001", 700, 700);
   await page.getByTestId("explorer-row-uav-001").click();
   await page.getByTestId("overlay-belief").click();
@@ -94,7 +96,7 @@ test("display rate on the 1 km² reference world with belief, difference, rays a
   await page.getByTestId("st-json").fill(
     JSON.stringify({ schemaVersion: 0, id: "gpu", version: 1, origin: "human", root: { kind: "refine", mode: "eager", coarse: { kind: "algorithm", algorithm: "hpa" }, local: { kind: "algorithm", algorithm: "astar" } } }),
   );
-  await page.getByTestId("st-x").fill("200");
+  await page.getByTestId("st-x").fill("220");
   await page.getByTestId("st-y").fill("250");
   await page.getByTestId("st-run").click();
   await expect(page.getByTestId("st-status")).toBeVisible({ timeout: 120_000 });

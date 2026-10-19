@@ -91,6 +91,16 @@ export const RunHeader = Type.Object({
   simulatorVersion: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
   /** Agents whose beliefs were `ideal` (ground truth), as resolved at run start; sorted (ADR-0028 addition of 2026-10-10). */
   idealAgents: Type.Optional(Type.Array(Type.String({ pattern: "^(uav|ugv|ev|virt)-[0-9]+$", maxLength: 32 }), { maxItems: 4096 })),
+  /**
+   * Recording (ADR-0004 and ADR-0035 additions of 2026-10-17): `stored` for a recorded run, `none` for the explicit opt-out
+   * ("Don't record this run"). Absent on runs stored before recording existed.
+   */
+  recording: Type.Optional(Type.Union([Type.Literal("stored"), Type.Literal("none")])),
+  /** The resolved recording profile the run used and its hash (8 hex digits), next to `runConfigHash`; only on a `stored` run. */
+  recordingProfile: Type.Optional(Type.Unknown()),
+  recordingProfileHash: Type.Optional(Type.String({ pattern: "^[0-9a-f]{8}$" })),
+  /** A run that was imported (ADR-0035 addition of 2026-10-17, item 11) keeps the ID it had where it was recorded; its own ID is a fresh one. */
+  importedFrom: Type.Optional(Type.String({ pattern: "^run-[0-9]{6}$" })),
 });
 export type RunHeader = Static<typeof RunHeader>;
 

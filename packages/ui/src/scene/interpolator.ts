@@ -1,5 +1,15 @@
 import { POSE_STRIDE } from "@agentsim/core";
 
+/**
+ * What the renderer draws agents from, once per frame: the live interpolator, or (in replay) poses read from a recording at the
+ * time cursor. `sample` never waits for anything and returns a view valid until the next call (ADR-0013).
+ */
+export interface PoseSource {
+  /** Poses (x, y, z, heading per entity) at `nowMs`. */
+  sample(nowMs: number): Float32Array;
+  readonly entityCount: number;
+}
+
 /** Tuning of the arrival-interval estimator (ADR-0019). */
 export interface InterpolatorOptions {
   /** EMA factor for the measured interval between received states. */
@@ -23,7 +33,7 @@ export const DEFAULT_INTERPOLATOR_OPTIONS: InterpolatorOptions = {
  * interval, so it stays smooth under jitter, speed changes and pauses. No extrapolation.
  * Preallocated buffers: no allocation per frame.
  */
-export class StateInterpolator {
+export class StateInterpolator implements PoseSource {
   private prev = new Float32Array(0);
   private next = new Float32Array(0);
   private out = new Float32Array(0);

@@ -9,19 +9,22 @@ const info: StorageInfo = {
   quotaBytes: 1e9, persisted: true, quotaThresholdBytes: 256 * 1024 * 1024, warning: null,
 };
 
-function setup(adminOverrides: Partial<StorageAdmin> = {}) {
+function setup(adminOverrides: Partial<StorageAdmin> = {}, props: { currentRunId?: string } = {}) {
   const ports = createMemoryPorts();
   const admin: StorageAdmin = {
     info: vi.fn(async () => info),
     exportDb: vi.fn(async () => new Uint8Array([1, 2, 3])),
     exportRun: vi.fn(async () => ({ ok: true as const, value: new Uint8Array([4]) })),
     importDb: vi.fn(async () => ({ ok: true as const, value: undefined })),
+    exportRunJsonl: vi.fn(async () => ({ ok: true as const, value: new Uint8Array([6, 7]) })),
+    importRun: vi.fn(async () => ({ ok: true as const, value: { runId: "run-000005", importedFrom: "run-000001" } })),
     requestPersistence: vi.fn(async () => true),
     close: vi.fn(async () => {}),
+    compact: vi.fn(async () => ({ freedBytes: 0, skipped: false })),
     ...adminOverrides,
   };
   const download = vi.fn();
-  render(<StorageBrowser client={{ ports, admin }} download={download} nowWallMs={() => 1_700_000_000_000} />);
+  render(<StorageBrowser client={{ ports, admin }} download={download} nowWallMs={() => 1_700_000_000_000} {...props} />);
   return { ports, admin, download };
 }
 
@@ -54,5 +57,83 @@ describe("StorageBrowser", () => {
     const input = await screen.findByTestId("import-file");
     await userEvent.upload(input, new File([new Uint8Array([0])], "bad.sqlite"));
     expect(await screen.findByTestId("storage-message")).toHaveTextContent("import rejected (not_sqlite)");
+  });
+
+  it("shows what each run holds: records, blobs, snapshots and belief frames, with their sizes", async () => {
+    const { ports } = setup();
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    const size = await screen.findByTestId("run-size-run-000001");
+    expect(size).toHaveTextContent(/records 100/);
+    expect(size).toHaveTextContent(/blobs 0/);
+    expect(size).toHaveTextContent(/snapshots 0/);
+    expect(size).toHaveTextContent(/belief frames 0/);
+    expect((await ports.runs.sizes("run-000001"))?.records.count).toBe(100);
+  });
+
+  it("deletes a run after a confirmation that names the run and its size, and not before", async () => {
+    const { ports } = setup();
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    await userEvent.click(await screen.findByRole("button", { name: "Delete run-000001" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("run-000001");
+    expect(dialog).toHaveTextContent(/\d+(\.\d+)? (B|KB|MB)/);
+    expect(await ports.runs.get("run-000001")).toBeDefined(); // asking is not deleting
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(await ports.runs.get("run-000001")).toBeDefined();
+    await userEvent.click(screen.getByRole("button", { name: "Delete run-000001" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Delete the run" }));
+    await waitFor(() => expect(screen.queryByTestId("run-row-run-000001")).toBeNull());
+    expect(await ports.runs.get("run-000001")).toBeUndefined();
+    expect(await screen.findByTestId("storage-message")).toHaveTextContent("deleted run-000001");
+  });
+
+  it("does not offer to delete the run being recorded", async () => {
+    setup({}, { currentRunId: "run-000001" });
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    const button = await screen.findByRole("button", { name: "Delete run-000001" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", expect.stringMatching(/being recorded/));
+  });
+
+  it("shows why a delete was refused", async () => {
+    const { ports } = setup();
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    vi.spyOn(ports.runs, "delete").mockResolvedValue({ ok: false, error: { code: "unknown_run", message: "unknown run run-000001" } } as never);
+    await userEvent.click(await screen.findByRole("button", { name: "Delete run-000001" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Delete the run" }));
+    expect(await screen.findByTestId("storage-message")).toHaveTextContent("unknown run run-000001");
+  });
+
+  it("gives back the space deleted runs left when it opens, and still lists the runs if that fails", async () => {
+    const compact = vi.fn(async () => ({ freedBytes: 4096, skipped: false }));
+    const { ports } = setup({ compact });
+    await screen.findByTestId("storage-mode");
+    expect(compact).toHaveBeenCalledTimes(1);
+    expect(await ports.runs.list()).toEqual([]);
+    const failing = vi.fn(async () => {
+      throw new Error("busy");
+    });
+    setup({ compact: failing });
+    await waitFor(() => expect(screen.getAllByTestId("storage-mode").length).toBe(2)); // the second browser lists its runs although compaction failed
+    expect(failing).toHaveBeenCalled();
+  });
+
+  it("exports a run as JSON lines, and adds a run file as a new run (nothing is replaced)", async () => {
+    const { admin, download } = setup();
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    await userEvent.click(await screen.findByTestId("export-jsonl-run-000001"));
+    await waitFor(() => expect(download).toHaveBeenCalledWith(new Uint8Array([6, 7]), "run-000001.agentsim.jsonl"));
+    const file = new File([new Uint8Array([1, 2, 3])], "a-run.agentsim.jsonl");
+    await userEvent.upload(screen.getByTestId("import-run-file"), file);
+    await waitFor(() => expect(admin.importRun).toHaveBeenCalled());
+    expect(await screen.findByTestId("storage-message")).toHaveTextContent("added a-run.agentsim.jsonl as run-000005 (it was run-000001)");
+    expect(admin.importDb).not.toHaveBeenCalled();
+  });
+
+  it("says why a run file was rejected", async () => {
+    setup({ importRun: vi.fn(async () => ({ ok: false as const, error: { code: "broken_recording" as const, message: "snapshot refers to a missing section" } })) });
+    await userEvent.upload(await screen.findByTestId("import-run-file"), new File([new Uint8Array([1])], "bad.jsonl"));
+    expect(await screen.findByTestId("storage-message")).toHaveTextContent("run file rejected (broken_recording): snapshot refers to a missing section");
   });
 });

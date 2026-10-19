@@ -1,12 +1,14 @@
 import "./fonts.css";
 import "@agentsim/ui/theme.css";
 import { initTheme, UiThemeProvider, useUiContext } from "@agentsim/ui";
-import { StrictMode } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
-import { resolveEnvironment } from "./config/environment.ts";
+import { connectRecorder, resolveEnvironment } from "./config/environment.ts";
 import { probeEnabled } from "./probe.ts";
+import type { RunSource } from "./sim/run-source.ts";
 import { ServicesProvider } from "./services.tsx";
+import { loadLiveSource } from "./workspaces/registry.tsx";
 
 // TypeBox is configured lazily, by the first validate()/isValid() call (ADR-0018 addition 2026-10-08): keeping
 // it out of the entry keeps the checker out of the initial chunk. Lint allows the checker only in that wrapper.
@@ -17,6 +19,19 @@ initTheme();
 const env = resolveEnvironment(import.meta.env["VITE_AGENTSIM_ENV"] as string | undefined);
 const storage = env.createStorage();
 const sim = env.createSim(10);
+connectRecorder(sim, storage);
+
+/** The panels' run source: the live run, or a recorded run while a replay session is open. */
+function Root() {
+  const [replay, setReplay] = useState<RunSource | undefined>(undefined);
+  const [live, setLive] = useState<RunSource | undefined>(undefined);
+  useEffect(() => void loadLiveSource().then((m) => setLive(new m.LiveRunSource(sim, storage))), []);
+  return (
+    <ServicesProvider value={{ sim, source: replay ?? live, setReplaySource: setReplay, storage }}>
+      <App />
+    </ServicesProvider>
+  );
+}
 
 if (probeEnabled()) {
   window.__agentsim = {
@@ -56,9 +71,7 @@ if (!root) throw new Error("missing #root");
 createRoot(root).render(
   <StrictMode>
     <UiThemeProvider>
-      <ServicesProvider value={{ sim, storage }}>
-        <App />
-      </ServicesProvider>
+      <Root />
     </UiThemeProvider>
   </StrictMode>,
 );

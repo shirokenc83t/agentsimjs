@@ -11,9 +11,25 @@ import { utf8, xxHash32 } from "./xxhash32.ts";
  * payloads.
  */
 export function contentHash64(json: string): string {
-  const bytes = utf8(json);
+  return contentHash64Bytes(utf8(json));
+}
+
+/** The same 64-bit hash of raw bytes. */
+export function contentHash64Bytes(bytes: Uint8Array): string {
   return xxHash32(bytes, 0).toString(16).padStart(8, "0") + xxHash32(bytes, 0x9e3779b1).toString(16).padStart(8, "0");
 }
+
+/**
+ * A 128-bit content hash of raw bytes: four xxHash32 passes with distinct seeds, as 32 hex digits. Names snapshot
+ * sections and containers (ADR-0004 addition of 2026-10-18): a collision would silently share two different sections.
+ */
+export function contentHash128Bytes(bytes: Uint8Array): string {
+  let out = "";
+  for (const seed of HASH128_SEEDS) out += xxHash32(bytes, seed).toString(16).padStart(8, "0");
+  return out;
+}
+
+const HASH128_SEEDS = [0, 0x9e3779b1, 0x85ebca77, 0xc2b2ae3d] as const;
 
 export function contentHash(json: string): string {
   return xxHash32(utf8(json), 0).toString(16).padStart(8, "0");

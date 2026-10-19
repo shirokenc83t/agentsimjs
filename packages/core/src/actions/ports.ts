@@ -73,9 +73,11 @@ export interface PlannerPort {
   cancel(agentId: string): void;
   /**
    * The map the agent would plan on now (F1: the ground-truth grid it knows; from F2: its belief map).
-   * Every onboard decision of the runtime (target fit, replanning) uses it, never `SpatialPort`.
+   * Every onboard decision of the runtime (target fit, replanning) uses it, never `SpatialPort`. A UAV's view depends
+   * on the altitude its path is planned at: `cruiseAltitudeM` names it (default: the body's cruise altitude), which is
+   * how a restored goTo gets back the map of the plan it was following (ADR-0035 addition of 2026-10-17, item 8).
    */
-  currentMap(agentId: string): PlanMap;
+  currentMap(agentId: string, cruiseAltitudeM?: number): PlanMap;
   /**
    * Start-time checks on the agent's own map (ADR-0005; F2 audit of 2026-10-10): its belief grid, or the ground
    * truth for `ideal` agents. Cells the agent has never observed count as free (optimistic): a mind is told no more

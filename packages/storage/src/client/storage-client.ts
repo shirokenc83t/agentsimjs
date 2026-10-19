@@ -1,5 +1,7 @@
 import type { CodedError, Result } from "@agentsim/core";
 import type { StoragePorts } from "../ports.ts";
+import type { ReplayClient } from "../replay.ts";
+import type { RunFileErrorCode } from "../run-bundle.ts";
 import {
   STORAGE_PROTOCOL_VERSION,
   type StorageInfo,
@@ -8,6 +10,7 @@ import {
   type StorageResponse,
   type StorageStatus,
 } from "../worker/protocol.ts";
+import type { PersistedHeadMessage, QuotaMessage, RecorderPortMessage } from "../worker/recorder-protocol.ts";
 import type { ImportErrorCode } from "../worker/transfer.ts";
 
 /** Errors surfaced by the client when the worker reports an infrastructure failure. */
@@ -22,6 +25,18 @@ export interface StorageAdmin {
   exportDb(): Promise<Uint8Array>;
   exportRun(runId: string): Promise<Result<Uint8Array, CodedError<"unknown_run">>>;
   importDb(bytes: Uint8Array): Promise<Result<void, CodedError<ImportErrorCode>>>;
+  /** One run as a JSON-lines file: a versioned header line, then its records, snapshots, blobs and belief frames (ADR-0035 addition of 2026-10-17, item 11). */
+  exportRunJsonl(runId: string): Promise<Result<Uint8Array, CodedError<"unknown_run" | "broken_recording">>>;
+  /**
+   * Adds the run of a file (JSON lines, or a per-run `.sqlite`) to the database as a new run, under a fresh run ID, keeping its original in `importedFrom`.
+   * The files are validated like a database import is; nothing is replaced.
+   */
+  importRun(bytes: Uint8Array): Promise<Result<{ readonly runId: string; readonly importedFrom: string }, CodedError<ImportErrorCode | RunFileErrorCode>>>;
+  /**
+   * Gives the space deleted runs left behind back to the browser (VACUUM), unless a run is being recorded (it would hold the recorder's
+   * writes for seconds): `skipped` says so. Also done when storage starts.
+   */
+  compact(): Promise<{ readonly freedBytes: number; readonly skipped: boolean }>;
   /** Requests persistent storage; must run on the main thread (StorageManager.persist is Window-only). */
   requestPersistence(): Promise<boolean>;
   /** Closes the database and releases the ownership lock. */
@@ -30,6 +45,8 @@ export interface StorageAdmin {
 
 export interface StorageClient {
   readonly ports: StoragePorts;
+  /** Replay reads rebuilt in the storage worker: an agent's belief map at a tick, and the world a run was made in. */
+  readonly replay: ReplayClient;
   readonly admin: StorageAdmin;
   /** Latest status; listeners are called on every change. */
   status(): StorageStatus;
@@ -38,6 +55,16 @@ export interface StorageClient {
   ready(): Promise<Extract<StorageStatus, { state: "ready" }>>;
   /** Test-only probe of the one-connection invariant. */
   probeSecondConnection(): Promise<string>;
+  /**
+   * Hands the storage worker its end of the recorder channel (the main thread created it with the sim worker's end: trace records never
+   * travel through here). The port is transferred.
+   */
+  attachRecorderPort(port: MessagePort): void;
+  /**
+   * What the storage worker reports about recording: the persisted head after each flush (the status line, the timeline) and the quota state
+   * (`paused` near the quota, `ok` once space is free again).
+   */
+  onRecording(listener: (m: PersistedHeadMessage | QuotaMessage) => void): () => void;
 }
 
 export interface StorageClientOptions {
@@ -47,6 +74,12 @@ export interface StorageClientOptions {
   readonly poolName?: string;
   readonly simulateNoOpfs?: boolean;
   readonly resetOnOpen?: boolean;
+  /** Test-only: a quota of this many bytes against the database's own size (ADR-0035 §6). */
+  readonly simulateQuotaBytes?: number;
+  /** Test-only: a quota of what the database holds when it opens plus this many bytes. */
+  readonly simulateQuotaHeadroomBytes?: number;
+  /** Test-only: every commit of recorder batches takes this long first. */
+  readonly simulateSlowWriterMs?: number;
 }
 
 export const DEFAULT_QUOTA_THRESHOLD_BYTES = 256 * 1024 * 1024;
@@ -60,9 +93,14 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
   const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   let current: StorageStatus = { type: "status", state: "loading" };
   const listeners = new Set<(s: StorageStatus) => void>();
+  const recordingListeners = new Set<(m: PersistedHeadMessage | QuotaMessage) => void>();
 
-  worker.addEventListener("message", (ev: MessageEvent<StorageResponse | StorageStatus>) => {
+  worker.addEventListener("message", (ev: MessageEvent<StorageResponse | StorageStatus | PersistedHeadMessage | QuotaMessage>) => {
     const m = ev.data;
+    if (m.type === "quota" || m.type === "persisted") {
+      for (const l of recordingListeners) l(m);
+      return;
+    }
     if (m.type === "status") {
       current = m;
       for (const l of listeners) l(m);
@@ -96,8 +134,13 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
     poolName: options.poolName ?? "agentsim-pool",
     ...(options.simulateNoOpfs ? { simulateNoOpfs: true } : {}),
     ...(options.resetOnOpen ? { resetOnOpen: true } : {}),
+    ...(options.simulateQuotaBytes === undefined ? {} : { simulateQuotaBytes: options.simulateQuotaBytes }),
+    ...(options.simulateQuotaHeadroomBytes === undefined ? {} : { simulateQuotaHeadroomBytes: options.simulateQuotaHeadroomBytes }),
+    ...(options.simulateSlowWriterMs === undefined ? {} : { simulateSlowWriterMs: options.simulateSlowWriterMs }),
   };
   worker.postMessage(init);
+
+  const rpc = (group: string, names: readonly string[]) => Object.fromEntries(names.map((n) => [n, (...args: unknown[]) => call(`${group}.${n}` as StorageOp, args)]));
 
   const ports: StoragePorts = {
     trace: {
@@ -114,6 +157,8 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       setStatus: (id, s) => call("runs.setStatus", [id, s]),
       appendInputs: (id, inputs) => call("runs.appendInputs", [id, inputs]),
       inputs: (id) => call("runs.inputs", [id]),
+      sizes: (id) => call("runs.sizes", [id]),
+      delete: (id) => call("runs.delete", [id]),
     },
     cache: {
       get: (k) => call("cache.get", [k]),
@@ -137,12 +182,21 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       saveVersion: (preset) => call("runConfigs.saveVersion", [preset]),
       delete: (id) => call("runConfigs.delete", [id]),
     },
+    // The recording ports forward every call as it is (same arguments, in order): one table instead of a lambda each, to keep the initial chunk small.
+    snapshots: rpc("snapshots", ["putBlobs", "getBlob", "write", "list", "read"]) as unknown as StoragePorts["snapshots"],
+    beliefFrames: rpc("beliefFrames", ["append", "query", "keyframeAtOrBefore"]) as unknown as StoragePorts["beliefFrames"],
   };
 
   const admin: StorageAdmin = {
     info: () => call("admin.info"),
     exportDb: () => call("admin.exportDb"),
     exportRun: (runId) => call("admin.exportRun", [runId]),
+    exportRunJsonl: (runId) => call("admin.exportRunJsonl", [runId]),
+    importRun: (bytes) => {
+      const copy = bytes.slice();
+      return call("admin.importRun", [copy], [copy.buffer]);
+    },
+    compact: () => call("admin.compact"),
     importDb: (bytes) => {
       // Copy so the caller keeps its buffer; the copy is transferred (no structured clone).
       const copy = bytes.slice();
@@ -162,6 +216,7 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
 
   return {
     ports,
+    replay: rpc("replay", ["beliefAt", "world"]) as unknown as ReplayClient,
     admin,
     status: () => current,
     onStatus(l) {
@@ -184,5 +239,13 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       });
     },
     probeSecondConnection: () => call("test.openSecondConnection"),
+    attachRecorderPort(port) {
+      const m: RecorderPortMessage = { type: "recorderPort", port };
+      worker.postMessage(m, [port]);
+    },
+    onRecording(l) {
+      recordingListeners.add(l);
+      return () => recordingListeners.delete(l);
+    },
   };
 }

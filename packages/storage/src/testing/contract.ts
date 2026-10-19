@@ -1,6 +1,8 @@
 import { parseSourceFilter, type RunHeader, type TraceRecord } from "@agentsim/trace";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { StoragePorts } from "../ports.ts";
+import { poseWindowQuery } from "../replay-queries.ts";
+import { describeRecordingContract } from "./recording-contract.ts";
 
 /**
  * Shared contract suite for every StoragePorts implementation (CLAUDE.md: contract tests per port).
@@ -202,6 +204,54 @@ export function describeStorageContract(name: string, create: () => Promise<Cont
         expect((await h.ports.trace.query({ runId: "run-000001", limit: 100, simTime: { to: 0.05 } })).map((r) => r.seq)).toEqual([0, 1, 2]);
       });
 
+      // F3a M3: replay reads one agent's records, or one kind of record, or the pose samples of a window, paged by seq.
+      it("filters by agent, kinds and payload op, combined with a window and paging, in seq order", async () => {
+        await h.ports.runs.create(header("run-000001"));
+        const agents = ["uav-001", "uav-002", "ugv-001"];
+        const kinds = ["action", "observation", "event"] as const;
+        await h.ports.trace.append(
+          Array.from({ length: 36 }, (_, seq) => {
+            const agentId = agents[seq % 3] as string;
+            const kind = kinds[Math.floor(seq / 3) % 3] as (typeof kinds)[number];
+            return rec("run-000001", seq, { simTime: Math.floor(seq / 3) / 10, kind, agentId, source: `${agentId}/body`, payload: { op: kind === "observation" && seq % 2 === 0 ? "pose" : "other", seq } });
+          }),
+        );
+        const seqs = async (q: Record<string, unknown>) => (await h.ports.trace.query({ runId: "run-000001", limit: 100, ...q })).map((r) => r.seq);
+        expect(await seqs({ agentId: "uav-002" })).toEqual([1, 4, 7, 10, 13, 16, 19, 22, 25, 28, 31, 34]);
+        expect(await seqs({ agentId: "uav-002", afterSeq: 10, limit: 3 })).toEqual([13, 16, 19]);
+        expect(await seqs({ kinds: ["action"] })).toEqual([0, 1, 2, 9, 10, 11, 18, 19, 20, 27, 28, 29]);
+        expect(await seqs({ kinds: ["action", "event"], agentId: "ugv-001" })).toEqual([2, 8, 11, 17, 20, 26, 29, 35]);
+        expect(await seqs({ agentId: "uav-001", kinds: ["observation"], simTime: { from: 0.3, to: 0.5 } })).toEqual([12]);
+        expect(await seqs({ kinds: ["observation"], op: "pose" })).toEqual([4, 12, 14, 22, 30, 32]);
+        expect(await seqs({ agentId: "nobody" })).toEqual([]);
+        expect(await seqs({ kinds: [] })).toEqual([]);
+        await expect(h.ports.trace.query({ runId: "run-000001", limit: 10, kinds: Array.from({ length: 40 }, (_, i) => `k${i}`) })).rejects.toThrow();
+        await expect(h.ports.trace.query({ runId: "run-000001", limit: 10, agentId: 5 as never })).rejects.toThrow();
+      });
+
+      it("answers a pose window: the pose samples of one agent or all, between two sim times, in seq order", async () => {
+        await h.ports.runs.create(header("run-000001"));
+        // Per tick (0.1 s): a pose sample and an action record of each of two agents; every third tick also an event of the world.
+        const records: TraceRecord[] = [];
+        for (let tick = 0; tick < 10; tick++) {
+          for (const a of ["uav-001", "ugv-001"]) {
+            records.push(rec("run-000001", records.length, { simTime: tick / 10, kind: "observation", agentId: a, source: `${a}/body`, payload: { op: "pose", x: tick } }));
+            records.push(rec("run-000001", records.length, { simTime: tick / 10, kind: "action", agentId: a, source: `${a}/actions`, payload: { op: "start" } }));
+          }
+          if (tick % 3 === 0) records.push(rec("run-000001", records.length, { simTime: tick / 10, kind: "observation", agentId: "uav-001", source: "uav-001/body", payload: { op: "other" } }));
+        }
+        await h.ports.trace.append(records);
+        const all = await h.ports.trace.query(poseWindowQuery({ runId: "run-000001", from: 0.3, to: 0.5, limit: 100 }));
+        expect(all.map((r) => [r.agentId, (r.payload as { x: number }).x])).toEqual([["uav-001", 3], ["ugv-001", 3], ["uav-001", 4], ["ugv-001", 4], ["uav-001", 5], ["ugv-001", 5]]);
+        expect(all.every((r) => r.kind === "observation" && (r.payload as { op: string }).op === "pose")).toBe(true);
+        const one = await h.ports.trace.query(poseWindowQuery({ runId: "run-000001", from: 0.3, to: 0.5, agentId: "ugv-001", limit: 100 }));
+        expect(one.map((r) => (r.payload as { x: number }).x)).toEqual([3, 4, 5]);
+        const page = await h.ports.trace.query(poseWindowQuery({ runId: "run-000001", from: 0, to: 1, agentId: "uav-001", afterSeq: one[0]?.seq ?? 0, limit: 2 }));
+        expect(page.length).toBe(2);
+        expect(page.every((r) => r.agentId === "uav-001" && r.seq > (one[0]?.seq ?? 0))).toBe(true);
+        expect(await h.ports.trace.query(poseWindowQuery({ runId: "run-000001", from: 5, to: 6, limit: 10 }))).toEqual([]);
+      });
+
       it("rejects malformed source patterns that bypass the parser", async () => {
         await h.ports.runs.create(header("run-000001"));
         const evil = [{ owner: "x' OR '1'='1", component: null }, { owner: null, component: null }, { owner: "uav-001", component: "drop" }] as const;
@@ -391,5 +441,7 @@ export function describeStorageContract(name: string, create: () => Promise<Cont
         expect(await h.ports.userData.keys("layout")).toEqual(["data"]);
       });
     });
+
+    describeRecordingContract(() => h.ports);
   });
 }

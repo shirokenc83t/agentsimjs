@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { SimClient } from "../sim/sim-client.ts";
+import type { RunSource } from "../sim/run-source.ts";
 import { asResearcherData, type ResearcherData } from "./researcher-data.ts";
 import { useSimStream } from "./use-sim-stream.ts";
 
@@ -52,15 +52,15 @@ function Metrics(props: { d: ResearcherData }) {
  * only while this section is mounted and expanded; the data goes one way, worker → here, and has no path back: its
  * type is branded and nothing that sends to the worker accepts it.
  */
-export function ResearcherSection(props: { sim: SimClient; agentId: string; runId: string }) {
-  const { sim, agentId, runId } = props;
+export function ResearcherSection(props: { source: RunSource; agentId: string; runId: string }) {
+  const { source, agentId, runId } = props;
   const [open, setOpen] = useState(true);
   useEffect(() => {
     if (!open) return;
-    sim.send({ type: "researcherWatch", agentId });
-    return () => sim.send({ type: "researcherWatch", agentId: null });
-  }, [sim, agentId, runId, open]);
-  const msg = useSimStream(sim, "researcherData", (m) => m.runId === runId && m.agentId === agentId, [runId, agentId, open]);
+    source.send({ type: "researcherWatch", agentId });
+    return () => source.send({ type: "researcherWatch", agentId: null });
+  }, [source, agentId, runId, open]);
+  const msg = useSimStream(source, "researcherData", (m) => m.runId === runId && m.agentId === agentId, [runId, agentId, open]);
   const data = msg ? asResearcherData(msg) : undefined;
   return (
     <details className="researcher-view" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)} data-testid="inspector-researcher">

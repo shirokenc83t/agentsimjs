@@ -3,6 +3,8 @@ export type {
   TraceQuery,
   RunStore,
   RunSummary,
+  RunSizes,
+  SizeEntry,
   ResponseCache,
   CachedResponse,
   UserDataStore,
@@ -18,7 +20,19 @@ export type {
   StoragePorts,
   StoredRunInput,
   RunInputError,
+  StoredBlob,
+  SnapshotWrite,
+  SnapshotInfo,
+  LoadedSnapshot,
+  SnapshotStore,
+  BeliefFrame,
+  BeliefFrameQuery,
+  BeliefFrameStore,
+  BeliefFrameError,
+  BlobWriteError,
+  SnapshotWriteError,
 } from "./ports.ts";
+export { RECORDING_LIMITS } from "./recording.ts";
 export { createMemoryPorts } from "./adapters/memory.ts";
 export type { SqlDriver, SqlValue, SqlRow } from "./sql/driver.ts";
 export { MIGRATIONS, LATEST_SCHEMA_VERSION, migrate } from "./sql/migrations.ts";
@@ -36,3 +50,10 @@ export type { ImportErrorCode } from "./worker/transfer.ts";
 // Worker side. sqlite-wasm itself is loaded lazily inside the worker (load-sqlite.ts).
 export { runStorageWorker, type WorkerScope } from "./worker/storage-worker.ts";
 export { storageMessageChecks, type StorageMessageChecks } from "./worker/message-checks.ts";
+export type { RecorderPortMessage, RecorderToStorage, StorageToRecorder, PersistedHeadMessage, QuotaMessage, RecorderPortLike } from "./worker/recorder-protocol.ts";
+export { QuotaGuard, QUOTA_PAUSE_FRACTION, QUOTA_RESUME_FRACTION, MEMORY_FALLBACK_LIMIT_BYTES, type QuotaMeasure } from "./worker/quota.ts";
+export { recorderAppend, reportCommit, type RecorderAppend } from "./worker/recorder-ingest.ts";
+export { poseWindowQuery, type PoseWindow } from "./replay-queries.ts";
+export type { ReplayView, ReplayBelief, ReplayWorld, ReplayError, ReplayErrorCode, ReplayHandlers, ReplayClient, StorageExtensions } from "./replay.ts";
+export { BELIEF_MANIFEST_FORMAT_STORED } from "./sql/recording-integrity.ts";
+export { bundleFromJsonl, bundleProblem, bundleToJsonl, exportRunJsonl, importRunJsonl, readRunBundle, writeRunBundle, RUN_JSONL_FORMAT, RUN_JSONL_VERSION, MAX_RUN_FILE_BYTES, type RunBundle, type RunFileError, type RunFileErrorCode } from "./run-bundle.ts";

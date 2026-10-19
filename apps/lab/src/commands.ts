@@ -1,6 +1,6 @@
 import { useUiContext, type Command } from "@agentsim/ui";
 import type { PresetId } from "@agentsim/core";
-import type { SimClient } from "./sim/sim-client.ts";
+import type { RunSource } from "./sim/run-source.ts";
 
 /**
  * Researcher commands on one agent (ADR-0015 addition of 2026-10-12): the closed set the worker accepts besides
@@ -37,15 +37,15 @@ export function commandParams(op: AgentCommand["op"], body: Readonly<Record<stri
  * Palette entries for the agent selected in the UI context when the palette opens: world scope, so a command the agent
  * cannot run now is refused with its code (shown in the Inspector), not hidden.
  */
-export function agentPaletteCommands(sim: SimClient, hasRun: boolean, startPreset: (preset: PresetId) => void, busy: boolean): Command[] {
+export function agentPaletteCommands(source: RunSource, hasRun: boolean, startPreset: (preset: PresetId) => void, busy: boolean): Command[] {
   const sel = useUiContext.getState().selection;
   const id = sel?.kind === "agent" ? sel.id : undefined;
   return AGENT_COMMANDS.map((c) => ({
     id: `agent.${c.op}`,
     title: `${c.title} selected agent${id ? ` (${id})` : ""}`,
     group: "Agent",
-    disabled: !id || !hasRun,
-    run: () => id && sim.command(id, c.op, commandParams(c.op, agentBody(sim.snapshot().run, id))),
+    disabled: !id || !hasRun || source.unavailable("commands") !== undefined,
+    run: () => id && source.command(id, c.op, commandParams(c.op, agentBody(source.snapshot().run, id))),
   })).concat([
     { id: "run.f2discovery", title: "Load F2 discovery demo (new run, unknown maps)", group: "Run", disabled: busy, run: () => startPreset("f2-discovery") },
     { id: "run.f2prior", title: "Load F2 prior map demo (new run, 1 km², stale survey)", group: "Run", disabled: busy, run: () => startPreset("f2-prior-1km") },

@@ -13,7 +13,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStorageStatus, useThemeSetting, type CurrentRun } from "./services.tsx";
 import type { PresetId } from "@agentsim/core";
 import { LAYOUT_NAMESPACE, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
-import { LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadRunController } from "./workspaces/registry.tsx";
+import { LazyRecordingStatus, LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadRunController } from "./workspaces/registry.tsx";
 import type { LabRun } from "./sim/run-controller.ts";
 
 const SPEEDS = [
@@ -25,7 +25,7 @@ const SPEEDS = [
 
 /** Lab shell (UI-SPEC §2): toolbar, banners, workspace, status line, command palette. */
 export function App() {
-  const { sim, storage } = useServices();
+  const { sim, source, storage } = useServices();
   const status = useStorageStatus(storage);
   const setTheme = useThemeSetting(storage);
   const snap = usePolled(useCallback(() => sim.snapshot(), [sim]), 100);
@@ -37,9 +37,12 @@ export function App() {
   const [runBusy, setRunBusy] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [runAnchor, setRunAnchor] = useState<HTMLElement | null>(null);
+  // A replay session: the run being shown from storage (the session itself, and what it says when it cannot open, are in its lazy chunk).
+  const [replayRun, setReplayRun] = useState<string | undefined>(undefined);
 
   const startRun = useCallback(
     (start: () => Promise<LabRun>) => {
+      setReplayRun(undefined); // a run that starts is what the panels show
       setRunBusy(true);
       setRunError(null);
       start().then(
@@ -61,8 +64,8 @@ export function App() {
     () => startRun(async () => (await loadRunController()).startPresetRun(storage, sim, "f1-reference-1km")),
     [startRun, storage, sim],
   );
-  const listRuns = useCallback(async () => (await loadRunController()).replayableRuns(storage), [storage]);
-  const replay = useCallback((runId: string) => startRun(async () => (await loadRunController()).replayStoredRun(storage, sim, runId)), [startRun, storage, sim]);
+  const listRuns = useCallback(async () => (await loadRunController()).resimulatableRuns(storage), [storage]);
+  const resimulate = useCallback((runId: string) => startRun(async () => (await loadRunController()).resimulateRun(storage, sim, runId)), [startRun, storage, sim]);
   const rerunCurrent = useCallback(() => run && startRun(async () => (await loadRunController()).rerun(storage, sim, run)), [startRun, storage, sim, run]);
   const rerunInMode = useCallback(
     (mode: "lockstep" | "realtime") => run && startRun(async () => (await loadRunController()).rerunInMode(storage, sim, run, mode)),
@@ -118,8 +121,8 @@ export function App() {
     if (paletteOpen && !agentCommandsModule) void loadAgentCommands().then(setAgentCommandsModule);
   }, [paletteOpen, agentCommandsModule]);
   const agentCommands = useMemo<Command[]>(
-    () => (paletteOpen && agentCommandsModule ? agentCommandsModule.agentPaletteCommands(sim, !!run, startPreset, runBusy) : []),
-    [paletteOpen, agentCommandsModule, sim, run, startPreset, runBusy],
+    () => (paletteOpen && agentCommandsModule && source ? agentCommandsModule.agentPaletteCommands(source, !!run, startPreset, runBusy) : []),
+    [paletteOpen, agentCommandsModule, source, run, startPreset, runBusy],
   );
   const commands = useMemo<Command[]>(
     () => [
@@ -160,7 +163,7 @@ export function App() {
   const preset = WORKSPACES.find((w) => w.id === workspace) ?? WORKSPACES[0];
 
   return (
-    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace }}>
+    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun }}>
       <CurrentRunProvider value={currentRun}>
       <div className="shell">
         <header className="toolbar" role="toolbar" aria-label="Run control">
@@ -189,7 +192,7 @@ export function App() {
                 onLoadReference={loadReference}
                 onRerun={() => rerunCurrent()}
                 listRuns={listRuns}
-                onReplay={replay}
+                onResimulate={resimulate}
               />
             </Suspense>
           )}
@@ -252,6 +255,11 @@ export function App() {
         </header>
 
         <div>
+          {replayRun !== undefined && (
+            <Suspense fallback={null}>
+              <LazyReplayHost runId={replayRun} />
+            </Suspense>
+          )}
           {status.state === "waiting-lock" && (
             <Banner kind="info" testId="db-in-use">
               Database in use in another tab. Storage is paused here and opens automatically when that tab is closed.
@@ -284,6 +292,11 @@ export function App() {
             <span data-testid="status-storage-size">
               {formatBytes(info.dbFileBytes)} · {formatBytes(info.usageBytes)} / {formatBytes(info.quotaBytes)} · schema v{LATEST_SCHEMA_VERSION}
             </span>
+          )}
+          {run && (
+            <Suspense fallback={null}>
+              <LazyRecordingStatus header={run.header} snap={snap} />
+            </Suspense>
           )}
           {snap.preparing && (
             <span data-testid="status-preparing" title="Planning views and HPA* graphs are built before tick 0 (ADR-0024)">

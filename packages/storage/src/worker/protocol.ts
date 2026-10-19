@@ -18,18 +18,27 @@ export const StorageInit = Type.Object({
   simulateNoOpfs: Type.Optional(Type.Boolean()),
   /** Test-only: wipe the pool before opening, for isolated contract tests. */
   resetOnOpen: Type.Optional(Type.Boolean()),
+  /** Test-only: a quota of this many bytes against the database's own size, instead of the browser's (ADR-0035 §6). */
+  simulateQuotaBytes: Type.Optional(Type.Integer({ minimum: 1 })),
+  /** Test-only: a quota of what the database holds when it opens plus this many bytes (a page that starts near its limit, whatever it holds). */
+  simulateQuotaHeadroomBytes: Type.Optional(Type.Integer({ minimum: 1 })),
+  /** Test-only: every commit of recorder batches takes this long first, to exercise flow control (ADR-0035 §6). */
+  simulateSlowWriterMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 10_000 })),
 });
 export type StorageInit = Static<typeof StorageInit>;
 
 export const OPS = [
   "trace.append", "trace.flush", "trace.query", "trace.count",
-  "runs.allocateRunId", "runs.create", "runs.get", "runs.list", "runs.setStatus", "runs.appendInputs", "runs.inputs",
+  "runs.allocateRunId", "runs.create", "runs.get", "runs.list", "runs.setStatus", "runs.appendInputs", "runs.inputs", "runs.sizes", "runs.delete",
   "cache.get", "cache.put",
   "userData.get", "userData.set", "userData.delete", "userData.keys",
   "scenarios.list", "scenarios.get", "scenarios.saveVersion", "scenarios.delete",
   "runConfigs.list", "runConfigs.get", "runConfigs.saveVersion", "runConfigs.delete",
-  "admin.info", "admin.exportDb", "admin.exportRun", "admin.importDb", "admin.close",
-  "test.openSecondConnection",
+  "snapshots.putBlobs", "snapshots.getBlob", "snapshots.write", "snapshots.list", "snapshots.read",
+  "beliefFrames.append", "beliefFrames.query", "beliefFrames.keyframeAtOrBefore",
+  "replay.beliefAt", "replay.world",
+  "admin.info", "admin.compact", "admin.exportDb", "admin.exportRun", "admin.exportRunJsonl", "admin.importDb", "admin.importRun", "admin.close",
+  "test.openSecondConnection", "test.setSimulatedQuota",
 ] as const;
 export type StorageOp = (typeof OPS)[number];
 

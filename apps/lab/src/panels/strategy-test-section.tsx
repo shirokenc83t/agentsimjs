@@ -3,7 +3,7 @@ import { STATE_GLYPH } from "@agentsim/ui";
 import Button from "@mui/material/Button";
 import { useEffect, useRef, useState } from "react";
 import { parseInlineStrategy } from "./run-config/model.ts";
-import type { SimClient } from "../sim/sim-client.ts";
+import type { RunSource } from "../sim/run-source.ts";
 import { QueryDetail } from "./plan-query-table.tsx";
 import { asResearcherPlan } from "./researcher-data.ts";
 import { RESEARCHER_BANNER } from "./researcher-section.tsx";
@@ -29,8 +29,8 @@ const num = (t: string): number | undefined => (t.trim() === "" || !Number.isFin
  * hash. A result on the ground truth is observer data: marked, with the researcher banner, like the beliefs-versus-truth
  * view. The result is drawn in the Scene in a tone of its own.
  */
-export function StrategyTestSection(props: { sim: Pick<SimClient, "strategyTest">; agentId: string }) {
-  const { sim, agentId } = props;
+export function StrategyTestSection(props: { source: Pick<RunSource, "strategyTest">; agentId: string }) {
+  const { source, agentId } = props;
   const [choice, setChoice] = useState(OWN);
   const [inline, setInline] = useState("");
   const [map, setMap] = useState<"belief" | "truth">("belief");
@@ -73,7 +73,7 @@ export function StrategyTestSection(props: { sim: Pick<SimClient, "strategyTest"
     const id = ++latest.current;
     setPending(true);
     setError(undefined);
-    void sim.strategyTest({ agentId, to: { xM: tx, yM: ty }, planOn: map, ...(strategy === undefined ? {} : { strategy }) }).then((m) => {
+    void source.strategyTest({ agentId, to: { xM: tx, yM: ty }, planOn: map, ...(strategy === undefined ? {} : { strategy }) }).then((m) => {
       if (id !== latest.current) return; // a newer request owns the section
       setPending(false);
       if (!m.ok || m.result === undefined) {

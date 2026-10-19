@@ -3,7 +3,7 @@ import type { StrategyTestResult } from "@agentsim/scenarios";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { SimClient } from "../sim/sim-client.ts";
+import type { RunSource } from "../sim/run-source.ts";
 import { sandboxTarget, sandboxView } from "./sandbox-store.ts";
 import { StrategyTestSection } from "./strategy-test-section.tsx";
 
@@ -30,8 +30,8 @@ const result = (over: Partial<StrategyTestResult> = {}): StrategyTestResult => (
 
 function setup(answer: (req: Record<string, unknown>) => SimStrategyTestResultMessage) {
   const strategyTest = vi.fn((req: Record<string, unknown>) => Promise.resolve(answer(req)));
-  const sim = { strategyTest } as unknown as SimClient;
-  const { unmount } = render(<StrategyTestSection sim={sim} agentId="ugv-001" />);
+  const source = { strategyTest } as unknown as RunSource;
+  const { unmount } = render(<StrategyTestSection source={source} agentId="ugv-001" />);
   return { strategyTest, unmount };
 }
 const ok = (r: StrategyTestResult): SimStrategyTestResultMessage => ({ type: "strategyTestResult", requestId: 1, ok: true, result: r });

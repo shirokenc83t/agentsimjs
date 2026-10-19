@@ -103,4 +103,10 @@ export class ScriptBrain implements Brain {
   get position(): number {
     return this.cursor;
   }
+
+  /** Puts the position back (a restore of a snapshot). */
+  restorePosition(position: number): void {
+    if (!Number.isInteger(position) || position < 0 || position > this.steps.length) throw new RangeError(`script position ${position} of ${this.steps.length} steps`);
+    this.cursor = position;
+  }
 }

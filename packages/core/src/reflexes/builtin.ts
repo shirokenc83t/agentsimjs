@@ -55,12 +55,19 @@ export const geofenceReflex: Reflex = {
 /**
  * Critical battery: once the state of charge reaches the body's critical level, the running action is
  * preempted and the agent returns to base (a UAV lands there); without a base, a UAV lands where it is and
- * a UGV holds. Latched: it acts once per agent.
+ * a UGV holds. Latched: it acts once per agent. The latch is run state: `snapshot()` lists the agents it has acted on
+ * (sorted) and `restore()` puts them back.
  */
 export function batteryReflex(): Reflex {
   const fired = new Set<string>();
   return {
     name: "battery",
+    snapshot: () => [...fired].sort(),
+    restore(data: unknown): void {
+      if (!Array.isArray(data) || data.some((id) => typeof id !== "string")) throw new RangeError("battery reflex snapshot must be a list of agent IDs");
+      fired.clear();
+      for (const id of data as string[]) fired.add(id);
+    },
     afterStep(_ctx: ReflexContext, agent: SimAgent, runningAction: string | undefined): ReflexTrigger | undefined {
       if (fired.has(agent.id) || !isBatteryCritical(agent.battery, agent.body.battery) || agent.battery.soc <= 0) return undefined;
       if (runningAction === "returnToBase" || runningAction === "land") return undefined;

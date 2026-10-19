@@ -3,6 +3,7 @@ import { err, ok } from "@agentsim/core";
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import type { SqlDriver, SqlValue } from "../sql/driver.ts";
 import { appliedVersions, isKnownPrefix, migrate } from "../sql/migrations.ts";
+import { firstRecordingProblem } from "../sql/recording-integrity.ts";
 import { openWasmSqlDriver } from "../drivers/wasm-sql-driver.ts";
 
 export type ImportErrorCode =
@@ -13,7 +14,8 @@ export type ImportErrorCode =
   | "unexpected_objects"
   | "unknown_tables"
   | "unknown_schema_version"
-  | "non_monotonic_trace";
+  | "non_monotonic_trace"
+  | "broken_recording";
 
 export const MAX_IMPORT_BYTES = 512 * 1024 * 1024;
 const SQLITE_HEADER = "SQLite format 3\u0000";
@@ -80,6 +82,9 @@ export function validateImport(sqlite3: Sqlite3Static, bytes: Uint8Array): Resul
        WHERE sim_time < prev LIMIT 1`,
     );
     if (backwards) return err({ code: "non_monotonic_trace", message: `run ${backwards.run_id}: sim time goes backwards at seq ${backwards.seq}`, details: backwards });
+    // Recording (ADR-0035 addition of 2026-10-17): blobs, snapshots and belief frames agree with each other and with the run header.
+    const broken = firstRecordingProblem(db);
+    if (broken) return err({ code: "broken_recording", message: broken });
     return ok(undefined);
   } catch (e) {
     return err({ code: "corrupt", message: e instanceof Error ? e.message : String(e) });
@@ -89,7 +94,8 @@ export function validateImport(sqlite3: Sqlite3Static, bytes: Uint8Array): Resul
 }
 
 // Everything a run owns: its header, trace and snapshots, and its run inputs (researcher commands, replayed to reproduce it).
-const RUN_TABLES = ["runs", "run_inputs", "trace_records", "trace_causes", "snapshots"] as const;
+// Blobs come before the rows that refer to them (foreign keys).
+const RUN_TABLES = ["runs", "run_inputs", "trace_records", "trace_causes", "blobs", "snapshots", "belief_frames"] as const;
 
 /** Copies one run into an in-memory database with the same DDL and serializes it (ADR-0020). */
 export function exportRun(sqlite3: Sqlite3Static, source: SqlDriver, runId: string): Result<Uint8Array, CodedError<"unknown_run">> {

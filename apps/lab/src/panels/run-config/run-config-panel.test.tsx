@@ -7,6 +7,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { CurrentRunProvider, ServicesProvider, type CurrentRun } from "../../services.tsx";
 import type { LabRun } from "../../sim/run-controller.ts";
+import type { RunSource } from "../../sim/run-source.ts";
 import type { SimClient } from "../../sim/sim-client.ts";
 import { validateDraft } from "./model.ts";
 import { RunConfigPanel } from "./run-config-panel.tsx";
@@ -37,7 +38,7 @@ function setup(over: Partial<CurrentRun> = {}) {
   const runWithConfig = vi.fn();
   const current: CurrentRun = { run: labRun(), busy: false, error: null, loadDemo: vi.fn(), runWithConfig, startScenarioRun: vi.fn(), ...over };
   render(
-    <ServicesProvider value={{ storage, sim: {} as SimClient }}>
+    <ServicesProvider value={{ storage, sim: {} as SimClient, source: {} as RunSource, setReplaySource: () => {} }}>
       <CurrentRunProvider value={current}>
         <RunConfigPanel />
       </CurrentRunProvider>

@@ -92,6 +92,12 @@ interface Entry {
   readonly event: DecisionEvent;
 }
 
+/** What an `Inbox` keeps between ticks. */
+export interface InboxSnapshot {
+  readonly entries: readonly { readonly tick: number; readonly seq: number; readonly event: DecisionEvent }[];
+  readonly seq: number;
+}
+
 /**
  * One agent's inbox (ADR-0005 addition): undelivered events, in the state hash only when not empty. Perception
  * events are coalesced per subject (one entry per entity with its latest state and the number of transitions; the
@@ -148,6 +154,17 @@ export class Inbox {
     }
     const events = sorted.filter((e) => e.tick !== -1).map((e) => e.event);
     return { events, dropped };
+  }
+
+  /** The undelivered events as plain data, in arrival order with their tick and seq (a snapshot: ADR-0035 addition of 2026-10-17, item 8). */
+  snapshot(): InboxSnapshot {
+    return { entries: this.entries.map((e) => ({ tick: e.tick, seq: e.seq, event: e.event })), seq: this.seq };
+  }
+
+  /** Puts a snapshot back in place. */
+  restore(s: InboxSnapshot): void {
+    this.entries = s.entries.map((e) => ({ tick: e.tick, seq: e.seq, event: e.event }));
+    this.seq = s.seq;
   }
 
   /** In the state hash only when not empty (runs with nothing pending keep their hash). */
