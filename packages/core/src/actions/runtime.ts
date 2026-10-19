@@ -1138,6 +1138,8 @@ class ExploreBehavior implements Behavior {
       ...(approach ? { approach: this.region } : {}),
       iteration: this.iteration?.no ?? 0,
       mode,
+      // The iteration's centre and radius travel with every target of it, so a view of a stored run that starts anywhere in the run can draw the area.
+      ...(mode === "iterate" && this.iteration ? { centre: [this.iteration.cx, this.iteration.cy], radiusM: this.radiusM } : {}),
       window: windowArray(window),
       ...(gx === c.xM && gy === c.yM ? {} : { goal: [gx, gy] }),
       candidates,

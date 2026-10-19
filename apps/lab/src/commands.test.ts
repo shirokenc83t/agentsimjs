@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentBody, AGENT_COMMANDS, commandParams } from "./commands.ts";
+import { agentBody, agentExploreRadius, AGENT_COMMANDS, commandParams } from "./commands.ts";
 
 describe("researcher agent commands", () => {
   it("are the injectable actions besides goTo, and only takeoff has parameters (its altitude, defaulting to the body's cruise altitude)", () => {
@@ -8,6 +8,15 @@ describe("researcher agent commands", () => {
     expect(commandParams("takeoff", { cruiseAltitudeM: 25 }, 8)).toEqual({ altitudeM: 8 });
     expect(commandParams("takeoff", undefined)).toEqual({ altitudeM: 10 });
     for (const op of ["land", "explore", "hold"] as const) expect(commandParams(op, { cruiseAltitudeM: 25 })).toBeUndefined();
+  });
+
+  it("explore takes a radius only when one is given: without it the agent's configured radius applies (ADR-0040)", () => {
+    expect(commandParams("explore", undefined, undefined, 25)).toEqual({ radiusM: 25 });
+    expect(commandParams("explore", undefined, 8)).toBeUndefined();
+    const run = { agents: [{ id: "ugv-001", config: { planning: { radiusM: 40 } } }, { id: "uav-001", config: { planning: {} } }] };
+    expect(agentExploreRadius(run, "ugv-001")).toBe(40);
+    expect(agentExploreRadius(run, "uav-001")).toBeUndefined();
+    expect(agentExploreRadius(undefined, "x")).toBeUndefined();
   });
 
   it("reads an agent's body from the loaded run", () => {

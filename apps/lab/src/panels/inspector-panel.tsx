@@ -5,7 +5,7 @@ import Button from "@mui/material/Button";
 import { useCallback, useState, type ReactNode } from "react";
 import { usePolled, useSource } from "../services.tsx";
 import type { RunFeature, RunSnapshot, RunSource } from "../sim/run-source.ts";
-import { AGENT_COMMANDS, commandParams } from "../commands.ts";
+import { AGENT_COMMANDS, agentExploreRadius, commandParams } from "../commands.ts";
 import { actionLabel, actionState, waypointsText, type AgentViews, type CommandView } from "./agent-views.ts";
 import { MindViewSection } from "./mind-view-section.tsx";
 import { PlanQueryTable, StrategyRow } from "./plan-query-table.tsx";
@@ -87,6 +87,11 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
   const [altitude, setAltitude] = useState("");
   const parsed = Number(altitude);
   const altitudeM = altitude.trim() !== "" && Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  // The radius of an exploration iteration (ADR-0040): empty = the agent's configured one, shown as the placeholder.
+  const [radius, setRadius] = useState("");
+  const parsedRadius = Number(radius);
+  const radiusM = radius.trim() !== "" && Number.isFinite(parsedRadius) && parsedRadius > 0 ? parsedRadius : undefined;
+  const configuredRadius = agentExploreRadius(source.snapshot().run, id);
   return (
     <Section title="Commands (researcher, world scope)" testId="inspector-commands">
       <Row k="send">
@@ -109,6 +114,21 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
           m
         </Row>
       )}
+      <Row k="explore radius">
+        <input
+          className="mono"
+          style={{ width: "6em" }}
+          type="number"
+          min={1}
+          step={1}
+          placeholder={configuredRadius === undefined ? "default" : String(configuredRadius)}
+          value={radius}
+          onChange={(e) => setRadius(e.target.value)}
+          aria-label="explore radius (m)"
+          data-testid="command-explore-radius"
+        />{" "}
+        m
+      </Row>
       <Row k="run">
         {AGENT_COMMANDS.map((c) => (
           <Button
@@ -119,7 +139,7 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
             sx={{ marginRight: 0.5 }}
             disabled={source.unavailable("commands") !== undefined}
             title={source.unavailable("commands")}
-            onClick={() => source.command(id, c.op, commandParams(c.op, body, altitudeM))}
+            onClick={() => source.command(id, c.op, commandParams(c.op, body, altitudeM, radiusM))}
             data-testid={`command-${c.op}`}
           >
             {c.title}

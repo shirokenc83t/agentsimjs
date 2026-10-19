@@ -206,6 +206,10 @@ function RunConfigEditor(props: { loaded: Loaded }) {
           />
           <NumberField label="total budget (expansions)" value={pEntry?.totalBudget} integer onChange={(v) => setP(withField(pEntry, "totalBudget", v))} testId="rc-total-budget" />
         </div>
+        <div className="row">
+          <NumberField label="explore radius (m)" value={pEntry?.radiusM} placeholder="ugv 40 · uav 80" onChange={(v) => setP(withField(pEntry, "radiusM", v))} testId="rc-explore-radius" />
+          <NumberField label="explore window margin (m)" value={pEntry?.windowMarginM} placeholder="10" onChange={(v) => setP(withField(pEntry, "windowMarginM", v))} testId="rc-window-margin" />
+        </div>
         {pEntry?.strategy !== undefined && <StrategyPicker key={planningScope} value={pEntry.strategy} onChange={(strategy) => setP(withPlanner(pEntry, { strategy }))} issue={strategyIssue} />}
         {validation.ok && <Warnings warnings={validation.resolved.warnings} />}
         <FormControlLabel
@@ -346,6 +350,7 @@ function EffectiveTable(props: { agents: readonly EffectiveAgentConfig[] }) {
             <th>algorithm</th>
             <th>per tick</th>
             <th>total</th>
+            <th>explore (radius / margin)</th>
             <th>cost profile</th>
             <th>initial map</th>
           </tr>
@@ -365,6 +370,10 @@ function EffectiveTable(props: { agents: readonly EffectiveAgentConfig[] }) {
               </td>
               <td>
                 <span className="mono">{a.planning.totalBudget}</span> <span className="source-tag">{a.planningSources.totalBudget}</span>
+              </td>
+              <td data-testid={`rc-effective-explore-${a.agentId}`}>
+                <span className="mono">{a.planning.radiusM} m</span> <span className="source-tag">{a.planningSources.radiusM}</span> <span className="mono">/ {a.planning.windowMarginM} m</span>{" "}
+                <span className="source-tag">{a.planningSources.windowMarginM}</span>
               </td>
               <td>
                 <span className="mono">{profileSummary(a.planning.costProfile)}</span> <span className="source-tag">{a.planningSources.costProfile}</span>

@@ -10,6 +10,7 @@ import { HudBudgetRows } from "./hud-budget.tsx";
 import { ReplayBar } from "./replay-bar.tsx";
 import { sandboxTarget, useSandboxTarget, useSandboxView } from "./sandbox-store.ts";
 import { useSandboxOverlay } from "./use-sandbox-overlay.ts";
+import { useExploreOverlay } from "./use-explore-overlay.ts";
 import { useStagesOverlay } from "./use-stages-overlay.ts";
 import { useBeliefOverlay, type MapOverlay } from "./use-belief-overlay.ts";
 import { useSensorOverlays } from "./use-sensor-overlays.ts";
@@ -27,6 +28,7 @@ export function ScenePanel() {
   const [showRays, setShowRays] = useState(false);
   const [showTopology, setShowTopology] = useState(false);
   const [showStages, setShowStages] = useState(false);
+  const [showExplore, setShowExplore] = useState(false);
   // Snapshot at ≤ 10 Hz: entity table, run and grid (agent colours are derived from IDs once per agent).
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const selection = useUiContext((s) => s.selection);
@@ -93,6 +95,7 @@ export function ScenePanel() {
   useBeliefOverlay(source, renderer, overlay, selectedAgent, !ideal, snap.run?.runId, chunksX);
   useSensorOverlays(source, renderer, showRays, showTopology, selectedAgent, snap.run?.runId);
   useStagesOverlay(source, renderer, showStages, selectedAgent);
+  useExploreOverlay(source, renderer, showExplore, selectedAgent, snap.grid, snap.simTimeS);
   useSandboxOverlay(renderer, selectedAgent);
   const sandbox = useSandboxView();
   const picking = useSandboxTarget().picking;
@@ -205,11 +208,18 @@ export function ScenePanel() {
               ◌ frontiers
             </ToggleButton>
           </ToggleButtonGroup>
-          <ToggleButtonGroup size="small" value={showStages ? ["stages"] : []} onChange={(_e, v: string[]) => setShowStages(v.includes("stages"))} aria-label="Strategy stages overlay">
-            <ToggleButton value="stages" data-testid="overlay-stages" title="The stages of the selected planning query: coarse path, legs and joints">
-              ⑂ stages
-            </ToggleButton>
-          </ToggleButtonGroup>
+          <div style={{ display: "flex", gap: 6 }}>
+            <ToggleButtonGroup size="small" value={showStages ? ["stages"] : []} onChange={(_e, v: string[]) => setShowStages(v.includes("stages"))} aria-label="Strategy stages overlay">
+              <ToggleButton value="stages" data-testid="overlay-stages" title="The stages of the selected planning query: coarse path, legs and joints">
+                ⑂ stages
+              </ToggleButton>
+            </ToggleButtonGroup>
+            <ToggleButtonGroup size="small" value={showExplore ? ["explore"] : []} onChange={(_e, v: string[]) => setShowExplore(v.includes("explore"))} aria-label="Exploration overlay">
+              <ToggleButton value="explore" data-testid="overlay-explore" title="The selected agent's exploration: the area of its iteration, the targets set aside for it and the ones marked unreachable">
+                ◎ explore
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </div>
           {(noRays !== undefined || noTopology !== undefined) && (
             <p className="muted" data-testid="overlay-off-reason">
               Rays and frontiers are off in replay: {noRays ?? noTopology}
@@ -258,6 +268,17 @@ export function ScenePanel() {
                   <dd>frontier group marked unreachable</dd>
                 </>
               )}
+            </dl>
+          )}
+          {showExplore && !selectedAgent && <p className="muted">Select an agent to see its exploration.</p>}
+          {showExplore && (
+            <dl className="kv legend" data-testid="explore-legend">
+              <dt>◯ ring</dt>
+              <dd>iteration of explore: its radius around its centre (square: the search window)</dd>
+              <dt>◇ amber</dt>
+              <dd>target set aside for the iteration (tried again from another centre)</dd>
+              <dt>✕ red</dt>
+              <dd>target marked unreachable</dd>
             </dl>
           )}
           {(showStages || sandbox) && (

@@ -1,6 +1,7 @@
 export { StateInterpolator, DEFAULT_INTERPOLATOR_OPTIONS, type InterpolatorOptions, type PoseSource } from "./scene/interpolator.ts";
 export { SceneRenderer, type EditPointerPhase, type GridSpec, type ScenePick } from "./scene/scene-renderer.ts";
 export { type StageLine } from "./scene/stages-overlay.ts";
+export { type ExplorationView } from "./scene/overlay-layers.ts";
 export { AtlasLayout, ChunkQueue, CHUNK_UPLOADS_PER_FRAME, type GridDims } from "./scene/atlas-layout.ts";
 export type { GridViewMode } from "./scene/grid-atlas.ts";
 export type { BeliefViewMode } from "./scene/belief-atlas.ts";

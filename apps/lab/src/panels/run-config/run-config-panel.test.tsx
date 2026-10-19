@@ -78,6 +78,23 @@ describe("RunConfigPanel (ADR-0028)", () => {
     expect(runWithConfig).toHaveBeenCalledWith({ ...runConfig, planning: { byAgent: { rover: { costProfile: { weights: { distance: 1, terrain: 1 } } } } } });
   });
 
+  it("sets the exploration scope (ADR-0040): the defaults are in the effective table, a radius for the rover changes its row and the configuration hash", async () => {
+    const { runWithConfig } = setup();
+    const hashBefore = screen.getByTestId("rc-effective-config-hash").textContent;
+    // Built-in placeholders: a ground vehicle explores in iterations of 40 m, an aerial one of 80 m, windows margin 10 m.
+    expect(screen.getByTestId("rc-effective-explore-ugv-001")).toHaveTextContent("40 m builtin / 10 m builtin");
+    expect(screen.getByTestId("rc-effective-explore-uav-001")).toHaveTextContent("80 m builtin / 10 m builtin");
+    expect(screen.getByTestId("rc-explore-radius")).toHaveAttribute("placeholder", "ugv 40 · uav 80");
+    await userEvent.selectOptions(screen.getByTestId("rc-planning-scope"), "byAgent.rover");
+    await userEvent.type(screen.getByTestId("rc-explore-radius"), "25");
+    await userEvent.type(screen.getByTestId("rc-window-margin"), "5");
+    expect(screen.getByTestId("rc-effective-explore-ugv-001")).toHaveTextContent("25 m byAgent / 5 m byAgent");
+    expect(screen.getByTestId("rc-effective-explore-ugv-002")).toHaveTextContent("40 m builtin");
+    expect(screen.getByTestId("rc-effective-config-hash").textContent).not.toBe(hashBefore);
+    await userEvent.click(screen.getByTestId("rc-run"));
+    expect(runWithConfig).toHaveBeenCalledWith(expect.objectContaining({ planning: { byAgent: { rover: { radiusM: 25, windowMarginM: 5 } } } }));
+  });
+
   it("reports invalid values with their stable codes and does not run them", async () => {
     const { runWithConfig } = setup();
     await userEvent.type(screen.getByTestId("rc-per-tick"), "0");
