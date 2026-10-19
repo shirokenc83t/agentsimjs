@@ -14,7 +14,7 @@ test("explore with a radius from the Inspector: the iteration area is drawn, liv
 
   // The radius field shows the agent's configured radius (a ground vehicle's built-in default) and takes another.
   const radius = page.getByTestId("command-explore-radius");
-  await expect(radius).toHaveAttribute("placeholder", "40");
+  await expect(radius).toHaveAttribute("placeholder", "20");
   await radius.fill("25");
   await page.getByTestId("overlay-explore").click();
   await page.getByTestId("command-explore").click();

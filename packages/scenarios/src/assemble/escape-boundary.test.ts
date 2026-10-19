@@ -13,7 +13,7 @@ import { createRun } from "./run.ts";
  * `ActionRuntime.findEscape` runs, for a belief agent whose explore escapes the planning band beside the box wall.
  */
 describe("the escape search reads no ground truth for a belief agent", () => {
-  it("explore started at tick 60 on the F2 discovery map: the escape runs, with zero ground-truth reads", async () => {
+  it("explore started at tick 2 on the F2 discovery map: the escape runs, with zero ground-truth reads", async () => {
     const loaded = loadScenario(f2DiscoveryScenario());
     if (!loaded.ok) throw new Error(loaded.error.message);
     const resolved = resolveRunConfig(f2RunConfig(F2_DISCOVERY_ID, 1), { loaded: loaded.value, version: 1 });
@@ -37,9 +37,8 @@ describe("the escape search reads no ground truth for a belief agent", () => {
     };
     try {
       const rover = run.agents.find((a) => a.key === "rover");
-      await runLockstep(run.world, run.scheduler, 58);
       run.world.inject({ agentId: rover?.id ?? "", name: "explore", params: {} });
-      await runLockstep(run.world, run.scheduler, 1700); // its first escape comes at about tick 1,725 of the run
+      await runLockstep(run.world, run.scheduler, 1600); // its first escape comes at about tick 1,450 of the run (iterations of 20 m)
     } finally {
       proto.findEscape = original;
     }

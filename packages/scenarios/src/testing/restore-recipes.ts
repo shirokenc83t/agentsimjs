@@ -98,7 +98,7 @@ function recipes(long: boolean): RestoreRecipe[] {
       "explore-unknown-map",
       { preset: "f2-discovery", scripts: { rover: [{ name: "explore", params: {} }], low: [goTo(25, 60)], scout: [takeoff, { name: "explore", params: {} }] }, beliefVsTruth: { everyS: 1 } },
       s(650, 1500),
-      long ? [20, 140, 179, 355, 590, 1070, 1100, 1383] : [20, 140, 179, 355, 590],
+      long ? [30, 140, 179, 355, 590, 1070, 1100, 1383] : [30, 140, 179, 355, 590],
       changesAt({ 140: "through", 179: "away" }),
     ),
     // 3b. Explore with iterations of a small radius: the travel to the next centre in flight, the iteration state and what it remembers.

@@ -41,8 +41,8 @@ describe("explore in iterations, on the F2 discovery map (ADR-0040)", () => {
     expect(iterations.filter((i) => i.event === "start").length).toBeGreaterThanOrEqual(2);
     expect(iterations.filter((i) => i.event === "end").length).toBe(iterations.filter((i) => i.event === "start").length);
     for (const i of iterations.filter((x) => x.event === "start")) {
-      expect(i.radiusM).toBe(40); // the built-in default for a ground vehicle
-      expect(i.window).toEqual([i.centre[0] as number - 50, i.centre[1] as number - 50, i.centre[0] as number + 50, i.centre[1] as number + 50]); // 2 (R + margin) = 100 m
+      expect(i.radiusM).toBe(20); // the built-in default for a ground vehicle
+      expect(i.window).toEqual([i.centre[0] as number - 30, i.centre[1] as number - 30, i.centre[0] as number + 30, i.centre[1] as number + 30]); // 2 (R + margin) = 60 m
     }
     const selected = mine.filter((r) => (r.payload as { op?: string; event?: string }).op === "explore-target" && (r.payload as { event?: string }).event === "selected");
     expect(selected.length).toBeGreaterThan(5);

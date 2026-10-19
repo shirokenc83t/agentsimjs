@@ -207,7 +207,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
           <NumberField label="total budget (expansions)" value={pEntry?.totalBudget} integer onChange={(v) => setP(withField(pEntry, "totalBudget", v))} testId="rc-total-budget" />
         </div>
         <div className="row">
-          <NumberField label="explore radius (m)" value={pEntry?.radiusM} placeholder="ugv 40 · uav 80" onChange={(v) => setP(withField(pEntry, "radiusM", v))} testId="rc-explore-radius" />
+          <NumberField label="explore radius (m)" value={pEntry?.radiusM} placeholder="ugv 20 · uav 40" onChange={(v) => setP(withField(pEntry, "radiusM", v))} testId="rc-explore-radius" />
           <NumberField label="explore window margin (m)" value={pEntry?.windowMarginM} placeholder="10" onChange={(v) => setP(withField(pEntry, "windowMarginM", v))} testId="rc-window-margin" />
         </div>
         {pEntry?.strategy !== undefined && <StrategyPicker key={planningScope} value={pEntry.strategy} onChange={(strategy) => setP(withPlanner(pEntry, { strategy }))} issue={strategyIssue} />}

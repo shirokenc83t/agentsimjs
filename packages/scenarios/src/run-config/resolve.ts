@@ -52,9 +52,9 @@ export type PlanningField = "algorithm" | "onboardComputeExpansionsPerTick" | "t
 
 /**
  * Built-in exploration scope (ADR-0040): the radius of an iteration of `explore` per vehicle kind, and the margin of its search windows.
- * Placeholders until the measurements of F2c M1 fix them.
+ * Fixed by the F2c M1 measurements (ADR-0040 addition of 2026-10-19, "values and retries").
  */
-export const EXPLORE_BUILTIN = { radiusM: { uav: 80, ugv: 40 }, windowMarginM: 10 } as const;
+export const EXPLORE_BUILTIN = { radiusM: { uav: 40, ugv: 20 }, windowMarginM: 10 } as const;
 
 /**
  * A planning strategy as resolved for an agent (ADR-0037 §4): what it does (id, version, tree) and its content hash.

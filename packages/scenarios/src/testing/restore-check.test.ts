@@ -99,7 +99,8 @@ describe("restore recipes cover what they claim (F3a M1)", () => {
 
   it("explore: inside an iteration, a belief change the planner has not seen, a query in flight, a back-off", async () => {
     const f = await at("explore-unknown-map");
-    expect(f(140).explores.some((e) => e.iterating && e.mode === "iterate" && e.inner)).toBe(true);
+    expect(f(30).explores.some((e) => e.iterating && e.mode === "iterate" && e.inner)).toBe(true);
+    expect(f(140).explores.length).toBeGreaterThan(0);
     expect(f(140).queries.some((q) => q.pending && q.overlap), "a change through what the search read").toBe(true);
     expect(f(179).queries.some((q) => q.pending && !q.overlap), "a change away from what it read").toBe(true);
     expect(f(355).actions.some((a) => a.name === "explore" && a.phase === "planning")).toBe(true);
