@@ -139,7 +139,7 @@ function recipes(long: boolean): RestoreRecipe[] {
         beliefVsTruth: { everyS: 1 },
       },
       s(420, 1000),
-      long ? [100, 190, 300, 700] : [100, 190, 300],
+      long ? [100, 190, 350, 700] : [100, 190, 350],
     ),
     // Hold and takeoff in progress (a UGV holding while a UAV climbs; the UAV holding after its climb).
     recipe(

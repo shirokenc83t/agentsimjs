@@ -132,7 +132,7 @@ describe("restore recipes cover what they claim (F3a M1)", () => {
     const scout = (tick: number) => f(tick).actions.find((a) => a.agentId.startsWith("uav"));
     expect(scout(100)).toMatchObject({ name: "takeoff", status: "running" });
     expect(scout(190)).toMatchObject({ name: "goTo", status: "running" });
-    expect(scout(300)).toMatchObject({ name: "explore", status: "running" });
+    expect(scout(350)).toMatchObject({ name: "explore", status: "running" });
     const run = byName("uav-altitudes").create("genesis");
     expect((run.agents.find((a) => a.kind === "uav")?.body as { cruiseAltitudeM: number }).cruiseAltitudeM).toBe(20); // none of 30 and 25 is the default
   }, 120_000);

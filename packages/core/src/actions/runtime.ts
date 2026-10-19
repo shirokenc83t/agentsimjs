@@ -1403,6 +1403,7 @@ class GoToBehavior implements Behavior {
       this.uavPath = [];
       for (let k = 2; k < pts.length; k += 2) this.uavPath.push([pts[k] ?? 0, pts[k + 1] ?? 0]);
       this.uavIndex = 0;
+      this.planVersion = r.map.version;
       this.phase = Math.abs(a.state.z - this.cruise) > 1e-9 || !a.state.airborne ? "climbing" : "following";
       return RUNNING;
     }
@@ -1523,6 +1524,7 @@ class GoToBehavior implements Behavior {
       if (first) {
         this.uavPath = [];
         this.uavIndex = 0;
+        this.planVersion = map.version;
         this.phase = Math.abs(a.state.z - this.cruise) > 1e-9 || !a.state.airborne ? "climbing" : "following";
       }
       for (const [x, y] of ahead) this.uavPath.push([x, y]);
@@ -1823,6 +1825,25 @@ class GoToBehavior implements Behavior {
     return true;
   }
 
+  /** Whether the bare footprint of a UAV is free all along its remaining waypoints, from where it is, on its own map at its cruise altitude. */
+  private uavPathClear(map: PlanMap): boolean {
+    const a = this.agent;
+    if (a.kind !== "uav") return true;
+    const fp = a.body.footprintRadiusM;
+    let ax = a.state.x;
+    let ay = a.state.y;
+    for (let k = this.uavIndex; k < this.uavPath.length; k++) {
+      const wp = this.uavPath[k] as readonly [number, number];
+      const ex = wp[0] - ax;
+      const ey = wp[1] - ay;
+      const n = Math.max(1, Math.ceil(Math.sqrt(ex * ex + ey * ey) / 0.25));
+      for (let i = 0; i <= n; i++) if (map.clearanceM(ax + (ex * i) / n, ay + (ey * i) / n, fp) < fp) return false;
+      ax = wp[0];
+      ay = wp[1];
+    }
+    return true;
+  }
+
   private followUav(ctx: TickCtx): Step {
     const a = this.agent;
     if (a.kind !== "uav") return RUNNING;
@@ -1835,6 +1856,22 @@ class GoToBehavior implements Behavior {
         return RUNNING;
       }
       return this.returning ? this.beginLanding() : this.success(false);
+    }
+    // Replan when the agent's own map changed under the remaining path (never on ground truth it has not seen), as a ground vehicle does:
+    // a wall the lidar showed after the plan was made must not be flown into (a path planned before it was seen is not a known obstacle's job to veto).
+    const map = this.ports.planner.currentMap(a.id, this.cruise);
+    if (map.version !== this.planVersion) {
+      if (!this.uavPathClear(map)) {
+        this.replans++;
+        this.note(ctx.simTime, { op: "replan", reason: "map_changed", replans: this.replans, mapVersion: map.version });
+        this.endHold(ctx.simTime, "replan");
+        this.dropQuery();
+        this.uavPath = [];
+        this.uavIndex = 0;
+        this.phase = "planning";
+        return RUNNING;
+      }
+      this.planVersion = map.version;
     }
     const s = a.state;
     const x = s.x;
