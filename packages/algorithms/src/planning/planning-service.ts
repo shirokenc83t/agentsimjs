@@ -68,6 +68,25 @@ export interface PlanRequest {
    * and snapshots stay plain data.
    */
   readonly mapKey?: string;
+  /**
+   * A search window (ADR-0024 addition, ADR-0040): the cell rectangle [i0, i1) × [j0, j1) the search never leaves. Part of the result-cache key
+   * and of the snapshot (it is in the request). A goal outside it, or unreachable inside it, ends `not_found` after at most the window's cells.
+   * HPA* queries ignore it: they keep their own cluster bounds.
+   */
+  readonly window?: SearchWindow;
+}
+
+/** A cell rectangle, `i0 <= i < i1` and `j0 <= j < j1`. */
+export interface SearchWindow {
+  readonly i0: number;
+  readonly j0: number;
+  readonly i1: number;
+  readonly j1: number;
+}
+
+/** The window as a key part: absent is the empty string, so a query without one keeps the key it always had plus one separator. */
+function windowKey(w: SearchWindow | undefined): string {
+  return w ? `${w.i0},${w.j0},${w.i1},${w.j1}` : "";
 }
 
 export interface PlanOutcome {
@@ -496,6 +515,10 @@ export class PlanningService {
     const ti = g.cellI(request.to.x);
     const tj = g.cellJ(request.to.y);
     if (!g.inBounds(si, sj) || !g.inBounds(ti, tj)) return err({ code: "invalid_endpoint", message: "start or goal outside the map" });
+    const w = request.window;
+    if (w && !(Number.isInteger(w.i0) && Number.isInteger(w.j0) && Number.isInteger(w.i1) && Number.isInteger(w.j1) && w.i0 >= 0 && w.j0 >= 0 && w.i1 <= g.sizeX && w.j1 <= g.sizeY && w.i0 < w.i1 && w.j0 < w.j1)) {
+      return err({ code: "invalid_endpoint", message: "search window empty or outside the map" });
+    }
     const hpa = request.config.algorithm.kind === "hpa";
     const views = this.viewsFor(g, mapKey, request.traversal, profile.value, hpa);
     const start = sj * g.sizeX + si;
@@ -523,7 +546,7 @@ export class PlanningService {
     else {
       q.engine = hpa
         ? new HpaQuery(views.graph ?? new AbstractGraph(views.space), start, goal, remaining)
-        : new GridSearch(views.space, start, goal, alg as GridAlgorithm, remaining, { trackReads: true, ...(request.startDir === undefined ? {} : { startDir: request.startDir }) });
+        : new GridSearch(views.space, start, goal, alg as GridAlgorithm, remaining, { trackReads: true, ...(request.startDir === undefined ? {} : { startDir: request.startDir }), ...(w ? { window: w } : {}) });
       // Restore: deterministically re-run the search to the expansions already charged (wall time only).
       if (prior.charged > 0) q.engine.step(prior.charged);
     }
@@ -534,7 +557,7 @@ export class PlanningService {
   /** Result-cache key: the view's identity and content version, so a hit requires an identical view. */
   private resultKey(mapKey: string, views: Views, request: PlanRequest, profile: CompiledCostProfile, start: number, goal: number): string {
     const alg = request.config.algorithm;
-    return `${mapKey}#${views.id}.${views.space.contentVersion}|${SearchSpace.key(request.traversal, profile)}|${JSON.stringify(alg)}|${request.config.totalBudget}|${start}|${goal}|${request.startDir ?? -1}`;
+    return `${mapKey}#${views.id}.${views.space.contentVersion}|${SearchSpace.key(request.traversal, profile)}|${JSON.stringify(alg)}|${request.config.totalBudget}|${start}|${goal}|${request.startDir ?? -1}|${windowKey(request.window)}`;
   }
 
   /** Live views for the map (created on first use; synced only at the sync points). */
@@ -1075,7 +1098,7 @@ export class PlanningService {
   /** Cache key of one search of a strategy: the view and its content version, the search and its effective cap. */
   private stageKey(q: ActiveQuery, spec: StageSpec, cap: number): string {
     const v = q.views;
-    return `S|${q.request.mapKey ?? ""}#${v.id}.${v.space.contentVersion}|${SearchSpace.key(q.request.traversal, v.space.profile)}|${spec.algorithm}:${spec.weight ?? ""}:${spec.heuristic}:${spec.coarseOnly ? 1 : 0}|${cap}|${spec.from}|${spec.to}|${spec.startDir ?? -1}`;
+    return `S|${q.request.mapKey ?? ""}#${v.id}.${v.space.contentVersion}|${SearchSpace.key(q.request.traversal, v.space.profile)}|${spec.algorithm}:${spec.weight ?? ""}:${spec.heuristic}:${spec.coarseOnly ? 1 : 0}|${cap}|${spec.from}|${spec.to}|${spec.startDir ?? -1}|${windowKey(q.request.window)}`;
   }
 
   /** Starts the search the runner asked for: from the result cache (charged out like a real one) or as a new engine. */
@@ -1099,6 +1122,7 @@ export class PlanningService {
       engine = new GridSearch(views.space, spec.from, spec.to, alg, cap, {
         trackReads: true,
         ...(spec.startDir === undefined ? {} : { startDir: spec.startDir }),
+        ...(q.request.window ? { window: q.request.window } : {}),
         ...(spec.heuristic === "euclidean" ? { heuristic: "euclidean" as const } : {}),
       });
     }

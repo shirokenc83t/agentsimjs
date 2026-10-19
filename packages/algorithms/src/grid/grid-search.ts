@@ -9,6 +9,12 @@ export type SearchStatus = "running" | "found" | "not_found" | "budget_exceeded"
 export interface GridSearchOptions {
   /** Restrict the search to the cell rectangle [i0, i1) × [j0, j1) (HPA* cluster searches). */
   readonly bounds?: { readonly i0: number; readonly j0: number; readonly i1: number; readonly j1: number };
+  /**
+   * A planner query's search window (ADR-0024 addition, ADR-0040): the same rectangle as `bounds`, but the search keeps its turn-aware
+   * states, so inside the window it expands exactly as an unwindowed search does and the two agree whenever the optimal path lies inside.
+   * `bounds` wins when both are given.
+   */
+  readonly window?: { readonly i0: number; readonly j0: number; readonly i1: number; readonly j1: number };
   /** Expand predecessors instead of successors: g = cost from a cell *to* the start (HPA* goal insertion). */
   readonly reverse?: boolean;
   /** Initial heading (0..7) for turn-aware profiles; absent = no turn cost on the first move. */
@@ -47,6 +53,7 @@ export class GridSearch {
   private readonly open = new OpenHeap();
   private readonly hWeight: number;
   private readonly turnAware: boolean;
+  private readonly area: GridSearchOptions["bounds"];
   private readonly fast: boolean;
   private readonly euclid: boolean;
   private targets: Set<number> | undefined;
@@ -75,6 +82,7 @@ export class GridSearch {
     this.chunksY = space.grid.chunksY;
     this.readChunks = opts.trackReads ? new Uint8Array(this.chunksX * this.chunksY) : undefined;
     this.hWeight = goalCell < 0 || algorithm.kind === "dijkstra" ? 0 : algorithm.kind === "astar" ? 1 : algorithm.weight;
+    this.area = opts.bounds ?? opts.window;
     this.turnAware = space.profile.turnAware && !opts.bounds && !opts.reverse;
     this.fast = !this.turnAware && !opts.reverse && !space.hasEdgeConstraints;
     this.euclid = opts.heuristic === "euclidean";
@@ -103,7 +111,7 @@ export class GridSearch {
   }
 
   private inBounds(i: number, j: number): boolean {
-    const b = this.opts.bounds;
+    const b = this.area;
     if (!b) return true;
     return i >= b.i0 && j >= b.j0 && i < b.i1 && j < b.j1;
   }
@@ -208,7 +216,7 @@ export class GridSearch {
     const space = this.space;
     const mask = space.mask;
     const sx = this.sizeX;
-    const b = this.opts.bounds;
+    const b = this.area;
     const i0 = b ? b.i0 : 0;
     const j0 = b ? b.j0 : 0;
     const i1 = b ? b.i1 : sx;
@@ -266,7 +274,7 @@ export class GridSearch {
     const space = this.space;
     const mask = space.mask;
     const sx = this.sizeX;
-    const b = this.opts.bounds;
+    const b = this.area;
     const i0 = b ? b.i0 : 0;
     const j0 = b ? b.j0 : 0;
     const i1 = b ? b.i1 : sx;
