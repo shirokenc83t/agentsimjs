@@ -410,6 +410,8 @@ export class ActionRuntime {
   tick(agent: SimAgent, tick: number, simTime: number): void {
     const a = this.active.get(agent.id);
     agent.state.lastStepM = 0;
+    // A rotation in place drains the battery only during the tick it happens in (ADR-0041): reset with the step distance.
+    if (agent.kind === "ugv") agent.state.lastRotationRad = 0;
     if (a) {
       const phase = a.behavior.phase;
       const s = a.behavior.step({ tick, simTime, dtS: this.dtS });

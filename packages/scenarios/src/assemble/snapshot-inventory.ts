@@ -187,7 +187,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     speed: c(""),
     steering: c(""),
     lastStepM: c("set to 0 at the start of every tick, but read by the next tick's reflexes and hash: captured"),
-    lastRotationRad: c("never reset when the agent stops driving, and it keeps draining the battery (pinned, not fixed: see rotation-drain.test.ts)"),
+    lastRotationRad: c("reset at the start of every tick (ADR-0041): a rotation in place drains the battery only during the tick it happens in"),
   },
   UavState: {
     x: c(""),
