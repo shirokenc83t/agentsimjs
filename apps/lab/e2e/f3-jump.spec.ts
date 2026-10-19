@@ -73,6 +73,9 @@ test("clicking an event moves the cursor: the belief overlay and the agent are w
   await expect(page.getByTestId("replay-error")).toHaveCount(0);
   await page.getByTestId(`explorer-row-${AGENT}`).waitFor({ state: "attached", timeout: 1 }).catch(() => undefined); // the Debug workspace has no Explorer: the list selected the agent
   await overlayOn(page);
+  // The overlay's chunks for the new moment have landed (nearest groups first, then the rest) before the grid is read.
+  await expect.poll(() => page.evaluate(() => window.__agentsim?.scene?.stats().belief.chunksPending), { timeout: 15_000 }).toBe(0);
+  await page.waitForTimeout(500);
   const replayed = await beliefGrid(page);
   const inspector = await page.getByTestId("inspector-state").textContent();
   expect(replayed.some((v) => v === 1), "the rover has seen free space by then").toBe(true);

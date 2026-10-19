@@ -330,6 +330,9 @@ export class TopologyService implements FrontierPort {
   private addMark(agentId: string, m: Marks, group: FrontierGroup): void {
     const g = this.of(agentId).grid;
     const at = this.viewOf(agentId)?.contentVersion ?? 0;
+    // Changes are tracked only while marks exist (`clearMarks` returns early without any): the first mark starts the tracking from now, so a change of the
+    // view from before it was made can never clear it (and a restored run, whose marks are re-based on its rebuilt view, behaves as the live one).
+    if (m.byChunk.size === 0) m.checkedAt = at;
     const cs = g.chunkSize;
     for (const c of group.cells) {
       const k = (((c / g.sizeX) | 0) / cs | 0) * g.chunksX + (((c % g.sizeX) / cs) | 0);
