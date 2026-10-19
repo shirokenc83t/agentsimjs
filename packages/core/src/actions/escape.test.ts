@@ -40,10 +40,10 @@ function alongWall(y: number, x0 = 0, x1 = 40, drive: "differential" | "forward-
 }
 
 describe("escape from the planning band (ADR-0033 addition of 2026-10-12)", () => {
-  it("a vehicle inside its band along a long wall, where no straight reverse leaves it, escapes away from the wall and goes on", () => {
+  it("a vehicle inside its band along a long wall escapes away from the wall (where no straight reverse would leave it) and goes on", () => {
     const { trace, a, rt, minClear } = alongWall(30);
     const recs = trace.ops("recovery") as EscapeRecord[];
-    expect(recs[0]).toMatchObject({ kind: "back-off", ok: false }); // 3 m straight back stays in the band
+    expect(recs.some((r) => r.kind === "back-off")).toBe(false); // the escape comes first (ADR-0041): no reverse is even tried
     const escape = recs.find((r) => r.kind === "escape");
     expect(escape).toMatchObject({ reason: "inside_planning_clearance", recoveries: 1 });
     expect(escape?.ok).toBeUndefined();

@@ -1341,23 +1341,25 @@ class GoToBehavior implements Behavior {
     const a = this.agent;
     const planner = this.ports.planner;
     if (this.queryId === undefined) {
-      // Back-off (ADR-0033): a reverse-capable UGV inside its own planning clearance (the planner would see
-      // its start as blocked) first reverses straight until it is clear, then plans.
+      // Recovery (ADR-0041, amending ADR-0033 §4): a reverse-capable UGV inside its own planning clearance (the planner would see
+      // its start as blocked) first looks for a forward escape (a differential vehicle rotates in place towards it, an Ackermann one
+      // arcs), only then for a straight reverse, and otherwise stays where it is and fails.
       if (a.kind === "ugv" && a.body.reverseAllowed && this.recoveries < MAX_RECOVERIES) {
         const map = planner.currentMap(a.id);
         const inflation = a.body.footprintRadiusM + a.body.trackingMarginM;
         if (map.clearanceM(a.state.x, a.state.y, inflation) < inflation) {
+          // 1. Escape (ADR-0033 addition of 2026-10-12): a short path, checked before it is driven, whose clearance never decreases
+          // until it is outside the band.
+          const escape = this.findEscape(map, ctx);
+          if (escape) return this.startEscape(escape, ctx, "inside_planning_clearance");
+          this.note(ctx.simTime, { op: "recovery", kind: "escape", reason: "inside_planning_clearance", ok: false });
+          // 2. Only if no escape exists: the straight reverse (ADR-0033 §4), the shortest one that leaves the band.
           const backoff = this.findBackoff(map, ctx, (end) => map.clearanceM(end[0], end[1], inflation + 0.05) >= inflation + 0.05);
           if (backoff) return this.startBackoff(backoff, ctx, "inside_planning_clearance");
           this.note(ctx.simTime, { op: "recovery", kind: "back-off", reason: "inside_planning_clearance", ok: false });
-          // Escape (ADR-0033 addition of 2026-10-12): no straight reverse leaves the band (a wall found from close by
-          // lines the whole strip), so look for a short path whose clearance never decreases until it is outside.
-          const escape = this.findEscape(map, ctx);
-          if (escape) return this.startEscape(escape, ctx, "inside_planning_clearance");
-          // Neither a clear reverse nor an escape (bare footprint, on the agent's map) gets it out: it cannot plan from
-          // here, and it does not move.
-          this.note(ctx.simTime, { op: "recovery", kind: "escape", reason: "inside_planning_clearance", ok: false });
-          return fail("kinematically_infeasible", "too close to obstacles to plan, and neither a clear straight reverse nor an escape path gets the vehicle out");
+          // 3. Neither gets it out (bare footprint, on the agent's own map): it stays where it is, never translating, and the action
+          // fails; explore marks the target and goes on (ADR-0040).
+          return fail("kinematically_infeasible", "too close to obstacles to plan, and neither an escape path nor a clear straight reverse gets the vehicle out");
         }
       }
       const q = planner.submit(a.id, { from: { x: a.state.x, y: a.state.y }, to: { x: this.tx, y: this.ty }, ...(a.kind === "uav" ? { cruiseAltitudeM: this.cruise } : {}), ...(this.window ? { window: this.queryWindow() } : {}) }, ctx.tick);

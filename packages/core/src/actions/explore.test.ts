@@ -209,6 +209,25 @@ describe("explore (ADR-0039 addition of 2026-10-10)", () => {
     expect(info?.result).toMatchObject({ reason: "frontier_exhausted", groupsMarked: 1 });
   });
 
+  it("a vehicle boxed in on its own map stays where it is, each target fails kinematically_infeasible and is marked, and explore ends frontier_exhausted instead of failing (ADR-0041)", () => {
+    const a = makeUgv(10.5, 10, 0, { drive: "differential", reverseAllowed: true, turningRadiusM: 0 });
+    const belief = new FakeSpatial();
+    belief.add({ x0: 11.1, y0: 9, x1: 12, y1: 11 });
+    belief.add({ x0: 8.9, y0: 9, x1: 9.9, y1: 11 });
+    belief.add({ x0: 9, y0: 10.6, x1: 12, y1: 11.6 });
+    belief.add({ x0: 9, y0: 8.4, x1: 12, y1: 9.4 });
+    const env = setup(a, belief);
+    env.frontiers.add("f-a", "r-00-00", 40, 10);
+    env.frontiers.add("f-b", "r-00-00", 30, 30);
+    env.rt.start(a, "explore", {}, self(a), 0, 0);
+    const info = run(env, a);
+    expect(info?.status).toBe("succeeded");
+    expect(info?.result).toMatchObject({ reason: "frontier_exhausted", groupsMarked: 2 });
+    expect(env.frontiers.markCalls.sort()).toEqual(["f-a", "f-b"]);
+    expect([a.state.x, a.state.y]).toEqual([10.5, 10]); // it never translated
+    expect((env.trace.ops("recovery") as { kind: string; ok?: boolean }[]).every((r) => r.ok === false)).toBe(true);
+  });
+
   it("a region never seen is approached through the frontier nearest to it, then ends region_explored", () => {
     const a = makeUgv(10, 10);
     const env = setup(a);
