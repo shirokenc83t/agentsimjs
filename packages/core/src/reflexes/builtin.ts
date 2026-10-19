@@ -5,6 +5,8 @@ import type { Pose, Reflex, ReflexContext, ReflexTrigger } from "./reflex.ts";
 
 /** How far ahead (along the motion) the obstacle reflex looks, at least. */
 const MIN_LOOKAHEAD_M = 0.5;
+/** Most look-ahead samples of one move: a move of a picometre (a UAV finishing a leg a hair from its waypoint) is not half a trillion samples. */
+const MAX_LOOKAHEAD_SAMPLES = 64;
 
 /**
  * Obstacle avoidance: stops the body before an obstacle that the plan did not account for. It looks ahead
@@ -25,7 +27,7 @@ export const obstacleReflex: Reflex = {
     const step = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (step === 0) return undefined;
     const fp = agent.body.footprintRadiusM;
-    const samples = Math.max(2, Math.ceil(MIN_LOOKAHEAD_M / step));
+    const samples = Math.min(MAX_LOOKAHEAD_SAMPLES, Math.max(2, Math.ceil(MIN_LOOKAHEAD_M / step)));
     for (let k = 1; k <= samples; k++) {
       const x = from.x + dx * k;
       const y = from.y + dy * k;
