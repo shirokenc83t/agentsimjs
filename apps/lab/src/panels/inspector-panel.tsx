@@ -6,7 +6,7 @@ import { useCallback, useState, type ReactNode } from "react";
 import { usePolled, useSource } from "../services.tsx";
 import type { RunFeature, RunSnapshot, RunSource } from "../sim/run-source.ts";
 import { AGENT_COMMANDS, agentExploreRadius, commandParams } from "../commands.ts";
-import { actionLabel, actionState, waypointsText, type AgentViews, type CommandView } from "./agent-views.ts";
+import { actionLabel, actionState, recoveryLabel, waypointsText, type AgentViews, type CommandView } from "./agent-views.ts";
 import { MindViewSection } from "./mind-view-section.tsx";
 import { PlanQueryTable, StrategyRow } from "./plan-query-table.tsx";
 import { querySelection, useQuerySelection } from "./query-selection.ts";
@@ -216,6 +216,11 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
           </span>
         </Row>
         {action && <Row k="id">{action.actionId}</Row>}
+        {agent.kind === "ugv" && (
+          <Row k="recovery" testId="inspector-recovery">
+            {recoveryLabel(v?.recovery)}
+          </Row>
+        )}
         {v?.reflex && (
           <Row k="last reflex" testId="inspector-reflex">
             <span className="st-warn">

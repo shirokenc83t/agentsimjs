@@ -12,6 +12,9 @@ test("explore with a radius from the Inspector: the iteration area is drawn, liv
   await loadF2(page, "discovery");
   await page.getByTestId(`explorer-row-${AGENT}`).click();
 
+  // The Inspector names the vehicle's current or last recovery (ADR-0041), from the records: none before it ever needed one.
+  await expect(page.getByTestId("inspector-recovery")).toHaveText("none");
+
   // The radius field shows the agent's configured radius (a ground vehicle's built-in default) and takes another.
   const radius = page.getByTestId("command-explore-radius");
   await expect(radius).toHaveAttribute("placeholder", "20");
