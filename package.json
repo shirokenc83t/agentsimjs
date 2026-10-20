@@ -18,6 +18,7 @@
     "lint": "eslint . --max-warnings 0 --cache --cache-location node_modules/.cache/eslint/ && node tools/lint/no-literal-colours.mjs",
     "typecheck": "pnpm -r --if-present typecheck && tsc --noEmit -p tsconfig.bench.json",
     "format": "prettier --write .",
+    "verify": "node tools/verify/verify.mjs",
     "bench": "node tools/bench/run.mjs",
     "ci:local": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "bench:gpu": "node tools/bench/run.mjs --gpu",
