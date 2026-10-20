@@ -126,7 +126,7 @@ export class SimClient {
         const dims = { sizeX: m.sizeX, sizeY: m.sizeY, chunkSize: m.chunkSize, resolutionM: m.resolutionM };
         this.chunkViews = new Map();
         this.defaultObstacleHeightM = m.defaultObstacleHeightM;
-        this.snap = { ...this.snap, grid: { dims, zones: m.zones, queue: new ChunkQueue(Math.ceil(m.sizeX / m.chunkSize)) } };
+        this.snap = { ...this.snap, grid: { dims, zones: m.zones, queue: new ChunkQueue(Math.ceil(m.sizeX / m.chunkSize), true) } };
         break;
       }
       case "chunks":

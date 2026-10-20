@@ -25,13 +25,17 @@ export function CommandPalette(props: { open: boolean; commands: readonly Comman
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  /** Where the focus was when the palette opened: Escape gives it back there. */
+  const opener = useRef<Element | null>(null);
   const results = useMemo(() => filterCommands(commands, query), [commands, query]);
 
   // Reset on close, not on open: an effect runs after paint, so a reset on open could wipe what the user
   // already typed after Ctrl+K (and Enter would then run the first command of the unfiltered list).
   useEffect(() => {
-    if (open) input.current?.focus();
-    else {
+    if (open) {
+      opener.current = document.activeElement;
+      input.current?.focus();
+    } else {
       setQuery("");
       setActive(0);
     }
@@ -53,7 +57,10 @@ export function CommandPalette(props: { open: boolean; commands: readonly Comman
         aria-label="Command palette"
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
+          if (e.key === "Escape") {
+            onClose();
+            if (opener.current instanceof HTMLElement && opener.current.isConnected) opener.current.focus();
+          }
           else if (e.key === "ArrowDown") setActive((a) => Math.min(results.length - 1, a + 1));
           else if (e.key === "ArrowUp") setActive((a) => Math.max(0, a - 1));
           // Clamped: a hover may have set an index past the end of a newly filtered list.

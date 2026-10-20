@@ -88,6 +88,32 @@ describe("StorageBrowser", () => {
     expect(await screen.findByTestId("storage-message")).toHaveTextContent("deleted run-000001");
   });
 
+  it("the delete dialog is modal: focus moves into it and stays there, Escape cancels and gives the focus back", async () => {
+    const { ports } = setup();
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    const opener = await screen.findByRole("button", { name: "Delete run-000001" });
+    await userEvent.click(opener);
+    const dialog = await screen.findByRole("alertdialog");
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    const confirm = screen.getByRole("button", { name: "Delete the run" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(cancel).toHaveFocus();
+    // Tab and Shift+Tab cycle inside the dialog.
+    await userEvent.tab();
+    expect(confirm).toHaveFocus();
+    await userEvent.tab();
+    expect(cancel).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    expect(confirm).toHaveFocus();
+    // Focus sent elsewhere (a click on the page behind) comes back.
+    opener.focus();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(opener).toHaveFocus();
+    expect(await ports.runs.get("run-000001")).toBeDefined();
+  });
+
   it("does not offer to delete the run being recorded", async () => {
     setup({}, { currentRunId: "run-000001" });
     await userEvent.click(await screen.findByTestId("create-sample-run"));

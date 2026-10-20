@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { CommandPalette, filterCommands, type Command } from "./command-palette.tsx";
@@ -57,5 +58,24 @@ describe("CommandPalette", () => {
     expect(onClose).toHaveBeenCalled();
     rerender(<CommandPalette open={false} commands={cmds()} onClose={onClose} />);
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("Escape closes the palette and puts the focus back where it was before it opened", async () => {
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>opener</button>
+          <CommandPalette open={open} commands={cmds()} onClose={() => setOpen(false)} />
+        </>
+      );
+    }
+    render(<Host />);
+    const opener = screen.getByRole("button", { name: "opener" });
+    await userEvent.click(opener);
+    expect(screen.getByRole("textbox", { name: "Command" })).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(opener).toHaveFocus();
   });
 });

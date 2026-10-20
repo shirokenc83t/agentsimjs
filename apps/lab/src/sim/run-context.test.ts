@@ -68,4 +68,13 @@ describe("syncRunContext", () => {
     syncRunContext(store, { mode: "replay", runId: "run-000002", simTimeS: 0 });
     expect(store.getState()).toMatchObject({ runId: "run-000002", simTime: 0, selection: undefined });
   });
+
+  it("Live from a replay of the same run keeps the selection, and the cursor goes to the sim head", () => {
+    const store = createUiContextStore();
+    syncRunContext(store, { mode: "live", runId: "run-000001", simTimeS: 0 });
+    store.getState().select({ kind: "agent", id: "uav-001" });
+    syncRunContext(store, { mode: "replay", runId: "run-000001", simTimeS: 9 });
+    syncRunContext(store, { mode: "live", runId: "run-000001", simTimeS: 9.5 });
+    expect(store.getState()).toMatchObject({ mode: "live", runId: "run-000001", simTime: 9.5, selection: { kind: "agent", id: "uav-001" } });
+  });
 });

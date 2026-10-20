@@ -91,6 +91,24 @@ export function EventListPanel() {
     if (last && last.index >= rows.length && more && rows.length > 0) void loadMore();
   }, [last, rows, more, loadMore]);
 
+  /** Selects row `i` (clamped to the rows read so far): its record in the detail, the cursor and the agent where the row is, and the row in view. */
+  const select = (i: number) => {
+    const r = rows[Math.max(0, Math.min(rows.length - 1, i))];
+    if (!r) return;
+    setSelected(r);
+    jump(r.simTime, r.agentId);
+    virtual.scrollToIndex(rows.indexOf(r));
+  };
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const at = selected ? rows.findIndex((r) => r.seq === selected.seq) : -1;
+    if (e.key === "ArrowDown") select(at + 1);
+    else if (e.key === "ArrowUp") select(at < 0 ? 0 : at - 1);
+    else if (e.key === "Home") select(0);
+    else if (e.key === "End") select(rows.length - 1);
+    else return;
+    e.preventDefault();
+  };
+
   return (
     <div className="panel event-list" data-testid="event-list">
       <div className="event-filters">
@@ -121,7 +139,7 @@ export function EventListPanel() {
           {more ? "+" : ""} records
         </span>
       </div>
-      <div ref={scroller} className="event-scroller" role="listbox" aria-label="Events" tabIndex={0}>
+      <div ref={scroller} className="event-scroller" role="listbox" aria-label="Events" tabIndex={0} onKeyDown={onKeyDown} aria-activedescendant={selected ? `event-row-${selected.seq}` : undefined}>
         <div style={{ height: virtual.getTotalSize(), position: "relative" }}>
           {items.map((it) => {
             const r = rows[it.index];
@@ -132,6 +150,7 @@ export function EventListPanel() {
                 key={r.seq}
                 role="option"
                 aria-selected={selected?.seq === r.seq}
+                id={`event-row-${r.seq}`}
                 data-testid={`event-row-${r.seq}`}
                 data-kind={r.kind}
                 data-agent={r.agentId ?? ""}
