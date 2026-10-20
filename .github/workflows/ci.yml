@@ -162,19 +162,24 @@ jobs:
       - name: Upload benchmark results and bundle report
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        # A full artifact storage must never fail a job; a short retention keeps it from filling again (D-013).
+        continue-on-error: true
         with:
           name: bench-results
           path: bench/results/
+          retention-days: 7
           if-no-files-found: ignore
 
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        continue-on-error: true
         with:
           name: playwright-report
           path: |
             playwright-report/
             test-results/
+          retention-days: 2
           if-no-files-found: ignore
 
   # Visual regression (ADR-0032 §9): the committed baselines, on the same pinned image that generates them
@@ -212,9 +217,13 @@ jobs:
       - name: Upload diffs
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        # Only the images that show a difference (no report, traces or videos: ~125 MB a run); a full storage never fails the job.
+        continue-on-error: true
         with:
           name: visual-diffs
           path: |
-            playwright-report/
-            test-results/
+            test-results/**/*-diff.png
+            test-results/**/*-actual.png
+            test-results/**/*-expected.png
+          retention-days: 2
           if-no-files-found: ignore

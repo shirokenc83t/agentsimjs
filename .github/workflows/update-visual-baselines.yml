@@ -60,9 +60,12 @@ jobs:
 
       - name: Attach baselines for review
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        # The review branch below carries the same images: a full artifact storage must not stop the commit, and the artifact is short-lived (D-013).
+        continue-on-error: true
         with:
           name: visual-baselines-${{ github.run_id }}
           path: apps/lab/e2e/visual/__screenshots__/
+          retention-days: 3
 
       # Only baseline images may change; anything else means the run touched the tree and nothing is committed.
       # The reason reaches the script through the environment, never interpolated into it (no injection).
