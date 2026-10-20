@@ -162,7 +162,7 @@ jobs:
       - name: Upload benchmark results and bundle report
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        # A full artifact storage must never fail a job; a short retention keeps it from filling again (D-013).
+        # A full artifact storage must never fail a job; a short retention keeps it from filling again.
         continue-on-error: true
         with:
           name: bench-results
