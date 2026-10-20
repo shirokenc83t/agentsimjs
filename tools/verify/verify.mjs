@@ -86,7 +86,8 @@ async function visualGate(log) {
 
 function runCommand(cmd, args, log) {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { shell: true, env: process.env });
+    // One command string for the shell (pnpm is a .cmd on Windows): arguments are our own constants and the working directory, never user input.
+    const child = spawn([cmd, ...args.map((x) => (/\s/.test(x) ? `"${x}"` : x))].join(" "), { shell: true, env: process.env });
     child.stdout.on("data", (d) => log.write(d));
     child.stderr.on("data", (d) => log.write(d));
     child.on("close", (code) => resolve(code ?? 1));
