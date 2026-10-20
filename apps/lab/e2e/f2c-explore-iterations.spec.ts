@@ -43,6 +43,12 @@ test("explore with a radius from the Inspector: the iteration area is drawn, liv
   await expect(page.getByTestId("replay-bar")).toBeVisible({ timeout: 30_000 });
   await openWorkspace(page, "scene");
   await page.getByTestId(`explorer-row-${AGENT}`).click();
-  await setReplayCursor(page, 5);
+  // A moment inside the first iteration (it ends when the groups within its radius are visited: how soon depends on the map, so take its middle).
+  const span = await page.evaluate(() => {
+    const marks = (window.__agentsim?.records?.() ?? []).filter((r) => (r as { agentId?: string; payload?: { op?: string } }).agentId === "ugv-001" && (r as { payload?: { op?: string } }).payload?.op === "explore-iteration") as { simTime: number; payload: { event: string; iteration: number } }[];
+    return { start: marks.find((m) => m.payload.event === "start" && m.payload.iteration === 1)?.simTime ?? 0, end: marks.find((m) => m.payload.event === "end" && m.payload.iteration === 1)?.simTime };
+  });
+  const inside = Math.round((span.end === undefined ? span.start + 0.5 : (span.start + span.end) / 2) * 10) / 10;
+  await setReplayCursor(page, inside);
   await expect.poll(async () => (await exploration(page))?.area, { timeout: 15_000 }).toBe(1);
 });
