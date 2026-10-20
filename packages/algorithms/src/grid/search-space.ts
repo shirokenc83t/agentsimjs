@@ -227,7 +227,8 @@ export class SearchSpace {
   private syncCells(changed: Int32Array, touched: Uint8Array): void {
     const sx = this.sizeX;
     const sy = this.sizeY;
-    const ring = this.profile.cellConstraints.length > 0 ? 1 : 0;
+    // The base value of a cell reads its 4-neighbours when the view has unknown cells (the rule above) or the profile has cell constraints (slope).
+    const ring = this.profile.cellConstraints.length > 0 || this.unknown !== null ? 1 : 0;
     const base = new Set<number>();
     for (let n = 0; n < changed.length; n++) {
       const c = changed[n] ?? 0;
@@ -426,11 +427,27 @@ export class SearchSpace {
           }
         }
         if (ok && this.profile.cellConstraints.length > 0) ok = this.cellConstraintsHold(i, j);
+        // An unknown cell 4-adjacent to a cell the map knows as blocked (at the vehicle's altitude for a UAV) is blocked while it stays unknown
+        // (ADR-0040 addition of 2026-10-19, second): a lidar sees the near face of a wall, the unseen body behind it is not a way through.
+        if (ok && this.unknown && g.isUnknown(i, j) && this.nextToKnownObstacle(i, j)) ok = false;
         const n = j * this.sizeX + i;
         this.base[n] = ok ? (t.vehicle === "ugv" ? g.terrainAt(i, j) : 10) : 0;
         if (this.unknown) this.unknown[n] = g.isUnknown(i, j) ? 1 : 0;
       }
     }
+  }
+
+  /** Whether a 4-neighbour of the cell is known (observed) and blocks this vehicle: occupied for a ground vehicle, reaching its altitude for a UAV. */
+  private nextToKnownObstacle(i: number, j: number): boolean {
+    const g = this.grid;
+    const t = this.traversal;
+    for (let d = 0; d < 4; d++) {
+      const a = i + (d === 0 ? 1 : d === 1 ? -1 : 0);
+      const b = j + (d === 2 ? 1 : d === 3 ? -1 : 0);
+      if (a < 0 || b < 0 || a >= this.sizeX || b >= this.sizeY || g.isUnknown(a, b)) continue;
+      if (t.vehicle === "ugv" ? g.isBlocked(a, b) : t.cruiseAltitudeM < g.obstacleTopM(a, b) + t.clearanceM) return true;
+    }
+    return false;
   }
 
   private cellVar(name: string, i: number, j: number): number {

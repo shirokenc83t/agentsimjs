@@ -54,6 +54,10 @@ export interface MomentFacts {
   readonly goTo: readonly { readonly agentId: string; readonly legsPending: boolean; readonly holding: boolean; readonly backingOff: boolean }[];
   /** Cells marked unreachable, over all agents. */
   readonly marks: number;
+  /** Cells marked unreachable for the current exploration iteration only (ADR-0040), over all agents. */
+  readonly temporaryMarks: number;
+  /** Running explores: inside an iteration or travelling to the next centre, with the groups they remember failing and whether a goTo is in flight. */
+  readonly explores: readonly { readonly agentId: string; readonly iterating: boolean; readonly mode: string; readonly failures: number; readonly inner: boolean }[];
   readonly beliefChunks: number;
 }
 
@@ -100,8 +104,16 @@ export function momentFacts(run: ReferenceRun): MomentFacts {
     if (nameOf(b) !== "GoToBehavior") continue;
     goTo.push({ agentId, legsPending: priv(b, "legsPending") === true, holding: priv(b, "holdStartS") !== undefined, backingOff: priv(b, "backingOff") === true });
   }
+  const explores: { agentId: string; iterating: boolean; mode: string; failures: number; inner: boolean }[] = [];
+  for (const [agentId, active] of priv(run.runtime, "active") as Map<string, unknown>) {
+    const b = priv(active, "behavior");
+    if (nameOf(b) !== "ExploreBehavior") continue;
+    explores.push({ agentId, iterating: priv(b, "iteration") !== undefined, mode: String(priv(b, "mode")), failures: (priv(b, "failures") as Map<number, unknown>).size, inner: priv(b, "inner") !== undefined });
+  }
   let marks = 0;
   for (const m of values(priv(run.topology, "marks"))) for (const c of values(priv(m, "byChunk"))) marks += (priv(c, "cells") as Set<number>).size;
+  let temporaryMarks = 0;
+  for (const m of values(priv(run.topology, "temporary"))) for (const c of values(priv(m, "byChunk"))) temporaryMarks += (priv(c, "cells") as Set<number>).size;
   let beliefChunks = 0;
   for (const s of values(priv(run.sensing, "byId"))) beliefChunks += (priv(s, "belief") as { materializedChunks: number }).materializedChunks;
   return {
@@ -112,6 +124,8 @@ export function momentFacts(run: ReferenceRun): MomentFacts {
     queries,
     goTo,
     marks,
+    temporaryMarks,
+    explores,
     beliefChunks,
   };
 }

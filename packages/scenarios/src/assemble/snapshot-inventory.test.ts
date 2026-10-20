@@ -130,7 +130,7 @@ async function sampleAll(): Promise<Sample> {
     },
     beliefVsTruth: { everyS: 2 },
   });
-  for (const ticks of [5, 95, 400, 800]) {
+  for (const ticks of [5, 96, 253, 946]) {
     await runLockstep(explore.world, explore.scheduler, ticks);
     sampleRun(sample, explore);
   }

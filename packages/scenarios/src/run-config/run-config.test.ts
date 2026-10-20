@@ -77,11 +77,11 @@ describe("run configuration v0 (ADR-0028)", () => {
     const [uav1, ugv1, ugv2] = r.agents;
     expect(r.agents.map((a) => a.agentId)).toEqual(["uav-001", "ugv-001", "ugv-002"]);
     // scout: algorithm from default, compute from byAgent (over the scenario body's 5000), budget from default.
-    expect(uav1?.planning).toEqual({ algorithm: "dijkstra", onboardComputeExpansionsPerTick: 50_000, totalBudget: 3_000_000, costProfile: { weights: { distance: 1 } } });
-    expect(uav1?.planningSources).toEqual({ algorithm: "default", onboardComputeExpansionsPerTick: "byAgent", totalBudget: "default", costProfile: "builtin" });
+    expect(uav1?.planning).toEqual({ algorithm: "dijkstra", onboardComputeExpansionsPerTick: 50_000, totalBudget: 3_000_000, costProfile: { weights: { distance: 1 } }, radiusM: 40, windowMarginM: 10 });
+    expect(uav1?.planningSources).toEqual({ algorithm: "default", onboardComputeExpansionsPerTick: "byAgent", totalBudget: "default", costProfile: "builtin", radiusM: "builtin", windowMarginM: "builtin" });
     // rover: hpa from byKind, profile from byAgent, compute from the built-in body.
     expect(ugv1?.planning.algorithm).toBe("hpa");
-    expect(ugv1?.planningSources).toEqual({ algorithm: "byKind", onboardComputeExpansionsPerTick: "builtin", totalBudget: "default", costProfile: "byAgent" });
+    expect(ugv1?.planningSources).toEqual({ algorithm: "byKind", onboardComputeExpansionsPerTick: "builtin", totalBudget: "default", costProfile: "byAgent", radiusM: "builtin", windowMarginM: "builtin" });
     // The unkeyed UGV gets byKind but no byAgent entry.
     expect(ugv2?.planning.costProfile).toEqual({ weights: { distance: 1 } });
     expect(r.seed).toBe(11);

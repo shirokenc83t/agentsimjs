@@ -139,43 +139,78 @@ describe("recovery after a reflex stop (ADR-0033)", () => {
   });
 });
 
-describe("back-off is checked before it is executed (ADR-0033 §4)", () => {
-  // Stopped 0.6 m from a block in front (inside the 0.75 m planning clearance), with another obstacle
-  // behind. Every reverse is checked on the agent's map with the bare footprint before it is driven.
-  function wedged(rearBlockEndX: number) {
+describe("recovery order inside the planning clearance (ADR-0041, amending ADR-0033 §4)", () => {
+  // Stopped 0.6 m from a block in front (inside the 0.75 m planning clearance), with another obstacle behind. Every recovery is checked on the
+  // agent's map with the bare footprint before it is driven. Order: forward escape, then straight reverse, then stay.
+  function wedged(rearBlockEndX: number, body: { drive: "differential" | "ackermann"; turningRadiusM: number } = { drive: "differential", turningRadiusM: 0 }) {
     const env = setup();
     env.spatial.add({ x0: 11.1, y0: 9, x1: 12, y1: 11 }); // block in front: 0.6 m of clearance
     env.spatial.add({ x0: rearBlockEndX - 1, y0: 9, x1: rearBlockEndX, y1: 11 }); // block behind
-    const a = makeUgv(10.5, 10, 0, { drive: "differential", reverseAllowed: true, turningRadiusM: 0 });
+    const a = makeUgv(10.5, 10, 0, { ...body, reverseAllowed: true });
     env.rt.start(a, "goTo", { xM: 10.5, yM: 30 }, self(a), 0, 0); // open ground to the north
     let minClear = Number.POSITIVE_INFINITY;
+    const poses: { x: number; y: number; h: number }[] = [];
     for (let t = 0; t < 2000 && env.rt.isRunning(a.id); t++) {
       env.planner.advance(t);
       env.rt.tick(a, t, t * DT);
       minClear = Math.min(minClear, env.spatial.groundClearanceM(a.state.x, a.state.y, 5));
+      poses.push({ x: a.state.x, y: a.state.y, h: a.state.heading });
     }
-    return { env, a, minClear };
+    return { env, a, minClear, poses };
   }
 
-  it("with room behind: backs off just enough, stopping short of the rear obstacle, then drives on", () => {
+  it("with room behind and a way out forward: the escape is taken, not the reverse", () => {
     const { env, a, minClear } = wedged(8.5);
-    const [rec] = env.trace.ops("recovery") as { kind: string; ok?: boolean; distanceM: number }[];
-    expect(rec?.kind).toBe("back-off");
-    expect(rec?.ok).toBeUndefined();
-    expect(rec?.distanceM).toBeLessThanOrEqual(0.5);
+    const recs = env.trace.ops("recovery") as { kind: string; ok?: boolean }[];
+    expect(recs[0]?.kind).toBe("escape");
+    expect(recs[0]?.ok).toBeUndefined();
+    expect(recs.some((r) => r.kind === "back-off")).toBe(false);
     expect(minClear).toBeGreaterThanOrEqual(a.body.footprintRadiusM);
     expect(env.rt.info(a.id)?.status).toBe("succeeded");
   });
 
-  it("with no room behind either: neither a reverse nor an escape is drivable in this 0.1 m-margin corridor: it fails kinematically_infeasible without moving and without contact", () => {
+  it("a differential vehicle rotates in place towards the escape before it translates", () => {
+    const { env, a, poses } = wedged(8.5);
+    const escapeTick = poses.findIndex((p) => Math.abs(p.h) > 1e-9 || Math.abs(p.x - 10.5) > 1e-9 || Math.abs(p.y - 10) > 1e-9);
+    expect(escapeTick).toBeGreaterThanOrEqual(0);
+    const turned = poses.findIndex((p) => Math.abs(p.h) > 1e-6);
+    const moved = poses.findIndex((p) => Math.abs(p.x - 10.5) > 1e-6 || Math.abs(p.y - 10) > 1e-6);
+    expect(turned).toBeGreaterThanOrEqual(0);
+    expect(turned).toBeLessThanOrEqual(moved === -1 ? Number.POSITIVE_INFINITY : moved);
+    expect(env.rt.info(a.id)?.status).toBe("succeeded");
+  });
+
+  it("an Ackermann vehicle in a dead-end corridor, which cannot turn round, has no escape and takes the straight reverse", () => {
+    const env = setup();
+    // A corridor 1.3 m wide along x (clearance 0.65 m inside the 0.75 m band), closed at x = 14, open behind from x = 10.5.
+    env.spatial.add({ x0: 10.5, y0: 11.15, x1: 14, y1: 12.15 });
+    env.spatial.add({ x0: 10.5, y0: 8.85, x1: 14, y1: 9.85 });
+    env.spatial.add({ x0: 14, y0: 8.85, x1: 15, y1: 12.15 });
+    const a = makeUgv(13, 10.5, 0, { drive: "ackermann", turningRadiusM: 1 / Math.tan(0.6), reverseAllowed: true });
+    env.rt.start(a, "goTo", { xM: 3, yM: 10.5 }, self(a), 0, 0);
+    let minClear = Number.POSITIVE_INFINITY;
+    for (let t = 0; t < 3000 && env.rt.isRunning(a.id); t++) {
+      env.planner.advance(t);
+      env.rt.tick(a, t, t * DT);
+      minClear = Math.min(minClear, env.spatial.groundClearanceM(a.state.x, a.state.y, 5));
+    }
+    const recs = env.trace.ops("recovery") as { kind: string; ok?: boolean; distanceM?: number }[];
+    expect(recs[0]).toMatchObject({ kind: "escape", ok: false });
+    expect(recs[1]?.kind).toBe("back-off");
+    expect(recs[1]?.ok).toBeUndefined();
+    expect(recs[1]?.distanceM).toBeLessThanOrEqual(3);
+    expect(minClear).toBeGreaterThanOrEqual(a.body.footprintRadiusM);
+  });
+
+  it("with no room behind either: neither an escape nor a reverse is drivable in this 0.1 m-margin corridor: it fails kinematically_infeasible without translating and without contact", () => {
     const { env, a, minClear } = wedged(9.9); // 0.6 m behind too: any reverse would touch, and the way sideways is a corridor too tight to drive
     expect(env.rt.info(a.id)?.failure?.code).toBe("kinematically_infeasible");
-    expect(env.trace.ops("recovery")).toEqual([expect.objectContaining({ kind: "back-off", ok: false }), expect.objectContaining({ kind: "escape", ok: false })]);
+    expect(env.trace.ops("recovery")).toEqual([expect.objectContaining({ kind: "escape", ok: false }), expect.objectContaining({ kind: "back-off", ok: false })]);
     expect([a.state.x, a.state.y]).toEqual([10.5, 10]);
     expect(minClear).toBeGreaterThanOrEqual(a.body.footprintRadiusM);
   });
 
-  it("truly boxed in (blocks on all four sides): fails kinematically_infeasible without moving and without contact", () => {
+  it("truly boxed in (blocks on all four sides): stays where it is, fails kinematically_infeasible, and without translating or contact", () => {
     const env = setup();
     env.spatial.add({ x0: 11.1, y0: 9, x1: 12, y1: 11 });
     env.spatial.add({ x0: 8.9, y0: 9, x1: 9.9, y1: 11 });
@@ -188,8 +223,20 @@ describe("back-off is checked before it is executed (ADR-0033 §4)", () => {
       env.rt.tick(a, t, t * DT);
     }
     expect(env.rt.info(a.id)?.failure?.code).toBe("kinematically_infeasible");
-    expect(env.trace.ops("recovery")).toEqual([expect.objectContaining({ kind: "back-off", ok: false }), expect.objectContaining({ kind: "escape", ok: false })]);
+    expect(env.trace.ops("recovery")).toEqual([expect.objectContaining({ kind: "escape", ok: false }), expect.objectContaining({ kind: "back-off", ok: false })]);
     expect([a.state.x, a.state.y]).toEqual([10.5, 10]);
+  });
+
+  it("a forward-only vehicle keeps no recovery at all", () => {
+    const env = setup();
+    env.spatial.add({ x0: 11.1, y0: 9, x1: 12, y1: 11 });
+    const a = makeUgv(10.5, 10, 0, { drive: "forward-only", reverseAllowed: false });
+    env.rt.start(a, "goTo", { xM: 10.5, yM: 30 }, self(a), 0, 0);
+    for (let t = 0; t < 300 && env.rt.isRunning(a.id); t++) {
+      env.planner.advance(t);
+      env.rt.tick(a, t, t * DT);
+    }
+    expect(env.trace.ops("recovery")).toEqual([]);
   });
 });
 

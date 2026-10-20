@@ -39,6 +39,9 @@ export const PlanningEntry = Type.Object(
     onboardComputeExpansionsPerTick: Type.Optional(Type.Integer({ minimum: 0, maximum: 1e9 })),
     totalBudget: Type.Optional(Type.Integer({ minimum: 0, maximum: 1e9 })),
     costProfile: Type.Optional(CostProfile),
+    /** Exploration scope (ADR-0040): the radius of an iteration of `explore` in metres, and the margin its search windows add. */
+    radiusM: Type.Optional(Type.Number({ exclusiveMinimum: 0, maximum: 100_000 })),
+    windowMarginM: Type.Optional(Type.Number({ minimum: 0, maximum: 100_000 })),
   },
   { additionalProperties: false },
 );

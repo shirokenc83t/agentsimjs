@@ -26,8 +26,19 @@ export function agentBody(run: { readonly agents: readonly { readonly id: string
   return cfg?.body;
 }
 
-/** Parameters for `op` on an agent with this body: takeoff climbs to the body's cruise altitude unless told otherwise. */
-export function commandParams(op: AgentCommand["op"], body: Readonly<Record<string, unknown>> | undefined, altitudeM?: number): Record<string, number> | undefined {
+/** The radius of an exploration iteration an agent has by configuration (ADR-0040), from the worker's `loaded` message, if it says. */
+export function agentExploreRadius(run: { readonly agents: readonly { readonly id: string; readonly config?: unknown }[] } | undefined, id: string): number | undefined {
+  const cfg = run?.agents.find((a) => a.id === id)?.config as { planning?: { radiusM?: unknown } } | undefined;
+  const r = cfg?.planning?.radiusM;
+  return typeof r === "number" ? r : undefined;
+}
+
+/**
+ * Parameters for `op` on an agent with this body: takeoff climbs to the body's cruise altitude unless told otherwise; explore takes a
+ * radius only when one is given (otherwise the agent's configured radius applies, ADR-0040).
+ */
+export function commandParams(op: AgentCommand["op"], body: Readonly<Record<string, unknown>> | undefined, altitudeM?: number, radiusM?: number): Record<string, number> | undefined {
+  if (op === "explore") return radiusM === undefined ? undefined : { radiusM };
   if (op !== "takeoff") return undefined;
   const cruise = body?.["cruiseAltitudeM"];
   return { altitudeM: altitudeM ?? (typeof cruise === "number" && cruise > 0 ? cruise : 10) };

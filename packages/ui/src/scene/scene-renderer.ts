@@ -33,7 +33,7 @@ import { RollingStats } from "../perf/rolling-stats.ts";
 import { agentColorIndex, type SceneTokens } from "../theme/tokens.ts";
 import { CHUNK_UPLOADS_PER_FRAME, type ChunkQueue, type GridDims } from "./atlas-layout.ts";
 import { BeliefAtlas, type BeliefViewMode } from "./belief-atlas.ts";
-import { SensorOverlay } from "./overlay-layers.ts";
+import { SensorOverlay, type ExplorationView } from "./overlay-layers.ts";
 import { StagesOverlay, type StageLine } from "./stages-overlay.ts";
 import { GridAtlas, type GridViewMode } from "./grid-atlas.ts";
 import type { PoseSource } from "./interpolator.ts";
@@ -293,6 +293,12 @@ export class SceneRenderer {
     this.overlay().setTopology(regions, frontiers);
   }
 
+  /** What exploration is doing for the viewed agent (ADR-0040): the area of its iteration and its marked targets; `undefined` clears them. */
+  setExploration(view: ExplorationView | undefined): void {
+    if (view === undefined && !this.sensorOverlay) return;
+    this.overlay().setExploration(view);
+  }
+
   /** The stages of a planning query (coarse path dashed, legs solid with numbered joints); `undefined` clears them. */
   setStages(lines: readonly StageLine[] | undefined): void {
     if (lines === undefined && !this.stagesOverlay) return;
@@ -319,12 +325,13 @@ export class SceneRenderer {
     regions: number;
     frontiers: number;
     markedFrontiers: number;
+    exploration: { area: number; temporary: number; permanent: number };
     stages: { coarseDashes: number; legs: number; legSegments: number; joints: number; labels: number };
     sandbox: { coarseDashes: number; legs: number; legSegments: number; joints: number; labels: number };
   } {
     const none = { coarseDashes: 0, legs: 0, legSegments: 0, joints: 0, labels: 0 };
     return {
-      ...(this.sensorOverlay?.counts() ?? { rays: 0, regions: 0, frontiers: 0, markedFrontiers: 0 }),
+      ...(this.sensorOverlay?.counts() ?? { rays: 0, regions: 0, frontiers: 0, markedFrontiers: 0, exploration: { area: 0, temporary: 0, permanent: 0 } }),
       stages: this.stagesOverlay?.counts() ?? none,
       sandbox: this.sandboxOverlay?.counts() ?? none,
     };

@@ -23,6 +23,8 @@ const FAR_SCRIPTS: Readonly<Record<string, readonly ScriptStep[]>> = { rover: [g
 const FALLBACK = { schemaVersion: 0, id: "fallback-restore", version: 1, root: { kind: "fallback", stages: [{ kind: "algorithm", algorithm: "astar", stageBudget: 150 }, { kind: "algorithm", algorithm: "hpa" }] } };
 /** A lazy refine: HPA* coarse path, A* legs handed to the action as they complete (ADR-0037 fourth addition). */
 const LAZY = { schemaVersion: 0, id: "lazy-restore", version: 1, root: { kind: "refine", mode: "lazy", coarse: { kind: "algorithm", algorithm: "hpa" }, local: { kind: "algorithm", algorithm: "astar" } } };
+/** The exploration scope of every agent (ADR-0040): the radius of an iteration and the margin of its windows, in metres. */
+const exploreScope = (radiusM: number, windowMarginM: number) => ({ planning: { default: { radiusM, windowMarginM } } }) as unknown as Partial<RunConfigDocument>;
 const planning = (strategy: unknown) => ({ planning: { default: { strategy, onboardComputeExpansionsPerTick: 100 } } }) as unknown as Partial<RunConfigDocument>;
 
 function recipe(name: string, options: PresetRunOptions, endTick: number, snapshotTicks: readonly number[], afterTick?: RestoreRecipe["afterTick"]): RestoreRecipe {
@@ -96,8 +98,15 @@ function recipes(long: boolean): RestoreRecipe[] {
       "explore-unknown-map",
       { preset: "f2-discovery", scripts: { rover: [{ name: "explore", params: {} }], low: [goTo(25, 60)], scout: [takeoff, { name: "explore", params: {} }] }, beliefVsTruth: { everyS: 1 } },
       s(650, 1500),
-      long ? [20, 140, 179, 355, 590, 1100] : [20, 140, 179, 355, 590],
+      long ? [107, 140, 179, 575, 1070, 1100, 1383] : [107, 140, 179, 575],
       changesAt({ 140: "through", 179: "away" }),
+    ),
+    // 3b. Explore with iterations of a small radius: the travel to the next centre in flight, the iteration state and what it remembers.
+    recipe(
+      "explore-small-radius",
+      { preset: "f2-discovery", scripts: { rover: [{ name: "explore", params: {} }], scout: [takeoff, { name: "explore", params: {} }] }, runConfig: exploreScope(10, 1) },
+      s(350, 1000),
+      long ? [3, 107, 120, 138, 276, 700] : [3, 107, 120, 138, 276],
     ),
     // 4. A strategy query mid stage 1 and mid stage 2.
     recipe(
@@ -108,7 +117,7 @@ function recipes(long: boolean): RestoreRecipe[] {
       changesAt({ 26: "through", 33: "away" }),
     ),
     // 5. A lazy goTo mid-leg (legs still being planned while the vehicle moves).
-    recipe("lazy-goto-mid-leg", { preset: "f2-discovery", scripts: FAR_SCRIPTS, runConfig: planning(LAZY) }, s(200, 1000), long ? [22, 48, 75, 106, 500] : [22, 48, 75, 106]),
+    recipe("lazy-goto-mid-leg", { preset: "f2-discovery", scripts: FAR_SCRIPTS, runConfig: planning(LAZY) }, s(200, 1000), long ? [22, 45, 71, 117, 500] : [22, 45, 71, 117]),
     // 6. The belief-map prior run (f2-prior-1km config: the rover starts from the survey, the scout from an unknown map).
     recipe(
       "belief-map-prior-1km",
@@ -130,7 +139,7 @@ function recipes(long: boolean): RestoreRecipe[] {
         beliefVsTruth: { everyS: 1 },
       },
       s(420, 1000),
-      long ? [100, 190, 300, 700] : [100, 190, 300],
+      long ? [100, 190, 350, 700] : [100, 190, 350],
     ),
     // Hold and takeoff in progress (a UGV holding while a UAV climbs; the UAV holding after its climb).
     recipe(

@@ -25,6 +25,7 @@ export {
   type PlanningAlgorithm,
   type PlanningConfig,
   type PlanRequest,
+  type SearchWindow,
   type PlanOutcome,
   type PlanRestart,
   type LazyPlanLeg,

@@ -37,7 +37,16 @@ export interface CommandView {
   readonly atS: number;
 }
 
+/** The current or last recovery of a ground vehicle (ADR-0041): a forward escape, a reverse, or staying where it is because neither was possible. */
+export interface RecoveryView {
+  readonly kind: "escape" | "back-off" | "stay";
+  readonly reason: string;
+  readonly distanceM: number;
+  readonly atS: number;
+}
+
 export interface AgentViews {
+  readonly recovery: RecoveryView | undefined;
   readonly command: CommandView | undefined;
   readonly action: ActionView | undefined;
   readonly plan: PlanView | undefined;
@@ -56,6 +65,9 @@ interface Payload {
   readonly completedTick?: unknown;
   readonly waypoints?: unknown;
   readonly reflex?: unknown;
+  readonly kind?: unknown;
+  readonly reason?: unknown;
+  readonly distanceM?: unknown;
   readonly code?: unknown;
   readonly then?: unknown;
   readonly ok?: unknown;
@@ -76,12 +88,14 @@ function pathLength(w: readonly (readonly [number, number])[]): number {
  * data from the worker; nothing here simulates.
  */
 export function agentViews(records: readonly TraceRecord[]): Map<string, AgentViews> {
-  const out = new Map<string, { command: CommandView | undefined; action: ActionView | undefined; plan: PlanView | undefined; reflex: ReflexView | undefined }>();
+  const out = new Map<string, { recovery: RecoveryView | undefined; command: CommandView | undefined; action: ActionView | undefined; plan: PlanView | undefined; reflex: ReflexView | undefined }>();
   const get = (id: string) => {
     let v = out.get(id);
-    if (!v) out.set(id, (v = { command: undefined, action: undefined, plan: undefined, reflex: undefined }));
+    if (!v) out.set(id, (v = { recovery: undefined, command: undefined, action: undefined, plan: undefined, reflex: undefined }));
     return v;
   };
+  // An attempt that found nothing (`ok: false`) is shown only when both attempts of a recovery did: then the vehicle stays where it is.
+  const failedEscapeAtS = new Map<string, number>();
   for (const r of records) {
     if (r.agentId === undefined) continue;
     const p = (r.payload ?? {}) as Payload;
@@ -92,6 +106,13 @@ export function agentViews(records: readonly TraceRecord[]): Map<string, AgentVi
         v.action = { actionId, name: str(p.name) ?? "?", status: "running", phase: undefined, failure: undefined, startedAtS: r.simTime };
       } else if (p.op === "phase" && v.action && v.action.actionId === actionId) {
         v.action = { ...v.action, phase: str(p.to) };
+      } else if (p.op === "recovery") {
+        const kind = str(p.kind);
+        const reason = str(p.reason) ?? "?";
+        if (p.ok === false) {
+          if (kind === "escape") failedEscapeAtS.set(r.agentId, r.simTime);
+          else if (kind === "back-off" && failedEscapeAtS.get(r.agentId) === r.simTime && reason === "inside_planning_clearance") v.recovery = { kind: "stay", reason, distanceM: 0, atS: r.simTime };
+        } else if (kind === "escape" || kind === "back-off") v.recovery = { kind, reason, distanceM: num(p.distanceM), atS: r.simTime };
       } else if (p.op === "end" && v.action && v.action.actionId === actionId) {
         const status = str(p.status);
         if (status === "succeeded" || status === "failed" || status === "preempted") {
@@ -139,6 +160,13 @@ export function actionLabel(a: ActionView | undefined): string {
   if (!a) return "idle";
   if (a.status === "running") return a.phase ? `${a.name} · ${a.phase}` : a.name;
   return a.failure ? `${a.name} · ${a.status} · ${a.failure}` : `${a.name} · ${a.status}`;
+}
+
+/** One line for a recovery: `forward escape · inside_planning_clearance · 1.4 m`, `reverse · …`, `stay · … · neither an escape nor a reverse`, `none`. */
+export function recoveryLabel(r: RecoveryView | undefined): string {
+  if (!r) return "none";
+  if (r.kind === "stay") return `stay · ${r.reason} · neither an escape nor a reverse`;
+  return `${r.kind === "escape" ? "forward escape" : "reverse"} · ${r.reason} · ${r.distanceM.toFixed(1)} m`;
 }
 
 /** Waypoints as "(x, y) → (x, y) …" in metres; long paths are cut after the first `max` points. */

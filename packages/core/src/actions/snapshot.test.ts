@@ -213,7 +213,7 @@ describe("action runtime snapshot and restore: behaviours (F3a M1)", () => {
     expect(40 - a.agent.state.x).toBeLessThanOrEqual(0.5); // it went on once the legs came
   });
 
-  it("explore: the target, the inner goTo and the frontier groups skipped", () => {
+  it("explore: the target, the inner goTo and the iteration", () => {
     const make = () =>
       build({
         agent: makeUgv(10, 10),
@@ -234,26 +234,59 @@ describe("action runtime snapshot and restore: behaviours (F3a M1)", () => {
     // and took 5,049 ms on a shared CI runner against the default 5,000 ms: the check is the same, the time it may take is not 5 s.
   }, 30_000);
 
-  it("explore with unreachable groups: the strikes against each frontier cell and the cells skipped", () => {
+  it("explore mid-iteration: the centre, the radius, the window, the failures remembered and the temporary marks", () => {
     const make = () =>
       build({
         agent: makeUgv(10, 10),
         action: { name: "explore", params: {} },
         frontiers: true,
         setup: ({ frontiers, planner }) => {
-          planner.status = "not_found";
-          if (frontiers) frontiers.marksStick = false;
-          frontiers?.add("f-a", "r-00-00", 30, 10);
-          frontiers?.add("f-b", "r-00-00", 50, 10);
+          planner.explore = { radiusM: 30, windowMarginM: 5 };
+          planner.answer = (q) => (Math.abs(q.to.x - 40) < 1 ? "not_found" : "found");
+          frontiers?.add("f-bad", "r-00-00", 40, 10);
+          frontiers?.add("f-a", "r-00-00", 25, 10);
+          frontiers?.add("f-far", "r-00-00", 70, 10);
         },
       });
-    const n = firstTick(make, (s) => (activeOf(s) as ExploreSnapshot | undefined)?.strikes.some(([, k]) => k >= 1) ?? false) + 1;
-    const { snapshot, restored, b } = checkContinuation(make, n, 400);
+    const inIteration = (s: RuntimeSnapshot) => {
+      const e = activeOf(s) as ExploreSnapshot | undefined;
+      return e?.kind === "explore" && e.iteration !== undefined && e.failures.length > 0;
+    };
+    const n = firstTick(make, inIteration) + 1;
+    const { snapshot, restored, b } = checkContinuation(make, n, 3000);
     const e = activeOf(snapshot) as ExploreSnapshot;
-    expect(e.strikes.length).toBeGreaterThan(0);
-    expect(e.strikes.map(([c]) => c)).toEqual([...e.strikes.map(([c]) => c)].sort((x, y) => x - y)); // ascending: the snapshot is canonical
+    expect(e.radiusM).toBe(30);
+    expect(e.marginM).toBe(5);
+    expect(e.iteration?.window).toEqual({ x0: e.iteration!.cx - 35, y0: e.iteration!.cy - 35, x1: e.iteration!.cx + 35, y1: e.iteration!.cy + 35 });
+    expect(e.failures.flatMap((f) => f.cells)).toEqual([...e.failures.flatMap((f) => f.cells)].sort((x, y) => x - y)); // ascending: the snapshot is canonical
     expect(restored.info(b.agent.id)?.status).toBe("succeeded");
-  });
+  }, 30_000);
+
+  it("explore mid-travel to the next centre, and with a travel failed before: the mode, its origin and its window", () => {
+    const make = () =>
+      build({
+        agent: makeUgv(10, 10),
+        action: { name: "explore", params: {} },
+        frontiers: true,
+        setup: ({ frontiers, planner }) => {
+          planner.explore = { radiusM: 15, windowMarginM: 5 };
+          planner.answer = (q) => (Math.abs(q.to.x - 40) < 1 && q.window && q.window.x1 < 70 ? "not_found" : "found");
+          frontiers?.add("f-detour", "r-00-00", 40, 10);
+          frontiers?.add("f-far", "r-00-00", 80, 10);
+        },
+      });
+    const travelling = (s: RuntimeSnapshot) => {
+      const e = activeOf(s) as ExploreSnapshot | undefined;
+      return e?.kind === "explore" && e.mode === "travel" && e.inner !== undefined && e.failures.some((f) => f.travels >= 1);
+    };
+    const n = firstTick(make, travelling) + 1;
+    const { snapshot, restored, b } = checkContinuation(make, n, 3000);
+    const e = activeOf(snapshot) as ExploreSnapshot;
+    expect(e.mode).toBe("travel");
+    expect(e.targetWindow).toBeDefined();
+    expect(e.inner?.window).toEqual(e.targetWindow);
+    expect(restored.info(b.agent.id)?.status).toBe("succeeded");
+  }, 30_000);
 });
 
 describe("action runtime snapshot and restore: the runtime's own state (F3a M1)", () => {

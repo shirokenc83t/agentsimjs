@@ -146,6 +146,8 @@ export class FakePlanner implements PlannerPort {
   readonly submissions: { agentId: string; q: PlanQuery; tick: number }[] = [];
   delayTicks = 2;
   status: PlanResult["status"] = "found";
+  /** What a query ends with, by its content (its window, its target); absent: `status`. */
+  answer: ((q: PlanQuery) => PlanResult["status"]) | undefined;
   route: (q: PlanQuery) => [number, number][] = (q) => [
     [q.from.x, q.from.y],
     [q.to.x, q.to.y],
@@ -196,8 +198,9 @@ export class FakePlanner implements PlannerPort {
       p.left--;
       if (p.left > 0) continue;
       this.pending.delete(agentId);
-      const found = this.status === "found";
-      this.done.set(p.id, { status: this.status, waypoints: found ? this.route(p.q) : [], expansionsCharged: 1000, completedTick: tick, map: this.currentMap() });
+      const status = this.answer ? this.answer(p.q) : this.status;
+      const found = status === "found";
+      this.done.set(p.id, { status, waypoints: found ? this.route(p.q) : [], expansionsCharged: 1000, completedTick: tick, map: this.currentMap() });
     }
   }
 
@@ -237,9 +240,22 @@ export class FakePlanner implements PlannerPort {
     if (this.pending.delete(agentId) || this.lazyQueries.delete(agentId)) this.cancelled.push(agentId);
   }
 
+  /** The agent's exploration scope (ADR-0040); a test changes it to try other radii. */
+  explore = { radiusM: 40, windowMarginM: 10 };
+  exploreParams(): { readonly radiusM: number; readonly windowMarginM: number } {
+    return this.explore;
+  }
+
+  /** The planning view's extra blocked area (the inflated band): a test sets it; the belief's rectangles block as ever. */
+  viewBlocked: (x: number, y: number) => boolean = () => false;
+
   currentMap(): PlanMap {
     const b = this.belief;
-    return { version: b.version, clearanceM: (x, y, maxM) => b.groundClearanceM(x, y, maxM) };
+    return {
+      version: b.version,
+      clearanceM: (x, y, maxM) => b.groundClearanceM(x, y, maxM),
+      passableAt: (x, y) => b.inBounds(x, y) && b.freeForGround(x, y) && !this.viewBlocked(x, y),
+    };
   }
 
   /** Start-time checks on the agent's map (the fake belief), never the runtime's ground truth. */
@@ -276,7 +292,7 @@ const CAPS: Record<string, CapDef> = {
   explore: {
     vehicles: ["uav", "ugv"],
     preconditions: [{ name: "airborne", vehicles: ["uav"] }, { name: "hasRangeSensor" }],
-    check: (p) => (p["region"] === undefined || typeof p["region"] === "string") && (p["strategy"] === undefined || p["strategy"] === "nearest" || p["strategy"] === "largest"),
+    check: (p) => (p["region"] === undefined || typeof p["region"] === "string") && (p["strategy"] === undefined || p["strategy"] === "nearest" || p["strategy"] === "largest") && (p["radiusM"] === undefined || (num(p["radiusM"]) && (p["radiusM"] as number) > 0)),
   },
 };
 
@@ -288,7 +304,10 @@ const CAPS: Record<string, CapDef> = {
 export class FakeFrontiers implements FrontierPort {
   readonly groups: { id: string; region: string; xM: number; yM: number; size: number; resolved: boolean }[] = [];
   readonly marked = new Set<string>();
+  readonly temporary = new Set<string>();
   readonly markCalls: string[] = [];
+  readonly temporaryCalls: string[] = [];
+  clearCalls = 0;
   marksStick = true;
   regions = new Map<string, { x0: number; y0: number; x1: number; y1: number; reachableUnknown: boolean }>();
   constructor(private readonly agent: SimAgent) {}
@@ -305,6 +324,7 @@ export class FakeFrontiers implements FrontierPort {
     }
   }
 
+  /** The cell of a group's point (100 cells a row, 1 m cells); its other cells follow along the row. */
   private cellOf(g: { xM: number; yM: number }): number {
     return Math.floor(g.yM) * 100 + Math.floor(g.xM);
   }
@@ -321,7 +341,19 @@ export class FakeFrontiers implements FrontierPort {
     this.refresh();
     return this.groups
       .filter((g) => !g.resolved && !this.marked.has(g.id))
-      .map((g) => ({ id: g.id, region: g.region, cells: Array.from({ length: g.size }, (_, k) => this.cellOf(g) * 10 + k), point: this.cellOf(g), xM: g.xM, yM: g.yM }));
+      .map((g) => ({
+        id: g.id,
+        region: g.region,
+        cells: Array.from({ length: g.size }, (_, k) => this.cellOf(g) + k),
+        point: this.cellOf(g),
+        xM: g.xM,
+        yM: g.yM,
+        temporary: this.temporary.has(g.id),
+      }));
+  }
+
+  cellCentre(_agentId: string, cell: number): { xM: number; yM: number } {
+    return { xM: (cell % 100) + 0.5, yM: Math.floor(cell / 100) + 0.5 };
   }
 
   markedCount(): number {
@@ -349,12 +381,30 @@ export class FakeFrontiers implements FrontierPort {
     return this.regions.get(region)?.reachableUnknown ?? false;
   }
 
+  private groupAt(xM: number, yM: number) {
+    return this.groups.find((x) => !x.resolved && Math.abs(x.xM - xM) < 1e-9 && Math.abs(x.yM - yM) < 1e-9);
+  }
+
   markAt(_agentId: string, xM: number, yM: number): boolean {
-    const g = this.groups.find((x) => !x.resolved && Math.abs(x.xM - xM) < 1e-9 && Math.abs(x.yM - yM) < 1e-9);
+    const g = this.groupAt(xM, yM);
     if (!g) return false;
     this.markCalls.push(g.id);
+    this.temporary.delete(g.id);
     if (this.marksStick) this.marked.add(g.id);
     return true;
+  }
+
+  markTemporaryAt(_agentId: string, xM: number, yM: number): boolean {
+    const g = this.groupAt(xM, yM);
+    if (!g) return false;
+    this.temporaryCalls.push(g.id);
+    this.temporary.add(g.id);
+    return true;
+  }
+
+  clearTemporary(): void {
+    this.clearCalls++;
+    this.temporary.clear();
   }
 }
 

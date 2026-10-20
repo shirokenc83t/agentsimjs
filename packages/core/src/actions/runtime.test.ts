@@ -34,6 +34,9 @@ describe("action start checks (stable codes, fixed order)", () => {
     ["vehicle unsupported", "takeoff", { altitudeM: 10 }, "vehicle_unsupported"],
     ["ground vehicle with an altitude", "goTo", { xM: 20, yM: 10, altitudeM: 5 }, "invalid_params"],
     ["target outside the map", "goTo", { xM: 150, yM: 10 }, "target_out_of_bounds"],
+    ["target just past the left edge", "goTo", { xM: -0.01, yM: 10 }, "target_out_of_bounds"],
+    ["target on the far edge (the map ends at the last cell)", "goTo", { xM: 100, yM: 10 }, "target_out_of_bounds"],
+    ["target past the top edge", "goTo", { xM: 10, yM: -5 }, "target_out_of_bounds"],
   ])("%s → %s", (_, name, params, code) => {
     const env = setup();
     const a = makeUgv();

@@ -26,6 +26,8 @@ export interface TopologySnapshot {
     readonly hadFrontier: boolean | undefined;
     /** The cells marked unreachable (ascending) and the change stamp of the marks; undefined when the agent never had a mark. */
     readonly marks: { readonly cells: readonly number[]; readonly rev: number } | undefined;
+    /** The cells marked unreachable for the current exploration iteration only (ADR-0040): absent when there is no such mark. */
+    readonly temporary?: { readonly cells: readonly number[]; readonly rev: number };
   }[];
 }
 
@@ -37,6 +39,8 @@ export interface TopologySnapshot {
 export class TopologyService implements FrontierPort {
   private readonly byAgent = new Map<string, AgentTopology>();
   private readonly marks = new Map<string, Marks>();
+  /** Temporary marks (ADR-0040): groups an exploration iteration could not reach inside its window; they clear like marks, and with the iteration. */
+  private readonly temporary = new Map<string, Marks>();
   /** Per agent: it had an unmarked frontier at the last update (so reaching none is a transition: `frontierExhausted`). */
   private readonly hadFrontier = new Map<string, boolean>();
   /** Per agent: one unmarked frontier group found at the last look, and its region's stamp then. */
@@ -81,6 +85,7 @@ export class TopologyService implements FrontierPort {
     for (const id of this.ids) {
       this.byAgent.get(id)?.update();
       this.clearMarks(id, simTime);
+      this.clearMarks(id, simTime, true);
       this.watchFrontiers(id);
     }
   }
@@ -194,7 +199,12 @@ export class TopologyService implements FrontierPort {
     return t
       .frontierGroups()
       .filter((f) => !this.isMarked(agentId, f))
-      .map((f) => ({ id: f.id, region: f.region, cells: f.cells, point: f.point, xM: g.cellCenterX(f.point % g.sizeX), yM: g.cellCenterY((f.point / g.sizeX) | 0) }));
+      .map((f) => ({ id: f.id, region: f.region, cells: f.cells, point: f.point, xM: g.cellCenterX(f.point % g.sizeX), yM: g.cellCenterY((f.point / g.sizeX) | 0), temporary: this.isMarked(agentId, f, true) }));
+  }
+
+  cellCentre(agentId: string, cell: number): { readonly xM: number; readonly yM: number } {
+    const g = this.of(agentId).grid;
+    return { xM: g.cellCenterX(cell % g.sizeX), yM: g.cellCenterY((cell / g.sizeX) | 0) };
   }
 
   markedCount(agentId: string): number {
@@ -282,16 +292,47 @@ export class TopologyService implements FrontierPort {
   }
 
   markAt(agentId: string, xM: number, yM: number, simTime: number): boolean {
+    const group = this.groupAt(agentId, xM, yM);
+    if (!group) return false;
+    this.addMark(agentId, this.marksOf(agentId), group);
+    // A group marked for good is no longer marked for the iteration only.
+    this.dropTemporary(agentId, group);
+    this.emit(agentId, simTime, { op: "frontier-mark", group: group.point, region: group.region, cells: group.cells.length });
+    return true;
+  }
+
+  markTemporaryAt(agentId: string, xM: number, yM: number, _simTime: number): boolean {
+    const group = this.groupAt(agentId, xM, yM);
+    if (!group) return false;
+    this.addMark(agentId, this.temporaryOf(agentId), group);
+    return true;
+  }
+
+  clearTemporary(agentId: string, _simTime: number): void {
+    const m = this.temporary.get(agentId);
+    if (!m || m.byChunk.size === 0) return;
+    m.byChunk.clear();
+    m.rev++;
+  }
+
+  /** The frontier group holding the cell at (x, y), if any. */
+  private groupAt(agentId: string, xM: number, yM: number): FrontierGroup | undefined {
     const t = this.of(agentId);
     const g = t.grid;
     const i = g.cellI(xM);
     const j = g.cellJ(yM);
-    if (!g.inBounds(i, j)) return false;
+    if (!g.inBounds(i, j)) return undefined;
     const cell = j * g.sizeX + i;
-    const group = t.frontierGroups().find((f) => f.cells.includes(cell));
-    if (!group) return false;
-    const m = this.marksOf(agentId);
+    return t.frontierGroups().find((f) => f.cells.includes(cell));
+  }
+
+  /** Adds the group's cells to a store of marks, stamped with the planning view's version now. */
+  private addMark(agentId: string, m: Marks, group: FrontierGroup): void {
+    const g = this.of(agentId).grid;
     const at = this.viewOf(agentId)?.contentVersion ?? 0;
+    // Changes are tracked only while marks exist (`clearMarks` returns early without any): the first mark starts the tracking from now, so a change of the
+    // view from before it was made can never clear it (and a restored run, whose marks are re-based on its rebuilt view, behaves as the live one).
+    if (m.byChunk.size === 0) m.checkedAt = at;
     const cs = g.chunkSize;
     for (const c of group.cells) {
       const k = (((c / g.sizeX) | 0) / cs | 0) * g.chunksX + (((c % g.sizeX) / cs) | 0);
@@ -304,8 +345,22 @@ export class TopologyService implements FrontierPort {
       entry.at = at;
     }
     m.rev++;
-    this.emit(agentId, simTime, { op: "frontier-mark", group: group.point, region: group.region, cells: group.cells.length });
-    return true;
+  }
+
+  private dropTemporary(agentId: string, group: FrontierGroup): void {
+    const m = this.temporary.get(agentId);
+    if (!m || m.byChunk.size === 0) return;
+    const g = this.of(agentId).grid;
+    const cs = g.chunkSize;
+    let changed = false;
+    for (const c of group.cells) {
+      const k = (((c / g.sizeX) | 0) / cs | 0) * g.chunksX + (((c % g.sizeX) / cs) | 0);
+      const e = m.byChunk.get(k);
+      if (!e?.cells.delete(c)) continue;
+      changed = true;
+      if (e.cells.size === 0) m.byChunk.delete(k);
+    }
+    if (changed) m.rev++;
   }
 
   /**
@@ -319,14 +374,20 @@ export class TopologyService implements FrontierPort {
     return {
       agents: this.ids.map((agentId) => {
         const m = this.marks.get(agentId);
-        if (m && m.byChunk.size > 0) {
-          const view = this.viewOf(agentId);
-          if (view && view.contentVersion !== m.checkedAt) throw new Error(`marks of ${agentId} have a planning-view change not yet checked (snapshots are taken after the tick's topology update)`);
+        const tm = this.temporary.get(agentId);
+        for (const x of [m, tm]) {
+          if (x && x.byChunk.size > 0) {
+            const view = this.viewOf(agentId);
+            if (view && view.contentVersion !== x.checkedAt) throw new Error(`marks of ${agentId} have a planning-view change not yet checked (snapshots are taken after the topology update of the tick)`);
+          }
         }
-        const cells: number[] = [];
-        if (m) for (const e of m.byChunk.values()) for (const c of e.cells) cells.push(c);
-        cells.sort((a, b) => a - b);
-        return { agentId, hadFrontier: this.hadFrontier.get(agentId), marks: m ? { cells, rev: m.rev } : undefined };
+        const cellsOf = (x: Marks | undefined): number[] => {
+          const out: number[] = [];
+          if (x) for (const e of x.byChunk.values()) for (const c of e.cells) out.push(c);
+          return out.sort((a, b) => a - b);
+        };
+        const temporary = tm && (tm.byChunk.size > 0 || tm.rev > 0) ? { cells: cellsOf(tm), rev: tm.rev } : undefined;
+        return { agentId, hadFrontier: this.hadFrontier.get(agentId), marks: m ? { cells: cellsOf(m), rev: m.rev } : undefined, ...(temporary ? { temporary } : {}) };
       }),
     };
   }
@@ -340,6 +401,7 @@ export class TopologyService implements FrontierPort {
     if (s.agents.length !== this.ids.length) throw new RangeError(`snapshot has ${s.agents.length} agents' topology, the run has ${this.ids.length}`);
     for (const a of s.agents) if (!this.byAgent.has(a.agentId)) throw new RangeError(`snapshot has topology for unknown agent ${a.agentId}`);
     this.marks.clear();
+    this.temporary.clear();
     this.hadFrontier.clear();
     this.witness.clear();
     this.watchedAt.clear();
@@ -351,21 +413,24 @@ export class TopologyService implements FrontierPort {
     }
     for (const a of s.agents) {
       if (a.hadFrontier !== undefined) this.hadFrontier.set(a.agentId, a.hadFrontier);
-      if (!a.marks) continue;
       const g = this.of(a.agentId).grid;
       const at = this.viewOf(a.agentId)?.contentVersion ?? 0;
-      const byChunk = new Map<number, { cells: Set<number>; at: number }>();
       const cs = g.chunkSize;
-      for (const c of a.marks.cells) {
-        const k = (((c / g.sizeX) | 0) / cs | 0) * g.chunksX + (((c % g.sizeX) / cs) | 0);
-        let entry = byChunk.get(k);
-        if (!entry) {
-          entry = { cells: new Set(), at };
-          byChunk.set(k, entry);
+      const rebuild = (src: { readonly cells: readonly number[]; readonly rev: number }): Marks => {
+        const byChunk = new Map<number, { cells: Set<number>; at: number }>();
+        for (const c of src.cells) {
+          const k = (((c / g.sizeX) | 0) / cs | 0) * g.chunksX + (((c % g.sizeX) / cs) | 0);
+          let entry = byChunk.get(k);
+          if (!entry) {
+            entry = { cells: new Set(), at };
+            byChunk.set(k, entry);
+          }
+          entry.cells.add(c);
         }
-        entry.cells.add(c);
-      }
-      this.marks.set(a.agentId, { byChunk, checkedAt: at, rev: a.marks.rev });
+        return { byChunk, checkedAt: at, rev: src.rev };
+      };
+      if (a.marks) this.marks.set(a.agentId, rebuild(a.marks));
+      if (a.temporary) this.temporary.set(a.agentId, rebuild(a.temporary));
     }
   }
 
@@ -380,6 +445,16 @@ export class TopologyService implements FrontierPort {
       h.str(id).u32(cells.length);
       for (const c of cells) h.u32(c);
     }
+    // The temporary marks steer exploration, so they are state too; only agents that hold some add to the hash.
+    for (const id of this.ids) {
+      const m = this.temporary.get(id);
+      if (!m || m.byChunk.size === 0) continue;
+      const cells: number[] = [];
+      for (const e of m.byChunk.values()) for (const c of e.cells) cells.push(c);
+      cells.sort((a, b) => a - b);
+      h.str(`${id}~temporary`).u32(cells.length);
+      for (const c of cells) h.u32(c);
+    }
   }
 
   // ---- internals -----------------------------------------------------------------------------------
@@ -392,6 +467,15 @@ export class TopologyService implements FrontierPort {
     const row = Number(m[2]);
     if (col >= t.regionsX || row >= t.regionsY || t.regionId(col, row) !== region) return -1;
     return row * t.regionsX + col;
+  }
+
+  private temporaryOf(agentId: string): Marks {
+    let m = this.temporary.get(agentId);
+    if (!m) {
+      m = { byChunk: new Map(), checkedAt: this.viewOf(agentId)?.contentVersion ?? 0, rev: 0 };
+      this.temporary.set(agentId, m);
+    }
+    return m;
   }
 
   private marksOf(agentId: string): Marks {
@@ -409,8 +493,8 @@ export class TopologyService implements FrontierPort {
   }
 
   /** A group is marked when all its cells are (a group that grew into new cells is a candidate again). */
-  private isMarked(agentId: string, f: FrontierGroup): boolean {
-    const m = this.marks.get(agentId);
+  private isMarked(agentId: string, f: FrontierGroup, temporary = false): boolean {
+    const m = (temporary ? this.temporary : this.marks).get(agentId);
     if (!m || m.byChunk.size === 0) return false;
     const t = this.of(agentId);
     const g = t.grid;
@@ -423,8 +507,8 @@ export class TopologyService implements FrontierPort {
   }
 
   /** Clears marks in chunks where the agent's planning view changed in the chunk or its 8 neighbours. */
-  private clearMarks(agentId: string, simTime: number): void {
-    const m = this.marks.get(agentId);
+  private clearMarks(agentId: string, simTime: number, temporary = false): void {
+    const m = (temporary ? this.temporary : this.marks).get(agentId);
     if (!m || m.byChunk.size === 0) return; // no view is built for an agent without marks
     const view = this.viewOf(agentId);
     if (!view) return;
@@ -441,7 +525,7 @@ export class TopologyService implements FrontierPort {
       const cells = m.byChunk.get(k)?.cells.size ?? 0;
       m.byChunk.delete(k);
       m.rev++;
-      this.emit(agentId, simTime, { op: "frontier-unmark", chunk: k, cells });
+      if (!temporary) this.emit(agentId, simTime, { op: "frontier-unmark", chunk: k, cells });
     }
   }
 

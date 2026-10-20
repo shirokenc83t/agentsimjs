@@ -62,16 +62,17 @@ export const explore = {
   name: "explore",
   kind: "action",
   description:
-    "Explore unknown space on this agent's own map: go to its frontiers (known free space next to unknown space) until none is left in scope. Needs a range sensor (lidar or proximity); a UAV must be airborne and explores at its current altitude. " +
-    "region: a region ID from the space summary (e.g. r-03-05); omitted = the whole map. It limits which frontiers are targets, not the path; a region not seen yet is approached through the frontier nearest to it. " +
-    "strategy: nearest (default) = nearest in a straight line (a near frontier behind a wall can mean a long detour); largest = most cells. " +
-    "A frontier it cannot reach is marked unreachable and skipped until its map changes around it. " +
-    "Succeeds with region_explored (nothing reachable left to discover in the region) or frontier_exhausted (no reachable frontier left). " +
-    "Failures: unknown_region; no_map_data (after 2 s its sensors still gave it no data at its own position); geofence (a UAV would leave a geofence or its altitude limits); kinematically_infeasible (a ground vehicle stopped making progress).",
+    "Explore unknown space on this agent's own map, in iterations: the frontiers (known free space next to unknown space) within radiusM of the agent first, then it travels to the nearest one left and starts the next iteration, until none is left in scope. Needs a range sensor (lidar or proximity); a UAV must be airborne and explores at its current altitude. " +
+    "region: a region ID from the space summary (e.g. r-03-05); omitted = the whole map. It limits which frontiers are targets, not the path. " +
+    "strategy: nearest (default) = nearest in a straight line; largest = most cells. " +
+    "radiusM: iteration radius in metres; omitted = the agent's configured radius. Searches are bounded to a window around the iteration, so an unreachable frontier costs the window, not the map: it is set aside for the iteration, retried from another centre with larger windows, and marked unreachable (until its map changes) after three centres. " +
+    "Succeeds with region_explored or frontier_exhausted (no reachable frontier left). " +
+    "Failures: unknown_region; no_map_data (no data at its own position after 2 s); geofence (a UAV would leave a geofence or its altitude limits).",
   params: Type.Object(
     {
       region: Type.Optional(Type.String({ pattern: "^r-[0-9]{2,4}-[0-9]{2,4}$", description: "Region ID (r-<column>-<row>) to explore; omit for the whole map." })),
       strategy: Type.Optional(Type.Union([Type.Literal("nearest"), Type.Literal("largest")], { description: "Target choice: nearest (straight-line distance, default) or largest (most frontier cells)." })),
+      radiusM: Type.Optional(Type.Number({ exclusiveMinimum: 0, maximum: 100_000, description: "Radius of an exploration iteration in metres; omit for the agent's configured radius." })),
     },
     { additionalProperties: false },
   ),
@@ -88,7 +89,7 @@ export const explore = {
   vehicles: ["uav", "ugv"],
   scope: "self",
   preconditions: [{ name: "airborne", vehicles: ["uav"] }, { name: "hasRangeSensor" }],
-  failureCodes: ["unknown_region", "no_map_data", "geofence", "kinematically_infeasible"],
+  failureCodes: ["unknown_region", "no_map_data", "geofence"],
 } as const satisfies CapabilityDef;
 
 export const hold = {

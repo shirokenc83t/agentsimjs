@@ -21,8 +21,8 @@ const params: FollowerParams = {
   lookaheadM: 1.2,
   arrivalToleranceM: 0.3,
 };
-const open: PlanMap = { version: 1, clearanceM: (_x, _y, maxM) => maxM };
-const wall: PlanMap = { version: 1, clearanceM: (x, _y, maxM) => Math.min(maxM, Math.max(0, 8 - x)) }; // an obstacle at x = 8
+const open: PlanMap = { version: 1, clearanceM: (_x, _y, maxM) => maxM, passableAt: () => true };
+const wall: PlanMap = { version: 1, clearanceM: (x, _y, maxM) => Math.min(maxM, Math.max(0, 8 - x)), passableAt: (x) => x < 8 }; // an obstacle at x = 8
 const start = (): UgvState => ({ x: 0, y: 0, heading: 0, speed: 0, steering: 0, lastStepM: 0, lastRotationRad: 0 });
 const seg = (...pts: number[]): PathSegment => ({ pts: Float64Array.from(pts), reverse: false });
 
