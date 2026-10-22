@@ -3,11 +3,16 @@ import "./panels.css";
 import Button from "@mui/material/Button";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import { SceneView, useUiContext, type GridViewMode, type SceneRenderer } from "@agentsim/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { identityOf, SceneView, shortLabel, useUiContext, type AgentDecor, type GridViewMode, type MapPin, type SceneRenderer } from "@agentsim/ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { attachRendererProbe } from "../probe.ts";
 import { usePolled, useSource } from "../services.tsx";
+import { actionLabel } from "./agent-views.ts";
+import { useAttention } from "./attention-store.ts";
 import { sandboxTarget, useSandboxTarget, useSandboxView } from "./sandbox-store.ts";
+import { publishScene } from "./scene-handle.ts";
+import { publishSceneView } from "./scene-view-store.ts";
+import { useAgentViews } from "./use-agent-views.ts";
 import { useSandboxOverlay } from "./use-sandbox-overlay.ts";
 import { useExploreOverlay } from "./use-explore-overlay.ts";
 import { useStagesOverlay } from "./use-stages-overlay.ts";
@@ -43,6 +48,7 @@ export function ScenePanel() {
   const onRenderer = useCallback(
     (r: SceneRenderer | undefined) => {
       setRenderer(r);
+      publishScene(r);
       attachRendererProbe(r);
       if (r) {
         r.onPick = (p) => {
@@ -150,55 +156,88 @@ export function ScenePanel() {
     };
   }, [renderer]);
 
+  // Identity, short label and attention badge of every agent, and the pins of collisions, pushed to the renderer when they change (at most 10 Hz).
+  const attn = useAttention(source);
+  const [labelMode, setLabelMode] = useState<"short" | "full">("short");
+  const decorKey = snap.entityIds
+    .map((id) => {
+      const c = attn.byAgent.get(id)?.conditions[0];
+      return `${id}:${c ? `${c.level}/${c.glyph}/${c.label}` : ""}`;
+    })
+    .join("|");
+  const pinsKey = snap.entityIds.flatMap((id) => (attn.byAgent.get(id)?.conditions ?? []).filter((c) => c.at).map((c) => `${id}@${c.at?.xM},${c.at?.yM}`)).join("|");
+  const attnRef = useRef(attn);
+  attnRef.current = attn;
+  const decor = useMemo<AgentDecor[]>(
+    () =>
+      snap.entityIds.map((id, i) => {
+        const idn = identityOf(i);
+        const c = attnRef.current.byAgent.get(id)?.conditions[0];
+        return { id, short: shortLabel(id), colorIndex: idn.colorIndex, style: idn.style, badge: c ? { level: c.level, glyph: c.glyph, text: c.label } : undefined };
+      }),
+    [snap.entityIds, decorKey],
+  );
+  useEffect(() => renderer?.setAgentDecor(decor), [renderer, decor]);
+  useEffect(() => {
+    const pins: MapPin[] = snap.entityIds.flatMap((id) => (attnRef.current.byAgent.get(id)?.conditions ?? []).filter((c) => c.at).map((c) => ({ id, xM: c.at?.xM ?? 0, yM: c.at?.yM ?? 0 })));
+    renderer?.setPins(pins);
+  }, [renderer, pinsKey, snap.entityIds]);
+  useEffect(() => renderer?.setLabelMode(labelMode), [renderer, labelMode]);
+
+  // The tooltip of the agent under the pointer: the whole ID, its identity and what it is doing.
+  const views = useAgentViews(source);
+  const [hover, setHover] = useState<{ id: string; x: number; y: number } | undefined>(undefined);
+  useEffect(() => {
+    if (!renderer) return;
+    renderer.onHover = (id, x, y) => setHover(id === undefined ? undefined : { id, x, y });
+    return () => {
+      renderer.onHover = undefined;
+    };
+  }, [renderer]);
+  const hoverAgent = hover ? snap.run?.agents.find((a) => a.id === hover.id) : undefined;
+  const hoverCondition = hover ? attn.byAgent.get(hover.id)?.conditions[0] : undefined;
+
+  // What the Legend window explains.
+  useEffect(() => {
+    publishSceneView({ mode, overlay, rays: showRays, topology: showTopology, stages: showStages, explore: showExplore, sandbox: !!sandbox });
+  }, [mode, overlay, showRays, showTopology, showStages, showExplore, sandbox]);
+  useEffect(() => () => publishScene(undefined), []);
+
   return (
-    <SceneView interpolator={source.poses} onRenderer={onRenderer}>
+    <div className="scene-col">
       {snap.grid && (
-        <div className={`scene-overlay${sendFor ? " sending" : ""}`} data-testid="scene-overlay">
-          <div className="row">
-            <Button
-              size="small"
-              variant={sendFor ? "contained" : "outlined"}
-              color="inherit"
-              disabled={!selectedAgent || noCommands !== undefined}
-              onClick={() => setSendFor(sendFor ? undefined : selectedAgent)}
-              aria-pressed={sendFor !== undefined}
-              data-testid="send-to"
-              title={noCommands ?? "Send the selected agent to a point (G); Esc cancels"}
-            >
-              {sendFor ? `Click a target for ${sendFor} · Esc` : selectedAgent ? `Send ${selectedAgent} to… (G)` : "Send to… (select an agent)"}
-            </Button>
-          </div>
-          <ToggleButtonGroup size="small" exclusive value={mode} onChange={(_e, m: GridViewMode | null) => m && setMode(m)} aria-label="Grid view">
-            <ToggleButton value="occupancy" data-testid="view-occupancy">
-              occupancy
-            </ToggleButton>
-            <ToggleButton value="terrain" data-testid="view-terrain">
-              terrain
-            </ToggleButton>
-            <ToggleButton value="height" data-testid="view-height">
-              height
-            </ToggleButton>
-          </ToggleButtonGroup>
-          <ToggleButtonGroup size="small" exclusive value={overlay} onChange={(_e, v: MapOverlay | null) => v && setOverlay(v)} aria-label="Map overlay">
-            <ToggleButton value="truth" data-testid="overlay-truth" title="The ground-truth map">
-              truth
-            </ToggleButton>
-            <ToggleButton value="belief" data-testid="overlay-belief" title="The selected agent's own map">
-              belief
-            </ToggleButton>
-            <ToggleButton value="difference" data-testid="overlay-difference" title="Researcher view: the agent's map against the ground truth">
-              ◆ difference
-            </ToggleButton>
-          </ToggleButtonGroup>
-          <ToggleButtonGroup size="small" value={[...(showRays ? ["rays"] : []), ...(showTopology ? ["topology"] : [])]} onChange={(_e, v: string[]) => { setShowRays(v.includes("rays")); setShowTopology(v.includes("topology")); }} aria-label="Sensor and topology overlays">
-            <ToggleButton value="rays" data-testid="overlay-rays" disabled={noRays !== undefined} title={noRays ?? "The selected agent's lidar rays (decimated)"}>
-              ⌁ rays
-            </ToggleButton>
-            <ToggleButton value="topology" data-testid="overlay-frontiers" disabled={noTopology !== undefined} title={noTopology ?? "The selected agent's regions and frontier groups"}>
-              ◌ frontiers
-            </ToggleButton>
-          </ToggleButtonGroup>
-          <div style={{ display: "flex", gap: 6 }}>
+        <>
+          <div className="scene-toolbar" role="toolbar" aria-label="Scene controls" data-testid="scene-toolbar">
+            <ToggleButtonGroup size="small" exclusive value={overlay} onChange={(_e, v: MapOverlay | null) => v && setOverlay(v)} aria-label="Map overlay">
+              <ToggleButton value="truth" data-testid="overlay-truth" title="The ground-truth map">
+                truth
+              </ToggleButton>
+              <ToggleButton value="belief" data-testid="overlay-belief" title="The selected agent's own map">
+                ● belief
+              </ToggleButton>
+              <ToggleButton value="difference" data-testid="overlay-difference" title="Researcher view: the agent's map against the ground truth">
+                ◆ difference
+              </ToggleButton>
+            </ToggleButtonGroup>
+            <ToggleButtonGroup size="small" exclusive value={mode} onChange={(_e, m: GridViewMode | null) => m && setMode(m)} aria-label="Grid view">
+              <ToggleButton value="occupancy" data-testid="view-occupancy">
+                occupancy
+              </ToggleButton>
+              <ToggleButton value="terrain" data-testid="view-terrain">
+                terrain
+              </ToggleButton>
+              <ToggleButton value="height" data-testid="view-height">
+                height
+              </ToggleButton>
+            </ToggleButtonGroup>
+            <ToggleButtonGroup size="small" value={[...(showRays ? ["rays"] : []), ...(showTopology ? ["topology"] : [])]} onChange={(_e, v: string[]) => { setShowRays(v.includes("rays")); setShowTopology(v.includes("topology")); }} aria-label="Sensor and topology overlays">
+              <ToggleButton value="rays" data-testid="overlay-rays" disabled={noRays !== undefined} title={noRays ?? "The selected agent's lidar rays (decimated)"}>
+                ⌁ rays
+              </ToggleButton>
+              <ToggleButton value="topology" data-testid="overlay-frontiers" disabled={noTopology !== undefined} title={noTopology ?? "The selected agent's regions and frontier groups"}>
+                ◌ frontiers
+              </ToggleButton>
+            </ToggleButtonGroup>
             <ToggleButtonGroup size="small" value={showStages ? ["stages"] : []} onChange={(_e, v: string[]) => setShowStages(v.includes("stages"))} aria-label="Strategy stages overlay">
               <ToggleButton value="stages" data-testid="overlay-stages" title="The stages of the selected planning query: coarse path, legs and joints">
                 ⑂ stages
@@ -209,102 +248,73 @@ export function ScenePanel() {
                 ◎ explore
               </ToggleButton>
             </ToggleButtonGroup>
+            <ToggleButtonGroup size="small" exclusive value={labelMode} onChange={(_e, m: "short" | "full" | null) => m && setLabelMode(m)} aria-label="Labels">
+              <ToggleButton value="short" data-testid="labels-short" title="Short labels: g07 for ugv-007">
+                # g07
+              </ToggleButton>
+              <ToggleButton value="full" data-testid="labels-full" title="Whole IDs">
+                # ugv-007
+              </ToggleButton>
+            </ToggleButtonGroup>
+            <Button
+              size="small"
+              variant={sendFor ? "contained" : "outlined"}
+              color="inherit"
+              disabled={!selectedAgent || noCommands !== undefined}
+              onClick={() => setSendFor(sendFor ? undefined : selectedAgent)}
+              aria-pressed={sendFor !== undefined}
+              data-testid="send-to"
+              title={noCommands ?? "Send the selected agent to a point (G); Esc cancels"}
+            >
+              {sendFor ? `⇢ click a target for ${shortLabel(sendFor)} · Esc` : selectedAgent ? `⇢ send ${shortLabel(selectedAgent)} to… · G` : "⇢ send to… (select an agent)"}
+            </Button>
           </div>
-          {(noRays !== undefined || noTopology !== undefined) && (
-            <p className="muted" data-testid="overlay-off-reason">
-              Rays and frontiers are off in replay: {noRays ?? noTopology}
-            </p>
-          )}
-          {picking && <p className="muted" data-testid="scene-sandbox-picking">Click a target for the Strategy test · Esc</p>}
-          {(showRays || showTopology) && !selectedAgent && <p className="muted">Select an agent to see its rays and frontiers.</p>}
-          {overlay !== "truth" && !selectedAgent && <p className="muted">Select an agent to see its map.</p>}
-          {overlay !== "truth" && ideal && <p className="muted" data-testid="overlay-ideal">◆ ideal: this agent plans on the ground truth, it has no map of its own.</p>}
-          {overlay === "difference" && (
-            <p className="researcher-banner" role="note" data-testid="scene-researcher-marker">
-              ◆ Researcher view — not visible to the mind
-            </p>
-          )}
-          {overlay !== "truth" && (
-            <dl className="kv legend" data-testid="overlay-legend">
-              <dt>■ dark</dt>
-              <dd>unknown to the agent</dd>
+          {(noRays !== undefined || noTopology !== undefined || picking || sendFor !== undefined || ((showRays || showTopology) && !selectedAgent) || (overlay !== "truth" && (!selectedAgent || ideal)) || overlay === "difference" || (showExplore && !selectedAgent)) && (
+            <div className="scene-hint" data-testid="scene-hint">
+              {(noRays !== undefined || noTopology !== undefined) && (
+                <span className="muted" data-testid="overlay-off-reason">
+                  Rays and frontiers are off in replay: {noRays ?? noTopology}
+                </span>
+              )}
+              {picking && (
+                <span className="muted" data-testid="scene-sandbox-picking">
+                  Click a target for the Strategy test · Esc
+                </span>
+              )}
+              {(showRays || showTopology) && !selectedAgent && <span className="muted">Select an agent to see its rays and frontiers.</span>}
+              {overlay !== "truth" && !selectedAgent && <span className="muted">Select an agent to see its map.</span>}
+              {overlay !== "truth" && ideal && (
+                <span className="muted" data-testid="overlay-ideal">
+                  ◆ ideal: this agent plans on the ground truth, it has no map of its own.
+                </span>
+              )}
               {overlay === "difference" && (
-                <>
-                  <dt>╱ hatched</dt>
-                  <dd>believed occupied, actually free</dd>
-                  <dt>╳ cross-hatched</dt>
-                  <dd>believed free, actually blocked</dd>
-                </>
+                <span className="researcher-banner" role="note" data-testid="scene-researcher-marker">
+                  ◆ Researcher view — not visible to the mind
+                </span>
               )}
-            </dl>
+              {showExplore && !selectedAgent && <span className="muted">Select an agent to see its exploration.</span>}
+            </div>
           )}
-          {(showRays || showTopology) && (
-            <dl className="kv legend" data-testid="sensor-legend">
-              {showRays && (
-                <>
-                  <dt>─ accent</dt>
-                  <dd>lidar ray that hit an obstacle</dd>
-                  <dt>─ grey</dt>
-                  <dd>lidar ray that reached its range</dd>
-                </>
-              )}
-              {showTopology && (
-                <>
-                  <dt>□ outline</dt>
-                  <dd>region of the agent's topological layer</dd>
-                  <dt>● amber</dt>
-                  <dd>frontier group: known free next to unknown</dd>
-                  <dt>● red</dt>
-                  <dd>frontier group marked unreachable</dd>
-                </>
-              )}
-            </dl>
-          )}
-          {showExplore && !selectedAgent && <p className="muted">Select an agent to see its exploration.</p>}
-          {showExplore && (
-            <dl className="kv legend" data-testid="explore-legend">
-              <dt>◯ ring</dt>
-              <dd>iteration of explore: its radius around its centre (square: the search window)</dd>
-              <dt>◇ amber</dt>
-              <dd>target set aside for the iteration (tried again from another centre)</dd>
-              <dt>✕ red</dt>
-              <dd>target marked unreachable</dd>
-            </dl>
-          )}
-          {(showStages || sandbox) && (
-            <dl className="kv legend" data-testid="stages-legend">
-              {showStages && (
-                <>
-                  <dt>╌╌ dashed</dt>
-                  <dd>coarse path of a refine</dd>
-                  <dt>── solid, two tones</dt>
-                  <dd>the legs of a plan, alternating</dd>
-                  <dt>● ① ②</dt>
-                  <dd>numbered joint: where one leg ends and the next begins</dd>
-                </>
-              )}
-              {sandbox && (
-                <>
-                  <dt>── orange</dt>
-                  <dd data-testid="sandbox-legend">Strategy test result (not part of the run)</dd>
-                </>
-              )}
-            </dl>
-          )}
-          <dl className="kv legend">
-            <dt>╌╌ dashed</dt>
-            <dd>planned path</dd>
-            <dt>── solid</dt>
-            <dd>executed path</dd>
-            {mode === "height" && (
-              <>
-                <dt>▨ hatched</dt>
-                <dd>occupied, unknown height</dd>
-              </>
-            )}
-          </dl>
-        </div>
+        </>
       )}
-    </SceneView>
+      <div className="scene-area">
+        <SceneView interpolator={source.poses} onRenderer={onRenderer} />
+        {hover && hoverAgent && (
+          <div className="map-tooltip mono" style={{ left: hover.x + 14, top: hover.y + 14 }} role="tooltip" data-testid="map-tooltip">
+            <div>
+              {hoverAgent.id} · {shortLabel(hoverAgent.id)} · {hoverAgent.kind.toUpperCase()}
+            </div>
+            <div className="muted">{actionLabel(views.get(hoverAgent.id)?.action)}</div>
+            {hoverCondition && (
+              <div className={hoverCondition.level === "alarm" ? "danger" : "warn"}>
+                {hoverCondition.glyph} {hoverCondition.label}
+              </div>
+            )}
+            <div className="muted">click to select</div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

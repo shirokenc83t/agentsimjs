@@ -188,4 +188,23 @@ describe("beliefVsTruth never reaches a mind (ADR-0005 addition of 2026-10-11)",
     });
     expect(truth.hits.length).toBeGreaterThan(0);
   });
+
+  it("beliefAt: what every agent believes of one cell, from its own map, the agents whose map is the truth as ideal; nothing changes", () => {
+    const run = make();
+    const rover = roverId(run);
+    const belief = run.sensing.belief(rover);
+    belief.observeFree(25, 30, 40);
+    belief.observeHit(26, 30, 0, 40);
+    const free = obs(run).beliefAt(25, 30).find((a) => a.agentId === rover);
+    const occupied = obs(run).beliefAt(26, 30).find((a) => a.agentId === rover);
+    const unknown = obs(run).beliefAt(100, 100).find((a) => a.agentId === rover);
+    expect([free?.state, occupied?.state, unknown?.state]).toEqual(["free", "occupied", "unknown"]);
+    const all = obs(run).beliefAt(25, 30);
+    expect(all.map((a) => a.agentId).sort()).toEqual(run.agents.map((a) => a.id).sort());
+    // Reading again, and reading elsewhere, left the maps as they were.
+    expect(obs(run).beliefAt(25, 30)).toEqual(all);
+    // With every agent ideal, each one's belief is the truth.
+    const ideal = make({ runConfig: { beliefs: { default: { init: "ideal" } } } });
+    expect(obs(ideal).beliefAt(3, 3).every((a) => a.state === "ideal")).toBe(true);
+  });
 });

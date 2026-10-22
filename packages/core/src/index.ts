@@ -40,6 +40,7 @@ export {
   type SimPreparedMessage,
   type SimAgentViewMessage,
   type SimResearcherDataMessage,
+  type SimCellBeliefsMessage,
   type SimBeliefChunksMessage,
   type SimRaysMessage,
   type SimBudgetMessage,

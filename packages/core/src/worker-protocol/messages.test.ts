@@ -112,6 +112,17 @@ describe("sim worker protocol", () => {
     expect(validate(MainToSim, msg).ok).toBe(false);
   });
 
+  it("`cellWatch` asks for one cell (or stops), and what comes back, `cellBeliefs`, goes worker → main only", () => {
+    expect(validate(MainToSim, { type: "cellWatch", cell: { i: 3, j: 4 } }).ok).toBe(true);
+    expect(validate(MainToSim, { type: "cellWatch", cell: null }).ok).toBe(true);
+    expect(validate(MainToSim, { type: "cellWatch", cell: { i: -1, j: 0 } }).ok).toBe(false);
+    expect(validate(MainToSim, { type: "cellWatch", cell: { i: 1.5, j: 0 } }).ok).toBe(false);
+    const data = { type: "cellBeliefs", runId: "run-000001", i: 3, j: 4, tick: 5, agents: [{ agentId: "ugv-001", state: "free" }, { agentId: "ugv-002", state: "ideal" }] };
+    expect(validate(SimToMain, data).ok).toBe(true);
+    expect(validate(SimToMain, { ...data, agents: [{ agentId: "ugv-001", state: "maybe" }] }).ok).toBe(false);
+    expect(validate(MainToSim, data).ok).toBe(false);
+  });
+
   it("researcher data travels one way: `researcherWatch` and no other main → worker message carries observer fields", () => {
     expect(validate(MainToSim, { type: "researcherWatch", agentId: "ugv-001" }).ok).toBe(true);
     expect(validate(MainToSim, { type: "researcherWatch", agentId: null }).ok).toBe(true);

@@ -153,6 +153,15 @@ export const SimResearcherWatch = Type.Object({
 });
 
 /**
+ * Asks for what every agent believes of one cell (the Inspector's Cell tab), streamed while it is shown; `null` stops it. A cell and nothing else: not a run input,
+ * never traced, no effect on the simulation. What comes back is observer data and travels one way, worker to main.
+ */
+export const SimCellWatch = Type.Object({
+  type: Type.Literal("cellWatch"),
+  cell: Type.Union([Type.Object({ i: Type.Integer({ minimum: 0 }), j: Type.Integer({ minimum: 0 }) }), Type.Null()]),
+});
+
+/**
  * Asks for the belief map of an agent as chunks (ADR-0019 addition of 2026-10-12), for the Scene's belief overlay,
  * while the overlay is on; `null` stops the stream. Not a run input, never traced, no effect on the simulation.
  */
@@ -189,7 +198,7 @@ export const SimStrategyTest = Type.Object({
   planOn: Type.Union([Type.Literal("belief"), Type.Literal("truth")]),
 });
 
-export const MainToSim = Type.Union([SimInit, SimControl, SimReturnBuffer, SimRecorderPort, SimLoad, SimCommand, SimBuildPreset, SimView, SimResearcherWatch, SimBeliefWatch, SimOverlayWatch, SimStrategyTest]);
+export const MainToSim = Type.Union([SimInit, SimControl, SimReturnBuffer, SimRecorderPort, SimLoad, SimCommand, SimBuildPreset, SimView, SimResearcherWatch, SimCellWatch, SimBeliefWatch, SimOverlayWatch, SimStrategyTest]);
 export type MainToSim = Static<typeof MainToSim>;
 
 // ---- worker → main ----------------------------------------------------------------------------
@@ -432,6 +441,20 @@ export const SimResearcherData = Type.Object({
 });
 
 /**
+ * Researcher-only: what each agent believes of the watched cell (UI-SPEC section 4, the Inspector's Cell tab): free, occupied, unknown, or `ideal` (its map is the
+ * ground truth). Observer data like the beliefs-versus-truth figures: never part of a decision request, never sent back; panels only, at the panel cadence, while a
+ * panel has asked with `cellWatch`.
+ */
+export const SimCellBeliefs = Type.Object({
+  type: Type.Literal("cellBeliefs"),
+  runId: RunId,
+  i: Type.Integer({ minimum: 0 }),
+  j: Type.Integer({ minimum: 0 }),
+  tick: Type.Integer({ minimum: 0 }),
+  agents: Type.Array(Type.Object({ agentId: Type.String({ minLength: 1, maxLength: 64 }), state: Type.Union([Type.Literal("unknown"), Type.Literal("free"), Type.Literal("occupied"), Type.Literal("ideal")]) }), { maxItems: 4096 }),
+});
+
+/**
  * Chunks of the watched agent's belief map that changed since the last batch (all of its materialized chunks after a
  * watch starts or the agent changes), for the belief overlay (ADR-0027): `coords` holds (ci, cj) pairs, `data` the
  * chunks' cells in the same order, ONE byte per cell (0 unknown, 1 believed free, 2 believed occupied), row-major in
@@ -507,7 +530,7 @@ export const SimRecordingState = Type.Object({
   backlogBytes: Type.Integer({ minimum: 0 }),
 });
 
-export const SimToMain = Type.Union([SimReady, SimState, SimStats, SimDegradation, SimError, SimLoaded, SimEvents, SimGrid, SimChunks, SimTrail, SimInput, SimPreset, SimPreparing, SimPrepared, SimAgentView, SimResearcherData, SimBeliefChunks, SimRays, SimTopology, SimBudget, SimRecordingState, SimStrategyTestResult]);
+export const SimToMain = Type.Union([SimReady, SimState, SimStats, SimDegradation, SimError, SimLoaded, SimEvents, SimGrid, SimChunks, SimTrail, SimInput, SimPreset, SimPreparing, SimPrepared, SimAgentView, SimResearcherData, SimCellBeliefs, SimBeliefChunks, SimRays, SimTopology, SimBudget, SimRecordingState, SimStrategyTestResult]);
 export type SimToMain = Static<typeof SimToMain>;
 export type SimStateMessage = Static<typeof SimState>;
 export type SimStatsMessage = Static<typeof SimStats>;
@@ -521,6 +544,7 @@ export type SimInputMessage = Static<typeof SimInput>;
 export type SimAgentViewMessage = Static<typeof SimAgentView>;
 export type SimResearcherDataMessage = Static<typeof SimResearcherData>;
 export type SimBeliefChunksMessage = Static<typeof SimBeliefChunks>;
+export type SimCellBeliefsMessage = Static<typeof SimCellBeliefs>;
 export type SimRaysMessage = Static<typeof SimRays>;
 export type SimBudgetMessage = Static<typeof SimBudget>;
 export type SimTopologyMessage = Static<typeof SimTopology>;

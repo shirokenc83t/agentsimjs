@@ -3,7 +3,7 @@ import { KIND_STYLE, useUiContext } from "@agentsim/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { usePolled, useSource } from "../../services.tsx";
 import { gapLabel } from "../../sim/gap-click.ts";
-import { collapseMarks, glyphOf, isFailure, nearestMark, type Mark } from "./marks.ts";
+import { collapseMarks, flagRole, glyphOf, isFailure, nearestMark, type Mark } from "./marks.ts";
 import { LABEL_PX, LANE_PX, laneAt, MERGE_PX, RULER_PX, rulerTicks } from "./timeline-geometry.ts";
 import { useJump } from "./use-jump.ts";
 import { useRunMarks } from "./use-run-marks.ts";
@@ -111,8 +111,11 @@ export function TimelinePanel() {
       const family = KIND_STYLE[m.kind as keyof typeof KIND_STYLE]?.family ?? "slate";
       const cx = LABEL_PX + cl.px;
       const cy = RULER_PX + cl.lane * LANE_PX + LANE_PX / 2;
-      ctx.fillStyle = isFailure(m) ? color("--alm") : color(`--kind-${family}`);
-      ctx.fillText(glyphOf(m), cx, cy);
+      const role = flagRole(m);
+      ctx.fillStyle = role === "alarm" ? color("--alm") : role === "warning" ? color("--warn") : color(`--kind-${family}`);
+      // A flag is as tall as its lane.
+      if (role) ctx.fillRect(Math.round(cx) - 1, RULER_PX + cl.lane * LANE_PX, 2, LANE_PX - 1);
+      ctx.fillText(glyphOf(m), cx + (role ? 6 : 0), cy);
       if (cl.count > 1) {
         ctx.fillStyle = color("--fg2");
         ctx.textAlign = "left";
@@ -158,7 +161,7 @@ export function TimelinePanel() {
       <div className="timeline-head">
         <span className="muted">{marks.length} marks</span>
         <span data-testid="timeline-counts" className="mono">
-          <span style={{ color: "var(--kind-pink)" }}>▲ {marks.filter((m) => m.kind === "reflex").length} reflex</span> · <span className="danger">✕ {marks.filter(isFailure).length} failure</span>
+          <span className="warn">▲ {marks.filter((m) => m.kind === "reflex").length} reflex</span> · <span className="danger">✕ {marks.filter(isFailure).length} failure</span>
         </span>
         {label !== undefined && (
           <span className="warn" data-testid="timeline-gap">

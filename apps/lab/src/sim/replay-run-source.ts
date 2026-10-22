@@ -398,6 +398,8 @@ export class ReplayRunSource implements RunSource {
         return "the decision request of a mind is not part of a recording";
       case "researcher":
         return "beliefs versus truth is computed from the live run";
+      case "cellBeliefs":
+        return "what every agent believes of a cell is read from the live run's maps, which a recording does not hold";
       case "rays":
         return "lidar rays are not recorded";
       case "topology":

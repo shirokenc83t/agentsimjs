@@ -60,6 +60,9 @@
 .tile { display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: 0 12px; border-left: 1px solid var(--ln); min-width: 72px; }
 .tile .v { font-size: var(--type-telemetry-size); font-weight: var(--type-telemetry-weight); white-space: nowrap; }
 .tile .v small { font-size: var(--type-label-size); color: var(--fg3); font-weight: 400; }
+.attn-tile { appearance: none; font: inherit; color: inherit; background: transparent; border-top: 0; border-right: 0; border-bottom: 0; cursor: pointer; text-align: left; }
+.attn-tile:hover:not(:disabled) { background: var(--bg3); }
+.attn-tile:disabled { cursor: default; }
 .meter { height: 3px; background: var(--bg3); position: relative; margin-top: 2px; }
 .meter i { position: absolute; left: 0; top: 0; bottom: 0; }
 

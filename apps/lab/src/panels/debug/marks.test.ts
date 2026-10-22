@@ -1,6 +1,6 @@
 import type { TraceRecord } from "@agentsim/trace";
 import { describe, expect, it } from "vitest";
-import { collapseMarks, glyphOf, isFailure, laneIndex, markOf, nearestMark } from "./marks.ts";
+import { collapseMarks, flagRole, glyphOf, isFailure, laneIndex, markOf, nearestMark } from "./marks.ts";
 
 const rec = (seq: number, simTime: number, kind: string, agentId?: string, payload: unknown = {}) => ({ seq, simTime, kind, ...(agentId ? { agentId } : {}), payload }) as unknown as TraceRecord;
 
@@ -57,5 +57,15 @@ describe("timeline marks", () => {
       [1, 1, 5],
     ]);
     expect(collapseMarks(marks, lanes, 100, 1000, 0).map((c) => c.count)).toEqual([1, 1, 1, 1, 1]);
+  });
+
+  it("carry the failure code of an action, of a refused start and of a reflex; failures, reflexes and refusals are the flags, in their role", () => {
+    const failed = markOf(rec(1, 1, "action", "uav-001", { op: "end", status: "failed", failure: { code: "unreachable" } }));
+    const rejected = markOf(rec(2, 2, "action", "uav-001", { op: "rejected", failure: { code: "target_blocked" } }));
+    const reflex = markOf(rec(3, 3, "reflex", "uav-001", { reflex: "obstacle", code: "obstacle_ahead" }));
+    const plain = markOf(rec(4, 4, "action", "uav-001", { op: "start" }));
+    expect([failed.code, rejected.code, reflex.code, plain.code]).toEqual(["unreachable", "target_blocked", "obstacle_ahead", undefined]);
+    expect([failed, rejected, reflex, plain].map(flagRole)).toEqual(["alarm", "warning", "warning", undefined]);
+    expect(glyphOf(rejected)).toBe("▲");
   });
 });

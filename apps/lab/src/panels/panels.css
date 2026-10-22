@@ -7,7 +7,32 @@
 /* Scene overlays: agent ID labels (CSS2D) above the canvas; they never take pointer events. */
 .scene-labels { position: absolute; inset: 0; pointer-events: none; }
 .agent-label { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; font-size: var(--type-label-size); color: var(--fg); background: color-mix(in srgb, var(--bg0) 75%, transparent); border-radius: var(--radius-control); white-space: nowrap; }
-.agent-swatch { width: 8px; height: 8px; border-radius: 50%; }
+/* An agent's identity: a colour (the variable) and a marker style, solid, outline or dashed (24 in all). The same swatch in the map label, the Explorer, the log. */
+.agent-swatch { display: inline-block; width: 9px; height: 9px; box-sizing: border-box; flex: none; background: var(--swatch, var(--fg2)); }
+.agent-swatch.solid { background: var(--swatch, var(--fg2)); }
+.agent-swatch.outline { background: transparent; border: 2px solid var(--swatch, var(--fg2)); }
+.agent-swatch.dashed { background: transparent; border: 2px dashed var(--swatch, var(--fg2)); }
+/* Attention on the map: a badge by the label (the glyph in the role colour, text in the normal colour on the tint), a pin at the contact point, a chip for a cluster. */
+.agent-badge { margin-left: 4px; padding: 0 4px; border: 1px solid var(--ln2); color: var(--fg); }
+.agent-badge[hidden] { display: none; }
+.agent-badge.alarm { background: var(--almbg); border-color: var(--alm); }
+.agent-badge.alarm::first-letter { color: var(--alm); font-weight: 700; }
+.agent-badge.warning { background: var(--warnbg); border-color: var(--warn); }
+.agent-badge.warning::first-letter { color: var(--warn); font-weight: 700; }
+.agent-label.has-attention { background: var(--bg0); }
+.map-pin { color: var(--alm); font-weight: 700; font-size: 14px; text-shadow: 0 0 2px var(--bg0), 0 0 2px var(--bg0); }
+.cluster-chip { pointer-events: auto; cursor: pointer; padding: 0 6px; font-size: var(--type-label-size); color: var(--fg); background: var(--bg1); border: 1px solid var(--ln2); white-space: nowrap; }
+.cluster-chip:hover { background: var(--bg3); border-color: var(--fg2); }
+.cluster-chip[hidden] { display: none; }
+.map-tooltip { position: absolute; z-index: 5; pointer-events: none; padding: 4px 8px; background: var(--bg3); color: var(--fg); border: 1px solid var(--fg3); box-shadow: var(--float); font-size: var(--type-label-size); }
+
+/* The Scene panel: its controls are a toolbar row under the title bar, a hint line when there is something to say, then the map. */
+.scene-col { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.scene-toolbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 4px 8px; background: var(--bg1); border-bottom: 1px solid var(--ln); }
+.scene-toolbar .MuiToggleButton-root { height: 22px; padding: 0 7px; font-size: var(--type-label-size); text-transform: none; }
+.scene-toolbar .MuiButton-root { height: 22px; padding: 0 8px; font-size: var(--type-label-size); }
+.scene-hint { flex: none; display: flex; flex-wrap: wrap; gap: 2px 14px; padding: 2px 8px; background: var(--bg2); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); }
+.scene-area { position: relative; flex: 1; min-height: 0; }
 
 /* Scene overlay (view mode and legend), top-left above the canvas. */
 .scene-overlay { position: absolute; top: 8px; left: 8px; max-width: 220px; display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; background: color-mix(in srgb, var(--bg0) 85%, transparent); border: 1px solid var(--ln); border-radius: var(--radius-control); }
@@ -44,7 +69,20 @@
 .explorer { display: flex; flex-direction: column; padding: 0; }
 .explorer-list { flex: 1; overflow: auto; outline: none; }
 .explorer-list:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
-.explorer-row { display: grid; grid-template-columns: 10px 64px 1fr 34px auto; align-items: center; gap: 8px; padding: 0 10px; font-size: var(--type-mono-size); border-bottom: 1px solid var(--ln); }
+.explorer-row { display: grid; grid-template-columns: 12px 62px 34px 34px minmax(0, 1fr); align-items: center; gap: 8px; padding: 0 8px; font-size: var(--type-mono-size); white-space: nowrap; overflow: hidden; border-bottom: 1px solid color-mix(in srgb, var(--ln) 50%, transparent); }
+.explorer-row > span { overflow: hidden; text-overflow: ellipsis; }
+.explorer-list { background: var(--bg0); }
+.attention-group { flex: none; max-height: 45%; overflow: auto; border-bottom: 1px solid var(--ln); }
+.grp { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; white-space: nowrap; overflow: hidden; background: var(--bg2); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); color: var(--fg2); }
+.grp.attn { background: color-mix(in srgb, var(--warn) 9%, var(--bg2)); color: var(--fg); }
+.grp-toggle { appearance: none; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 0; }
+.chip { appearance: none; font: inherit; font-size: var(--type-label-size); border: 1px solid var(--ln2); height: 18px; padding: 0 6px; background: var(--bg0); color: var(--fg2); cursor: pointer; }
+.chip:hover { background: var(--bg3); border-color: var(--fg2); }
+.chip.on { color: var(--fg); border-color: var(--ac); background: var(--acbg); font-weight: 600; }
+.attention-row { display: grid; grid-template-columns: 12px 62px minmax(0, 1fr) 40px; align-items: center; gap: 8px; height: 24px; padding: 0 8px; white-space: nowrap; overflow: hidden; font-size: var(--type-mono-size); border-bottom: 1px solid color-mix(in srgb, var(--ln) 50%, transparent); }
+.attention-row.alarm { background: var(--almbg); }
+.attention-row.warning { background: var(--warnbg); }
+.attention-row.selected { outline: 1px solid var(--ac); outline-offset: -1px; }
 .explorer .legend { margin: 4px 10px; font-size: var(--type-label-size); }
 .kind-tag { font-size: var(--type-label-size); font-weight: 600; color: var(--fg2); }
 /* The Inspector as an ID card and blocks (Console, UI-SPEC section 4): the card edge to edge, then blocks with a ruled title and dotted-leader lists. */
@@ -138,3 +176,16 @@
 /* The Performance HUD in its floating window (not over the Scene any more). */
 .perf-panel { height: 100%; overflow: auto; }
 .perf-panel .hud { position: static; border: 0; background: transparent; min-width: 0; pointer-events: auto; padding: 8px 10px; }
+
+/* The Overview window and the Legend window (floating, in the Scene workspace). */
+.overview-panel { height: 100%; width: 100%; background: var(--bg0); overflow: hidden; }
+.overview-panel canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+.legend-panel { height: 100%; overflow: auto; padding: 8px 10px; }
+.legend-panel .legend { margin: 0 0 8px; }
+
+/* The Inspector's tabs (agent, cell) and the researcher block of the Cell tab. */
+.inspector-tabs { display: flex; background: var(--bg2); border-bottom: 1px solid var(--ln); }
+.itab { appearance: none; font: inherit; font-size: var(--type-label-size); letter-spacing: var(--type-label-tracking); border: 0; border-right: 1px solid var(--ln); background: transparent; color: var(--fg2); padding: 3px 12px; cursor: pointer; }
+.itab:hover { color: var(--fg); background: var(--bg3); }
+.itab.on { color: var(--fg); background: var(--bg1); font-weight: 600; box-shadow: inset 0 -2px 0 var(--ac); }
+.inspector-section.researcher-view { margin: 0; border: 0; border-top: 1px dashed var(--warn); border-bottom: 1px solid var(--ln); background: color-mix(in srgb, var(--warn) 6%, transparent); border-radius: 0; }

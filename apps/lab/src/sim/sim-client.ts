@@ -342,7 +342,7 @@ export class SimClient {
   }
 
   /** Sends a message to the worker on behalf of a panel stream (never a run input: those go through `command`). */
-  send(m: Extract<MainToSim, { type: "view" | "researcherWatch" | "beliefWatch" | "overlayWatch" }>): void {
+  send(m: Extract<MainToSim, { type: "view" | "researcherWatch" | "cellWatch" | "beliefWatch" | "overlayWatch" }>): void {
     this.post(m);
   }
 

@@ -135,6 +135,34 @@ test("render loop on the 1 km² reference world, agents moving and a path being 
   );
 });
 
+// F3b (ADR-0042 section 8): frame time with the Overview window open on the 1 km² reference world, agents moving. The Overview is drawn from its own timer, from the
+// atlases the Scene holds, never inside the frame loop: this measures that it does not cost the frame anything (budget 4 ms p95, ADR-0013). Reported as
+// `render.frameWork.overview` (a threshold entry for it is Max's to add).
+test("render loop on the 1 km² reference world with the Overview window open", async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.goto("/?probe");
+  await waitForStorageReady(page);
+  await page.getByTestId("run-label").click();
+  await page.getByTestId("load-reference").click();
+  await expect(page.getByTestId("run-scenario")).toHaveText(/^f1-reference-1km v\d+$/, { timeout: 60_000 });
+  await page.keyboard.press("Escape");
+  await expect
+    .poll(() => page.evaluate(() => { const s = window.__agentsim?.scene?.stats(); return s !== undefined && s.pages > 0 && s.chunksPending === 0; }), { timeout: 180_000 })
+    .toBe(true);
+  await page.getByTestId("wb-collapse-overview").click();
+  await expect(page.getByTestId("overview-canvas")).toBeVisible();
+  await sendTo(page, "uav-001", 200, 250);
+  await sendTo(page, "ugv-001", 700, 700);
+  await page.getByTestId("play").click();
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => window.__agentsim && (window.__agentsim.frameLog.length = 0));
+  await page.waitForTimeout(5000);
+  const steady = await page.evaluate(() => window.__agentsim?.frameLog.slice() ?? []);
+  expect(steady.length).toBeGreaterThan(30);
+  recordResults("browser.json", { "render.frameWork.overview": summarize(steady.map(([, w]) => w)) });
+  console.log(JSON.stringify({ overviewOpen: { steadyFrames: steady.length } }));
+});
+
 // F2 M2e5 (ADR-0027, ADR-0013): frame time with the belief overlay on, on the 1 km² reference world, while agents move.
 // Two measurements. (1) Showing a whole known 1 km² map (the rover's prior: 1,024 belief chunks at the shared ≤ 16 uploads
 // per frame): time to show it and the frame work meanwhile, reported only, like the F1 atlas upload. (2) A steady window

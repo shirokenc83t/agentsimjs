@@ -113,7 +113,9 @@ export function openPanel(api: DockviewApi, preset: WorkspacePreset, id: PanelId
 export function addPresetPanel(api: DockviewApi, preset: WorkspacePreset, p: PresetPanel): void {
   const base = { id: p.id, component: p.id, title: tabTitle(preset, p.id, PANELS[p.id].title) };
   if (p.floating) {
-    const panel = api.addPanel({ ...base, floating: { width: p.floating.width, height: p.floating.height, position: { bottom: 16, right: 16 } } });
+    const edge = p.floating.offsetPx ?? 16;
+    const position = p.floating.anchor === "top-right" ? { top: edge, right: 16 } : { bottom: edge, right: 16 };
+    const panel = api.addPanel({ ...base, floating: { width: p.floating.width, height: p.floating.height, position } });
     before.set(panel.group, p.floating.height);
     if (p.floating.collapsed) {
       // Not `toggleCollapse`: the window has no size yet to be read as open.

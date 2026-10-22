@@ -1,8 +1,8 @@
 import "./panels.css";
 import { STATUS_STRIDE, type SimLoadedMessage } from "@agentsim/core";
-import { agentColorIndex, STATE_GLYPH, useUiContext } from "@agentsim/ui";
+import { identityOf, shortLabel, STATE_GLYPH, useUiContext } from "@agentsim/ui";
 import Button from "@mui/material/Button";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePolled, useSource } from "../services.tsx";
 import type { RunFeature, RunSnapshot, RunSource } from "../sim/run-source.ts";
 import { AGENT_COMMANDS, agentExploreRadius, commandParams } from "../commands.ts";
@@ -10,7 +10,9 @@ import { actionLabel, actionState, recoveryLabel, waypointsText, type AgentViews
 import { MindViewSection } from "./mind-view-section.tsx";
 import { PlanQueryTable, StrategyRow } from "./plan-query-table.tsx";
 import { querySelection, useQuerySelection } from "./query-selection.ts";
-import { ResearcherSection } from "./researcher-section.tsx";
+import { asResearcherCellBeliefs } from "./researcher-data.ts";
+import { RESEARCHER_BANNER, ResearcherSection } from "./researcher-section.tsx";
+import { useSimStream } from "./use-sim-stream.ts";
 import { useAgentViews } from "./use-agent-views.ts";
 import { usePlanQueries } from "./use-plan-queries.ts";
 import { StrategyTestSection } from "./strategy-test-section.tsx";
@@ -196,7 +198,7 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
       {/* The ID card: who this is and what it is doing, before any block. */}
       <div className="idcard" data-testid="inspector-idcard">
         <h3>
-          <span className="dot" style={{ backgroundColor: `var(--agent-${agentColorIndex(id)})` }} /> <span className="id mono">{id}</span>{" "}
+          <span className={`agent-swatch ${identityOf(index).style}`} style={{ ["--swatch" as string]: `var(--agent-${identityOf(index).colorIndex})` }} /> <span className="id mono">{id}</span>{" "}
           <span className="muted">
             {[agent.key, agent.kind.toUpperCase(), typeof body["drive"] === "string" ? body["drive"] : undefined].filter((x) => x !== undefined && x !== "").join(" · ")}
           </span>
@@ -345,6 +347,47 @@ function clearanceM(source: RunSource, i: number, j: number, res: number, maxM: 
   return best;
 }
 
+/** What every agent believes of the cell, next to the truth: researcher data, live only. A belief that differs from the truth is flagged. */
+function CellBeliefs(props: { source: RunSource; runId: string; i: number; j: number; occupied: boolean; entityIds: readonly string[] }) {
+  const { source, runId, i, j, occupied, entityIds } = props;
+  useEffect(() => {
+    source.send({ type: "cellWatch", cell: { i, j } });
+    return () => source.send({ type: "cellWatch", cell: null });
+  }, [source, runId, i, j]);
+  const msg = useSimStream(source, "cellBeliefs", (m) => m.runId === runId && m.i === i && m.j === j, [runId, i, j]);
+  const data = msg ? asResearcherCellBeliefs(msg) : undefined;
+  return (
+    <section className="inspector-section researcher-view" data-testid="cell-beliefs">
+      <h4>
+        <span className="kind-tag mono">◆ RESEARCHER</span> What each agent believes
+      </h4>
+      <p className="researcher-banner" role="note" data-testid="cell-beliefs-banner">
+        ◆ {RESEARCHER_BANNER}
+      </p>
+      {data ? (
+        <dl className="kv">
+          {data.agents.map((a) => {
+            const index = entityIds.indexOf(a.agentId);
+            const wrong = (a.state === "free" && occupied) || (a.state === "occupied" && !occupied);
+            return (
+              <div key={a.agentId} className="belief-row" data-testid={`cell-belief-${a.agentId}`} data-state={a.state} data-wrong={wrong ? "true" : "false"} style={{ display: "contents" }}>
+                <dt>
+                  <span className={`agent-swatch ${identityOf(index).style}`} style={{ ["--swatch" as string]: `var(--agent-${identityOf(index).colorIndex})` }} /> {a.agentId} <span className="muted">{shortLabel(a.agentId)}</span>
+                </dt>
+                <dd className={wrong ? "st-warn" : undefined}>
+                  {a.state === "ideal" ? "◆ ideal: the truth" : a.state === "unknown" ? "? unknown" : wrong ? `▲ believes ${a.state}: actually ${occupied ? "blocked" : "free"}` : `✓ ${a.state}`}
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
+      ) : (
+        <p className="muted">Waiting for the worker…</p>
+      )}
+    </section>
+  );
+}
+
 function CellInspector(props: { id: string; snap: RunSnapshot; source: RunSource }) {
   const [si, sj] = props.id.split(",").map(Number);
   const i = si ?? 0;
@@ -369,7 +412,7 @@ function CellInspector(props: { id: string; snap: RunSnapshot; source: RunSource
           <span className="id">cell {props.id}</span>
         </h3>
       </div>
-      <Section title="Cell">
+      <Section title="Cell · truth ◆ researcher" testId="inspector-cell-truth">
         <Row k="centre">{`${m((i + 0.5) * res)}, ${m((j + 0.5) * res)}`}</Row>
         <Row k="occupancy" testId="inspector-cell-occupancy">
           <span className={occupied ? "st-alm" : "st-ok"}>{occupied ? `${STATE_GLYPH.alm} blocked` : `${STATE_GLYPH.ok} free`}</span>
@@ -381,6 +424,9 @@ function CellInspector(props: { id: string; snap: RunSnapshot; source: RunSource
         </Row>
         <Row k="clearance">{clear === undefined ? "> 5 m" : m(clear)}</Row>
       </Section>
+      <Unavailable source={props.source} feature="cellBeliefs" title="What each agent believes">
+        <CellBeliefs source={props.source} runId={props.snap.runId ?? ""} i={i} j={j} occupied={occupied} entityIds={props.snap.entityIds} />
+      </Unavailable>
     </div>
   );
 }
@@ -395,12 +441,38 @@ export function InspectorPanel() {
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const views = useAgentViews(source);
   const selection = useUiContext((s) => s.selection);
+  // The two tabs: the agent and the cell last selected. Selecting one shows its tab; either tab can be opened for the other one's last selection.
+  const [tab, setTab] = useState<"agent" | "cell">("agent");
+  const [last, setLast] = useState<{ agent?: string | undefined; cell?: string | undefined; runId?: string | undefined }>({});
+  const runId = snap.runId;
+  useEffect(() => {
+    setLast((cur) => (cur.runId === runId ? cur : { runId }));
+  }, [runId]);
+  useEffect(() => {
+    if (selection?.kind === "agent") {
+      setLast((cur) => ({ ...cur, agent: selection.id }));
+      setTab("agent");
+    } else if (selection?.kind === "cell") {
+      setLast((cur) => ({ ...cur, cell: selection.id }));
+      setTab("cell");
+    }
+  }, [selection]);
+  const agentId = selection?.kind === "agent" ? selection.id : last.agent;
+  const cellId = selection?.kind === "cell" ? selection.id : last.cell;
   let body: ReactNode = <p className="muted">Select an agent or a cell (Scene, Explorer).</p>;
   if (!snap.run) body = <p className="muted">No run loaded.</p>;
-  else if (selection?.kind === "agent") body = <AgentInspector id={selection.id} snap={snap} source={source} views={views} />;
-  else if (selection?.kind === "cell") body = <CellInspector id={selection.id} snap={snap} source={source} />;
+  else if (tab === "agent" && agentId) body = <AgentInspector id={agentId} snap={snap} source={source} views={views} />;
+  else if (tab === "cell" && cellId) body = <CellInspector id={cellId} snap={snap} source={source} />;
+  else if (tab === "cell") body = <p className="muted">Click a cell in the Scene to see it here.</p>;
   return (
     <div className="panel inspector" data-testid="inspector">
+      <div className="inspector-tabs" role="tablist" aria-label="Inspector">
+        {(["agent", "cell"] as const).map((t) => (
+          <button key={t} type="button" role="tab" aria-selected={tab === t} className={`itab${tab === t ? " on" : ""}`} onClick={() => setTab(t)} data-testid={`inspector-tab-${t}`}>
+            {t === "agent" ? "AGENT" : "CELL"}
+          </button>
+        ))}
+      </div>
       {body}
     </div>
   );

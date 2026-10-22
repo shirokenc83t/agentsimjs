@@ -30,7 +30,10 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
 import { POSE_STRIDE } from "@agentsim/core";
 import { RollingStats } from "../perf/rolling-stats.ts";
-import { agentColorIndex, type SceneTokens } from "../theme/tokens.ts";
+import { identityOf, type MarkerStyle } from "../theme/identity.ts";
+import { type SceneTokens } from "../theme/tokens.ts";
+import { dashedRingGeometry } from "./agent-markers.ts";
+import { clusterPoints } from "./declutter.ts";
 import { CHUNK_UPLOADS_PER_FRAME, type ChunkQueue, type GridDims } from "./atlas-layout.ts";
 import { BeliefAtlas, type BeliefViewMode } from "./belief-atlas.ts";
 import { SensorOverlay, type ExplorationView } from "./overlay-layers.ts";
@@ -54,6 +57,27 @@ export type EditPointerPhase = "hover" | "down" | "drag" | "up";
 
 /** What a click in the scene picked (the panel turns it into a UI-context selection, ADR-0016). */
 export type ScenePick = { readonly kind: "agent"; readonly id: string } | { readonly kind: "cell"; readonly i: number; readonly j: number; readonly xM: number; readonly yM: number };
+
+/** What the map says of an agent beyond its pose: how it is labelled and marked, and its attention badge (UI-SPEC section 4). */
+export interface AgentDecor {
+  readonly id: string;
+  /** The short label (`g07`). */
+  readonly short: string;
+  readonly colorIndex: number;
+  readonly style: MarkerStyle;
+  /** An attention condition: its level, glyph and short code (`collision`); undefined for an agent that needs none. */
+  readonly badge?: { readonly level: "alarm" | "warning"; readonly glyph: string; readonly text: string } | undefined;
+}
+
+/** A collision leaves a pin at the contact point until the condition clears. */
+export interface MapPin {
+  readonly id: string;
+  readonly xM: number;
+  readonly yM: number;
+}
+
+/** Two agents closer than this on the screen (px) share a chip. */
+const CLUSTER_PX = 22;
 
 /**
  * Imperative Three.js scene (ADR-0016): no React reconciliation on the render path. Runs at display
@@ -89,6 +113,23 @@ export class SceneRenderer {
   private readonly zones = new Group();
   private readonly labelGroup = new Group();
   private labelObjects: CSS2DObject[] = [];
+  /** How each agent is labelled and marked (by index in the run), and what shows now of that. */
+  private decor: readonly AgentDecor[] = [];
+  private labelMode: "short" | "full" = "short";
+  private readonly outlineRings: InstancedMesh;
+  private readonly dashedRings: InstancedMesh;
+  private readonly alarmRings: InstancedMesh;
+  private readonly hoverRing: Mesh;
+  private outlineIdx: number[] = [];
+  private dashedIdx: number[] = [];
+  private alarmIdx: number[] = [];
+  private hoverIndex = -1;
+  private hoverAt = 0;
+  private pinObjects: CSS2DObject[] = [];
+  private chipObjects: CSS2DObject[] = [];
+  private lastDeclutter = 0;
+  /** Called when the pointer rests on an agent or leaves it (the panel shows its tooltip). */
+  onHover: ((id: string | undefined, clientX: number, clientY: number) => void) | undefined;
   private readonly stalks: LineSegments<BufferGeometry, LineBasicMaterial>;
   private readonly stalkPos = new Float32Array(MAX_INSTANCES * 6);
   private readonly selectionRing: Mesh<RingGeometry, MeshBasicMaterial>;
@@ -175,6 +216,23 @@ export class SceneRenderer {
     this.brushRing.rotation.x = -Math.PI / 2;
     this.brushRing.visible = false;
     this.brushRing.renderOrder = 10;
+    // The marker styles of the identities beside the solid cone: an outline ring or a dashed ring under the agent; the alarm ring around an agent that failed; the
+    // dashed hover ring. Flat rings, one instance per agent.
+    const flat = <G extends BufferGeometry>(g: G): G => {
+      g.rotateX(-Math.PI / 2);
+      return g;
+    };
+    const ringMaterial = () => new MeshBasicMaterial({ transparent: true, opacity: 0.95 });
+    this.outlineRings = new InstancedMesh(flat(new RingGeometry(0.95, 1.1, 32)), ringMaterial(), MAX_INSTANCES);
+    this.dashedRings = new InstancedMesh(flat(dashedRingGeometry(0.95, 1.1)), ringMaterial(), MAX_INSTANCES);
+    this.alarmRings = new InstancedMesh(flat(new RingGeometry(1.35, 1.6, 40)), new MeshBasicMaterial({ transparent: true, opacity: 0.95 }), MAX_INSTANCES);
+    for (const m of [this.outlineRings, this.dashedRings, this.alarmRings]) {
+      m.count = 0;
+      m.frustumCulled = false;
+    }
+    this.hoverRing = new Mesh(flat(dashedRingGeometry(1.5, 1.68)), new MeshBasicMaterial({ transparent: true, opacity: 0.95 }));
+    this.hoverRing.visible = false;
+    this.scene.add(this.outlineRings, this.dashedRings, this.alarmRings, this.hoverRing);
     this.scene.add(this.selectionRing, this.brushRing, this.paths.group, this.zones, this.labelGroup);
 
     this.applyTheme(tokens);
@@ -183,6 +241,7 @@ export class SceneRenderer {
     canvas.addEventListener("pointerdown", this.onPointerDown);
     canvas.addEventListener("pointermove", this.onPointerMove);
     canvas.addEventListener("pointerup", this.onPointerUp);
+    canvas.addEventListener("pointerleave", this.onPointerLeave);
     this.resize = new ResizeObserver(() => this.fit());
     this.resize.observe(container);
     this.fit();
@@ -201,6 +260,8 @@ export class SceneRenderer {
     this.stalks.material.color.set(t.pathPlannedDim);
     this.selectionRing.material.color.set(t.selection);
     this.brushRing.material.color.set(t.selection);
+    (this.alarmRings.material as MeshBasicMaterial).color.set(t.alarm);
+    (this.hoverRing.material as MeshBasicMaterial).color.set(t.pathPlannedDim);
     // GridHelper bakes its colours into the geometry: rebuild it (theme changes are rare).
     if (this.helperGrid) {
       this.scene.remove(this.helperGrid);
@@ -432,25 +493,94 @@ export class SceneRenderer {
     this.selectedIndex = agentId === undefined ? -1 : this.entityIds.indexOf(agentId);
   }
 
-  private agentColor(id: string): string {
-    return this.tokens.agent[agentColorIndex(id)] ?? this.tokens.selection;
+  /** The identity of the agent at `i`: the one the panel gave, else the one its place in the run gives. */
+  private identity(i: number): { colorIndex: number; style: MarkerStyle } {
+    const d = this.decor[i];
+    return d && d.id === this.entityIds[i] ? { colorIndex: d.colorIndex, style: d.style } : identityOf(i);
+  }
+
+  private agentColor(i: number): string {
+    return this.tokens.agent[this.identity(i).colorIndex] ?? this.tokens.selection;
   }
 
   private paintAgents(): void {
     const n = Math.min(MAX_INSTANCES, this.entityIds.length);
+    this.outlineIdx = [];
+    this.dashedIdx = [];
     for (let i = 0; i < n; i++) {
       const id = this.entityIds[i] ?? "";
-      const c = this.agentColor(id);
+      const c = this.agentColor(i);
       this.tmpColor.set(c);
       this.agents.setColorAt(i, this.tmpColor);
       this.paths.ensure(id, c);
+      const style = this.identity(i).style;
+      if (style === "outline") {
+        this.outlineRings.setColorAt(this.outlineIdx.length, this.tmpColor);
+        this.outlineIdx.push(i);
+      } else if (style === "dashed") {
+        this.dashedRings.setColorAt(this.dashedIdx.length, this.tmpColor);
+        this.dashedIdx.push(i);
+      }
       const swatch = this.labelObjects[i]?.element.firstElementChild as HTMLElement | null | undefined;
-      if (swatch) swatch.style.backgroundColor = c;
+      if (swatch) {
+        swatch.className = `agent-swatch ${style}`;
+        swatch.style.setProperty("--swatch", c);
+      }
     }
     if (this.agents.instanceColor) this.agents.instanceColor.needsUpdate = true;
+    if (this.outlineRings.instanceColor) this.outlineRings.instanceColor.needsUpdate = true;
+    if (this.dashedRings.instanceColor) this.dashedRings.instanceColor.needsUpdate = true;
   }
 
-  /** One DOM label per agent: a colour swatch and the ID text (colour is never the only signal). */
+  /**
+   * How the map labels and marks the agents (on change only, at most 10 Hz): the short label, the identity (colour and marker style), and the attention badge.
+   * An agent with an alarm gets a ring; one with any condition keeps its label when the others collapse into a chip.
+   */
+  setAgentDecor(decor: readonly AgentDecor[]): void {
+    this.decor = decor;
+    this.alarmIdx = [];
+    this.entityIds.forEach((id, i) => {
+      if (decor[i]?.id === id && decor[i]?.badge?.level === "alarm") this.alarmIdx.push(i);
+    });
+    this.paintAgents();
+    this.writeLabels();
+    this.lastDeclutter = 0;
+  }
+
+  /** `short` shows `g07`, `full` the whole ID. */
+  setLabelMode(mode: "short" | "full"): void {
+    if (mode === this.labelMode) return;
+    this.labelMode = mode;
+    this.writeLabels();
+  }
+
+  /** Pins on the map (a collision's contact point), replacing the ones shown. */
+  setPins(pins: readonly MapPin[]): void {
+    for (const o of this.pinObjects) {
+      o.element.remove();
+      this.labelGroup.remove(o);
+    }
+    this.pinObjects = pins.map((p) => {
+      const el = document.createElement("span");
+      el.className = "map-pin mono";
+      el.textContent = "✕";
+      el.title = `${p.id}: contact point`;
+      const o = new CSS2DObject(el);
+      o.position.set(p.xM, 0.3, -p.yM);
+      this.labelGroup.add(o);
+      return o;
+    });
+  }
+
+  /** Moves the view to a ground point and halves its distance (a chip's click). */
+  zoomTo(xM: number, yM: number): void {
+    const t = this.controls.target;
+    const away = this.camera.position.clone().sub(t).multiplyScalar(0.5);
+    t.set(xM, 0, -yM);
+    this.camera.position.copy(t).add(away);
+  }
+
+  /** One DOM label per agent: a swatch of its identity, the label text and a badge slot (colour is never the only signal). */
   private rebuildLabels(): void {
     for (const o of this.labelObjects) {
       o.element.remove();
@@ -461,12 +591,96 @@ export class SceneRenderer {
       el.className = "agent-label mono";
       el.dataset["agent"] = id;
       const swatch = document.createElement("span");
-      swatch.className = "agent-swatch";
-      el.append(swatch, document.createTextNode(id));
+      swatch.className = "agent-swatch solid";
+      const text = document.createElement("span");
+      text.className = "agent-text";
+      const badge = document.createElement("span");
+      badge.className = "agent-badge";
+      badge.hidden = true;
+      el.append(swatch, text, badge);
       const o = new CSS2DObject(el);
       o.center.set(0, 1.4);
       this.labelGroup.add(o);
       return o;
+    });
+    this.writeLabels();
+  }
+
+  private writeLabels(): void {
+    this.labelObjects.forEach((o, i) => {
+      const id = this.entityIds[i] ?? "";
+      const d = this.decor[i]?.id === id ? this.decor[i] : undefined;
+      const text = o.element.children[1] as HTMLElement | undefined;
+      const badge = o.element.children[2] as HTMLElement | undefined;
+      if (text) text.textContent = this.labelMode === "short" && d ? d.short : id;
+      if (badge) {
+        badge.hidden = !d?.badge;
+        badge.className = `agent-badge ${d?.badge?.level ?? ""}`;
+        badge.textContent = d?.badge ? `${d.badge.glyph} ${d.badge.text}` : "";
+      }
+      o.element.classList.toggle("has-attention", !!d?.badge);
+    });
+  }
+
+  /**
+   * Chips for agents too close to label one by one: about every 100 ms (never per frame), the agents' screen positions are grouped; the members of a group lose
+   * their labels and the group gets a chip with its count, the worst glyph first, and the short labels. Agents with a badge and the selected one keep their label.
+   */
+  private declutter(poses: Float32Array, n: number, now: number): void {
+    if (now - this.lastDeclutter < 100) return;
+    this.lastDeclutter = now;
+    const w = Math.max(1, this.container.clientWidth);
+    const h = Math.max(1, this.container.clientHeight);
+    const points = [];
+    for (let i = 0; i < n; i++) {
+      const o = i * POSE_STRIDE;
+      this.projected.set(poses[o] ?? 0, (poses[o + 2] ?? 0) + 0.75, -(poses[o + 1] ?? 0)).project(this.camera);
+      const keep = i === this.selectedIndex || (this.decor[i]?.id === this.entityIds[i] && this.decor[i]?.badge !== undefined);
+      points.push({ index: i, x: ((this.projected.x + 1) / 2) * w, y: ((1 - this.projected.y) / 2) * h, keep });
+    }
+    const clusters = clusterPoints(points, CLUSTER_PX);
+    const hidden = new Set<number>();
+    clusters.forEach((c, k) => {
+      for (const m of c.members) hidden.add(m);
+      let chip = this.chipObjects[k];
+      if (!chip) {
+        const el = document.createElement("span");
+        el.className = "cluster-chip mono";
+        el.setAttribute("role", "button");
+        el.tabIndex = 0;
+        el.addEventListener("click", () => {
+          const at = el.dataset["at"]?.split(",").map(Number);
+          if (at && at.length === 2) this.zoomTo(at[0] as number, at[1] as number);
+        });
+        chip = new CSS2DObject(el);
+        chip.center.set(0, 1.4);
+        this.labelGroup.add(chip);
+        this.chipObjects[k] = chip;
+      }
+      let sx = 0;
+      let sy = 0;
+      const shorts: string[] = [];
+      for (const m of c.members) {
+        const o = m * POSE_STRIDE;
+        sx += poses[o] ?? 0;
+        sy += poses[o + 1] ?? 0;
+        shorts.push(this.decor[m]?.short ?? this.entityIds[m] ?? "");
+      }
+      chip.position.set(sx / c.members.length, 1.6, -(sy / c.members.length));
+      chip.element.dataset["at"] = `${sx / c.members.length},${sy / c.members.length}`;
+      chip.element.textContent = `${c.members.length} · ${shorts.slice(0, 4).join(" ")}${shorts.length > 4 ? " …" : ""}`;
+      chip.element.setAttribute("aria-label", `Cluster of ${c.members.length} agents: ${c.members.map((m) => this.entityIds[m]).join(", ")}. Click to zoom in.`);
+      chip.visible = true;
+      chip.element.hidden = false;
+    });
+    for (let k = clusters.length; k < this.chipObjects.length; k++) {
+      const chip = this.chipObjects[k] as CSS2DObject;
+      chip.visible = false;
+      chip.element.hidden = true;
+    }
+    // `visible` is what the label renderer reads each frame (it owns the element's display).
+    this.labelObjects.forEach((o, i) => {
+      o.visible = !hidden.has(i);
     });
   }
 
@@ -508,6 +722,7 @@ export class SceneRenderer {
     canvas.removeEventListener("pointerdown", this.onPointerDown);
     canvas.removeEventListener("pointermove", this.onPointerMove);
     canvas.removeEventListener("pointerup", this.onPointerUp);
+    canvas.removeEventListener("pointerleave", this.onPointerLeave);
     this.resize.disconnect();
     this.controls.dispose();
     this.helperGrid?.dispose();
@@ -560,6 +775,14 @@ export class SceneRenderer {
       if (i === this.selectedIndex) this.selectionRing.position.set(x, 0.04, -y);
     }
     this.selectionRing.visible = this.selectedIndex >= 0 && this.selectedIndex < n;
+    this.placeRings(this.outlineRings, this.outlineIdx, poses, n, 0.03);
+    this.placeRings(this.dashedRings, this.dashedIdx, poses, n, 0.035);
+    this.placeRings(this.alarmRings, this.alarmIdx, poses, n, 0.04);
+    if (this.hoverIndex >= 0 && this.hoverIndex < n) {
+      const o = this.hoverIndex * POSE_STRIDE;
+      this.hoverRing.position.set(poses[o] ?? 0, 0.045, -(poses[o + 1] ?? 0));
+      this.hoverRing.visible = true;
+    } else this.hoverRing.visible = false;
     if (stalks > 0) (this.stalks.geometry.getAttribute("position") as BufferAttribute).needsUpdate = true;
     this.stalks.geometry.setDrawRange(0, stalks * 2);
     this.agents.count = n;
@@ -567,10 +790,32 @@ export class SceneRenderer {
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
     this.labels.render(this.scene, this.camera);
+    this.declutter(poses, n, now);
     const workMs = performance.now() - t0;
     this.frameWorkMs.add(workMs);
     this.onFrame?.(poses, t0, workMs);
   }
+
+  private placeRings(mesh: InstancedMesh, indices: readonly number[], poses: Float32Array, n: number, y: number): void {
+    let k = 0;
+    for (const i of indices) {
+      if (i >= n) continue;
+      const o = i * POSE_STRIDE;
+      this.dummy.position.set(poses[o] ?? 0, y, -(poses[o + 1] ?? 0));
+      this.dummy.rotation.set(0, 0, 0);
+      this.dummy.updateMatrix();
+      mesh.setMatrixAt(k++, this.dummy.matrix);
+    }
+    mesh.count = k;
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  private readonly onPointerLeave = (): void => {
+    if (this.hoverIndex >= 0) {
+      this.hoverIndex = -1;
+      this.onHover?.(undefined, 0, 0);
+    }
+  };
 
   private readonly onPointerDown = (e: PointerEvent): void => {
     this.downAt = { x: e.clientX, y: e.clientY };
@@ -583,7 +828,23 @@ export class SceneRenderer {
 
   private readonly onPointerMove = (e: PointerEvent): void => {
     if (this.editMode) this.emitEdit(this.editing ? "drag" : "hover", e);
+    else this.hover(e);
   };
+
+  /** The agent under the pointer (looked for at most every 50 ms): a dashed ring on it and the panel's tooltip. */
+  private hover(e: PointerEvent): void {
+    const now = e.timeStamp;
+    if (now - this.hoverAt < 50) return;
+    this.hoverAt = now;
+    const p = this.pickAt(e.clientX, e.clientY);
+    const index = p?.kind === "agent" ? this.entityIds.indexOf(p.id) : -1;
+    if (index === this.hoverIndex) {
+      if (index >= 0) this.onHover?.(p?.kind === "agent" ? p.id : undefined, e.clientX, e.clientY);
+      return;
+    }
+    this.hoverIndex = index;
+    this.onHover?.(p?.kind === "agent" ? p.id : undefined, e.clientX, e.clientY);
+  }
 
   private emitEdit(phase: EditPointerPhase, e: PointerEvent): void {
     const p = this.groundAt(e.clientX, e.clientY);
@@ -622,6 +883,105 @@ export class SceneRenderer {
     const j = Math.floor(yM / g.dims.resolutionM);
     if (i < 0 || j < 0 || i >= g.dims.sizeX || j >= g.dims.sizeY) return undefined;
     return { kind: "cell", i, j, xM, yM };
+  }
+
+  /**
+   * The Overview window (ADR-0042 section 8): the whole map at low resolution from the grid atlas' CPU copy (and the belief atlas when its overlay is on), the agents
+   * as dots in their colour (attention agents as their glyph) and the main view's frame, drawn into a small canvas. Called from the window's own timer a few times a
+   * second, never from the frame loop, so it adds nothing to a frame's work. Returns the map-to-canvas scale, so a click can be turned into a ground point.
+   */
+  drawOverview(ctx: CanvasRenderingContext2D, w: number, h: number): { scale: number; ox: number; oy: number; sizeXM: number; sizeYM: number } | undefined {
+    const g = this.gridSpec;
+    if (!g) {
+      ctx.clearRect(0, 0, w, h);
+      return undefined;
+    }
+    const sizeXM = g.dims.sizeX * g.dims.resolutionM;
+    const sizeYM = g.dims.sizeY * g.dims.resolutionM;
+    const scale = Math.min(w / sizeXM, h / sizeYM);
+    const dw = Math.max(1, Math.floor(sizeXM * scale));
+    const dh = Math.max(1, Math.floor(sizeYM * scale));
+    const ox = Math.floor((w - dw) / 2);
+    const oy = Math.floor((h - dh) / 2);
+    const css = (hex: string) => hex;
+    ctx.clearRect(0, 0, w, h);
+    const img = ctx.createImageData(dw, dh);
+    const rgb = (hex: string): [number, number, number] => {
+      const hx = this.tmpColor.set(hex).getHex(); // sRGB bytes: this is a 2D canvas
+      return [(hx >> 16) & 255, (hx >> 8) & 255, hx & 255];
+    };
+    const free = rgb(css(this.tokens.cellFree));
+    const blocked = rgb(css(this.tokens.cellBlocked));
+    const unloaded = rgb(css(this.tokens.cellUnloaded));
+    const unknown = rgb(css(this.tokens.beliefUnknown));
+    const believing = this.beliefAtlas !== undefined && this.beliefMode !== "truth";
+    for (let py = 0; py < dh; py++) {
+      // North is up: the top row of the picture is the largest y.
+      const j = Math.min(g.dims.sizeY - 1, Math.floor(((dh - 1 - py) / dh) * g.dims.sizeY));
+      for (let px = 0; px < dw; px++) {
+        const i = Math.min(g.dims.sizeX - 1, Math.floor((px / dw) * g.dims.sizeX));
+        const c = this.atlas?.cell(i, j);
+        let col = unloaded;
+        if (c?.loaded) col = c.occupancy === 1 ? blocked : free;
+        if (believing && this.beliefAtlas?.state(i, j) === 0) col = unknown;
+        const o = (py * dw + px) * 4;
+        img.data[o] = col[0];
+        img.data[o + 1] = col[1];
+        img.data[o + 2] = col[2];
+        img.data[o + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, ox, oy);
+    const toX = (xM: number) => ox + xM * scale;
+    const toY = (yM: number) => oy + dh - yM * scale;
+    // The agents, in their colour; those with attention as their glyph.
+    const poses = this.source.sample(performance.now());
+    const n = Math.min(MAX_INSTANCES, this.source.entityCount, this.entityIds.length);
+    ctx.font = "11px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (let i = 0; i < n; i++) {
+      const o = i * POSE_STRIDE;
+      const x = toX(poses[o] ?? 0);
+      const y = toY(poses[o + 1] ?? 0);
+      const badge = this.decor[i]?.id === this.entityIds[i] ? this.decor[i]?.badge : undefined;
+      if (badge) {
+        ctx.fillStyle = badge.level === "alarm" ? this.tokens.alarm : this.tokens.warning;
+        ctx.fillText(badge.glyph, x, y);
+      } else {
+        ctx.fillStyle = this.agentColor(i);
+        ctx.fillRect(Math.round(x) - 2, Math.round(y) - 2, 4, 4);
+      }
+    }
+    // The main view's frame: the ground under the corners of the viewport.
+    const pts: { x: number; y: number }[] = [];
+    for (const [nx, ny] of [[-1, 1], [1, 1], [1, -1], [-1, -1]] as const) {
+      this.pointer.set(nx, ny);
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      if (this.raycaster.ray.intersectPlane(this.groundPlane, this.hit)) pts.push({ x: toX(this.hit.x), y: toY(-this.hit.z) });
+    }
+    if (pts.length === 4) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(ox, oy, dw, dh);
+      ctx.clip();
+      ctx.strokeStyle = this.tokens.selection;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      pts.forEach((pt, k) => (k === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
+    return { scale, ox, oy: oy + dh, sizeXM, sizeYM };
+  }
+
+  /** Moves the main view over a ground point, keeping its distance and angle (a click in the Overview). */
+  panTo(xM: number, yM: number): void {
+    const t = this.controls.target;
+    const offset = this.camera.position.clone().sub(t);
+    t.set(xM, 0, -yM);
+    this.camera.position.copy(t).add(offset);
   }
 
   /** Viewport position of an agent's body (e2e probe and overlays), or undefined if unknown. */

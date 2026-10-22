@@ -12,6 +12,7 @@ import {
   type SimBudgetMessage,
   type SimRaysMessage,
   type SimTopologyMessage,
+  type SimCellBeliefsMessage,
   type SimResearcherDataMessage,
   type SimLoadedMessage,
   type SimTrailMessage,
@@ -64,6 +65,8 @@ export interface HostedWorld extends Steppable {
   mindView(agentId: string): { tick: number; pending: boolean; request: string } | undefined;
   /** Researcher-only beliefs-vs-truth metrics of an agent, without changing the run (scenario runs only). */
   researcherData(agentId: string): Omit<SimResearcherDataMessage, "type" | "runId"> | undefined;
+  /** What every agent believes of one cell, without changing the run (scenario runs only). */
+  cellBeliefs(i: number, j: number): Omit<SimCellBeliefsMessage, "type" | "runId"> | undefined;
   /**
    * Belief-map chunks of the watched agent that changed since the previous call (all its materialized ones when the agent
    * changed), in batches; `null` stops and forgets (scenario runs only; `ideal` agents have none: their map is the truth).
@@ -138,6 +141,10 @@ export class DummyHostedWorld implements HostedWorld {
   }
 
   researcherData(): undefined {
+    return undefined;
+  }
+
+  cellBeliefs(): undefined {
     return undefined;
   }
 
@@ -246,6 +253,12 @@ export class ScenarioHostedWorld implements HostedWorld {
     if (!obs || !this.entityIds.includes(agentId)) return undefined;
     const r = obs.report(agentId, this.run.world.tick, this.run.world.simTimeS);
     return { agentId, tick: r.tick, simTimeS: r.simTimeS, ideal: r.map === undefined, ...(r.map ? { map: { ...r.map } } : {}), entities: { ...r.entities } };
+  }
+
+  cellBeliefs(i: number, j: number): Omit<SimCellBeliefsMessage, "type" | "runId"> | undefined {
+    const obs = this.run.observer;
+    if (!obs) return undefined;
+    return { i, j, tick: this.run.world.tick, agents: obs.beliefAt(i, j) };
   }
 
   drainTrail(): SimTrailMessage | undefined {

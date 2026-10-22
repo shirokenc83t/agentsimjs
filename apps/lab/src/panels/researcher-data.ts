@@ -1,4 +1,4 @@
-import type { SimResearcherDataMessage } from "@agentsim/core";
+import type { SimCellBeliefsMessage, SimResearcherDataMessage } from "@agentsim/core";
 import type { StrategyTestResult } from "@agentsim/scenarios";
 
 declare const researcherView: unique symbol;
@@ -11,6 +11,11 @@ declare const researcherView: unique symbol;
 export type ResearcherData = SimResearcherDataMessage & { readonly [researcherView]: "researcher view — not visible to the mind" };
 
 export const asResearcherData = (m: SimResearcherDataMessage): ResearcherData => m as ResearcherData;
+
+/** What every agent believes of one cell (the Cell tab): observer data of the same kind, with the same brand. */
+export type ResearcherCellBeliefs = SimCellBeliefsMessage & { readonly [researcherView]: "researcher view — not visible to the mind" };
+
+export const asResearcherCellBeliefs = (m: SimCellBeliefsMessage): ResearcherCellBeliefs => m as ResearcherCellBeliefs;
 
 /**
  * A strategy test planned on the ground truth (ADR-0005, ADR-0037 item 16): what a path planned on the truth shows of the

@@ -1,6 +1,6 @@
 import "../panels.css";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { KIND_STYLE, ROW_PX, agentColorIndex } from "@agentsim/ui";
+import { identityOf, KIND_STYLE, ROW_PX } from "@agentsim/ui";
 import type { TraceRecord } from "@agentsim/trace";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePolled, useServices, useSource } from "../../services.tsx";
@@ -198,7 +198,7 @@ export function EventListPanel() {
                 <span className="mono muted">{r.simTime.toFixed(2)} s</span>
                 {r.agentId ? (
                   <span className="mono">
-                    <span className="agent-swatch" style={{ backgroundColor: `var(--agent-${agentColorIndex(r.agentId)})` }} /> {r.agentId}
+                    <span className={`agent-swatch ${identityOf(snap.entityIds.indexOf(r.agentId)).style}`} style={{ ["--swatch" as string]: `var(--agent-${identityOf(snap.entityIds.indexOf(r.agentId)).colorIndex})` }} /> {r.agentId}
                   </span>
                 ) : (
                   <span className="mono muted">run</span>

@@ -11,6 +11,8 @@ const InspectorPanel = lazy(() => import("../panels/inspector-panel.tsx").then((
 const RunConfigPanel = lazy(() => import("../panels/run-config/run-config-panel.tsx").then((m) => ({ default: m.RunConfigPanel })));
 const TimelinePanel = lazy(() => import("../panels/debug/timeline-panel.tsx").then((m) => ({ default: m.TimelinePanel })));
 const EventListPanel = lazy(() => import("../panels/debug/event-list-panel.tsx").then((m) => ({ default: m.EventListPanel })));
+const OverviewPanel = lazy(() => import("../panels/overview-panel.tsx").then((m) => ({ default: m.OverviewPanel })));
+const LegendPanel = lazy(() => import("../panels/legend-panel.tsx").then((m) => ({ default: m.LegendPanel })));
 const PerfPanel = lazy(() => import("../panels/perf-panel.tsx").then((m) => ({ default: m.PerfPanel })));
 const ScenarioEditorPanel = lazy(() => import("../panels/scenario-editor/scenario-editor-panel.tsx").then((m) => ({ default: m.ScenarioEditorPanel })));
 
@@ -38,16 +40,21 @@ export const loadLiveSource = () => import("../sim/live-run-source.ts");
 /** A replay session (a recorded run in the panels, read from storage), loaded when one is opened (ADR-0035 addition of 2026-10-17, item 9). */
 export const LazyReplayHost = lazy(() => import("../panels/replay-host.tsx").then((m) => ({ default: m.ReplayHost })));
 
+/** The attention tile of the player: the attention rules load with it, when a run is there. */
+export const LazyAttentionTile = lazy(() => import("../shell/attention-tile.tsx").then((m) => ({ default: m.AttentionTile })));
+
 /** Flag markers on the player's scrub track, loaded when a stored run is shown. */
 export const LazyPlayerMarks = lazy(() => import("../shell/player-marks.tsx").then((m) => ({ default: m.PlayerMarks })));
 
 /** The run header popover, loaded on first open (the toolbar keeps only the run label). */
 export const LazyRunPopover = lazy(() => import("../run-info.tsx").then((m) => ({ default: m.RunPopover })));
 
-export type PanelId = "perf" | "scene" | "explorer" | "inspector" | "timeline" | "eventList" | "runConfig" | "scenarioEditor" | "storage" | "settings";
+export type PanelId = "overview" | "legend" | "perf" | "scene" | "explorer" | "inspector" | "timeline" | "eventList" | "runConfig" | "scenarioEditor" | "storage" | "settings";
 
 export const PANELS: Record<PanelId, { readonly title: string; readonly component: ComponentType }> = {
   perf: { title: "Performance", component: PerfPanel },
+  overview: { title: "Overview", component: OverviewPanel },
+  legend: { title: "Legend", component: LegendPanel },
   scene: { title: "Scene 3D", component: ScenePanel },
   explorer: { title: "Explorer", component: ExplorerPanel },
   inspector: { title: "Inspector", component: InspectorPanel },

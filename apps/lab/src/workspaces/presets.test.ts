@@ -29,4 +29,14 @@ describe("workspace presets", () => {
   it("saved layouts are versioned past the one without numbered tabs and the floating window", () => {
     expect(LAYOUT_VERSION).toBeGreaterThanOrEqual(5);
   });
+
+  it("the Scene workspace has the Overview and the Legend as floating windows, collapsed to start with; the numbers are the docked panels'", () => {
+    const scene = preset("scene");
+    for (const id of ["overview", "legend"] as const) {
+      expect(scene.panels.find((p) => p.id === id)?.floating?.collapsed, id).toBe(true);
+      expect(panelNumber(scene, id)).toBeUndefined();
+    }
+    expect(panelNumber(scene, "inspector")).toBe(3);
+    expect(LAYOUT_VERSION).toBeGreaterThanOrEqual(6);
+  });
 });

@@ -4,7 +4,7 @@ import { useSource } from "../services.tsx";
 import { gapLabel, resolveGapClick } from "../sim/gap-click.ts";
 import type { RunSnapshot } from "../sim/run-source.ts";
 import type { SimClient, SimSnapshot } from "../sim/sim-client.ts";
-import { LazyPlayerMarks } from "../workspaces/registry.tsx";
+import { LazyAttentionTile, LazyPlayerMarks } from "../workspaces/registry.tsx";
 import { trackLayout } from "./track.ts";
 
 export const SPEEDS = [
@@ -260,6 +260,11 @@ function Telemetry(props: { snap: SimSnapshot; recorded: boolean }) {
           <i style={{ width: `${load}%`, background: load > 80 ? "var(--warn)" : "var(--ok)" }} />
         </div>
       </div>
+      {snap.run && (
+        <Suspense fallback={null}>
+          <LazyAttentionTile />
+        </Suspense>
+      )}
       <div className="tile opt">
         <span className="lbl">AGENTS</span>
         <span className="v mono">{snap.entityIds.length}</span>

@@ -208,6 +208,14 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   let watched: string | null = null;
 
   /** Researcher-only beliefs-vs-truth for the watched agent (observer data: worker → main only). */
+  /** The cell whose beliefs a panel shows, or none. Reset by a load. */
+  let watchedCell: { i: number; j: number } | null = null;
+  const postCellBeliefs = () => {
+    if (watchedCell === null || !world.runId) return;
+    const d = world.cellBeliefs(watchedCell.i, watchedCell.j);
+    if (d) scope.postMessage({ type: "cellBeliefs", runId: world.runId, ...d });
+  };
+
   const postResearcher = () => {
     if (watched === null || !world.runId) return;
     const d = world.researcherData(watched);
@@ -230,6 +238,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     if (records.length > 0 && world.runId) scope.postMessage({ type: "events", runId: world.runId, records });
     postAgentView();
     postResearcher();
+    postCellBeliefs();
     postBeliefChunks();
     postOverlays();
     postBudget(force);
@@ -540,6 +549,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     pool.length = 0;
     viewed = null;
     watched = null;
+    watchedCell = null;
     beliefWatched = null;
     budgetPosts = 0;
     overlayWatch = { agentId: null, rays: false, topology: false };
@@ -605,6 +615,10 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
       case "researcherWatch":
         watched = m.agentId;
         if (watched !== null) postResearcher();
+        break;
+      case "cellWatch":
+        watchedCell = m.cell;
+        postCellBeliefs();
         break;
       case "command": {
         // A run input for the next tick (ADR-0015): applied in the world's input phase, traced as injected,

@@ -57,7 +57,7 @@ describe("researcher data stays one-way (ADR-0005 addition of 2026-10-12)", () =
     expect(test).not.toMatch(NEEDLE);
     expect(client).toMatch(/strategyTest\(req: Omit<SimStrategyTestMessage, "type" \| "requestId">\): Promise<SimStrategyTestResultMessage>/);
     // `send` accepts only the two stream requests, which carry an agent ID and nothing else.
-    expect(client).toMatch(/send\(m: Extract<MainToSim, \{ type: "view" \| "researcherWatch" \| "beliefWatch" \| "overlayWatch" \}>\)/);
+    expect(client).toMatch(/send\(m: Extract<MainToSim, \{ type: "view" \| "researcherWatch" \| "cellWatch" \| "beliefWatch" \| "overlayWatch" \}>\)/);
   });
   // The Scene's difference mode (belief against ground truth, computed on the GPU from the two atlases) is researcher-only too:
   // marked in the Scene, and its code is in the scene modules only: never in the client, the commands, the run controller or
@@ -67,6 +67,9 @@ describe("researcher data stays one-way (ADR-0005 addition of 2026-10-12)", () =
     const allowed = new Set(
       [
         ["apps", "lab", "src", "panels", "scene-panel.tsx"],
+        // The Legend window explains the overlays that are on; it reads what the Scene shows and sends nothing.
+        ["apps", "lab", "src", "panels", "legend-panel.tsx"],
+        ["apps", "lab", "src", "panels", "scene-view-store.ts"],
         ["apps", "lab", "src", "panels", "use-belief-overlay.ts"],
         // The scenario editor draws a prior against the world with the same overlay (an authoring view; marked the same way).
         ["apps", "lab", "src", "panels", "scenario-editor", "editor-view.ts"],

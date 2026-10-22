@@ -10,7 +10,7 @@ export interface PresetPanel {
   /** Initial width (px) for side panels. */
   readonly initialWidth?: number;
   /** A panel that starts as a floating window (inside the app, ADR-0042 §1), not in the grid: its size, anchored to the bottom right, and whether it starts collapsed to its title bar. */
-  readonly floating?: { readonly width: number; readonly height: number; readonly collapsed: boolean };
+  readonly floating?: { readonly width: number; readonly height: number; readonly collapsed: boolean; readonly anchor?: "top-right" | "bottom-right"; readonly offsetPx?: number };
 }
 
 export interface WorkspacePreset {
@@ -22,6 +22,9 @@ export interface WorkspacePreset {
 
 /** The Performance HUD: a floating window in every workspace, collapsed until opened (ADR-0042 §5). */
 const PERF_WINDOW: PresetPanel = { id: "perf", floating: { width: 300, height: 400, collapsed: true } };
+/** The Scene's own windows (ADR-0042 section 8): the Overview of the whole map and the Legend stacked above the Performance window, at the bottom right; both start collapsed. */
+const OVERVIEW_WINDOW: PresetPanel = { id: "overview", floating: { width: 240, height: 200, collapsed: true, offsetPx: 88 } };
+const LEGEND_WINDOW: PresetPanel = { id: "legend", floating: { width: 340, height: 330, collapsed: true, offsetPx: 52 } };
 
 /**
  * Scene workspace (UI-SPEC §3): Scene 3D in the middle, Explorer left, Inspector right. Timeline and the log
@@ -36,6 +39,8 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
       { id: "explorer", position: { referencePanel: "scene", direction: "left" }, initialWidth: 300 },
       { id: "inspector", position: { referencePanel: "scene", direction: "right" }, initialWidth: 340 },
       PERF_WINDOW,
+      OVERVIEW_WINDOW,
+      LEGEND_WINDOW,
     ],
   },
   // Debug (UI-SPEC §3, F3a M3): the Scene at the cursor, the Timeline under it, the event list and the Inspector beside it. Everything follows the shared cursor.
@@ -78,5 +83,5 @@ export const LAYOUT_NAMESPACE = "layout";
  * Saved layouts are keyed with this version: a preset that gains panels (F1 e4: Explorer, Inspector; F3a: the Debug workspace) starts
  * from the new preset instead of a saved layout that lacks them.
  */
-export const LAYOUT_VERSION = 5;
+export const LAYOUT_VERSION = 6;
 export const layoutKey = (workspace: WorkspaceId) => `${workspace}@${LAYOUT_VERSION}`;

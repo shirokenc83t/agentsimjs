@@ -12,24 +12,41 @@ export interface Mark {
   readonly agentId: string | undefined;
   /** How an action ended (`succeeded`, `failed`, `preempted`), on the record that ends it. */
   readonly status?: string | undefined;
+  /** The failure code of a failed action or a rejected start, or the code of a reflex. */
+  readonly code?: string | undefined;
 }
 
 /** The kinds the Timeline marks (actions, reflexes, injected commands, degradations, snapshots); checkpoints are `event` records with op `checkpoint`. */
 export const MARK_KINDS = ["action", "reflex", "injected", "degradation", "snapshot"] as const;
 
 export function markOf(r: TraceRecord): Mark {
-  const p = r.payload !== null && typeof r.payload === "object" ? (r.payload as { op?: unknown; status?: unknown }) : {};
+  const p = r.payload !== null && typeof r.payload === "object" ? (r.payload as { op?: unknown; status?: unknown; code?: unknown; failure?: { code?: unknown } }) : {};
   const status = r.kind === "action" && p.op === "end" && typeof p.status === "string" ? p.status : undefined;
-  return { seq: r.seq, t: r.simTime, kind: r.kind, op: typeof p.op === "string" ? p.op : undefined, agentId: r.agentId, ...(status === undefined ? {} : { status }) };
+  const code = r.kind === "reflex" ? p.code : r.kind === "action" && (p.op === "end" || p.op === "rejected") ? p.failure?.code : undefined;
+  return {
+    seq: r.seq,
+    t: r.simTime,
+    kind: r.kind,
+    op: typeof p.op === "string" ? p.op : undefined,
+    agentId: r.agentId,
+    ...(status === undefined ? {} : { status }),
+    ...(typeof code === "string" ? { code } : {}),
+  };
 }
 
 /** An action that ended in failure: the mark that is a flag (UI-SPEC §6). */
 export const isFailure = (m: Mark): boolean => m.status === "failed";
 
+/** A start that was refused. */
+export const isRejection = (m: Mark): boolean => m.kind === "action" && m.op === "rejected";
+
+/** The marks that are flags: failures, reflexes and rejections draw in their role colour at the full height of their lane (attention.md section 3). */
+export const flagRole = (m: Mark): "alarm" | "warning" | undefined => (isFailure(m) ? "alarm" : m.kind === "reflex" || isRejection(m) ? "warning" : undefined);
+
 /** The glyph of a mark, one per meaning (ADR-0042 §4): a failure is ✕, a reflex ▲; the others by kind, in the kind's hue. */
 export function glyphOf(m: Mark): string {
   if (isFailure(m)) return "✕";
-  if (m.kind === "reflex") return "▲";
+  if (m.kind === "reflex" || isRejection(m)) return "▲";
   if (m.kind === "injected") return "◆";
   if (m.kind === "degradation") return "▼";
   if (m.kind === "snapshot") return "◇";

@@ -71,7 +71,7 @@ export interface RecordQuery {
 }
 
 /** Features of the live run that have no recorded source; a source says why one is off, or undefined when it is on. */
-export type RunFeature = "commands" | "strategyTest" | "mindView" | "researcher" | "rays" | "topology";
+export type RunFeature = "commands" | "strategyTest" | "mindView" | "researcher" | "cellBeliefs" | "rays" | "topology";
 
 /** The live view cell of the loaded grid (cell inspector): the layers as last received. */
 export interface CellView {
