@@ -16,11 +16,13 @@ export function syncRunContext(store: { getState(): UiContextState }, view: Pick
     const liveToLive = c.mode === "live" && view.mode === "live" && c.runId !== undefined && view.runId !== undefined;
     // The same run going from live to a replay of itself (scrubbing it back) keeps where the cursor and the selection are: that is where the user was looking.
     const sameRunScrub = c.mode === "live" && view.mode === "replay" && c.runId === view.runId;
-    const kept = liveToLive || sameRunScrub ? c.selection : undefined;
+    // Live again from a replay of the same run (the Live button) keeps it too: the run is the one it was looking at.
+    const sameRunLive = c.mode === "replay" && view.mode === "live" && c.runId === view.runId;
+    const kept = liveToLive || sameRunScrub || sameRunLive ? c.selection : undefined;
     const cursor = c.simTime;
     c.setRun(view.runId, view.mode);
     const next = store.getState();
-    if (kept && (kept.kind === "cell" || (kept.kind === "agent" && (sameRunScrub || view.run?.agents.some((a) => a.id === kept.id))))) next.select(kept);
+    if (kept && (kept.kind === "cell" || (kept.kind === "agent" && (sameRunScrub || sameRunLive || view.run?.agents.some((a) => a.id === kept.id))))) next.select(kept);
     if (sameRunScrub) next.setSimTime(cursor);
     else if (view.mode === "live") {
       next.setSimTime(view.simTimeS);

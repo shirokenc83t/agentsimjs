@@ -44,4 +44,24 @@ describe("chunk upload queue", () => {
     ]);
     expect(q.size).toBe(0);
   });
+
+  it("a retaining queue gives a renderer that attaches later every chunk at its latest version; a plain one forgets what it drained", () => {
+    const retaining = new ChunkQueue(4, true);
+    const plain = new ChunkQueue(4);
+    for (const q of [retaining, plain]) {
+      const a = batch([0, 0, 1, 0], [1, 2]);
+      q.push(a.coords, a.data);
+      const b = batch([0, 0], [9]);
+      q.push(b.coords, b.data);
+      q.take(16, () => undefined);
+      q.requeueAll();
+    }
+    const seen: [number, number, number][] = [];
+    retaining.take(16, (ci, cj, d) => seen.push([ci, cj, d[0] ?? -1]));
+    expect(seen).toEqual([
+      [1, 0, 2],
+      [0, 0, 9],
+    ]);
+    expect(plain.size).toBe(0);
+  });
 });

@@ -66,7 +66,15 @@ export class AtlasLayout {
 export class ChunkQueue {
   private readonly pending = new Map<number, { ci: number; cj: number; data: Uint8Array }>();
 
-  constructor(private readonly chunksX: number) {}
+  /** Every chunk received, at its latest version (kept only when asked: a grid that more than one renderer may attach to over its life). */
+  private readonly latest: Map<number, { ci: number; cj: number; data: Uint8Array }> | undefined;
+
+  constructor(
+    private readonly chunksX: number,
+    retain = false,
+  ) {
+    this.latest = retain ? new Map() : undefined;
+  }
 
   /** Adds a received batch: `coords` (ci, cj) pairs, `data` the chunks back to back. */
   push(coords: Uint16Array, data: Uint8Array): void {
@@ -78,7 +86,10 @@ export class ChunkQueue {
       const cj = coords[k * 2 + 1] ?? 0;
       const key = cj * this.chunksX + ci;
       this.pending.delete(key); // re-insert: the latest version keeps its place at the end
-      this.pending.set(key, { ci, cj, data: data.subarray(k * bytes, (k + 1) * bytes) });
+      const chunk = { ci, cj, data: data.subarray(k * bytes, (k + 1) * bytes) };
+      this.pending.set(key, chunk);
+      this.latest?.delete(key);
+      this.latest?.set(key, chunk);
     }
   }
 
@@ -92,6 +103,12 @@ export class ChunkQueue {
       n++;
     }
     return n;
+  }
+
+  /** Queues every chunk received so far again (a renderer that attaches after another one drained the queue draws the whole grid, not what arrived since). */
+  requeueAll(): void {
+    if (!this.latest) return;
+    for (const [key, c] of this.latest) if (!this.pending.has(key)) this.pending.set(key, c);
   }
 
   get size(): number {

@@ -602,7 +602,7 @@ export async function openReplaySource(deps: ReplayDeps): Promise<Result<ReplayR
     agents,
   };
   const dims = { sizeX: w.sizeX, sizeY: w.sizeY, chunkSize: w.chunkSize, resolutionM: w.resolutionM };
-  const grid: GridSpec = { dims, zones: w.zones.map((z) => ({ id: z.id, kind: z.kind, polygon: [...z.polygon] })) as GridSpec["zones"], queue: new ChunkQueue(Math.ceil(w.sizeX / w.chunkSize)) };
+  const grid: GridSpec = { dims, zones: w.zones.map((z) => ({ id: z.id, kind: z.kind, polygon: [...z.polygon] })) as GridSpec["zones"], queue: new ChunkQueue(Math.ceil(w.sizeX / w.chunkSize), true) };
   const head = await headOf(deps.ports, deps.runId);
   return ok(new ReplayRunSource(deps, run, grid, { coords: w.coords, data: w.data, defaultObstacleHeightM: w.defaultObstacleHeightM }, describePoseRate(header.recordingProfile), head));
 }

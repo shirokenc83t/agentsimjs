@@ -29,6 +29,43 @@ export function StorageBrowser(props: StorageBrowserProps) {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [sizes, setSizes] = useState<Record<string, RunSizes>>({});
   const [confirming, setConfirming] = useState<string | null>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+
+  // The delete dialog is modal: the focus goes to its safe choice, cannot leave it, Escape cancels and the focus goes back to where it was.
+  useEffect(() => {
+    if (confirming === null) return;
+    const opener = document.activeElement;
+    cancelButton.current?.focus();
+    const onFocusIn = (e: FocusEvent) => {
+      if (dialog.current && e.target instanceof Node && !dialog.current.contains(e.target)) cancelButton.current?.focus();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setConfirming(null);
+    };
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("keydown", onKey);
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
+  }, [confirming]);
+  /** Tab and Shift+Tab cycle among the dialog's buttons. */
+  const trapTab = (e: React.KeyboardEvent) => {
+    if (e.key !== "Tab" || !dialog.current) return;
+    const items = Array.from(dialog.current.querySelectorAll<HTMLElement>("button:not(:disabled)"));
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (!first || !last) return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -259,13 +296,13 @@ export function StorageBrowser(props: StorageBrowserProps) {
         </tbody>
       </table>
       {confirming !== null && (
-        <div role="alertdialog" aria-modal="true" aria-label={`Delete ${confirming}`} className="panel" data-testid="delete-run-dialog">
+        <div ref={dialog} role="alertdialog" aria-modal="true" aria-label={`Delete ${confirming}`} className="panel" data-testid="delete-run-dialog" onKeyDown={trapTab}>
           <p>
             Delete {confirming} ({sizes[confirming] ? formatBytes(totalBytes(sizes[confirming] as RunSizes)) : "size unknown"})? Its records, snapshots, blobs and belief frames go with it, and it cannot
             be restored.
           </p>
           <div className="row">
-            <button className="btn" onClick={() => setConfirming(null)}>
+            <button ref={cancelButton} className="btn" onClick={() => setConfirming(null)}>
               Cancel
             </button>
             <button className="btn danger" disabled={busy} onClick={() => void deleteRun(confirming)}>

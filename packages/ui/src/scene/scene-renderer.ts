@@ -236,6 +236,7 @@ export class SceneRenderer {
     this.paths.clear();
     this.selectedIndex = -1;
     if (spec) {
+      spec.queue.requeueAll();
       this.atlas = new GridAtlas(spec.dims, spec.queue, this.tokens, this.renderer.capabilities.maxTextureSize);
       this.scene.add(this.atlas.group);
       const w = spec.dims.sizeX * spec.dims.resolutionM;

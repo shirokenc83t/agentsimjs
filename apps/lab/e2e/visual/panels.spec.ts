@@ -10,8 +10,9 @@ test.skip(process.env["AGENTSIM_VISUAL_IMAGE"] !== "1", "visual baselines are ch
 
 const THEMES = ["dark", "light"] as const;
 
-/** Fonts loaded, no pending layout; animations and caret are disabled by the screenshot options. */
+/** Fonts loaded, no pending layout, no focused control (one whose focus came back by keyboard shows its focus ring); animations and caret are disabled by the screenshot options. */
 async function settle(page: Page) {
+  await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
   await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
 }

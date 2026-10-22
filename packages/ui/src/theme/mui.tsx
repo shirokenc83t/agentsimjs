@@ -35,7 +35,13 @@ export const muiTheme = createTheme({
     button: { textTransform: "none", fontWeight: TYPE.title.weight },
   },
   components: {
-    MuiButtonBase: { defaultProps: { disableRipple: true } },
+    // Keyboard focus is the one 2 px accent outline of the base stylesheet on every control (ADR-0032 §8): MUI marks focus with its own classes and clears the
+    // browser's outline on inputs, so the outline is set here on those classes (buttons, tabs, menu items; input fields) from the same tokens.
+    MuiButtonBase: {
+      defaultProps: { disableRipple: true },
+      styleOverrides: { root: { "&.Mui-focusVisible": { outline: "var(--focus-ring) solid var(--ac)", outlineOffset: "-2px" } } },
+    },
+    MuiInputBase: { styleOverrides: { root: { "&.Mui-focused": { outline: "var(--focus-ring) solid var(--ac)", outlineOffset: "1px" } } } },
     // Control boundaries use ln2 (3:1, WCAG 1.4.11); MUI's defaults derive them from the text colour.
     MuiButton: { defaultProps: { size: "small", disableElevation: true }, styleOverrides: { outlined: { borderColor: "var(--ln2)" } } },
     MuiOutlinedInput: { styleOverrides: { notchedOutline: { borderColor: "var(--ln2)" } } },
