@@ -54,6 +54,8 @@ export interface ColorTokens {
   readonly alm: string;
   /** alarm tint, composited on bg1 */
   readonly almbg: string;
+  /** warning tint (the attention badge and row), composited on bg0 or bg1 */
+  readonly warnbg: string;
   readonly kind: Readonly<Record<KindFamily, string>>;
   readonly port: Readonly<Record<PortCategory, string>>;
   /** Categorical agent colours (always shown next to the agent ID). */
@@ -83,6 +85,7 @@ export const COLORS: Readonly<Record<ThemeName, ColorTokens>> = {
     warn: "#e6ab3e",
     alm: "#f0625a",
     almbg: "rgba(240, 98, 90, 0.13)",
+    warnbg: "rgba(230, 171, 62, 0.14)",
     kind: { slate: "#8d9db0", violet: "#c6a0f2", cyan: "#4fc6d0", amber: "#e8b95e", orange: "#f39864", green: "#8fcbaa", pink: "#ff86a3" },
     port: { world: "#4cc4b0", agent: "#6ea8fe", mind: "#b48cf2", planning: "#f0956a", coordination: "#e8b95e", run: "#7ccf8a" },
     agent: ["#4fc6d0", "#e8b95e", "#c6a0f2", "#8fcbaa", "#ff86a3", "#f39864", "#86adff", "#a9d483"],
@@ -109,6 +112,7 @@ export const COLORS: Readonly<Record<ThemeName, ColorTokens>> = {
     warn: "#8b5d00",
     alm: "#c12d26",
     almbg: "rgba(194, 45, 38, 0.08)",
+    warnbg: "rgba(139, 93, 0, 0.1)",
     kind: { slate: "#536275", violet: "#7438bd", cyan: "#0a707f", amber: "#8b5d00", orange: "#a94816", green: "#2b7350", pink: "#b1265a" },
     port: { world: "#0f7d6c", agent: "#2160c4", mind: "#7438bd", planning: "#ad4a16", coordination: "#8f5f00", run: "#2b7a46" },
     agent: ["#0a7685", "#8f5f00", "#7438bd", "#2b7350", "#b1265a", "#ad4a16", "#2858c4", "#3c7419"],
@@ -297,6 +301,9 @@ export interface SceneTokens {
   /** Researcher-only difference mode: believed occupied but free (hatched), believed free but blocked (cross-hatched). */
   readonly diffPhantom: string;
   readonly diffFalseFree: string;
+  /** Attention (UI-SPEC section 4): the alarm ring and pin, the warning badge. */
+  readonly alarm: string;
+  readonly warning: string;
   /** Zone outlines (base, geofence, no-fly). */
   readonly zone: string;
   /** Planned and executed path lines are drawn in the agent's colour; this is the dash gap tint. */
@@ -311,7 +318,7 @@ export interface SceneTokens {
   readonly stageSandbox: string;
 }
 
-const SCENE_BASE: Readonly<Record<ThemeName, Omit<SceneTokens, "selection" | "agent" | "beliefHatch">>> = {
+const SCENE_BASE: Readonly<Record<ThemeName, Omit<SceneTokens, "selection" | "agent" | "beliefHatch" | "alarm" | "warning">>> = {
   dark: {
     background: "#0e1115",
     ground: "#202a35",
@@ -369,5 +376,5 @@ const SCENE_BASE: Readonly<Record<ThemeName, Omit<SceneTokens, "selection" | "ag
 };
 
 export function sceneTokens(theme: ThemeName): SceneTokens {
-  return { ...SCENE_BASE[theme], beliefHatch: COLORS[theme].hatch, selection: COLORS[theme].ac, agent: COLORS[theme].agent };
+  return { ...SCENE_BASE[theme], beliefHatch: COLORS[theme].hatch, alarm: COLORS[theme].alm, warning: COLORS[theme].warn, selection: COLORS[theme].ac, agent: COLORS[theme].agent };
 }

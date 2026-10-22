@@ -41,6 +41,30 @@ describe("design tokens (ADR-0032)", () => {
     }
   });
 
+  it("the attention tints (alarm and warning) carry text at 4.5:1 and their role colour at 3:1, over the content well and the panel", () => {
+    // The tint is an alpha colour: what is seen is the tint composited over the surface.
+    const over = (rgba: string, hex: string): string => {
+      const m = /^rgba\((\d+), (\d+), (\d+), ([\d.]+)\)$/.exec(rgba);
+      if (!m) throw new Error(rgba);
+      const a = Number(m[4]);
+      const base = [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16));
+      const hex2 = (v: number) => Math.round(v).toString(16).padStart(2, "0");
+      return `#${[1, 2, 3].map((k, i) => hex2(Number(m[k]) * a + (base[i] ?? 0) * (1 - a))).join("")}`;
+    };
+    for (const t of THEME_NAMES) {
+      const c = COLORS[t];
+      for (const [tint, role, name] of [[c.almbg, c.alm, "alarm"], [c.warnbg, c.warn, "warning"]] as const) {
+        for (const surface of [c.bg0, c.bg1]) {
+          const seen = over(tint, surface);
+          expect(contrastRatio(c.fg, seen), `${t}: text on the ${name} tint over ${surface}`).toBeGreaterThanOrEqual(4.5);
+          expect(contrastRatio(role, seen), `${t}: the ${name} glyph and edge on its tint over ${surface}`).toBeGreaterThanOrEqual(3);
+        }
+      }
+    }
+    const s = sceneTokens("dark");
+    expect([s.alarm, s.warning]).toEqual([COLORS.dark.alm, COLORS.dark.warn]);
+  });
+
   it("ln2 is declared for control boundaries and ln as decorative (the rule applied is explicit)", () => {
     expect(CONTRAST_PAIRS.find((p) => p.fg === "ln2")?.role).toBe("control");
     expect(CONTRAST_PAIRS.find((p) => p.fg === "ln")?.role).toBe("decorative");

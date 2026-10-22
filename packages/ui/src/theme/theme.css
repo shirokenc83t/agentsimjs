@@ -65,6 +65,7 @@
   --warn: #e6ab3e;
   --alm: #f0625a;
   --almbg: rgba(240, 98, 90, 0.13);
+  --warnbg: rgba(230, 171, 62, 0.14);
   --kind-slate: #8d9db0;
   --kind-violet: #c6a0f2;
   --kind-cyan: #4fc6d0;
@@ -111,6 +112,7 @@
   --warn: #8b5d00;
   --alm: #c12d26;
   --almbg: rgba(194, 45, 38, 0.08);
+  --warnbg: rgba(139, 93, 0, 0.1);
   --kind-slate: #536275;
   --kind-violet: #7438bd;
   --kind-cyan: #0a707f;
