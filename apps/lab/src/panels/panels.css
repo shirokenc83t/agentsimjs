@@ -325,3 +325,4 @@
 .tog:has(input:focus-visible) i { outline: var(--focus-ring) solid var(--ac); outline-offset: 1px; }
 .st-keys { margin: 0; grid-template-columns: 160px minmax(0, 1fr); }
 .st-keys kbd { font: inherit; font-size: var(--type-label-size); color: var(--fg); border: 1px solid var(--ln2); padding: 0 5px; }
+.st-row > .btn, .st-row > .segc { justify-self: start; }

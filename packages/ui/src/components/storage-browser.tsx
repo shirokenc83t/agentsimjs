@@ -192,7 +192,7 @@ export function StorageBrowser(props: StorageBrowserProps) {
           <div className="gauge">
             <span className="gl">USAGE / QUOTA</span>
             {info.usageBytes !== null && info.quotaBytes !== null ? (
-              <div className="meter" role="meter" aria-label="Usage against the quota" aria-valuemin={0} aria-valuenow={info.usageBytes} aria-valuemax={info.quotaBytes}>
+              <div className="gauge-meter" role="meter" aria-label="Usage against the quota" aria-valuemin={0} aria-valuenow={info.usageBytes} aria-valuemax={info.quotaBytes}>
                 <i style={{ width: `${Math.min(100, (100 * info.usageBytes) / Math.max(1, info.quotaBytes))}%` }} />
                 <b data-testid="quota-min-mark" title={`minimum quota ${formatBytes(info.quotaThresholdBytes)}`} style={{ left: `${Math.min(100, (100 * info.quotaThresholdBytes) / Math.max(1, info.quotaBytes))}%` }} />
               </div>
