@@ -25,7 +25,7 @@ import { checkRunInputs, RUN_INPUT_LIMITS, type RunInputError, type StoredRunInp
 import { checkRunRecording } from "../recording.ts";
 import { checkRunDerived, checkRunReferences } from "../run-references.ts";
 import type { SqlDriver, SqlValue } from "./driver.ts";
-import { SqlBeliefFrameStore, SqlSnapshotStore } from "./recording-stores.ts";
+import { SqlBeliefFrameStore, SqlMetricStore, SqlSnapshotStore } from "./recording-stores.ts";
 import { checkRecordFilter, compileSourceFilter } from "./source-filter.ts";
 import { buildTraceQuery, timeWindowToSeqRange, type SeqRange } from "./trace-query.ts";
 
@@ -269,6 +269,8 @@ class SqlRunStore implements RunStore {
       blobs: one("SELECT count(*) AS n, sum(length(data)) AS b FROM blobs WHERE run_id = ?"),
       snapshots: one("SELECT count(*) AS n, sum(length(data)) AS b FROM snapshots WHERE run_id = ?"),
       beliefFrames: one("SELECT count(*) AS n, sum(length(data)) AS b FROM belief_frames WHERE run_id = ?"),
+      // A row has no heavy column: its bytes are the fixed width of a sample.
+      metrics: one("SELECT count(*) AS n, count(*) * 40 AS b FROM metrics WHERE run_id = ?"),
     };
   }
 
@@ -276,7 +278,7 @@ class SqlRunStore implements RunStore {
     if (!this.db.get("SELECT 1 AS x FROM runs WHERE run_id = ?", [runId])) return err({ code: "unknown_run" as const, message: `unknown run ${runId}` });
     this.db.transaction(() => {
       // Frames name blobs, so they go first; the run's row goes last, and its ID stays behind so it is never handed out again.
-      for (const table of ["belief_frames", "blobs", "snapshots", "trace_causes", "trace_records", "run_inputs"]) this.db.run(`DELETE FROM ${table} WHERE run_id = ?`, [runId]);
+      for (const table of ["metrics", "belief_frames", "blobs", "snapshots", "trace_causes", "trace_records", "run_inputs"]) this.db.run(`DELETE FROM ${table} WHERE run_id = ?`, [runId]);
       this.db.run("DELETE FROM runs WHERE run_id = ?", [runId]);
       this.db.run("INSERT OR IGNORE INTO deleted_runs (run_id, deleted_at_wall_ms) VALUES (?, ?)", [runId, Date.now()]);
     });
@@ -462,5 +464,6 @@ export function createSqlPorts(db: SqlDriver, nowWallMs: () => number): StorageP
     runConfigs: new SqlRunConfigStore(db, nowWallMs),
     snapshots: new SqlSnapshotStore(db),
     beliefFrames: new SqlBeliefFrameStore(db),
+    metrics: new SqlMetricStore(db),
   };
 }

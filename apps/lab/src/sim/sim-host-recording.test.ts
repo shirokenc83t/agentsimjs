@@ -239,3 +239,34 @@ describe("sim host: a run is the same whether or not it is recorded, and an opte
     expect(h.events().map((r) => r.seq)).toEqual(h.trace().all().map((r) => r.seq));
   });
 });
+
+describe("sim host: the metrics channel (ADR-0035 section 4)", () => {
+  /** The ticks at which each series was sampled, as the storage worker received them, for a run stopped at `stops`. */
+  async function sampledTicks(stops: readonly number[]) {
+    const h = harness();
+    init(h);
+    h.send({ type: "recorderPort", port: h.port });
+    h.send(demo(stored()));
+    h.fromStorage({ type: "header", runId: "run-000007" });
+    let at = 0;
+    for (const stop of [...stops, 35]) {
+      h.send({ type: "control", op: "step", count: stop - at });
+      await flush();
+      at = stop;
+      h.send({ type: "control", op: "pause" });
+    }
+    const samples = h.toStorage.flatMap((m) => (m.type === "metrics" ? [...(m as unknown as { samples: { source: string; name: string; tick: number; value: number }[] }).samples] : []));
+    const by = new Map<string, number[]>();
+    for (const x of samples) by.set(`${x.source} ${x.name}`, [...(by.get(`${x.source} ${x.name}`) ?? []), x.tick]);
+    return { by, samples };
+  }
+
+  it("hands metric samples over as items for a recorded run, at the same ticks however the run was paused and stepped (the values are wall times and are not compared)", async () => {
+    const straight = await sampledTicks([]);
+    const choppy = await sampledTicks([1, 7, 12, 30]);
+    expect(straight.by.get("world/sim sim.tickMs")).toEqual([1, 10, 20, 30]);
+    expect(straight.by.get("ugv-001/body agent.soc")).toEqual([1, 10, 20, 30]);
+    expect(choppy.by).toEqual(straight.by);
+    expect(straight.samples.every((x) => Number.isFinite(x.value))).toBe(true);
+  });
+});

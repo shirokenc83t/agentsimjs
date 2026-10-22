@@ -82,6 +82,8 @@ export interface SizeEntry {
 
 export interface RunSizes {
   readonly records: SizeEntry;
+  /** Metric samples (the count; the bytes are the fixed width of a row). */
+  readonly metrics: SizeEntry;
   readonly blobs: SizeEntry;
   readonly snapshots: SizeEntry;
   readonly beliefFrames: SizeEntry;
@@ -250,6 +252,38 @@ export interface BeliefFrameStore {
   keyframeAtOrBefore(runId: string, agentId: string, tick: number): Promise<BeliefFrame | undefined>;
 }
 
+/** One point of a metric series (ADR-0035 section 4): `name` is in the trusted registry and `source` is the one the registry gives that series. */
+export interface StoredMetricSample {
+  readonly source: string;
+  readonly name: string;
+  /** The tick the sample was taken after. Unique per series, and the series' order. */
+  readonly tick: number;
+  readonly simTime: number;
+  readonly value: number;
+}
+
+export interface MetricQuery {
+  readonly runId: string;
+  /** Exactly this source (a `source:` filter with `*` is the filter language's). */
+  readonly source?: string;
+  readonly name?: string;
+  /** Inclusive sim-time window. */
+  readonly fromS?: number;
+  readonly toS?: number;
+  /** Continues after this sample, in (source, name, tick) order: the cursor of a paged read. */
+  readonly after?: { readonly source: string; readonly name: string; readonly tick: number };
+  readonly limit: number;
+}
+
+export type MetricError = CodedError<"unknown_run" | "invalid_metric" | "duplicate_metric" | "non_monotonic_metric">;
+
+export interface MetricStore {
+  /** Appends samples; all or nothing. Each series (source, name) keeps tick order, and a tick holds one sample of it. */
+  append(runId: string, samples: readonly StoredMetricSample[]): Promise<Result<void, MetricError>>;
+  /** Samples in (source, name, tick) order, filtered. */
+  query(q: MetricQuery): Promise<StoredMetricSample[]>;
+}
+
 export interface StoragePorts {
   readonly trace: TraceStore;
   readonly runs: RunStore;
@@ -259,4 +293,5 @@ export interface StoragePorts {
   readonly runConfigs: RunConfigStore;
   readonly snapshots: SnapshotStore;
   readonly beliefFrames: BeliefFrameStore;
+  readonly metrics: MetricStore;
 }

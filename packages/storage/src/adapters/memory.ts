@@ -72,6 +72,7 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
   return {
     snapshots: recording.snapshots,
     beliefFrames: recording.beliefFrames,
+    metrics: recording.metrics,
     scenarios: {
       list: async () => scenarios.list(),
       get: async (id, version) => scenarios.get(id, version),

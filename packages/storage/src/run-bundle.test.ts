@@ -66,7 +66,14 @@ async function recordedRun(ports: StoragePorts, runId = "run-000001", scenarioVe
   ];
   const fa = await ports.beliefFrames.append(runId, frames);
   if (!fa.ok) throw new Error(fa.error.message);
-  return { header, records, blobs, container, frames, manifestHash: manifest.hash, groupHash: group.hash };
+  const metrics = [
+    { source: "uav-001/body", name: "agent.soc", tick: 5, simTime: 0.5, value: 0.97 },
+    { source: "uav-001/body", name: "agent.soc", tick: 15, simTime: 1.5, value: 0.95 },
+    { source: "world/sim", name: "sim.tickMs", tick: 5, simTime: 0.5, value: 1.25 },
+  ];
+  const ma = await ports.metrics.append(runId, metrics);
+  if (!ma.ok) throw new Error(ma.error.message);
+  return { header, records, blobs, container, frames, metrics, manifestHash: manifest.hash, groupHash: group.hash };
 }
 
 async function fileOf(ports: StoragePorts, runId: string): Promise<Uint8Array> {
@@ -108,6 +115,7 @@ describe.each(adapters)("a run as a file (%s)", (_name, make) => {
     expect(loaded?.container).toEqual(src.container);
     expect([...(loaded?.blobs ?? [])].sort((x, y) => (x.id < y.id ? -1 : 1))).toEqual([...src.blobs].sort((x, y) => (x.id < y.id ? -1 : 1)));
     expect(await b.beliefFrames.query({ runId: "run-000003", limit: 10 })).toEqual(src.frames);
+    expect(await b.metrics.query({ runId: "run-000003", limit: 10 })).toEqual(src.metrics);
     expect((await b.snapshots.getBlob("run-000003", src.manifestHash))?.bytes).toEqual(src.blobs.find((x) => x.id === src.manifestHash)?.bytes);
   });
 
@@ -227,6 +235,8 @@ describe.each(adapters)("a run as a file (%s)", (_name, make) => {
     expect(back.value.header).toEqual(bundle.value.header);
     expect(back.value.records).toEqual(bundle.value.records);
     expect(back.value.frames).toEqual(bundle.value.frames);
+    expect(back.value.metrics).toEqual(bundle.value.metrics);
+    expect(back.value.metrics?.length).toBe(3);
     expect([...back.value.blobs].sort((x, y) => (x.id < y.id ? -1 : 1))).toEqual([...bundle.value.blobs].sort((x, y) => (x.id < y.id ? -1 : 1)));
     expect(back.value.snapshots).toEqual(bundle.value.snapshots);
     expect(back.value.scenario).toEqual(bundle.value.scenario);

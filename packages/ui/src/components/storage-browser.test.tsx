@@ -67,6 +67,7 @@ describe("StorageBrowser", () => {
     expect(size).toHaveTextContent(/blobs 0/);
     expect(size).toHaveTextContent(/snapshots 0/);
     expect(size).toHaveTextContent(/belief frames 0/);
+    expect(size).toHaveTextContent(/metric samples 0/);
     expect((await ports.runs.sizes("run-000001"))?.records.count).toBe(100);
   });
 

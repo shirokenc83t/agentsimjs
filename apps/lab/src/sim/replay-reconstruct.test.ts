@@ -44,7 +44,7 @@ describe("a belief map rebuilt from keyframe and deltas is the live map", () => 
       live.set(i, hashOf(belief));
     }
     const frames = framesOf(t.items);
-    const blobs = new Map(t.items.flatMap((i) => i.blobs.map((b) => [b.id, b.bytes] as const)));
+    const blobs = new Map(t.items.flatMap((i) => (i.type === "metrics" ? [] : i.blobs).map((b) => [b.id, b.bytes] as const)));
     const keyframes = frames.filter((f) => f.agentId === id && f.kind === "keyframe").map((f) => f.tick);
     expect(keyframes).toEqual([0, 60, 120, 180]);
     // A keyframe tick, the tick after it, and the last tick before the next keyframe.

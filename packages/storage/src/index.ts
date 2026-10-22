@@ -29,6 +29,10 @@ export type {
   BeliefFrameQuery,
   BeliefFrameStore,
   BeliefFrameError,
+  StoredMetricSample,
+  MetricQuery,
+  MetricStore,
+  MetricError,
   BlobWriteError,
   SnapshotWriteError,
 } from "./ports.ts";

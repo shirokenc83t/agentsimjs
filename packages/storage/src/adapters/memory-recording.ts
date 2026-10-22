@@ -1,6 +1,6 @@
 import { contentHash128Bytes, err, ok, readSnapshot } from "@agentsim/core";
-import type { BeliefFrame, BeliefFrameStore, LoadedSnapshot, SizeEntry, SnapshotInfo, SnapshotStore, StoredBlob } from "../ports.ts";
-import { checkBlobs, checkFrameQuery, checkFrames, checkSnapshot, framesKeepOrder } from "../recording.ts";
+import type { BeliefFrame, BeliefFrameStore, LoadedSnapshot, MetricStore, SizeEntry, SnapshotInfo, SnapshotStore, StoredBlob, StoredMetricSample } from "../ports.ts";
+import { checkBlobs, checkFrameQuery, checkFrames, checkMetricQuery, checkMetricSamples, checkSnapshot, framesKeepOrder, metricsKeepOrder } from "../recording.ts";
 
 // Snapshots, blobs and belief frames in memory: the same rules as the SQL adapter (recording-stores.ts), the same contract suite.
 
@@ -22,14 +22,16 @@ function mapFor<V>(all: Map<string, Map<string, V>>, runId: string): Map<string,
 export function memoryRecordingStores(runExists: (runId: string) => boolean): {
   snapshots: SnapshotStore;
   beliefFrames: BeliefFrameStore;
+  metrics: MetricStore;
   /** What the run holds here (blobs, snapshots, frames), for its sizes. */
-  sizesOf(runId: string): { blobs: SizeEntry; snapshots: SizeEntry; beliefFrames: SizeEntry };
+  sizesOf(runId: string): { blobs: SizeEntry; snapshots: SizeEntry; beliefFrames: SizeEntry; metrics: SizeEntry };
   /** Drops everything of the run (deleting the run). */
   forget(runId: string): void;
 } {
   const blobs = new Map<string, Map<string, Uint8Array>>();
   const snapshots = new Map<string, Map<string, Stored>>();
   const frames = new Map<string, BeliefFrame[]>();
+  const metrics = new Map<string, StoredMetricSample[]>();
   const blobsOf = (runId: string) => mapFor(blobs, runId);
   const hasBlob = (runId: string, id: string) => blobs.get(runId)?.has(id) === true;
   const cloneFrame = (f: BeliefFrame): BeliefFrame => ({ ...f, chunks: [...f.chunks], ...(f.data === undefined ? {} : { data: copy(f.data) }) });
@@ -121,19 +123,48 @@ export function memoryRecordingStores(runExists: (runId: string) => boolean): {
     },
   };
 
+  const after = (s: StoredMetricSample, a: { source: string; name: string; tick: number }): boolean =>
+    s.source !== a.source ? s.source > a.source : s.name !== a.name ? s.name > a.name : s.tick > a.tick;
+  const metricStore: MetricStore = {
+    async append(runId, list) {
+      if (!runExists(runId)) return err({ code: "unknown_run" as const, message: `unknown run ${runId}` });
+      const checked = checkMetricSamples(list);
+      if (!checked.ok) return checked;
+      const stored = metrics.get(runId) ?? [];
+      for (const s of list) {
+        if (stored.some((x) => x.source === s.source && x.name === s.name && x.tick === s.tick)) return err({ code: "duplicate_metric" as const, message: `sample ${s.name} of ${s.source} at tick ${s.tick} is already stored` });
+      }
+      const last = (source: string, name: string) => stored.filter((x) => x.source === source && x.name === name).reduce<number | undefined>((a, x) => (a === undefined || x.tick > a ? x.tick : a), undefined);
+      if (!metricsKeepOrder(list, last)) return err({ code: "non_monotonic_metric" as const, message: "metric samples would break tick order" });
+      metrics.set(runId, [...stored, ...list.map((s) => ({ ...s }))]);
+      return ok(undefined);
+    },
+    async query(q) {
+      const c = checkMetricQuery(q);
+      return (metrics.get(c.runId) ?? [])
+        .filter((s) => (c.source === undefined || s.source === c.source) && (c.name === undefined || s.name === c.name) && (c.fromS === undefined || s.simTime >= c.fromS) && (c.toS === undefined || s.simTime <= c.toS) && (c.after === undefined || after(s, c.after)))
+        .sort((a, b) => (a.source < b.source ? -1 : a.source > b.source ? 1 : a.name < b.name ? -1 : a.name > b.name ? 1 : a.tick - b.tick))
+        .slice(0, c.limit)
+        .map((s) => ({ ...s }));
+    },
+  };
+
   const sum = (xs: readonly number[]): SizeEntry => ({ count: xs.length, bytes: xs.reduce((a, b) => a + b, 0) });
   return {
     snapshots: snapshotStore,
     beliefFrames: frameStore,
+    metrics: metricStore,
     sizesOf: (runId) => ({
       blobs: sum([...(blobs.get(runId)?.values() ?? [])].map((b) => b.length)),
       snapshots: sum([...(snapshots.get(runId)?.values() ?? [])].map((s) => s.bytes.length)),
       beliefFrames: sum((frames.get(runId) ?? []).map((f) => f.data?.length ?? 0)),
+      metrics: sum((metrics.get(runId) ?? []).map(() => 40)),
     }),
     forget(runId) {
       blobs.delete(runId);
       snapshots.delete(runId);
       frames.delete(runId);
+      metrics.delete(runId);
     },
   };
 }

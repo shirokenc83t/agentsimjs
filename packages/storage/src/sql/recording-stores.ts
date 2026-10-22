@@ -4,12 +4,15 @@ import type {
   BeliefFrameQuery,
   BeliefFrameStore,
   LoadedSnapshot,
+  MetricQuery,
+  MetricStore,
   SnapshotInfo,
   SnapshotStore,
   SnapshotWrite,
   StoredBlob,
+  StoredMetricSample,
 } from "../ports.ts";
-import { checkBlobs, checkFrameQuery, checkFrames, checkSnapshot, framesKeepOrder } from "../recording.ts";
+import { checkBlobs, checkFrameQuery, checkFrames, checkMetricQuery, checkMetricSamples, checkSnapshot, framesKeepOrder, metricsKeepOrder } from "../recording.ts";
 import type { SqlDriver, SqlValue } from "./driver.ts";
 
 // Snapshots, blobs and belief frames over SQL (migration 0007; ADR-0035 addition of 2026-10-17, items 8 and 9).
@@ -159,5 +162,59 @@ export class SqlBeliefFrameStore implements BeliefFrameStore {
       [runId, agentId, tick],
     );
     return r ? frameOf(r) : undefined;
+  }
+}
+
+type MetricRow = { source: string; name: string; tick: number; sim_time: number; value: number };
+
+/** Metric samples over SQL (migration 0012; ADR-0035 section 4). */
+export class SqlMetricStore implements MetricStore {
+  constructor(private readonly db: SqlDriver) {}
+
+  async append(runId: string, samples: readonly StoredMetricSample[]) {
+    if (!runExists(this.db, runId)) return err({ code: "unknown_run" as const, message: `unknown run ${runId}` });
+    const checked = checkMetricSamples(samples);
+    if (!checked.ok) return checked;
+    for (const s of samples) {
+      if (this.db.get("SELECT 1 AS x FROM metrics WHERE run_id = ? AND source = ? AND name = ? AND tick = ?", [runId, s.source, s.name, s.tick])) {
+        return err({ code: "duplicate_metric" as const, message: `sample ${s.name} of ${s.source} at tick ${s.tick} is already stored` });
+      }
+    }
+    const last = (source: string, name: string) => this.db.get<{ tick: number | null }>("SELECT max(tick) AS tick FROM metrics WHERE run_id = ? AND source = ? AND name = ?", [runId, source, name])?.tick ?? undefined;
+    if (!metricsKeepOrder(samples, last)) return err({ code: "non_monotonic_metric" as const, message: "metric samples would break tick order" });
+    this.db.transaction(() => {
+      for (const s of samples) this.db.run("INSERT INTO metrics (run_id, source, name, tick, sim_time, value) VALUES (?, ?, ?, ?, ?, ?)", [runId, s.source, s.name, s.tick, s.simTime, s.value]);
+    });
+    return ok(undefined);
+  }
+
+  async query(q: MetricQuery): Promise<StoredMetricSample[]> {
+    const c = checkMetricQuery(q);
+    const where = ["run_id = ?"];
+    const params: SqlValue[] = [c.runId];
+    if (c.source !== undefined) {
+      where.push("source = ?");
+      params.push(c.source);
+    }
+    if (c.name !== undefined) {
+      where.push("name = ?");
+      params.push(c.name);
+    }
+    if (c.fromS !== undefined) {
+      where.push("sim_time >= ?");
+      params.push(c.fromS);
+    }
+    if (c.toS !== undefined) {
+      where.push("sim_time <= ?");
+      params.push(c.toS);
+    }
+    if (c.after !== undefined) {
+      where.push("(source, name, tick) > (?, ?, ?)");
+      params.push(c.after.source, c.after.name, c.after.tick);
+    }
+    params.push(c.limit);
+    return this.db
+      .all<MetricRow>(`SELECT source, name, tick, sim_time, value FROM metrics WHERE ${where.join(" AND ")} ORDER BY source, name, tick LIMIT ?`, params)
+      .map((r) => ({ source: r.source, name: r.name, tick: r.tick, simTime: r.sim_time, value: r.value }));
   }
 }

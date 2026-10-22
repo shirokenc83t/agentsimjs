@@ -1,5 +1,6 @@
 import { channelOf } from "./channels.ts";
 import { filterRecord } from "./levels.ts";
+import type { MetricSample } from "./metrics.ts";
 import { redactSecrets } from "./redact.ts";
 import type { RecordingProfile } from "./recording-profile.ts";
 import type { TraceBuffer } from "./trace-buffer.ts";
@@ -60,11 +61,19 @@ export interface RecorderFramesItem {
   readonly blobs: readonly { readonly id: string; readonly bytes: Uint8Array }[];
 }
 
+/** Metric samples (ADR-0035 section 4), as the storage worker takes them: observer data, read from the run between ticks. */
+export interface RecorderMetricsItem {
+  readonly type: "metrics";
+  readonly runId: string;
+  readonly samples: readonly MetricSample[];
+}
+
 /** What a recorder hands over besides batches of records. Items go out in order with the batches, and before the batch that refers to them. */
-export type RecorderItem = RecorderSnapshotItem | RecorderFramesItem;
+export type RecorderItem = RecorderSnapshotItem | RecorderFramesItem | RecorderMetricsItem;
 
 /** The bytes an item weighs in the backlog. */
 export function itemBytes(i: RecorderItem): number {
+  if (i.type === "metrics") return i.samples.length * 64;
   return i.type === "snapshot"
     ? i.bytes.length + i.blobs.reduce((n, b) => n + b.bytes.length, 0)
     : i.blobs.reduce((n, b) => n + b.bytes.length, 0) + i.frames.reduce((n, f) => n + (f.data?.length ?? 0) + f.chunks.length * 4 + 64, 0);

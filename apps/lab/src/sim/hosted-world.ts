@@ -23,7 +23,7 @@ import { ATLAS_BYTES_PER_CELL, atlasScratch, encodeAtlasChunk, type GridSpace } 
 import { startStrategyTest, type StrategyTestError, type StrategyTestRequest, type StrategyTestRun, agentWarnings, checkSensorNoise, checkSensorRates, createRun, idealAgentsOf, loadScenario, parseRunConfigValue, parseScenarioValue, preparePlanning, resolveRunConfig, restoreRun, type CreatedRun, type ResolvedRunConfig } from "@agentsim/scenarios";
 import { TraceBuffer, type TraceRecord } from "@agentsim/trace";
 import { DUMMY_DT_S, DUMMY_ENTITY_IDS, DUMMY_POSE_FLOATS, writeDummyPoses } from "./dummy-world.ts";
-import type { RecordingTarget } from "./run-recording.ts";
+import type { HealthSample, RecordingTarget } from "./run-recording.ts";
 import { SCENARIO_DT_S } from "./sim-constants.ts";
 import { TrailRecorder } from "./trail-recorder.ts";
 
@@ -364,13 +364,25 @@ export class ScenarioHostedWorld implements HostedWorld {
       trace: this.trace,
       dtS: this.dtS,
       idealAgents: new Set(this.resolved.agents.filter((a) => a.beliefs.idealized).map((a) => a.agentId)),
+      health: () => this.healthSample(),
     };
   }
 
+  /** Wall time of the last tick (the world's step and the trail; the recording's own work after it is not in it), for the `sim.tickMs` metric. */
+  private lastTickMs = 0;
+
   step(ctx: TickContext): void {
+    const t0 = performance.now();
     this.run.world.step(ctx);
     this.recordTrail();
+    this.lastTickMs = performance.now() - t0;
     this.tickHook?.();
+  }
+
+  /** What the metrics channel reads of the last tick: its wall time, the sensing phase's and the planner's spending (diagnostics: nothing here reaches a hash). */
+  healthSample(): HealthSample {
+    const service = this.run.planner.service;
+    return { tickMs: this.lastTickMs, senseMs: this.senseMs[this.senseMs.length - 1] ?? 0, planExpansions: service.lastTick.expansions, planBudget: service.lastTick.budget };
   }
 
   decide(): Promise<void> {

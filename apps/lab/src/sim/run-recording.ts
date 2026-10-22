@@ -1,11 +1,24 @@
 import { encodeValue, readSnapshot, SnapshotWriter, snapshotHash, type SimAgent } from "@agentsim/core";
 import { snapshotRun, writeBeliefSections, type SnapshotableRun } from "@agentsim/scenarios";
-import type { RecorderFramesItem, RecordingProfile, RunRecorder, TraceBuffer, TraceRecord } from "@agentsim/trace";
+import { channelOf, metricDef, MetricSampler, metricSource, type MetricDef, type MetricSample, type RecorderFramesItem, type RecordingProfile, type RunRecorder, type TraceBuffer, type TraceRecord } from "@agentsim/trace";
 
 // What a recorded run writes besides what its components trace (ADR-0035 addition of 2026-10-17, items 8 and 9; ADR-0029 addition of the
 // same date): checkpoint records (the state hash every N ticks), snapshots at the start, every S sim seconds and at a stop, pose samples at
 // the profile's rate and at every transition, and belief-map keyframes and deltas. All of it is observation: it reads the run between ticks
 // and writes records and items for the recorder; nothing in it changes the run, so a recorded run has the hashes of one that is not.
+
+/** What the metrics channel reads of the last tick besides the agents: wall times and the planner's spending (diagnostics; nothing here reaches a hash). */
+export interface HealthSample {
+  readonly tickMs: number;
+  readonly senseMs: number;
+  readonly planExpansions: number;
+  readonly planBudget: number;
+}
+
+/** The registered series this file feeds (ADR-0035 section 4). */
+const SERIES = Object.fromEntries(
+  ["sim.tickMs", "sim.tickBudgetUse", "sim.senseMs", "sim.otherPhasesMs", "sim.planExpansions", "sim.planBudgetUse", "storage.backlogRecords", "storage.backlogBytes", "agent.soc", "agent.speedMps", "belief.unknownPct", "belief.falseFreePct", "belief.entityMeanErrM"].map((n) => [n, metricDef(n) as MetricDef]),
+) as Record<string, MetricDef>;
 
 /** What the recording reads of a run. */
 export interface RecordingTarget {
@@ -14,6 +27,8 @@ export interface RecordingTarget {
   readonly dtS: number;
   /** Agents whose beliefs are the ground truth (`ideal`): they have no belief map of their own to record. */
   readonly idealAgents: ReadonlySet<string>;
+  /** The last tick's wall times and the planner's spending, for the metrics channel; a run without it records no health series. */
+  readonly health?: () => HealthSample | undefined;
 }
 
 type SnapshotReason = "start" | "periodic" | "end";
@@ -40,6 +55,9 @@ export class RunRecording {
   private readonly frameSeq = new Map<string, number>();
   private readonly nextPoseDueS = new Map<string, number>();
   private poseCursor = 0;
+  /** The metrics channel (ADR-0035 section 4): observer data, folded at the profile's rate. */
+  private readonly metrics: MetricSampler;
+  private metricCursor = 0;
 
   constructor(
     private readonly target: RecordingTarget,
@@ -56,6 +74,7 @@ export class RunRecording {
     this.snapshotEveryTicks = Math.max(1, Math.round(profile.checkpoints.snapshotEveryS / target.dtS));
     this.keyframeEveryTicks = Math.max(1, Math.round(profile.channels.beliefs.keyframeEveryS / target.dtS));
     this.beliefFrames = profile.channels.beliefs.level === "chunks";
+    this.metrics = new MetricSampler(profile.channels.metrics.rateHz);
   }
 
   private get tick(): number {
@@ -65,6 +84,7 @@ export class RunRecording {
   /** The start of the run (after load, before the first step): the first snapshot, keyframes, checkpoint and pose samples. */
   start(): void {
     this.poseCursor = this.trace.nextSeq;
+    this.metricCursor = this.trace.nextSeq;
     const snap = this.snapshot("start");
     this.checkpoint(snap?.id);
     this.samplePoses("start");
@@ -84,6 +104,7 @@ export class RunRecording {
     this.flushFrames(draft);
     if (snapshotDue || tick % this.checkpointEveryTicks === 0) this.checkpoint(snapshotId);
     this.poseCursor = this.trace.nextSeq;
+    this.sampleMetrics();
   }
 
   /** The run ends (another run replaces it): a snapshot, unless the run is where the last one was taken. */
@@ -203,6 +224,55 @@ export class RunRecording {
     draft.blobs = [];
   }
 
+  // ---- metrics -------------------------------------------------------------------------------------------------------------
+
+  private observe(name: string, value: number, agentId?: string): void {
+    const def = SERIES[name] as MetricDef;
+    this.metrics.observe(def, metricSource(def, agentId), value);
+  }
+
+  /**
+   * After the tick's state hash, between ticks: reads the run and hands the metrics channel's samples to the recorder. Observation only: it changes nothing in the run,
+   * and what it records is not reachable from a decision request. The observer's belief error is taken from the reports of that observer the run traced.
+   */
+  private sampleMetrics(): void {
+    const tick = this.tick;
+    const t = this.run.world.simTimeS;
+    const h = this.target.health?.();
+    if (h) {
+      this.observe("sim.tickMs", h.tickMs);
+      this.observe("sim.tickBudgetUse", h.tickMs / (this.target.dtS * 1000));
+      this.observe("sim.senseMs", h.senseMs);
+      this.observe("sim.otherPhasesMs", Math.max(0, h.tickMs - h.senseMs));
+      this.observe("sim.planExpansions", h.planExpansions);
+      this.observe("sim.planBudgetUse", h.planBudget > 0 ? h.planExpansions / h.planBudget : 0);
+    }
+    const backlog = this.recorder.backlog;
+    this.observe("storage.backlogRecords", backlog.records);
+    this.observe("storage.backlogBytes", backlog.bytes);
+    for (const a of this.agents) {
+      this.observe("agent.soc", a.battery.soc, a.id);
+      this.observe("agent.speedMps", speedOf(a, this.target.dtS), a.id);
+    }
+    const samples: MetricSample[] = [];
+    for (const r of this.trace.since(this.metricCursor)) {
+      // The `beliefs` channel's records are the observer's reports (ADR-0035 addition of 2026-10-17, item 4): the trace package's table says which they are.
+      if (r.kind !== "event" || channelOf(r) !== "beliefs" || r.agentId === undefined) continue;
+      const p = r.payload as { map?: { unknownPct?: number; falseFreePct?: number }; entities?: { meanErrM?: number } } | null;
+      const add = (name: string, value: number | undefined) => {
+        if (value === undefined || !Number.isFinite(value)) return;
+        const def = SERIES[name] as MetricDef;
+        samples.push({ source: metricSource(def, r.agentId), name, tick, simTime: t, value });
+      };
+      add("belief.unknownPct", p?.map?.unknownPct);
+      add("belief.falseFreePct", p?.map?.falseFreePct);
+      add("belief.entityMeanErrM", p?.entities?.meanErrM);
+    }
+    this.metricCursor = this.trace.nextSeq;
+    if (this.metrics.due(t)) samples.push(...this.metrics.take(tick, t));
+    if (samples.length > 0) this.recorder.enqueue({ type: "metrics", runId: this.runId, samples });
+  }
+
   // ---- pose samples ---------------------------------------------------------------------------------------------------------
 
   /** Transitions of the agents in what the tick traced since the last look: an action starts or ends, a reflex, a lifecycle operation. */
@@ -251,6 +321,10 @@ function triggerOf(r: TraceRecord): PoseTrigger | undefined {
   return undefined;
 }
 
+function speedOf(a: SimAgent, dtS: number): number {
+  return a.kind === "ugv" ? Math.abs(a.state.speed) : a.state.lastStepM / dtS;
+}
+
 /** What the Explorer and the Inspector show of an agent: where it is, how it moves, its battery, odometer and whether it flies. */
 function poseOf(a: SimAgent, dtS: number, trigger: PoseTrigger) {
   return {
@@ -259,7 +333,7 @@ function poseOf(a: SimAgent, dtS: number, trigger: PoseTrigger) {
     y: a.state.y,
     z: a.kind === "uav" ? a.state.z : 0,
     heading: a.state.heading,
-    speedMps: a.kind === "ugv" ? Math.abs(a.state.speed) : a.state.lastStepM / dtS,
+    speedMps: speedOf(a, dtS),
     soc: a.battery.soc,
     odometerM: a.odometerM,
     airborne: a.kind === "uav" && a.state.airborne,

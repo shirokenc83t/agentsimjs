@@ -185,6 +185,7 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
     // The recording ports forward every call as it is (same arguments, in order): one table instead of a lambda each, to keep the initial chunk small.
     snapshots: rpc("snapshots", ["putBlobs", "getBlob", "write", "list", "read"]) as unknown as StoragePorts["snapshots"],
     beliefFrames: rpc("beliefFrames", ["append", "query", "keyframeAtOrBefore"]) as unknown as StoragePorts["beliefFrames"],
+    metrics: rpc("metrics", ["append", "query"]) as unknown as StoragePorts["metrics"],
   };
 
   const admin: StorageAdmin = {

@@ -16,12 +16,12 @@ export interface StorageBrowserProps {
   readonly onReplay?: ((runId: string) => void) | undefined;
 }
 
-const totalBytes = (s: RunSizes): number => s.records.bytes + s.blobs.bytes + s.snapshots.bytes + s.beliefFrames.bytes;
+const totalBytes = (s: RunSizes): number => s.records.bytes + s.blobs.bytes + s.snapshots.bytes + s.beliefFrames.bytes + s.metrics.bytes;
 
 /** What a run holds, as the browser lists it: count and size of each kind of data. */
 function holds(s: RunSizes): string {
   const part = (name: string, e: { count: number; bytes: number }) => `${name} ${e.count} · ${formatBytes(e.bytes)}`;
-  return [part("records", s.records), part("blobs", s.blobs), part("snapshots", s.snapshots), part("belief frames", s.beliefFrames)].join(" · ");
+  return [part("records", s.records), part("blobs", s.blobs), part("snapshots", s.snapshots), part("belief frames", s.beliefFrames), `metric samples ${s.metrics.count}`].join(" · ");
 }
 
 /** A run's size by kind of data as one stacked bar: records, blobs, snapshots, belief frames (the text next to it has the numbers). */

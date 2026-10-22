@@ -1,6 +1,6 @@
 import { decodeValue, err, isValid, ok, readSnapshot, type CodedError, type Result } from "@agentsim/core";
 import { firstNonMonotonicRecord, isValidTraceRecord, RunHeader, type TraceRecord } from "@agentsim/trace";
-import type { BeliefFrame, StoragePorts, StoredBlob, StoredRunInput } from "./ports.ts";
+import type { BeliefFrame, StoragePorts, StoredBlob, StoredMetricSample, StoredRunInput } from "./ports.ts";
 import { checkBlobs, checkFrames, checkRunRecording, framesKeepOrder, checkSnapshot } from "./recording.ts";
 import { checkRunInputs } from "./run-inputs.ts";
 import { BELIEF_MANIFEST_FORMAT_STORED } from "./sql/recording-integrity.ts";
@@ -44,6 +44,8 @@ export interface RunBundle {
   readonly snapshots: readonly BundleSnapshot[];
   readonly blobs: readonly StoredBlob[];
   readonly frames: readonly BeliefFrame[];
+  /** Metric samples (ADR-0035 section 4); a file written before they existed has none. */
+  readonly metrics?: readonly StoredMetricSample[];
 }
 
 export type RunFileErrorCode = "unknown_run" | "not_run_file" | "unsupported_version" | "too_large" | "corrupt" | "non_monotonic_trace" | "broken_recording" | "write_failed";
@@ -105,6 +107,13 @@ export async function readRunBundle(ports: StoragePorts, runId: string): Promise
       lastSeq = last.seq;
     }
   }
+  const metrics: StoredMetricSample[] = [];
+  for (let after: StoredMetricSample | undefined; ; ) {
+    const page = await ports.metrics.query({ runId, ...(after === undefined ? {} : { after: { source: after.source, name: after.name, tick: after.tick } }), limit: PAGE * 10 });
+    metrics.push(...page);
+    if (page.length < PAGE * 10) break;
+    after = page[page.length - 1] as StoredMetricSample;
+  }
   // Keyframe blobs: the manifest and the groups it names.
   for (const f of frames) {
     if (f.blobId === undefined || blobs.has(f.blobId)) continue;
@@ -126,6 +135,7 @@ export async function readRunBundle(ports: StoragePorts, runId: string): Promise
     snapshots,
     blobs: [...blobs.values()],
     frames,
+    metrics,
   });
 }
 
@@ -239,6 +249,11 @@ export async function writeRunBundle(ports: StoragePorts, b: RunBundle): Promise
       const r = await ports.snapshots.write(runId, { seq: s.seq, simTime: s.simTime, tick: s.tick, bytes: s.bytes });
       if (!r.ok && r.error.code !== "duplicate_snapshot") return await fail(r.error.message);
     }
+    const samples = [...(b.metrics ?? [])].sort((a, c) => (a.source < c.source ? -1 : a.source > c.source ? 1 : a.name < c.name ? -1 : a.name > c.name ? 1 : a.tick - c.tick));
+    for (let i = 0; i < samples.length; i += PAGE) {
+      const r = await ports.metrics.append(runId, samples.slice(i, i + PAGE));
+      if (!r.ok) return await fail(r.error.message);
+    }
     const frames = [...b.frames].sort((a, c) => (a.agentId < c.agentId ? -1 : a.agentId > c.agentId ? 1 : a.seq - c.seq));
     for (let i = 0; i < frames.length; i += PAGE) {
       const r = await ports.beliefFrames.append(runId, frames.slice(i, i + PAGE));
@@ -260,6 +275,7 @@ export function bundleToJsonl(b: RunBundle): Uint8Array {
   for (const v of b.records) lines.push(JSON.stringify({ t: "record", v }));
   for (const x of b.blobs) lines.push(JSON.stringify({ t: "blob", id: x.id, data: bytesToBase64(x.bytes) }));
   for (const s of b.snapshots) lines.push(JSON.stringify({ t: "snapshot", seq: s.seq, simTime: s.simTime, tick: s.tick, data: bytesToBase64(s.bytes) }));
+  for (const m of b.metrics ?? []) lines.push(JSON.stringify({ t: "metric", v: m }));
   for (const f of b.frames) lines.push(JSON.stringify({ t: "frame", v: { ...f, ...(f.data === undefined ? {} : { data: bytesToBase64(f.data) }) } }));
   return new TextEncoder().encode(`${lines.join("\n")}\n`);
 }
@@ -284,6 +300,7 @@ export function bundleFromJsonl(bytes: Uint8Array): Result<RunBundle, RunFileErr
   const blobs: StoredBlob[] = [];
   const snapshots: BundleSnapshot[] = [];
   const frames: BeliefFrame[] = [];
+  const metrics: StoredMetricSample[] = [];
   let scenario: BundleScenario | undefined;
   for (let n = 1; n < lines.length; n++) {
     const line = lines[n] as string;
@@ -297,6 +314,7 @@ export function bundleFromJsonl(bytes: Uint8Array): Result<RunBundle, RunFileErr
         case "record": records.push(x.v as unknown as TraceRecord); break;
         case "blob": blobs.push({ id: String(x.id), bytes: base64ToBytes(String(x.data)) }); break;
         case "snapshot": snapshots.push({ seq: Number(x.seq), simTime: Number(x.simTime), tick: Number(x.tick), bytes: base64ToBytes(String(x.data)) }); break;
+        case "metric": metrics.push(x.v as unknown as StoredMetricSample); break;
         case "frame": {
           const f = x.v as unknown as BeliefFrame & { data?: string };
           frames.push({ ...f, ...(f.data === undefined ? {} : { data: base64ToBytes(String(f.data)) }) } as BeliefFrame);
@@ -309,7 +327,7 @@ export function bundleFromJsonl(bytes: Uint8Array): Result<RunBundle, RunFileErr
       return err({ code: "corrupt", message: `line ${n + 1} does not parse: ${e instanceof Error ? e.message : String(e)}` });
     }
   }
-  return ok({ header: first.header as RunHeader, ...(scenario ? { scenario } : {}), inputs, records, snapshots, blobs, frames });
+  return ok({ header: first.header as RunHeader, ...(scenario ? { scenario } : {}), inputs, records, snapshots, blobs, frames, metrics });
 }
 
 /** Reads a run out of the ports as a file. */

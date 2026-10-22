@@ -73,6 +73,8 @@ export async function recordedParent(ticks: number, opts: { profile?: RecordingP
       snapshots.push({ tick: item.tick, bytes: item.bytes });
       for (const b of item.blobs) blobs.set(b.id, b.bytes);
       await ports.snapshots.write(item.runId, { seq: item.seq, simTime: item.simTimeS, tick: item.tick, bytes: item.bytes, blobs: item.blobs });
+    } else if (item.type === "metrics") {
+      await ports.metrics.append(item.runId, item.samples);
     } else {
       for (const b of item.blobs) blobs.set(b.id, b.bytes);
       await ports.snapshots.putBlobs(item.runId, item.blobs);

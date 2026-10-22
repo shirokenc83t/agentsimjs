@@ -56,6 +56,7 @@ function transferList(item: RecorderItem): Transferable[] {
   const add = (b: Uint8Array | undefined) => {
     if (b && b.byteOffset === 0 && b.buffer instanceof ArrayBuffer && b.byteLength === b.buffer.byteLength) out.add(b.buffer);
   };
+  if (item.type === "metrics") return [];
   if (item.type === "snapshot") add(item.bytes);
   for (const b of item.blobs) add(b.bytes);
   if (item.type === "frames") for (const f of item.frames) add(f.data);

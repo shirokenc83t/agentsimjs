@@ -190,6 +190,9 @@ export async function resimulateWindowToRun(ports: StoragePorts, parentRunId: st
     if (item.type === "snapshot") {
       const w = await ports.snapshots.write(runId, { seq: item.seq, simTime: item.simTimeS, tick: item.tick, bytes: item.bytes, blobs: item.blobs });
       if (!w.ok) return fail(`${w.error.code}: ${w.error.message}`);
+    } else if (item.type === "metrics") {
+      const m = await ports.metrics.append(runId, item.samples);
+      if (!m.ok) return fail(`${m.error.code}: ${m.error.message}`);
     } else {
       const b = await ports.snapshots.putBlobs(runId, item.blobs);
       if (!b.ok) return fail(`${b.error.code}: ${b.error.message}`);

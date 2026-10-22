@@ -2,7 +2,7 @@ import { err, type CodedError, type Result } from "@agentsim/core";
 import type { RecorderItem, RunHeader, RunStatus, TraceRecord } from "@agentsim/trace";
 import type { Database, SAHPoolUtil, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { openWasmSqlDriver, SecondConnectionError } from "../drivers/wasm-sql-driver.ts";
-import type { BeliefFrame, BeliefFrameQuery, CachedResponse, SnapshotWrite, StoragePorts, StoredBlob, StoredRunInput } from "../ports.ts";
+import type { BeliefFrame, BeliefFrameQuery, CachedResponse, MetricQuery, SnapshotWrite, StoragePorts, StoredBlob, StoredMetricSample, StoredRunInput } from "../ports.ts";
 import type { ReplayHandlers, ReplayView, StorageExtensions } from "../replay.ts";
 import type { SqlDriver } from "../sql/driver.ts";
 import { LATEST_SCHEMA_VERSION, migrate } from "../sql/migrations.ts";
@@ -336,6 +336,9 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         const r = await e.storage.snapshots.write(item.runId, { seq: item.seq, simTime: item.simTimeS, tick: item.tick, bytes: item.bytes, blobs: item.blobs });
         // The same state twice (a pause where nothing ran since the last snapshot) is the same snapshot: nothing to refuse.
         if (!r.ok && r.error.code !== "duplicate_snapshot") refuse(r.error.code, r.error.message);
+      } else if (item.type === "metrics") {
+        const r = await e.storage.metrics.append(item.runId, item.samples);
+        if (!r.ok) refuse(r.error.code, r.error.message);
       } else {
         const stored = await e.storage.snapshots.putBlobs(item.runId, item.blobs);
         if (!stored.ok) return refuse(stored.error.code, stored.error.message);
@@ -540,6 +543,8 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "snapshots.read": value = await s.snapshots.read(String(a), String(b)); break;
         case "beliefFrames.append": value = await s.beliefFrames.append(String(a), Array.isArray(b) ? (b as BeliefFrame[]) : []); break;
         case "beliefFrames.query": value = await s.beliefFrames.query(a as BeliefFrameQuery); break;
+        case "metrics.append": value = await s.metrics.append(String(a), Array.isArray(b) ? (b as StoredMetricSample[]) : []); break;
+        case "metrics.query": value = await s.metrics.query(a as MetricQuery); break;
         case "beliefFrames.keyframeAtOrBefore": value = await s.beliefFrames.keyframeAtOrBefore(String(a), String(b), Number(req.args[2])); break;
         case "replay.beliefAt":
         case "replay.world": {
@@ -615,7 +620,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         queue.push(recorderAppend(msg.batch));
         pendingAppendRecords += msg.batch.records.length;
         void drain();
-      } else if (msg?.type === "snapshot" || msg?.type === "frames") {
+      } else if (msg?.type === "snapshot" || msg?.type === "frames" || msg?.type === "metrics") {
         lastBatchAt = now();
         queue.push(recorderSide(msg));
         pendingAppendRecords += ITEM_WEIGHT;

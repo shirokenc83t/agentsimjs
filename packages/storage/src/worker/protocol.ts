@@ -36,6 +36,7 @@ export const OPS = [
   "runConfigs.list", "runConfigs.get", "runConfigs.saveVersion", "runConfigs.delete",
   "snapshots.putBlobs", "snapshots.getBlob", "snapshots.write", "snapshots.list", "snapshots.read",
   "beliefFrames.append", "beliefFrames.query", "beliefFrames.keyframeAtOrBefore",
+  "metrics.append", "metrics.query",
   "replay.beliefAt", "replay.world",
   "admin.info", "admin.compact", "admin.exportDb", "admin.exportRun", "admin.exportRunJsonl", "admin.importDb", "admin.importRun", "admin.close",
   "test.openSecondConnection", "test.setSimulatedQuota",

@@ -171,7 +171,7 @@ describe("beliefVsTruth never reaches a mind (ADR-0005 addition of 2026-10-11)",
     await runLockstep(run.world, run.scheduler, 400);
     const m = mapOf(run);
     expect(seen.length).toBeGreaterThan(2);
-    for (const req of seen) expect(JSON.stringify(req)).not.toMatch(/beliefVsTruth|belief-vs-truth|phantom|falseFree|heightViolations|reachableCells|meanErrM/);
+    for (const req of seen) expect(JSON.stringify(req)).not.toMatch(/beliefVsTruth|belief-vs-truth|phantom|falseFree|heightViolations|reachableCells|meanErrM|unknownPct|tickBudgetUse|planBudgetUse|backlogRecords|sim.tickMs|agent.soc/);
     // The metrics are real, so the scan above means something.
     expect(m.reachableCells).toBeGreaterThan(1000);
   });
