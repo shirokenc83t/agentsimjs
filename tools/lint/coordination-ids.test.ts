@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 const KINDS = ["T", "D", "G"].map((k) => `${k}-0[0-9]{2}`);
 const PATTERN = new RegExp(`\\b(${KINDS.join("|")}|D-00[0-9]|G-00[0-9])\\b`);
 const SKIP = new Set(["node_modules", "dist", "coverage", "test-results", "results", ".vite", ".git", "playwright-report"]);
-const TEXT = /\.(ts|tsx|mjs|js|css|sql|md|json)$/;
+const TEXT = /\.(ts|tsx|mjs|js|css|sql|md|json|ya?ml)$/;
 
 function sources(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -21,9 +21,9 @@ function sources(dir: string, out: string[] = []): string[] {
 }
 
 describe("coordination identifiers stay out of the public code", () => {
-  it("no task, decision or gate number in packages, apps, tools or bench", () => {
+  it("no task, decision or gate number in packages, apps, tools, bench or the workflows", () => {
     const root = join(import.meta.dirname, "..", "..");
-    const files = ["packages", "apps", "tools", "bench"].flatMap((d) => sources(join(root, d)));
+    const files = ["packages", "apps", "tools", "bench", ".github"].flatMap((d) => sources(join(root, d)));
     expect(files.length).toBeGreaterThan(200);
     const found: string[] = [];
     for (const f of files) {
