@@ -41,10 +41,7 @@ export function CostProfileForm(props: { value: CostProfile; onChange: (p: CostP
       <legend>Cost profile</legend>
       <div className="field-grid">
         {F1_FEATURES.map((f) => (
-          <div key={f} className="field-with-hint">
-            <NumberField label={f} value={weights[f]} onChange={(w) => setWeight(f, w)} testId={`${props.testId}-weight-${f}`} step={0.1} placeholder="0" />
-            <span className="muted hint">{FEATURE_HINT[f]}</span>
-          </div>
+          <NumberField key={f} label={f} value={weights[f]} onChange={(w) => setWeight(f, w)} testId={`${props.testId}-weight-${f}`} step={0.1} placeholder="0" help={FEATURE_HINT[f]} />
         ))}
       </div>
       <h5>Constraints</h5>
