@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, openPanelTab, openWorkspace, sendTo, step } from "./helpers.ts";
+import { loadDemo, openPanelTab, openWorkspace, runCommand, sendTo, step } from "./helpers.ts";
 
 const astar = { kind: "algorithm", algorithm: "astar" };
 const hpa = { kind: "algorithm", algorithm: "hpa" };
@@ -54,6 +54,7 @@ test("a lazy refine hands out its first leg earlier than the eager one finishes 
   expect(lazyFirst).toBeLessThan(eagerDone);
 
   // The stages overlay follows the selected query: the coarse path dashed, the legs solid, a joint between them.
+  await runCommand(page, "Open panel: Legend"); // closed by `sendTo`, which clears the windows off the map
   await page.getByTestId("overlay-stages").click();
   await expect(page.getByTestId("stages-legend")).toContainText("coarse path of a refine");
   await expect.poll(async () => (await stages(page))?.legs ?? 0).toBeGreaterThan(0);
