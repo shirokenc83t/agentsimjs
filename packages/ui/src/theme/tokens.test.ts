@@ -1,6 +1,6 @@
 import { TRACE_KINDS } from "@agentsim/trace";
 import { describe, expect, it } from "vitest";
-import { agentColorIndex, colorAt, COLORS, CONTRAST_MIN, CONTRAST_PAIRS, contrastRatio, KIND_STYLE, kindTable, sceneTokens, THEME_NAMES } from "./tokens.ts";
+import { agentColorIndex, colorAt, COLORS, CONTRAST_MIN, CONTRAST_PAIRS, contrastRatio, FONT, GLYPH, KIND_STYLE, kindTable, RADIUS_PX, sceneTokens, STATE_GLYPH, THEME_NAMES, TYPE, TYPE_MIN_PX } from "./tokens.ts";
 
 /** Every token path of a theme, flattened (`kind.violet`, `agent.3`, …). */
 function paths(o: unknown, prefix = ""): string[] {
@@ -37,7 +37,7 @@ describe("design tokens (ADR-0032)", () => {
       expect(contrastRatio(s.cellFree, s.background), `${t}: free cells on background`).toBeGreaterThanOrEqual(1.3);
       expect(contrastRatio(s.gridMinor, s.ground), `${t}: minor grid on ground`).toBeGreaterThanOrEqual(1.25);
       expect(contrastRatio(s.gridMajor, s.ground), `${t}: major grid on ground`).toBeGreaterThanOrEqual(1.5);
-      expect(contrastRatio(s.cellBlocked, s.cellFree), `${t}: blocked cells on free cells`).toBeGreaterThanOrEqual(2);
+      expect(contrastRatio(s.cellBlocked, s.cellFree), `${t}: walls on the ground`).toBeGreaterThanOrEqual(3);
     }
   });
 
@@ -68,5 +68,63 @@ describe("design tokens (ADR-0032)", () => {
   it("agent colours are stable per ID", () => {
     expect(agentColorIndex("ugv-001")).toBe(agentColorIndex("ugv-001"));
     expect(new Set(["ugv-001", "ugv-002", "ugv-003", "uav-001", "uav-002"].map(agentColorIndex)).size).toBeGreaterThan(1);
+  });
+
+  it("the surface levels are told apart in both themes: the dock from the content wells, the wells from the panels, the panels from their bars and from hover", () => {
+    for (const t of THEME_NAMES) {
+      const c = COLORS[t];
+      for (const [a, b] of [[c.dock, c.bg0], [c.bg0, c.bg1], [c.bg1, c.bg2], [c.bg1, c.bg3]] as const) {
+        expect(contrastRatio(a, b), `${t}: ${a} on ${b}`).toBeGreaterThanOrEqual(1.04);
+      }
+    }
+    // The dock is darker than the content wells, in both themes (ADR-0042 §3).
+    for (const t of THEME_NAMES) expect(contrastRatio(COLORS[t].dock, COLORS[t].bg1)).toBeGreaterThan(contrastRatio(COLORS[t].bg0, COLORS[t].bg1));
+  });
+
+  it("the map's unknown area is told from the known one by its hatch (3:1 on free cells and on the ground), in both themes", () => {
+    for (const t of THEME_NAMES) {
+      const s = sceneTokens(t);
+      expect(s.beliefHatch).toBe(COLORS[t].hatch);
+      expect(contrastRatio(s.beliefHatch, s.beliefFree), `${t}: hatch on believed-free cells`).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(s.beliefHatch, s.ground), `${t}: hatch on the ground`).toBeGreaterThanOrEqual(3);
+    }
+    expect(CONTRAST_PAIRS.find((p) => p.fg === "hatch")?.role).toBe("control");
+  });
+
+  it("the shadow of floating windows and the scrim of dialogs exist in both themes", () => {
+    for (const t of THEME_NAMES) {
+      expect(COLORS[t].float).toMatch(/^0 \d+px \d+px rgba\(/);
+      expect(COLORS[t].scrim).toMatch(/^rgba\(/);
+    }
+  });
+
+  it("typography is the terminal scale of ADR-0042 §2: Mono for the chrome, Plex for prose only, 11 px at the least", () => {
+    expect(FONT.mono.startsWith("'JetBrains Mono'")).toBe(true);
+    expect(FONT.sans.startsWith("'IBM Plex Sans'")).toBe(true);
+    expect(TYPE.title).toEqual({ size: 13, weight: 600, letterSpacingEm: 0.06 });
+    expect(TYPE.body).toEqual({ size: 12, weight: 400 });
+    expect(TYPE.label).toEqual({ size: 11, weight: 600, letterSpacingEm: 0.1 });
+    expect(TYPE.clock).toEqual({ size: 22, weight: 600 });
+    expect(TYPE.telemetry).toEqual({ size: 15, weight: 600 });
+    expect(TYPE.prose).toEqual({ size: 12.5, weight: 400 });
+    for (const [name, v] of Object.entries(TYPE)) expect(v.size, name).toBeGreaterThanOrEqual(TYPE_MIN_PX);
+  });
+
+  it("panels, windows and controls are square; only the flow editor's nodes are rounded", () => {
+    expect(RADIUS_PX.control).toBe(0);
+    expect(RADIUS_PX.node).toBe(8);
+  });
+
+  it("one glyph per meaning, from the Mono character set and never an emoji: failure ✕, warning ▲, paused ❚❚, replay ◷ (▶ is the running glyph)", () => {
+    expect(GLYPH).toMatchObject({ fail: "✕", warn: "▲", paused: "❚❚", replay: "◷", running: "▶" });
+    expect(GLYPH.replay).not.toBe(GLYPH.running);
+    expect(STATE_GLYPH.alm).toBe(GLYPH.fail);
+    expect(STATE_GLYPH.warn).toBe(GLYPH.warn);
+    // Arrows, geometric shapes, dingbats, technical and box-drawing symbols (blocks the JetBrains Mono set covers), no character that presents as an emoji.
+    const allowed = /^[←-⇿⌀-⏿─-◿✀-➿●○]+$/u;
+    for (const g of [...Object.values(GLYPH), ...Object.values(STATE_GLYPH)]) {
+      expect(g, g).toMatch(allowed);
+      expect(g, g).not.toMatch(/\p{Emoji_Presentation}/u);
+    }
   });
 });

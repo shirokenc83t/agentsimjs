@@ -154,7 +154,7 @@ export function EventListPanel() {
                 data-testid={`event-row-${r.seq}`}
                 data-kind={r.kind}
                 data-agent={r.agentId ?? ""}
-                className="event-row"
+                className="event-row selectable"
                 onClick={() => {
                   setSelected(r);
                   jump(r.simTime, r.agentId);

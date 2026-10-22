@@ -17,7 +17,9 @@ export type KindFamily = "slate" | "violet" | "cyan" | "amber" | "orange" | "gre
 export type PortCategory = "world" | "agent" | "mind" | "planning" | "coordination" | "run";
 
 export interface ColorTokens {
-  /** app, canvas, logs */
+  /** the area behind the panels (ADR-0042 §3): darker than `bg0` */
+  readonly dock: string;
+  /** content wells: logs, inputs, the map background */
   readonly bg0: string;
   /** panels */
   readonly bg1: string;
@@ -34,6 +36,12 @@ export interface ColorTokens {
   readonly fg2: string;
   /** meta, timestamps */
   readonly fg3: string;
+  /** the lines of the hatch that tells the area unknown to an agent from the known one (map, and wherever a state must not rest on colour alone) */
+  readonly hatch: string;
+  /** shadow of floating windows, popovers and dialogs (the only shadow in the app, ADR-0042 §1) */
+  readonly float: string;
+  /** the layer behind a modal dialog: an alpha of `bg0` */
+  readonly scrim: string;
   /** the one accent: focus, selection, primary action, time cursor */
   readonly ac: string;
   /** text on an accent fill */
@@ -54,12 +62,16 @@ export interface ColorTokens {
 
 export const COLORS: Readonly<Record<ThemeName, ColorTokens>> = {
   dark: {
+    dock: "#06080a",
     bg0: "#0e1115",
     bg1: "#14181d",
     bg2: "#1a1f26",
     bg3: "#232a32",
     ln: "#262d36",
-    ln2: "#636b73",
+    ln2: "#68737f",
+    hatch: "#7d8a99",
+    float: "0 6px 24px rgba(0, 0, 0, 0.6)",
+    scrim: "rgba(14, 17, 21, 0.72)",
     fg: "#d5dbe3",
     fg2: "#9ba6b3",
     fg3: "#87919c",
@@ -76,12 +88,16 @@ export const COLORS: Readonly<Record<ThemeName, ColorTokens>> = {
     agent: ["#4fc6d0", "#e8b95e", "#c6a0f2", "#8fcbaa", "#ff86a3", "#f39864", "#86adff", "#a9d483"],
   },
   light: {
+    dock: "#d3d9df",
     bg0: "#e8ebee",
     bg1: "#f7f8fa",
     bg2: "#eef1f4",
     bg3: "#e1e5ea",
     ln: "#d3d9df",
     ln2: "#81878e",
+    hatch: "#5f6c7b",
+    float: "0 6px 20px rgba(25, 32, 42, 0.3)",
+    scrim: "rgba(232, 235, 238, 0.72)",
     fg: "#19202a",
     fg2: "#465261",
     fg3: "#5c6775",
@@ -138,26 +154,48 @@ export type StateName = "run" | "ok" | "warn" | "alm" | "idle";
 /** States are always shown with a glyph (ADR-0032 §5). */
 export const STATE_GLYPH: Readonly<Record<StateName, string>> = { run: "▶", ok: "✓", warn: "▲", alm: "✕", idle: "○" };
 
+/**
+ * One glyph per meaning everywhere (ADR-0042 §4), all from the JetBrains Mono character set, no emoji: failure ✕, warning ▲, paused ❚❚, replay ◷
+ * (▶ is the glyph of a running simulation and is never used for replay).
+ */
+export const GLYPH = { fail: "✕", warn: "▲", paused: "❚❚", replay: "◷", running: "▶", ok: "✓", idle: "○", info: "●" } as const;
+
 export const FONT = {
   sans: "'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif",
   mono: "'JetBrains Mono', ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace",
 } as const;
 
-/** Type scale (px, weight), ADR-0032 §4. */
+/**
+ * Type scale (px, weight), ADR-0042 §2. JetBrains Mono for the whole chrome; `prose` (IBM Plex Sans) only for running text: help, dialog body, descriptions.
+ * 11 px is the minimum. `mono` and `monoState` are the body and label sizes under the names the stylesheets already use.
+ */
 export const TYPE = {
-  title: { size: 15, weight: 600 },
-  body: { size: 13, weight: 400 },
-  label: { size: 11, weight: 600, letterSpacingEm: 0.06 },
+  /** uppercase */
+  title: { size: 13, weight: 600, letterSpacingEm: 0.06 },
+  body: { size: 12, weight: 400 },
+  /** uppercase */
+  label: { size: 11, weight: 600, letterSpacingEm: 0.1 },
+  clock: { size: 22, weight: 600 },
+  telemetry: { size: 15, weight: 600 },
+  prose: { size: 12.5, weight: 400 },
   mono: { size: 12, weight: 400 },
   monoState: { size: 11, weight: 600 },
 } as const;
+/** The smallest text size of the interface (px). */
+export const TYPE_MIN_PX = 11;
 
 export const SPACE_PX = { xxs: 2, xs: 4, s: 6, m: 8, l: 12, xl: 16, xxl: 24 } as const;
-export const RADIUS_PX = { control: 3, node: 8 } as const;
+/** Panels, windows and controls are square (ADR-0042 §1); the flow editor's nodes keep their radius. */
+export const RADIUS_PX = { control: 0, node: 8 } as const;
 export const ROW_PX = { compact: 20, comfortable: 25 } as const;
 export const Z = { dock: 1, hud: 10, popover: 1000, dialog: 1100 } as const;
 export const MOTION_MS = { fast: 120, normal: 200 } as const;
 export const FOCUS_RING_PX = 2;
+/** A tooltip appears after this long over its target (ADR-0042 §6). */
+export const TOOLTIP_DELAY_MS = 400;
+/** Pitch (px) of the dock's dot grid and of the hatch lines (ADR-0042 §3). */
+export const DOCK_DOT_PX = 12;
+export const HATCH_PITCH_PX = 5;
 
 export type ColorPath = Exclude<keyof ColorTokens, "kind" | "port" | "agent"> | `kind.${KindFamily}` | `port.${PortCategory}` | `agent.${number}`;
 
@@ -196,6 +234,7 @@ export const CONTRAST_PAIRS: readonly { readonly fg: ColorPath; readonly on: rea
   { fg: "acfg", on: ["ac"], role: "text" },
   // Control boundaries: ln2 is for controls only (inputs, selects, outlined buttons, ports, node borders).
   { fg: "ln2", on: ["bg0", "bg1", "bg2"], role: "control" },
+  { fg: "hatch", on: ["bg0", "bg1"], role: "control" },
   ...(Object.keys(COLORS.dark.port) as PortCategory[]).map((p) => ({ fg: `port.${p}` as const, on: ["bg0", "bg1"] as const, role: "control" as const })),
   ...COLORS.dark.agent.map((_c, i) => ({ fg: `agent.${i}` as const, on: ["bg0", "bg1"] as const, role: "control" as const })),
   // Decorative: ln for panel frames and dividers.
@@ -250,8 +289,9 @@ export interface SceneTokens {
   readonly heightLo: string;
   readonly heightHi: string;
   readonly unknownHeight: string;
-  /** Belief overlay (F2, ADR-0027): what the agent believes (unknown / free / occupied). */
+  /** Belief overlay (F2, ADR-0027): what the agent believes (unknown / free / occupied). The unknown area is hatched with `beliefHatch` (ADR-0042 §3). */
   readonly beliefUnknown: string;
+  readonly beliefHatch: string;
   readonly beliefFree: string;
   readonly beliefOccupied: string;
   /** Researcher-only difference mode: believed occupied but free (hatched), believed free but blocked (cross-hatched). */
@@ -271,7 +311,7 @@ export interface SceneTokens {
   readonly stageSandbox: string;
 }
 
-const SCENE_BASE: Readonly<Record<ThemeName, Omit<SceneTokens, "selection" | "agent">>> = {
+const SCENE_BASE: Readonly<Record<ThemeName, Omit<SceneTokens, "selection" | "agent" | "beliefHatch">>> = {
   dark: {
     background: "#0e1115",
     ground: "#202a35",
@@ -279,7 +319,7 @@ const SCENE_BASE: Readonly<Record<ThemeName, Omit<SceneTokens, "selection" | "ag
     gridMinor: "#34414f",
     light: "#ffffff",
     cellFree: "#202a35",
-    cellBlocked: "#5f6b78",
+    cellBlocked: "#6e7b89",
     cellUnloaded: "#0e1115",
     terrainLo: "#1c2a22",
     terrainHi: "#7a6431",
@@ -306,7 +346,7 @@ const SCENE_BASE: Readonly<Record<ThemeName, Omit<SceneTokens, "selection" | "ag
     gridMinor: "#a9b3be",
     light: "#ffffff",
     cellFree: "#c4ccd5",
-    cellBlocked: "#7d8996",
+    cellBlocked: "#5f6b78",
     cellUnloaded: "#e8ebee",
     terrainLo: "#d6e6d7",
     terrainHi: "#b48a3c",
@@ -329,5 +369,5 @@ const SCENE_BASE: Readonly<Record<ThemeName, Omit<SceneTokens, "selection" | "ag
 };
 
 export function sceneTokens(theme: ThemeName): SceneTokens {
-  return { ...SCENE_BASE[theme], selection: COLORS[theme].ac, agent: COLORS[theme].agent };
+  return { ...SCENE_BASE[theme], beliefHatch: COLORS[theme].hatch, selection: COLORS[theme].ac, agent: COLORS[theme].agent };
 }

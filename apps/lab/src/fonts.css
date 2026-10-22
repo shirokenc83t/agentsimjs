@@ -1,6 +1,6 @@
-/* Self-hosted fonts (ADR-0032 §4): IBM Plex Sans (UI) and JetBrains Mono, Latin subset, regular and semibold,
-   SIL OFL. Only woff2 is referenced, so the .woff fallbacks of @fontsource are never emitted. The UI regular
-   face is preloaded (vite.config.ts); the others load on first use (font-display: swap). */
+/* Self-hosted fonts (ADR-0042 §2): JetBrains Mono (the whole chrome) and IBM Plex Sans (running prose only), Latin subset, regular and
+   semibold, SIL OFL. Only woff2 is referenced, so the .woff fallbacks of @fontsource are never emitted. The Mono regular face is
+   preloaded (vite.config.ts); the others load on first use (font-display: swap). */
 @font-face {
   font-family: "IBM Plex Sans";
   font-style: normal;

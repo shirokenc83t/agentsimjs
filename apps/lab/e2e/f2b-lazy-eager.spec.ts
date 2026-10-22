@@ -74,7 +74,7 @@ test("the stages overlay follows the query selected in the Inspector's table", a
   await page.getByTestId("explorer-row-ugv-001").click();
   await sendTo(page, "ugv-001", 60, 58);
   await step(page, 2);
-  await sendTo(page, "ugv-001", 20, 40);
+  await sendTo(page, "ugv-001", 35, 35); // on screen clear of the scene overlay
   await step(page, 2);
   const rows = page.getByTestId(/^plan-query-row-/);
   await expect(rows).toHaveCount(2);

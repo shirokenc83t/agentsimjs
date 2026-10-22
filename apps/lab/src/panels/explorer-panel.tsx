@@ -63,7 +63,7 @@ export function ExplorerPanel() {
                 role="option"
                 aria-selected={row.index === selectedIndex}
                 data-testid={`explorer-row-${a.id}`}
-                className="explorer-row"
+                className="explorer-row selectable"
                 onClick={() => select(row.index)}
                 style={{ position: "absolute", top: 0, left: 0, right: 0, height: row.size, transform: `translateY(${row.start}px)` }}
               >

@@ -6,12 +6,12 @@
 
 /* Scene overlays: agent ID labels (CSS2D) above the canvas; they never take pointer events. */
 .scene-labels { position: absolute; inset: 0; pointer-events: none; }
-.agent-label { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; font-size: 11px; color: var(--fg); background: color-mix(in srgb, var(--bg0) 75%, transparent); border-radius: var(--radius-control); white-space: nowrap; }
+.agent-label { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; font-size: var(--type-label-size); color: var(--fg); background: color-mix(in srgb, var(--bg0) 75%, transparent); border-radius: var(--radius-control); white-space: nowrap; }
 .agent-swatch { width: 8px; height: 8px; border-radius: 50%; }
 
 /* Scene overlay (view mode and legend), top-left above the canvas. */
-.scene-overlay { position: absolute; top: 8px; left: 8px; display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; background: color-mix(in srgb, var(--bg0) 85%, transparent); border: 1px solid var(--ln); border-radius: var(--radius-control); }
-.scene-overlay .legend { font-size: 11px; }
+.scene-overlay { position: absolute; top: 8px; left: 8px; max-width: 220px; display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; background: color-mix(in srgb, var(--bg0) 85%, transparent); border: 1px solid var(--ln); border-radius: var(--radius-control); }
+.scene-overlay .legend { font-size: var(--type-label-size); }
 
 /* Replay bar (a recording in the Scene): a strip along the top. */
 .replay-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 4px 8px; background: color-mix(in srgb, var(--bg0) 92%, transparent); border-bottom: 1px solid var(--ac); font-size: 12px; }
@@ -31,27 +31,23 @@
 .event-filters { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--ln); font-size: 12px; }
 .event-scroller { flex: 1; min-height: 80px; overflow: auto; outline: none; }
 .event-scroller:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
-.event-row { display: grid; grid-template-columns: 62px 96px 34px 1fr; align-items: center; gap: 8px; padding: 0 8px; cursor: pointer; font-size: var(--type-mono-size); border-bottom: 1px solid var(--ln); white-space: nowrap; overflow: hidden; }
-.event-row:hover { background: var(--bg3); }
-.event-row[aria-selected="true"] { background: var(--acbg); box-shadow: inset 2px 0 0 var(--ac); }
-.event-detail { margin: 0; max-height: 40%; overflow: auto; padding: 6px 8px; border-top: 1px solid var(--ln); font-size: 11px; white-space: pre-wrap; }
+.event-row { display: grid; grid-template-columns: 62px 96px 34px 1fr; align-items: center; gap: 8px; padding: 0 8px; font-size: var(--type-mono-size); border-bottom: 1px solid var(--ln); white-space: nowrap; overflow: hidden; }
+.event-detail { margin: 0; max-height: 40%; overflow: auto; padding: 6px 8px; border-top: 1px solid var(--ln); font-size: var(--type-label-size); white-space: pre-wrap; }
 
 /* Explorer (virtualized list) and Inspector. */
 .explorer { display: flex; flex-direction: column; padding: 0; }
 .explorer-list { flex: 1; overflow: auto; outline: none; }
 .explorer-list:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
-.explorer-row { display: grid; grid-template-columns: 10px 64px 1fr 34px auto; align-items: center; gap: 8px; padding: 0 10px; cursor: pointer; font-size: var(--type-mono-size); border-bottom: 1px solid var(--ln); }
-.explorer-row:hover { background: var(--bg3); }
-.explorer-row[aria-selected="true"] { background: var(--acbg); box-shadow: inset 2px 0 0 var(--ac); }
-.explorer .legend { margin: 4px 10px; font-size: 11px; }
-.kind-tag { font-size: 10.5px; font-weight: 600; color: var(--fg2); }
+.explorer-row { display: grid; grid-template-columns: 10px 64px 1fr 34px auto; align-items: center; gap: 8px; padding: 0 10px; font-size: var(--type-mono-size); border-bottom: 1px solid var(--ln); }
+.explorer .legend { margin: 4px 10px; font-size: var(--type-label-size); }
+.kind-tag { font-size: var(--type-label-size); font-weight: 600; color: var(--fg2); }
 .inspector h3 { display: flex; align-items: center; gap: 6px; }
 .inspector-section { margin: 0 0 10px; }
-.inspector-section h4 { margin: 0 0 4px; font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg2); }
+.inspector-section h4 { margin: 0 0 4px; font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: var(--type-label-tracking); text-transform: uppercase; color: var(--fg2); }
 /* Values keep at least 45 % of the width; long schema keys wrap instead of squeezing values mid-word. */
 .inspector .kv { grid-template-columns: minmax(0, max-content) minmax(45%, 1fr); }
 .inspector .kv dt { overflow-wrap: anywhere; }
-.source-tag { font-family: var(--font-mono); font-size: 10.5px; color: var(--fg3); }
+.source-tag { font-family: var(--font-mono); font-size: var(--type-label-size); color: var(--fg3); }
 
 /* State text: colour plus the glyph in the text itself (ADR-0032 §5). */
 .st-run { color: var(--run); }
@@ -71,15 +67,15 @@
 /* Run configuration (F1 e6) */
 .run-config { overflow: auto; }
 .run-config section { margin: 0 0 14px; }
-.run-config h4 { margin: 0 0 6px; font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg2); }
+.run-config h4 { margin: 0 0 6px; font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: var(--type-label-tracking); text-transform: uppercase; color: var(--fg2); }
 .run-config h5 { margin: 8px 0 2px; font-size: var(--type-label-size); color: var(--fg2); }
 .run-config .row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
 .run-config .row.wrap { flex-wrap: wrap; }
 .field { display: inline-flex; flex-direction: column; gap: 2px; }
-.field-label { font-size: 11px; color: var(--fg2); }
+.field-label { font-size: var(--type-label-size); color: var(--fg2); }
 .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-top: 6px; }
 .field-with-hint { display: flex; flex-direction: column; gap: 2px; }
-.hint { font-size: 11px; }
+.hint { font-size: var(--type-label-size); }
 .cost-profile { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--ln); border-radius: var(--radius-control); }
 .cost-profile legend { padding: 0 4px; font-size: var(--type-label-size); color: var(--fg2); }
 .constraint-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; }
@@ -94,7 +90,7 @@
 .scenario-editor .editor-view { position: relative; flex: 1; min-width: 0; }
 .scenario-editor .editor-side { width: 380px; flex: none; overflow: auto; padding: 10px 12px; border-left: 1px solid var(--ln); }
 .scenario-editor .editor-side section { margin: 0 0 14px; }
-.scenario-editor h4 { margin: 0 0 6px; font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg2); }
+.scenario-editor h4 { margin: 0 0 6px; font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: var(--type-label-tracking); text-transform: uppercase; color: var(--fg2); }
 .scenario-editor h5 { margin: 8px 0 4px; font-size: var(--type-label-size); color: var(--fg2); }
 .scenario-editor .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
 .scenario-editor .row.wrap { flex-wrap: wrap; }
@@ -103,9 +99,7 @@
 .editor-tools { flex-direction: row; flex-wrap: wrap; align-items: center; right: 8px; }
 .editor-empty { position: absolute; top: 45%; width: 100%; text-align: center; }
 .agent-list, .zone-list, .warnings { list-style: none; margin: 0; padding: 0; }
-.agent-row { display: block; width: 100%; text-align: left; padding: 2px 6px; font: inherit; color: var(--fg); background: none; border: 0; border-bottom: 1px solid var(--ln); cursor: pointer; }
-.agent-row:hover { background: var(--bg3); }
-.agent-row.selected { background: var(--acbg); box-shadow: inset 2px 0 0 var(--ac); }
+.agent-row { display: block; width: 100%; text-align: left; padding: 2px 6px; font: inherit; color: var(--fg); background: none; border: 0; border-bottom: 1px solid var(--ln); }
 .agent-row:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
 .editor-agent { margin-top: 8px; padding: 8px; border: 1px solid var(--ln); border-radius: var(--radius-control); }
 .zone-list li { border-bottom: 1px solid var(--ln); }
@@ -120,8 +114,6 @@
 .strategy-view { max-height: 220px; overflow: auto; margin: 4px 0; padding: 6px 8px; background: var(--bg2); border: 1px solid var(--ln); border-radius: var(--radius-control); font-size: var(--type-mono-size); }
 .query-list { overflow: auto; border: 1px solid var(--ln); border-radius: var(--radius-control); }
 .query-list:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
-.query-row { display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; padding: 0 8px; cursor: pointer; font-size: var(--type-mono-size); border-bottom: 1px solid var(--ln); }
-.query-row:hover { background: var(--bg3); }
-.query-row[aria-selected="true"] { background: var(--acbg); box-shadow: inset 2px 0 0 var(--ac); }
+.query-row { display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; padding: 0 8px; font-size: var(--type-mono-size); border-bottom: 1px solid var(--ln); }
 .query-detail { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; margin-top: 4px; background: var(--bg2); border: 1px solid var(--ln); border-radius: var(--radius-control); font-size: var(--type-mono-size); }
-.stage-joint { padding: 0 4px; font-size: 10.5px; font-weight: 600; color: var(--fg); background: color-mix(in srgb, var(--bg0) 80%, transparent); border: 1px solid var(--ln2); border-radius: var(--radius-control); pointer-events: none; }
+.stage-joint { padding: 0 4px; font-size: var(--type-label-size); font-weight: 600; color: var(--fg); background: color-mix(in srgb, var(--bg0) 80%, transparent); border: 1px solid var(--ln2); border-radius: var(--radius-control); pointer-events: none; }
