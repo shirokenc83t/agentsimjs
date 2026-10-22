@@ -194,7 +194,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
             <button key={s.id} type="button" className={`nv${section === s.id ? " on" : ""}`} aria-current={section === s.id ? "true" : undefined} onClick={() => goTo(s.id)} data-testid={`rc-nav-${s.id}`}>
               <span className="n">{s.n}</span>
               {s.title}
-              {s.id === "effective" ? <span className="c3">{validation.ok ? `${validation.resolved.agents.length} agents` : ""}</span> : s.id === "presets" ? null : <StatusGlyph status={status[s.id]} />}
+              {s.id === "effective" ? <span className="c3">{validation.ok ? validation.resolved.agents.length : ""}</span> : s.id === "presets" ? null : <StatusGlyph status={status[s.id]} />}
             </button>
           ))}
         </nav>
