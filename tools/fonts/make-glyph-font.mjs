@@ -60,23 +60,23 @@ const diamond = (r) => [
 
 /** The glyphs: code point → name and contours. All within x 40..560, y -150..800. */
 export const GLYPHS = [
-  { code: 0x2715, name: "multiplication-x", contours: [solid(bar(110, 110, 490, 590, 96)), solid(bar(110, 590, 490, 110, 96))] },
-  { code: 0x25b2, name: "triangle-up", contours: [solid([[60, 60], [300, 650], [540, 60]])] },
-  { code: 0x25bc, name: "triangle-down", contours: [solid([[60, 640], [540, 640], [300, 50]])] },
-  { code: 0x25b6, name: "triangle-right", contours: [solid([[110, 50], [110, 650], [530, 350]])] },
-  { code: 0x275a, name: "heavy-bar", contours: [solid([[205, 50], [205, 650], [395, 650], [395, 50]])] },
-  { code: 0x25cf, name: "disc", contours: [solid(circle(CX, CY, 260, 28))] },
-  { code: 0x25cb, name: "ring", contours: [solid(circle(CX, CY, 260, 28)), hole(circle(CX, CY, 190, 28))] },
+  { code: 0x2715, name: "multiplication-x", contours: [solid(bar(80, 60, 520, 640, 104)), solid(bar(80, 640, 520, 60, 104))] },
+  { code: 0x25b2, name: "triangle-up", contours: [solid([[30, 30], [300, 690], [570, 30]])] },
+  { code: 0x25bc, name: "triangle-down", contours: [solid([[30, 670], [570, 670], [300, 10]])] },
+  { code: 0x25b6, name: "triangle-right", contours: [solid([[90, 20], [90, 680], [550, 350]])] },
+  { code: 0x275a, name: "heavy-bar", contours: [solid([[190, 20], [190, 680], [410, 680], [410, 20]])] },
+  { code: 0x25cf, name: "disc", contours: [solid(circle(CX, CY, 300, 32))] },
+  { code: 0x25cb, name: "ring", contours: [solid(circle(CX, CY, 300, 32)), hole(circle(CX, CY, 225, 32))] },
   {
     code: 0x25f7,
     name: "ring-upper-right-quadrant",
     // The ring, and the upper right quarter of what it encloses, filled.
-    contours: [solid(circle(CX, CY, 260, 28)), hole(circle(CX, CY, 190, 28)), solid([[CX, CY], [CX, CY + 190], ...[1, 2, 3, 4, 5, 6].map((i) => [Math.round(CX + 190 * Math.sin((i * Math.PI) / 14)), Math.round(CY + 190 * Math.cos((i * Math.PI) / 14))]), [CX + 190, CY]])],
+    contours: [solid(circle(CX, CY, 300, 32)), hole(circle(CX, CY, 225, 32)), solid([[CX, CY], [CX, CY + 225], ...[1, 2, 3, 4, 5, 6].map((i) => [Math.round(CX + 225 * Math.sin((i * Math.PI) / 14)), Math.round(CY + 225 * Math.cos((i * Math.PI) / 14))]), [CX + 225, CY]])],
   },
-  { code: 0x25c6, name: "diamond", contours: [solid(diamond(300))] },
-  { code: 0x25c7, name: "diamond-outline", contours: [solid(diamond(300)), hole(diamond(215))] },
-  { code: 0x25aa, name: "small-square", contours: [solid([[190, 240], [190, 460], [410, 460], [410, 240]])] },
-  { code: 0x2713, name: "check", contours: [solid(bar(90, 330, 235, 175, 100)), solid(bar(235, 175, 510, 600, 100))] },
+  { code: 0x25c6, name: "diamond", contours: [solid(diamond(340))] },
+  { code: 0x25c7, name: "diamond-outline", contours: [solid(diamond(340)), hole(diamond(250))] },
+  { code: 0x25aa, name: "small-square", contours: [solid([[170, 220], [170, 480], [430, 480], [430, 220]])] },
+  { code: 0x2713, name: "check", contours: [solid(bar(60, 330, 225, 150, 110)), solid(bar(225, 150, 540, 650, 110))] },
   { code: 0x2502, name: "light-vertical", contours: [solid([[270, -150], [270, 800], [330, 800], [330, -150]])] },
 ];
 
