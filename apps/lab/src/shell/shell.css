@@ -66,7 +66,7 @@
 /* Row 5: the status bar. */
 .bot { display: flex; align-items: stretch; height: 24px; background: var(--bg1); border-top: 1px solid var(--ln); white-space: nowrap; overflow: hidden; font-size: var(--type-label-size); color: var(--fg2); }
 .bot .seg { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-right: 1px solid var(--ln); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.bot .seg.r { flex: none; }
+.bot .seg.r, .bot .seg.pri { flex: none; }
 .bot .sp { flex: 1 1 0; min-width: 0; }
 .bot .seg.r { border-right: 0; border-left: 1px solid var(--ln); }
 .bot .warn { color: var(--warn); }

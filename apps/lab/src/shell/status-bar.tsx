@@ -30,16 +30,16 @@ export function StatusBar(props: StatusBarProps) {
   const persistent = status.state === "ready" && status.mode === "opfs-sahpool";
   return (
     <footer className="bot" aria-label="Status" data-testid="statusline">
-      <span className="seg" data-testid="status-state">
+      <span className="seg pri" data-testid="status-state">
         {snap.running ? `${GLYPH.running} running` : `${GLYPH.paused} paused`}
       </span>
-      <span className="seg" data-testid="status-simtime">
+      <span className="seg pri" data-testid="status-simtime">
         sim {formatSimTime(snap.simTimeS)}
       </span>
-      <span className="seg" data-testid="status-tick">
+      <span className="seg pri" data-testid="status-tick">
         tick {snap.tick}
       </span>
-      <span className="seg">{snap.entityIds.length} entities</span>
+      <span className="seg pri hide-narrow">{snap.entityIds.length} entities</span>
       {replaying && (
         <span className="seg rpseg" data-testid="status-live-background" title="The player shows a stored run; the live run goes on and is not touched">
           live run in background · tick {snap.tick}
@@ -47,13 +47,17 @@ export function StatusBar(props: StatusBarProps) {
       )}
       <span className="seg" data-testid="status-hashes" title="State hash of the live run at its last hash tick · run configuration hash · effective configuration hash">
         <span className="k">hash</span> {short(snap.stateHash)}
-        {snap.hashTick !== undefined && <span className="k">@{snap.hashTick}</span>} <span className="k">cfg</span> {short(header?.runConfigHash)} <span className="k">eff</span> {short(header?.effectiveConfigHash)}
+        {snap.hashTick !== undefined && <span className="k">@{snap.hashTick}</span>}
+        <span className="hide-narrow">
+          {" "}
+          <span className="k">cfg</span> {short(header?.runConfigHash)} <span className="k">eff</span> {short(header?.effectiveConfigHash)}
+        </span>
       </span>
       <span className={`seg${persistent ? "" : " warn"}`} data-testid="status-storage">
         db: {status.state === "ready" ? status.mode : status.state}
       </span>
       {info && (
-        <span className="seg" data-testid="status-storage-size">
+        <span className="seg hide-narrow" data-testid="status-storage-size">
           {formatBytes(info.dbFileBytes)} · {formatBytes(info.usageBytes)} / {formatBytes(info.quotaBytes)} · schema v{LATEST_SCHEMA_VERSION}
         </span>
       )}
