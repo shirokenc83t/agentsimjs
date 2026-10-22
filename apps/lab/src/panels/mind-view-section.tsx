@@ -85,7 +85,7 @@ export function MindViewSection(props: { source: RunSource; agentId: string; run
                 ? "none"
                 : req.unavailable.map((u) => (
                     <div key={u.name} className="mono" data-testid={`mind-unavailable-${u.name}`}>
-                      ✗ {u.name} · {u.code}
+                      ✕ {u.name} · {u.code}
                       {u.requires ? ` (${u.requires})` : ""}
                     </div>
                   ))}

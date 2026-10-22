@@ -53,14 +53,14 @@ export function RecordingControls({ realtime }: { realtime: boolean }) {
           />
           {!parsed.ok && (
             <p className="danger" role="alert" data-testid="recording-custom-error">
-              ✗ {parsed.message}
+              ✕ {parsed.message}
             </p>
           )}
         </>
       )}
       {realtime && heavy && !sel.optOut && (
         <p className="warn" data-testid="recording-heavy-warning">
-          ⚠ A realtime run with this profile writes a lot: if the writer falls behind, the run waits and each wait is traced as a storage_backpressure degradation.
+          ▲ A realtime run with this profile writes a lot: if the writer falls behind, the run waits and each wait is traced as a storage_backpressure degradation.
         </p>
       )}
     </fieldset>

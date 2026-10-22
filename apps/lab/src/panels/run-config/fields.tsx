@@ -70,7 +70,7 @@ export function OptionField<T extends string>(props: {
 export function Issue(props: { code: string; message: string; testId: string; children?: ReactNode }) {
   return (
     <p className="danger issue" role="alert" data-testid={props.testId}>
-      ✗ <span className="mono">{props.code}</span> {props.message}
+      ✕ <span className="mono">{props.code}</span> {props.message}
       {props.children}
     </p>
   );

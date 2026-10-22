@@ -37,9 +37,9 @@ export function describeRecording(i: RecordingStatusInput): RecordingStatusText 
   const saved = i.persisted === undefined ? "not saved yet" : i.tick > i.persisted.tick ? `saved to tick ${i.persisted.tick} · head ${i.tick}` : `saved to tick ${i.persisted.tick}`;
   const waiting =
     i.state === "storage_quota"
-      ? "⏸ paused: the storage quota is near (delete or export runs to free space)"
+      ? "❚❚ paused: the storage quota is near (delete or export runs to free space)"
       : i.state === "storage_backpressure"
-        ? `⏸ waiting for storage (${i.backlogRecords} records not saved yet)`
+        ? `❚❚ waiting for storage (${i.backlogRecords} records not saved yet)`
         : undefined;
   return { recorded: true, label, saved, waiting };
 }

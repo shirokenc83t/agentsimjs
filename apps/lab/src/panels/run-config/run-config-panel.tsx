@@ -445,7 +445,7 @@ function Presets(props: { draft: RunConfigDocument; scenario: RunConfigDocument[
       </div>
       {msg && (
         <p className={msg.ok ? "" : "danger"} role="status" data-testid="rc-preset-msg">
-          {msg.ok ? "✓" : "✗"} {msg.text}
+          {msg.ok ? "✓" : "✕"} {msg.text}
         </p>
       )}
     </section>

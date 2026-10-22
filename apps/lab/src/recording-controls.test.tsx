@@ -37,7 +37,7 @@ describe("RecordingControls", () => {
     expect(screen.queryByTestId("recording-custom-error")).toBeNull();
     await userEvent.clear(text);
     await userEvent.type(text, "{{}");
-    expect(await screen.findByTestId("recording-custom-error")).toHaveTextContent("✗");
+    expect(await screen.findByTestId("recording-custom-error")).toHaveTextContent("✕");
   });
 
   it("warns about a heavy profile only for a realtime run", async () => {

@@ -49,7 +49,7 @@ export function ReplayBar(props: { snap: RunSnapshot; dtS: number }) {
   const shown = Math.min(simTime, head);
   return (
     <div className="replay-bar" data-testid="replay-bar">
-      <span data-testid="replay-label">▶ {live ? "Scrubbing" : "Replay of"} {snap.runId} from storage (the live run is not touched)</span>
+      <span data-testid="replay-label">◷ {live ? "Scrubbing" : "Replay of"} {snap.runId} from storage (the live run is not touched)</span>
       <span className="muted" data-testid="replay-pose-rate">{snap.replay?.poseRate}</span>
       <div className="replay-track" ref={track} onClick={onTrackClick} data-testid="replay-track" role="presentation">
         <div className="replay-saved" style={{ width: `${(head / scale) * 100}%` }} />

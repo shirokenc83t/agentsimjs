@@ -305,10 +305,10 @@ export function App() {
           )}
           {snap.degradations > 0 && (
             <span className="warn" data-testid="status-degradations" title="Realtime tick skips; each one is traced (ADR-0013)">
-              ⚠ {snap.degradations} degradation{snap.degradations === 1 ? "" : "s"} (last: {snap.lastSkippedTicks} ticks skipped)
+              ▲ {snap.degradations} degradation{snap.degradations === 1 ? "" : "s"} (last: {snap.lastSkippedTicks} ticks skipped)
             </span>
           )}
-          {snap.error && <span className="danger">✗ {snap.error}</span>}
+          {snap.error && <span className="danger">✕ {snap.error}</span>}
         </footer>
 
         <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />

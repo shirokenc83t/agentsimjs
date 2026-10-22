@@ -561,7 +561,7 @@ export function ScenarioEditorPanel() {
                       <span className="mono muted">
                         ({a.start.xM}, {a.start.yM})
                       </span>
-                      {blocked && <span className="danger"> ✗ start not free</span>}
+                      {blocked && <span className="danger"> ✕ start not free</span>}
                     </button>
                   </li>
                 );

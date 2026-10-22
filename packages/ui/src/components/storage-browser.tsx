@@ -2,6 +2,7 @@ import type { RunSizes, RunSummary, StorageClient, StorageInfo } from "@agentsim
 import { useCallback, useEffect, useRef, useState } from "react";
 import { downloadBytes } from "../download.ts";
 import { formatBytes } from "../format.ts";
+import { GLYPH } from "../theme/tokens.ts";
 
 export interface StorageBrowserProps {
   readonly client: Pick<StorageClient, "ports" | "admin">;
@@ -230,7 +231,7 @@ export function StorageBrowser(props: StorageBrowserProps) {
       </div>
       {message && (
         <p role="status" data-testid="storage-message" className={message.kind === "error" ? "danger" : "muted"}>
-          {message.kind === "error" ? "✗ " : "✓ "}
+          {message.kind === "error" ? "✕ " : "✓ "}
           {message.text}
         </p>
       )}
@@ -265,7 +266,7 @@ export function StorageBrowser(props: StorageBrowserProps) {
                     aria-label={`Replay ${r.runId}`}
                     data-testid={`replay-${r.runId}`}
                   >
-                    ▶
+                    {GLYPH.replay}
                   </button>
                 )}
                 <button className="btn" disabled={busy} onClick={() => exportOne(r.runId)} aria-label={`Export ${r.runId}`}>
@@ -281,7 +282,7 @@ export function StorageBrowser(props: StorageBrowserProps) {
                   onClick={() => setConfirming(r.runId)}
                   aria-label={`Delete ${r.runId}`}
                 >
-                  🗑
+                  delete
                 </button>
               </td>
             </tr>

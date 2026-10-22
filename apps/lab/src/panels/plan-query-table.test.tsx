@@ -61,7 +61,7 @@ describe("PlanQueryTable (UI-SPEC: Strategy query table)", () => {
     expect(screen.getByTestId("plan-query-row-q-2")).toHaveTextContent("↻1");
     expect(screen.getByTestId("plan-query-row-q-2")).toHaveTextContent("tick 20→24");
     expect(screen.getByTestId("plan-query-row-q-2")).toHaveTextContent("1202 exp");
-    expect(screen.getByTestId("plan-query-row-q-3")).toHaveTextContent("⚡2");
+    expect(screen.getByTestId("plan-query-row-q-3")).toHaveTextContent("↯2");
     expect(screen.getByTestId("plan-query-row-q-3")).toHaveTextContent("interrupted");
     expect(screen.getByTestId("plan-query-row-q-4")).toHaveTextContent("✕");
     expect(screen.getByTestId("plan-query-row-q-4")).toHaveTextContent("budget_exceeded");

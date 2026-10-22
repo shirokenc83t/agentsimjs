@@ -160,7 +160,7 @@ export function ScenePanel() {
           {snap.mode === "live" && recorded && snap.runId && (
             <div className="row">
               <Button size="small" variant="outlined" color="inherit" onClick={() => openReplay(snap.runId)} data-testid="scrub-back" title="Look back at the run as it is saved (the run goes on)">
-                ⏪ Scrub back
+                ◷ Scrub back
               </Button>
             </div>
           )}
