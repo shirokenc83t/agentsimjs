@@ -27,6 +27,7 @@ export const LazyWorkspaceHost = lazy(() => import("./workspace-host.tsx").then(
  * spatial and planning packages, which must stay out of the initial chunk (ADR-0032 §3 bundle gate).
  */
 export const loadRunController = () => import("../sim/run-controller.ts");
+export const loadResimController = () => import("../sim/resim-controller.ts");
 
 /** Palette commands on the selected agent (ADR-0015 addition of 2026-10-12), loaded when the palette first opens. */
 export const loadAgentCommands = () => import("../commands.ts");

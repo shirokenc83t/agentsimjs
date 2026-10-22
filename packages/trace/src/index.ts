@@ -6,6 +6,7 @@ export {
   TraceRecord,
   RunStatus,
   RunHeader,
+  DerivedRun,
   formatRunId,
   isValidTraceRecord,
   firstNonMonotonicRecord,

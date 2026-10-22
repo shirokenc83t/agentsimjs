@@ -1,6 +1,6 @@
 import type { StorageInfo } from "@agentsim/storage";
 import type { DockviewApi } from "dockview-react";
-import { Banner, CommandPalette, downloadBytes, THEME_PREFERENCES, type Command } from "@agentsim/ui";
+import { Banner, CommandPalette, downloadBytes, THEME_PREFERENCES, useUiContext, type Command } from "@agentsim/ui";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { applyAppearance, loadAppearance } from "./config/appearance.ts";
 import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStorageStatus, useThemeSetting, type CurrentRun } from "./services.tsx";
@@ -9,7 +9,7 @@ import { closePanel, dockPanel, floatPanel, focusNext, focusNumber, isFloating, 
 import { deleteNamedLayout, layoutName, listNamedLayouts, readNamedLayout, saveNamedLayout } from "./workspaces/layouts.ts";
 import { LAYOUT_NAMESPACE, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
 import { PANELS, type PanelId } from "./workspaces/registry.tsx";
-import { LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadRunController } from "./workspaces/registry.tsx";
+import { LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadResimController, loadRunController } from "./workspaces/registry.tsx";
 import { Player } from "./shell/player.tsx";
 import { shellKey } from "./shell/shortcuts.ts";
 import { StatusBar } from "./shell/status-bar.tsx";
@@ -44,6 +44,8 @@ export function App() {
   const [runAnchor, setRunAnchor] = useState<HTMLElement | null>(null);
   // A replay session: the run being shown from storage (the session itself, and what it says when it cannot open, are in its lazy chunk).
   const [replayRun, setReplayRun] = useState<string | undefined>(undefined);
+  // What the last "Re-simulate window" said: its verdict, or why it could not be done. Dismissed by the researcher.
+  const [resimNote, setResimNote] = useState<{ kind: "info" | "warn" | "danger"; text: string } | null>(null);
 
   const startRun = useCallback(
     (start: () => Promise<LabRun>) => {
@@ -215,6 +217,28 @@ export function App() {
       ...(preset?.panels ?? []).map((p) => ({ id: `panel.open.${p.id}`, title: `Open panel: ${PANELS[p.id as PanelId].title}`, group: "Panel", run: () => dockRef.current && preset && openPanel(dockRef.current, preset, p.id) })),
     ];
   }, [preset]);
+  // Re-simulates a window around the cursor of the run the panels show into a derived run, stored with its verdict (ADR-0035 section 3). Opening a derived run in the panels, and
+  // the buttons of the log, the timeline and the inspector, are the next milestone: the panels' replay reads the run's configuration records, which a window does not hold.
+  const resimulateWindow = useCallback(async () => {
+    const runId = view?.runId;
+    if (!runId || storage.status().state !== "ready") return;
+    setResimNote({ kind: "info", text: `Re-simulating a window of ${runId}…` });
+    try {
+      const c = await loadResimController();
+      const w = await c.suggestWindow(storage.ports, runId, useUiContext.getState().simTime);
+      if (!w.ok) return setResimNote({ kind: "warn", text: `Cannot re-simulate a window of ${runId}: ${w.error.message}` });
+      const r = await c.resimulateWindowToRun(storage.ports, runId, w.value);
+      if (!r.ok) return setResimNote({ kind: "danger", text: `Could not re-simulate a window of ${runId}: ${r.error.message}` });
+      const d = r.value.derived;
+      setResimNote(
+        d.status === "matches"
+          ? { kind: "info", text: `Window ${d.t0S}–${d.t1S} s of ${runId} re-simulated as ${r.value.runId}: it matches (${d.checkpointsChecked} checkpoints reproduced).` }
+          : { kind: "danger", text: `Window ${d.t0S}–${d.t1S} s of ${runId} re-simulated as ${r.value.runId}: DIVERGENT at tick ${d.divergence?.tick ?? "?"} (the state hash differs from the recorded one).` },
+      );
+    } catch (e) {
+      setResimNote({ kind: "danger", text: `Could not re-simulate a window: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }, [view?.runId, storage]);
   // The Performance window is in the Scene and the Debug; elsewhere it opens from here (the status bar's frame segment, the palette).
   const openPerformance = useCallback(() => {
     if (dockRef.current && presetRef.current) openPanel(dockRef.current, presetRef.current, "perf");
@@ -236,6 +260,7 @@ export function App() {
       },
       ...agentCommands,
       { id: "run.config", title: "Open run configuration", group: "Run", run: () => setWorkspace("author") },
+      { id: "run.resimWindow", title: "Re-simulate window…", group: "Run", disabled: !ready || !view?.runId, run: () => void resimulateWindow() },
       { id: "run.rerun", title: "Re-run (same scenario version and run configuration)", group: "Run", disabled: !ready || runBusy || !run, run: () => rerunCurrent() },
       {
         id: "run.rerunMode",
@@ -254,7 +279,7 @@ export function App() {
       { id: "panel.perf", title: "Open the Performance window", group: "Panel", run: openPerformance },
       ...panelCommands,
     ],
-    [ready, sim, storage, resetLayouts, setTheme, openPerformance, loadDemo, loadReference, rerunCurrent, rerunInMode, otherMode, runBusy, run, agentCommands, panelCommands],
+    [ready, sim, storage, resetLayouts, setTheme, openPerformance, resimulateWindow, view?.runId, loadDemo, loadReference, rerunCurrent, rerunInMode, otherMode, runBusy, run, agentCommands, panelCommands],
   );
 
   return (
@@ -331,6 +356,14 @@ export function App() {
           )}
           {status.state === "failed" && (
             <Banner kind="danger" testId="storage-failed">Storage failed to open: {status.error}</Banner>
+          )}
+          {resimNote && (
+            <Banner kind={resimNote.kind} testId="resim-notice">
+              {resimNote.text}{" "}
+              <button type="button" className="btn" onClick={() => setResimNote(null)} data-testid="resim-notice-dismiss">
+                Dismiss
+              </button>
+            </Banner>
           )}
         </div>
 

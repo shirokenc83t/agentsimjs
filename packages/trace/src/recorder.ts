@@ -128,6 +128,11 @@ export interface RunRecorderOptions {
   readonly sendItem?: (item: RecorderItem) => void;
   /** The marks of the backlog (default: `DEFAULT_FLOW_CONTROL`). */
   readonly flow?: FlowControl;
+  /**
+   * The first seq to gather (default 0): a recorder that starts in the middle of a run, as the one of a re-simulated window does, takes what the run emits from here and
+   * leaves what it emitted before.
+   */
+  readonly fromSeq?: number;
 }
 
 interface InFlight {
@@ -163,6 +168,7 @@ export class RunRecorder {
     this.send = o.send;
     this.flow = o.flow ?? DEFAULT_FLOW_CONTROL;
     this.sendItem = o.sendItem;
+    this.cursor = o.fromSeq ?? 0;
     // From now on the cache forgets a record only once it is persisted.
     this.buffer.holdUnpersisted();
   }

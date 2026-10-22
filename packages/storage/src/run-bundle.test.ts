@@ -111,6 +111,21 @@ describe.each(adapters)("a run as a file (%s)", (_name, make) => {
     expect((await b.snapshots.getBlob("run-000003", src.manifestHash))?.bytes).toEqual(src.blobs.find((x) => x.id === src.manifestHash)?.bytes);
   });
 
+  it("keeps what a derived run says of itself through a file, though its parent is not in the other database", async () => {
+    const a = make();
+    await recordedRun(a);
+    const derived = { parentRunId: "run-000001", t0S: 0.1, t1S: 0.4, startTick: 0, endTick: 4, status: "divergent" as const, checkpointsChecked: 2, divergence: { tick: 3, expected: "aaaaaaaa", actual: "bbbbbbbb" }, copies: 1 };
+    const made = await a.runs.create({ runId: "run-000002", schemaVersion: 0, createdAtWallMs: 1, label: "window", status: "completed", derived });
+    if (!made.ok) throw new Error(made.error.message);
+    const file = await exportRunJsonl(a, "run-000002");
+    if (!file.ok) throw new Error(file.error.message);
+    const b = make();
+    const imported = await importRunJsonl(b, file.value);
+    if (!imported.ok) throw new Error(imported.error.message);
+    expect((await b.runs.get(imported.value.runId))?.derived).toEqual(derived);
+    expect(imported.value.importedFrom).toBe("run-000002");
+  });
+
   it("keeps the earliest origin when a run that was imported is exported and imported again", async () => {
     const a = make();
     await recordedRun(a);

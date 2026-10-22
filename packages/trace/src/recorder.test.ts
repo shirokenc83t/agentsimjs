@@ -121,3 +121,17 @@ describe("RunRecorder: the panel stream", () => {
     expect(rec.takePanel()).toHaveLength(100);
   });
 });
+
+describe("RunRecorder: starting in the middle of a run", () => {
+  it("gathers from the seq it is given and leaves what the run emitted before (a re-simulated window records from its start)", () => {
+    const buf = new TraceBuffer("run-000002", () => 0, 1000);
+    const sent: RecorderBatch[] = [];
+    emit(buf, 0, 4); // what the restored run already had
+    const rec = new RunRecorder({ buffer: buf, profile: RECORDING_PRESETS["default-research"], send: (b) => sent.push(b), fromSeq: buf.nextSeq });
+    rec.headerStored();
+    emit(buf, 1, 2);
+    rec.collect(1, 0.1);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.records.map((r) => r.seq)).toEqual([4, 5]);
+  });
+});

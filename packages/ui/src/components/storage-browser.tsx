@@ -282,7 +282,16 @@ export function StorageBrowser(props: StorageBrowserProps) {
           {runs.map((r) => (
             <tr key={r.runId} data-testid={`run-row-${r.runId}`}>
               <td>{r.runId}</td>
-              <td>{r.label}</td>
+              <td>
+                {r.label}
+                {r.derived && (
+                  <span className="derived-mark" data-testid={`derived-${r.runId}`} title={`Re-simulated from ${r.derived.parentRunId}: ${r.derived.status === "matches" ? `every checkpoint reproduced (${r.derived.checkpointsChecked})` : `divergent at tick ${r.derived.divergence?.tick ?? "?"}`}`}>
+                    {" "}
+                    <span className="muted">◇ of {r.derived.parentRunId}</span>{" "}
+                    <span className={r.derived.status === "matches" ? "st-ok" : "st-alm"}>{r.derived.status === "matches" ? "✓ matches" : `✕ divergent @${r.derived.divergence?.tick ?? "?"}`}</span>
+                  </span>
+                )}
+              </td>
               <td className={r.status === "completed" ? "st-ok" : r.status === "aborted" ? "st-warn" : "st-run"}>{r.status === "completed" ? "✓" : r.status === "aborted" ? "○" : "▶"} {r.status}</td>
               <td>{r.recordCount}</td>
               <td className="muted" data-testid={`run-size-${r.runId}`}>
@@ -293,8 +302,8 @@ export function StorageBrowser(props: StorageBrowserProps) {
                 {props.onReplay && (
                   <button
                     className="btn"
-                    disabled={busy || r.recording !== "stored"}
-                    title={r.recording === "stored" ? "Replay this run from storage" : r.recording === "none" ? "This run was not recorded: there is nothing to replay" : "This run was stored before recording existed: there is nothing to replay"}
+                    disabled={busy || r.recording !== "stored" || r.derived !== undefined}
+                    title={r.derived !== undefined ? "A re-simulated window: the panels open it in the next milestone (it holds the window, not the run's start)" : r.recording === "stored" ? "Replay this run from storage" : r.recording === "none" ? "This run was not recorded: there is nothing to replay" : "This run was stored before recording existed: there is nothing to replay"}
                     onClick={() => props.onReplay?.(r.runId)}
                     aria-label={`Replay ${r.runId}`}
                     data-testid={`replay-${r.runId}`}

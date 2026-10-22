@@ -49,8 +49,11 @@ export interface RunSummary extends RunHeader {
 export interface RunStore {
   /** Next unused run ID (`run-NNNNNN`), derived from stored runs; never reused. */
   allocateRunId(): Promise<string>;
-  /** A header naming a scenario must name a stored, not deleted, version of it (ADR-0028). */
-  create(header: RunHeader): Promise<Result<void, CodedError<"duplicate_run" | "invalid_header" | "scenario_version_not_found">>>;
+  /**
+   * A header naming a scenario must name a stored, not deleted, version of it (ADR-0028). A derived run names a parent that is stored (it may be deleted later: the
+   * link then stays as what the run says it was made from); a derived run that was imported names a run of the database it came from, which is not here.
+   */
+  create(header: RunHeader): Promise<Result<void, CodedError<"duplicate_run" | "invalid_header" | "scenario_version_not_found" | "parent_run_not_found">>>;
   get(runId: string): Promise<RunHeader | undefined>;
   list(): Promise<RunSummary[]>;
   setStatus(runId: string, status: RunStatus): Promise<Result<void, CodedError<"unknown_run">>>;

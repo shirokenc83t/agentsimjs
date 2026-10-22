@@ -193,4 +193,18 @@ describe("StorageBrowser", () => {
     await waitFor(() => expect(download).toHaveBeenCalledWith(new Uint8Array([4]), "run-000001.sqlite"));
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
   });
+
+  it("marks a derived run with its parent and its verdict, and does not offer to replay it yet", async () => {
+    const { ports } = setup();
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    await ports.runs.create({
+      runId: "run-000002", schemaVersion: 0, createdAtWallMs: 1, label: "window 5.0–9.0 s of run-000001", status: "completed", recording: "none",
+      derived: { parentRunId: "run-000001", t0S: 5, t1S: 9, startTick: 49, endTick: 90, status: "divergent", checkpointsChecked: 3, divergence: { tick: 60, expected: "aaaaaaaa", actual: "bbbbbbbb" }, copies: 0 },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    const mark = await screen.findByTestId("derived-run-000002");
+    expect(mark).toHaveTextContent("of run-000001");
+    expect(mark).toHaveTextContent("✕ divergent @60");
+    expect(screen.queryByTestId("derived-run-000001")).toBeNull();
+  });
 });
