@@ -19,10 +19,25 @@
 .timeline-lanes { overflow: auto; flex: 1; }
 .timeline-lanes canvas { display: block; cursor: pointer; }
 .event-list { display: flex; flex-direction: column; padding: 0; }
-.event-filters { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--ln); font-size: 12px; }
-.event-scroller { flex: 1; min-height: 80px; overflow: auto; outline: none; }
+.event-scroller { flex: 1; min-height: 80px; overflow: auto; outline: none; background: var(--bg0); }
 .event-scroller:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
-.event-row { display: grid; grid-template-columns: 62px 96px 34px 1fr; align-items: center; gap: 8px; padding: 0 8px; font-size: var(--type-mono-size); border-bottom: 1px solid var(--ln); white-space: nowrap; overflow: hidden; }
+.event-row { display: grid; grid-template-columns: 62px 96px 46px 112px minmax(0, 1fr) 118px; align-items: center; gap: 8px; padding: 0 10px; font-size: var(--type-mono-size); white-space: nowrap; overflow: hidden; }
+.event-row > span { overflow: hidden; text-overflow: ellipsis; }
+.event-row.zebra { background: color-mix(in srgb, var(--bg1) 60%, transparent); }
+.event-row.alm:not([aria-selected="true"]) { background: var(--almbg); }
+/* The filter as a prompt, the kind chips under it, the key footer under the log (Console, UI-SPEC section 6). */
+.prompt { flex: none; display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 10px; background: var(--bg0); border-bottom: 1px solid var(--ln); white-space: nowrap; overflow: hidden; }
+.prompt .ps { color: var(--ok); }
+.prompt .pf { color: var(--fg3); }
+.prompt .pr { color: var(--kind-amber); }
+.prompt .cur { display: inline-block; width: 7px; height: 14px; background: var(--fg); }
+.prompt select { background: transparent; border: 0; color: var(--fg); font: inherit; padding: 0 2px; cursor: pointer; }
+.kinds { flex: none; display: flex; gap: 4px; padding: 4px 8px; flex-wrap: wrap; background: var(--bg1); border-bottom: 1px solid var(--ln); }
+.kt { appearance: none; font: inherit; font-size: var(--type-label-size); border: 1px solid var(--ln); background: transparent; color: var(--fg2); padding: 0 5px; height: 18px; cursor: pointer; }
+.kt:hover { background: var(--bg3); border-color: var(--fg3); }
+.kt.off { opacity: 0.5; text-decoration: line-through; }
+.tag { display: inline-block; font-weight: 600; font-size: var(--type-label-size); }
+.lfoot { flex: none; display: flex; gap: 12px; height: 20px; align-items: center; padding: 0 10px; background: var(--bg2); border-top: 1px solid var(--ln); color: var(--fg3); font-size: var(--type-label-size); white-space: nowrap; overflow: hidden; }
 .event-detail { margin: 0; max-height: 40%; overflow: auto; padding: 6px 8px; border-top: 1px solid var(--ln); font-size: var(--type-label-size); white-space: pre-wrap; }
 
 /* Explorer (virtualized list) and Inspector. */
@@ -32,12 +47,23 @@
 .explorer-row { display: grid; grid-template-columns: 10px 64px 1fr 34px auto; align-items: center; gap: 8px; padding: 0 10px; font-size: var(--type-mono-size); border-bottom: 1px solid var(--ln); }
 .explorer .legend { margin: 4px 10px; font-size: var(--type-label-size); }
 .kind-tag { font-size: var(--type-label-size); font-weight: 600; color: var(--fg2); }
-.inspector h3 { display: flex; align-items: center; gap: 6px; }
-.inspector-section { margin: 0 0 10px; }
-.inspector-section h4 { margin: 0 0 4px; font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: var(--type-label-tracking); text-transform: uppercase; color: var(--fg2); }
+/* The Inspector as an ID card and blocks (Console, UI-SPEC section 4): the card edge to edge, then blocks with a ruled title and dotted-leader lists. */
+.panel.inspector { padding: 0; }
+.inspector > p { padding: 10px 12px; margin: 0; }
+.inspector .idcard { padding: 10px 12px; background: var(--bg2); border-bottom: 1px solid var(--ln); display: flex; flex-direction: column; gap: 4px; }
+.inspector .idcard h3 { margin: 0; display: flex; align-items: baseline; gap: 8px; text-transform: none; letter-spacing: 0; font-size: var(--type-body-size); font-weight: 400; }
+.inspector .idcard .id { font-size: 17px; font-weight: 600; }
+.dot { display: inline-block; width: 9px; height: 9px; flex: none; }
+.bar { color: var(--ok); }
+.bar s { color: var(--ln2); text-decoration: none; }
+.inspector-section { margin: 0; padding: 6px 12px 8px; border-bottom: 1px solid var(--ln); }
+.inspector-section h4 { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px; font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: var(--type-label-tracking); text-transform: uppercase; color: var(--fg3); }
+.inspector-section h4::after { content: ""; flex: 1; height: 1px; background: var(--ln); }
 /* Values keep at least 45 % of the width; long schema keys wrap instead of squeezing values mid-word. */
 .inspector .kv { grid-template-columns: minmax(0, max-content) minmax(45%, 1fr); }
-.inspector .kv dt { overflow-wrap: anywhere; }
+.inspector .kv dt { overflow-wrap: anywhere; display: flex; align-items: baseline; gap: 6px; }
+/* Dotted leaders from the name to the value. */
+.inspector .kv dt::after { content: ""; flex: 1; min-width: 12px; border-bottom: 1px dotted var(--ln2); transform: translateY(-3px); }
 .source-tag { font-family: var(--font-mono); font-size: var(--type-label-size); color: var(--fg3); }
 
 /* State text: colour plus the glyph in the text itself (ADR-0032 §5). */
@@ -94,8 +120,8 @@
 .agent-row:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
 .editor-agent { margin-top: 8px; padding: 8px; border: 1px solid var(--ln); border-radius: var(--radius-control); }
 .zone-list li { border-bottom: 1px solid var(--ln); }
-.mind-view { border-left: 3px solid var(--ac); padding-left: 8px; }
-.researcher-view { margin: 10px 0; padding: 6px 8px; border: 1px dashed var(--fg2); border-radius: var(--radius-control); background: var(--bg3); }
+.mind-view { border: 1px solid var(--ln); padding: 4px 8px; }
+.researcher-view { margin: 8px 12px; padding: 6px 8px; border: 1px dashed var(--warn); border-radius: var(--radius-control); background: color-mix(in srgb, var(--warn) 6%, transparent); }
 .researcher-view summary { cursor: pointer; }
 .researcher-banner { margin: 6px 0; font-weight: 600; color: var(--fg); }
 .edit-target { margin: 4px 0; padding: 4px 8px; border: 1px solid var(--ln); border-radius: var(--radius-control); font-weight: 600; }

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { loadF2, openWorkspace, runCommand, step } from "./helpers.ts";
+import { LABEL_PX, LANE_PX, RULER_PX } from "../src/panels/debug/timeline-geometry.ts";
 
 // F3a M3: a click on a row of the event list moves the shared cursor: the Scene's agents and the belief overlay go to that instant. The overlay at the
 // instant equals that of a live run paused at the same tick (exact), and the agent's position equals the live one (a record of an action is also a pose
@@ -48,7 +49,7 @@ test("clicking an event moves the cursor: the belief overlay and the agent are w
   // The event list of the Debug workspace: the rover's actions, from storage.
   await openWorkspace(page, "debug");
   await page.getByTestId("event-filter-agent").selectOption(AGENT);
-  await page.getByTestId("event-filter-kind").selectOption("action");
+  await page.getByTestId("event-kind-action").click({ modifiers: ["Shift"] }); // that kind alone
   await expect(page.getByTestId("event-count")).toContainText("records");
   const rows = page.locator('[data-testid^="event-row-"][data-kind="action"]');
   await expect.poll(() => rows.count(), { timeout: 15_000 }).toBeGreaterThan(2);
@@ -121,7 +122,7 @@ test("the Timeline of the Debug workspace has a lane per agent with the marks of
   const box = await page.getByTestId("timeline-canvas").boundingBox();
   if (!box) throw new Error("no timeline");
   // A click on the rover's lane (run, uav-001, ugv-001, ugv-002: the third lane) at the middle of the run: the panels show the run from storage, at that moment.
-  await page.getByTestId("timeline-canvas").click({ position: { x: 84 + (box.width - 84) * 0.5, y: 2 * 20 + 10 } });
+  await page.getByTestId("timeline-canvas").click({ position: { x: LABEL_PX + (box.width - LABEL_PX) * 0.5, y: RULER_PX + 2 * LANE_PX + LANE_PX / 2 } });
   await expect(page.getByTestId("replay-bar")).toBeVisible({ timeout: 20_000 });
   const shown = Number(/^([\d.]+) s/.exec((await page.getByTestId("replay-time").textContent()) ?? "")?.[1]);
   expect(shown).toBeGreaterThan(5);

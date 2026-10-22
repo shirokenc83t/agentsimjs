@@ -1,4 +1,5 @@
-import { useUiContext } from "@agentsim/ui";
+import { KIND_STYLE, useUiContext } from "@agentsim/ui";
+import { MARK_LEGEND } from "../panels/debug/marks.ts";
 import type { IDockviewHeaderActionsProps } from "dockview-react";
 import { useContext, useEffect, useReducer } from "react";
 import { PresetContext } from "./preset-context.ts";
@@ -19,6 +20,16 @@ function PanelContext(props: { panelId: string }) {
       text = runId ?? "no run";
       break;
     case "timeline":
+      // The legend of its glyphs lives in its title bar.
+      return (
+        <span className="tmeta mono" data-testid="timeline-legend" aria-label="Legend of the marks">
+          {MARK_LEGEND.map((l) => (
+            <span key={l.name} style={{ color: l.kind === "alm" ? "var(--alm)" : `var(--kind-${KIND_STYLE[l.kind as keyof typeof KIND_STYLE]?.family ?? "slate"})` }}>
+              {l.glyph} <span className="muted">{l.name}</span>{" "}
+            </span>
+          ))}
+        </span>
+      );
     case "eventList":
       text = runId ? `${runId} · cursor ${simTime.toFixed(1)} s` : "no run";
       break;

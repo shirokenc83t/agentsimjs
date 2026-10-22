@@ -33,7 +33,7 @@ async function signature(page: Page, runId: string) {
     out[`state@${t}`] = (await page.getByTestId("inspector-state").textContent()) ?? "";
   }
   await openWorkspace(page, "debug");
-  await page.getByTestId("event-filter-kind").selectOption("event");
+  await page.getByTestId("event-kind-event").click({ modifiers: ["Shift"] }); // that kind alone
   await expect.poll(() => page.locator('[data-testid^="event-row-"]').count(), { timeout: 15_000 }).toBeGreaterThan(2);
   const rows = page.locator('[data-testid^="event-row-"]');
   out["events"] = (await rows.evaluateAll((els) => els.slice(0, 12).map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim()))).join(" | ");

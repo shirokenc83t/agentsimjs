@@ -36,6 +36,18 @@ function Row(props: { k: string; children: ReactNode; testId?: string }) {
   );
 }
 
+/** The charge as a bar of ten cells (block characters): the alarm colour at or under the critical level, the warning colour under a third. */
+function BatteryBar(props: { soc: number; critical: number | undefined }) {
+  const cells = Math.max(0, Math.min(10, Math.round(props.soc * 10)));
+  const tone = props.critical !== undefined && props.soc <= props.critical ? "st-alm" : props.soc < 0.33 ? "st-warn" : "st-ok";
+  return (
+    <span className={`bar mono ${tone}`} aria-hidden="true">
+      {"█".repeat(cells)}
+      <s>{"░".repeat(10 - cells)}</s>
+    </span>
+  );
+}
+
 /** A live-only section: its content while the source has it, else the reason it is off (a recording has no such data). */
 function Unavailable(props: { source: RunSource; feature: RunFeature; title: string; children: ReactNode }) {
   const why = props.source.unavailable(props.feature);
@@ -181,10 +193,21 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
   const strategy = isStrategy(cfg.planning?.["strategy"]) ? cfg.planning["strategy"] : undefined;
   return (
     <div data-testid="inspector-agent">
-      <h3>
-        <span className="agent-swatch" style={{ backgroundColor: `var(--agent-${agentColorIndex(id)})` }} /> <span className="mono">{id}</span>{" "}
-        <span className="muted">{agent.key ?? ""} · {agent.kind.toUpperCase()}</span>
-      </h3>
+      {/* The ID card: who this is and what it is doing, before any block. */}
+      <div className="idcard" data-testid="inspector-idcard">
+        <h3>
+          <span className="dot" style={{ backgroundColor: `var(--agent-${agentColorIndex(id)})` }} /> <span className="id mono">{id}</span>{" "}
+          <span className="muted">
+            {[agent.key, agent.kind.toUpperCase(), typeof body["drive"] === "string" ? body["drive"] : undefined].filter((x) => x !== undefined && x !== "").join(" · ")}
+          </span>
+        </h3>
+        <div className="mono" data-testid="inspector-idcard-state">
+          <span className={`st-${state}`}>
+            {STATE_GLYPH[state]} {actionLabel(action)}
+          </span>
+          {action && <span className="muted"> · since {action.startedAtS.toFixed(1)} s</span>}
+        </div>
+      </div>
       <Unavailable source={source} feature="mindView" title="What the mind receives">
         <MindViewSection source={source} agentId={id} runId={run.runId} />
       </Unavailable>
@@ -205,6 +228,12 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
         <Row k="battery" testId="inspector-battery">
           {st ? `${((st[o] ?? 0) * 100).toFixed(1)} %` : "—"}
           {battery?.criticalSoc !== undefined ? ` (critical ${(battery.criticalSoc * 100).toFixed(0)} %)` : ""}
+          {st && (
+            <>
+              {" "}
+              <BatteryBar soc={st[o] ?? 0} critical={battery?.criticalSoc} />
+            </>
+          )}
         </Row>
         <Row k="odometer">{st ? m(st[o + 2] ?? 0, 1) : "—"}</Row>
         {agent.kind === "uav" && <Row k="airborne">{st && (st[o + 3] ?? 0) > 0.5 ? "yes" : "no"}</Row>}
@@ -335,7 +364,11 @@ function CellInspector(props: { id: string; snap: RunSnapshot; source: RunSource
   const clear = clearanceM(props.source, i, j, res, 5);
   return (
     <div data-testid="inspector-cell">
-      <h3 className="mono">cell {props.id}</h3>
+      <div className="idcard">
+        <h3 className="mono">
+          <span className="id">cell {props.id}</span>
+        </h3>
+      </div>
       <Section title="Cell">
         <Row k="centre">{`${m((i + 0.5) * res)}, ${m((j + 0.5) * res)}`}</Row>
         <Row k="occupancy" testId="inspector-cell-occupancy">

@@ -13,7 +13,7 @@ test("arrow keys, Home and End move the selection of the event list and the curs
   await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 300", { timeout: 20_000 });
   await openWorkspace(page, "debug");
   await page.getByTestId("event-filter-agent").selectOption("ugv-001");
-  await page.getByTestId("event-filter-kind").selectOption("action");
+  await page.getByTestId("event-kind-action").click({ modifiers: ["Shift"] }); // that kind alone
   const rows = page.locator('[data-testid^="event-row-"]');
   await expect.poll(() => rows.count(), { timeout: 15_000 }).toBeGreaterThan(3);
 
