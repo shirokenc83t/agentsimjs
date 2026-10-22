@@ -326,3 +326,7 @@
 .st-keys { margin: 0; grid-template-columns: 160px minmax(0, 1fr); }
 .st-keys kbd { font: inherit; font-size: var(--type-label-size); color: var(--fg); border: 1px solid var(--ln2); padding: 0 5px; }
 .st-row > .btn, .st-row > .segc { justify-self: start; }
+
+/* The popover is narrow: long hashes and profile names wrap instead of running off its edge. */
+.run-info .kv dd { overflow-wrap: anywhere; min-width: 0; }
+.run-info .kv { grid-template-columns: max-content minmax(0, 1fr); }

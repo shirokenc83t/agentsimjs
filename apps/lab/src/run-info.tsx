@@ -38,7 +38,7 @@ function Anchored(props: { anchor: HTMLElement; onClose: () => void; label: stri
       role="dialog"
       aria-label={props.label}
       tabIndex={-1}
-      style={{ position: "fixed", top: at.bottom + 4, left: left ?? at.left, maxHeight: `calc(100vh - ${at.bottom + 16}px)`, overflow: "auto" }}
+      style={{ position: "fixed", top: at.bottom + 4, left: left ?? 0, visibility: left === undefined ? "hidden" : undefined, maxHeight: `calc(100vh - ${at.bottom + 16}px)`, overflow: "auto" }}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.stopPropagation();
