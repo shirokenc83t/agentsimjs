@@ -11,26 +11,39 @@ import type { SimSnapshot } from "./sim/sim-client.ts";
  * trigger is moved left.
  */
 function Anchored(props: { anchor: HTMLElement; onClose: () => void; label: string; children: ReactNode }) {
-  const { anchor, onClose } = props;
+  const { anchor } = props;
   const box = useRef<HTMLDivElement>(null);
+  // The parent passes a new `onClose` on every render: the listeners below read the latest through a ref, so they are set once.
+  const close = useRef(props.onClose);
+  close.current = props.onClose;
   const [left, setLeft] = useState<number | undefined>(undefined);
   const at = anchor.getBoundingClientRect();
   useLayoutEffect(() => {
     const w = box.current?.offsetWidth ?? 0;
     setLeft(Math.max(8, Math.min(anchor.getBoundingClientRect().left, window.innerWidth - w - 8)));
   }, [anchor]);
+  // Hidden until placed (it is measured first), so the focus goes in once it is shown.
+  const placed = left !== undefined;
   useEffect(() => {
+    if (!placed) return;
     const first = box.current?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
     (first ?? box.current)?.focus();
+  }, [placed]);
+  useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      if (e.target instanceof Node && !box.current?.contains(e.target) && !anchor.contains(e.target)) onClose();
+      if (e.target instanceof Node && !box.current?.contains(e.target) && !anchor.contains(e.target)) close.current();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close.current();
     };
     document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
       if (anchor.isConnected) anchor.focus();
     };
-  }, [anchor, onClose]);
+  }, [anchor]);
   return (
     <div
       ref={box}
@@ -39,12 +52,6 @@ function Anchored(props: { anchor: HTMLElement; onClose: () => void; label: stri
       aria-label={props.label}
       tabIndex={-1}
       style={{ position: "fixed", top: at.bottom + 4, left: left ?? 0, visibility: left === undefined ? "hidden" : undefined, maxHeight: `calc(100vh - ${at.bottom + 16}px)`, overflow: "auto" }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.stopPropagation();
-          onClose();
-        }
-      }}
     >
       {props.children}
     </div>
