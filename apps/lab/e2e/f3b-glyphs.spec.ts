@@ -31,6 +31,9 @@ test("the symbols of the chrome are drawn by the glyph font, never by a system f
   }
   const status = await fontsOf(page, "status-state");
   expect(status.find((f) => f.family === "AgentSim Glyphs")?.glyphs, "❚❚ or ▶ in the status bar").toBeGreaterThan(0);
-  const tile = await fontsOf(page, "attention-tile");
-  expect(tile.find((f) => f.family === "AgentSim Glyphs")?.glyphs, "✕ ▲ in the attention tile").toBeGreaterThan(0);
+  // Each count is its own element (a zero is neutral, the others take their role colour): the symbols are drawn in them.
+  for (const id of ["attention-count-alarm", "attention-count-warning"]) {
+    const count = await fontsOf(page, id);
+    expect(count.find((f) => f.family === "AgentSim Glyphs")?.glyphs, `${id}: ✕ or ▲ in the attention tile`).toBeGreaterThan(0);
+  }
 });

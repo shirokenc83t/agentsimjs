@@ -1,9 +1,9 @@
-import { GLYPH } from "@agentsim/ui";
+import { AttentionCounts } from "./attention-counts.tsx";
 import { useAppActions, useSource } from "../services.tsx";
 import { useAttention } from "../panels/attention-store.ts";
 
 /**
- * The attention tile of the player (UI-SPEC section 4): how many agents are at each level, in the colour of the worst one. A click takes the researcher to the
+ * The attention tile of the player (UI-SPEC section 4): how many agents are at each level, each in its own colour (a zero is neutral). A click takes the researcher to the
  * Explorer's attention group. Loaded lazily with the first run: the shell does not carry the attention rules.
  */
 export function AttentionTile() {
@@ -19,17 +19,7 @@ export function AttentionTile() {
   return (
     <button type="button" className="tile attn-tile" onClick={go} disabled={worst === "none"} aria-label={`Attention: ${counts.alarm} alarms, ${counts.warning} warnings`} data-testid="attention-tile" data-level={worst}>
       <span className="lbl">ATTENTION</span>
-      <span className={`v mono ${worst === "alarm" ? "danger" : worst === "warning" ? "warn" : "muted"}`}>
-        {worst === "none" ? (
-          "none"
-        ) : (
-          <>
-            {GLYPH.fail}
-            {counts.alarm} {GLYPH.warn}
-            {counts.warning}
-          </>
-        )}
-      </span>
+      <span className={`v mono${worst === "none" ? " muted" : ""}`}>{worst === "none" ? "none" : <AttentionCounts alarm={counts.alarm} warning={counts.warning} />}</span>
     </button>
   );
 }

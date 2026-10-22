@@ -63,6 +63,8 @@
 .attn-tile { appearance: none; font: inherit; color: inherit; background: transparent; border-top: 0; border-right: 0; border-bottom: 0; cursor: pointer; text-align: left; }
 .attn-tile:hover:not(:disabled) { background: var(--bg3); }
 .attn-tile:disabled { cursor: default; }
+/* A zero attention count is neutral: it must not borrow the colour of the level beside it. */
+.attn-zero { color: var(--fg3); }
 .meter { height: 3px; background: var(--bg3); position: relative; margin-top: 2px; }
 .meter i { position: absolute; left: 0; top: 0; bottom: 0; }
 

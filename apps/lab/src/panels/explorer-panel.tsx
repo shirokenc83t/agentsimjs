@@ -4,6 +4,7 @@ import { GLYPH, identityOf, KIND_STYLE, STATE_GLYPH, useUiContext } from "@agent
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { usePolled, useSource } from "../services.tsx";
 import { actionLabel, actionState } from "./agent-views.ts";
+import { AttentionCounts } from "../shell/attention-counts.tsx";
 import { useAttention } from "./attention-store.ts";
 import { useAgentViews } from "./use-agent-views.ts";
 
@@ -58,14 +59,7 @@ export function ExplorerPanel() {
           <div className="grp attn">
             <button type="button" className="grp-toggle" aria-expanded={attnOpen} onClick={() => setAttnOpen((o) => !o)}>
               {attnOpen ? "▾" : "▸"} attention{" "}
-              <span className="danger">
-                {GLYPH.fail}
-                {attn.counts.alarm}
-              </span>{" "}
-              <span className="warn">
-                {GLYPH.warn}
-                {attn.counts.warning}
-              </span>
+              <AttentionCounts alarm={attn.counts.alarm} warning={attn.counts.warning} />
             </button>
             <span className="sp" />
             {(["alarm", "warning", "all"] as const).map((f) => (
