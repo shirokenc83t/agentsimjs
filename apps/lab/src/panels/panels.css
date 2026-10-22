@@ -82,6 +82,9 @@
 .attention-group { flex: none; max-height: 45%; overflow: auto; border-bottom: 1px solid var(--ln); }
 .grp { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; white-space: nowrap; overflow: hidden; background: var(--bg2); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); color: var(--fg2); }
 .grp.attn { background: color-mix(in srgb, var(--warn) 9%, var(--bg2)); color: var(--fg); }
+/* The attention group's header is a title and three filter chips: when the Explorer is narrow the chips go to a second line instead of out of the panel. */
+.grp.attn { flex-wrap: wrap; height: auto; min-height: 24px; padding-top: 2px; padding-bottom: 2px; row-gap: 2px; }
+.grp.attn .chip { height: 20px; padding: 0 6px; }
 .grp-toggle { appearance: none; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 0; }
 .chip { appearance: none; font: inherit; font-size: var(--type-label-size); border: 1px solid var(--ln2); height: 18px; padding: 0 6px; background: var(--bg0); color: var(--fg2); cursor: pointer; }
 .chip:hover { background: var(--bg3); border-color: var(--fg2); }
