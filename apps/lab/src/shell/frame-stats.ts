@@ -6,6 +6,7 @@ export interface FrameStats {
   readonly fps: number;
   readonly workMeanMs: number;
   readonly workP95Ms: number;
+  readonly intervalP95Ms: number;
 }
 
 let latest: FrameStats | undefined;

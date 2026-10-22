@@ -1,9 +1,13 @@
 import type { StorageInfo } from "@agentsim/storage";
+import type { DockviewApi } from "dockview-react";
 import { Banner, CommandPalette, downloadBytes, type Command } from "@agentsim/ui";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStorageStatus, useThemeSetting, type CurrentRun } from "./services.tsx";
 import type { PresetId } from "@agentsim/core";
+import { closePanel, dockPanel, floatPanel, focusNext, focusNumber, isFloating, openPanel, syncCollapsed, toggleCollapse, toggleMaximize } from "./workspaces/dock-actions.ts";
+import { deleteNamedLayout, layoutName, listNamedLayouts, readNamedLayout, saveNamedLayout } from "./workspaces/layouts.ts";
 import { LAYOUT_NAMESPACE, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
+import { PANELS, type PanelId } from "./workspaces/registry.tsx";
 import { LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadRunController } from "./workspaces/registry.tsx";
 import { Player } from "./shell/player.tsx";
 import { shellKey } from "./shell/shortcuts.ts";
@@ -24,6 +28,11 @@ export function App() {
   const [workspace, setWorkspace] = useState<WorkspaceId>("scene");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [layoutEpoch, setLayoutEpoch] = useState(0);
+  // The dock of the open workspace (it is built after first paint and again when the workspace changes) and its named layouts.
+  const dockRef = useRef<DockviewApi | null>(null);
+  const presetRef = useRef<(typeof WORKSPACES)[number] | undefined>(undefined);
+  const [layouts, setLayouts] = useState<string[]>([]);
+  const [activeLayout, setActiveLayout] = useState<string | undefined>(undefined);
   const [run, setRun] = useState<LabRun | undefined>(undefined);
   const [runBusy, setRunBusy] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
@@ -93,6 +102,12 @@ export function App() {
         setPaletteOpen((o) => !o);
         return;
       }
+      // Alt+number: the panel with that number in the open workspace (the number is in its tab).
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code) && dockRef.current && presetRef.current) {
+        e.preventDefault();
+        focusNumber(dockRef.current, presetRef.current, Number(e.code.slice(5)));
+        return;
+      }
       const k = shellKey(e, e.target, WORKSPACES.length);
       if (!k) return;
       e.preventDefault();
@@ -107,8 +122,61 @@ export function App() {
 
   const resetLayouts = useCallback(() => {
     if (storage.status().state === "ready") for (const w of WORKSPACES) void storage.ports.userData.delete(LAYOUT_NAMESPACE, layoutKey(w.id));
+    setActiveLayout(undefined);
     setLayoutEpoch((n) => n + 1);
   }, [storage]);
+
+  // Named layouts of the open workspace: listed when it opens (and once storage is ready), saved, loaded and deleted from the top bar.
+  const storageReady = status.state === "ready";
+  useEffect(() => {
+    setActiveLayout(undefined);
+    if (storageReady) void listNamedLayouts(storage, workspace).then(setLayouts, () => setLayouts([]));
+    else setLayouts([]);
+  }, [storage, storageReady, workspace]);
+  const saveLayout = useCallback(
+    (raw: string) => {
+      const name = layoutName(raw);
+      const api = dockRef.current;
+      if (!name || !api || !storageReady) return;
+      void saveNamedLayout(storage, workspace, name, api.toJSON())
+        .then(() => listNamedLayouts(storage, workspace))
+        .then((l) => {
+          setLayouts(l);
+          setActiveLayout(name);
+        });
+    },
+    [storage, storageReady, workspace],
+  );
+  const selectLayout = useCallback(
+    (name: string | undefined) => {
+      const api = dockRef.current;
+      if (name === undefined || !api || !storageReady) {
+        setActiveLayout(undefined);
+        return;
+      }
+      void readNamedLayout(storage, workspace, name).then((saved) => {
+        if (!saved || dockRef.current !== api) return;
+        try {
+          api.fromJSON(saved as Parameters<DockviewApi["fromJSON"]>[0]);
+          syncCollapsed(api);
+          setActiveLayout(name);
+        } catch {
+          // A layout that does not fit the panels any more is left as it is.
+        }
+      });
+    },
+    [storage, storageReady, workspace],
+  );
+  const deleteLayout = useCallback(() => {
+    if (!activeLayout || !storageReady) return;
+    const name = activeLayout;
+    void deleteNamedLayout(storage, workspace, name)
+      .then(() => listNamedLayouts(storage, workspace))
+      .then((l) => {
+        setLayouts(l);
+        setActiveLayout(undefined);
+      });
+  }, [storage, storageReady, workspace, activeLayout]);
 
   const ready = status.state === "ready";
   // Researcher commands on the selected agent come from a lazy module (nothing in the initial chunk), fetched when the
@@ -123,6 +191,25 @@ export function App() {
     () => (paletteOpen && agentCommandsModule && source ? agentCommandsModule.agentPaletteCommands(source, !!run, startPreset, runBusy) : []),
     [paletteOpen, agentCommandsModule, source, run, startPreset, runBusy],
   );
+  const preset = WORKSPACES.find((w) => w.id === workspace) ?? WORKSPACES[0];
+  presetRef.current = preset;
+  // Panel actions of the open workspace's dock, on the active panel (ADR-0042 §7): the window buttons' actions, from the palette.
+  const panelCommands = useMemo<Command[]>(() => {
+    const on = (f: (api: DockviewApi, panel: NonNullable<ReturnType<DockviewApi["getPanel"]>>) => void) => () => {
+      const api = dockRef.current;
+      const panel = api?.activePanel;
+      if (api && panel) f(api, panel);
+    };
+    return [
+      { id: "panel.float", title: "Float the active panel", group: "Panel", run: on((api, p) => (isFloating(p) ? undefined : floatPanel(api, p))) },
+      { id: "panel.dock", title: "Dock the active panel", group: "Panel", run: on((api, p) => void dockPanel(api, p, preset)) },
+      { id: "panel.maximize", title: "Maximize or restore the active panel", group: "Panel", run: on((api, p) => toggleMaximize(api, p)) },
+      { id: "panel.collapse", title: "Collapse or open the active floating window", group: "Panel", run: on((_api, p) => toggleCollapse(p.group)) },
+      { id: "panel.close", title: "Close the active panel", group: "Panel", run: on((_api, p) => closePanel(p)) },
+      { id: "panel.next", title: "Focus the next panel", group: "Panel", run: () => dockRef.current && focusNext(dockRef.current) },
+      ...(preset?.panels ?? []).map((p) => ({ id: `panel.open.${p.id}`, title: `Open panel: ${PANELS[p.id as PanelId].title}`, group: "Panel", run: () => dockRef.current && preset && openPanel(dockRef.current, preset, p.id) })),
+    ];
+  }, [preset]);
   const commands = useMemo<Command[]>(
     () => [
       ...WORKSPACES.map((w) => ({ id: `ws.${w.id}`, title: `Switch to ${w.title} workspace`, group: "Workspace", run: () => setWorkspace(w.id) })),
@@ -155,11 +242,10 @@ export function App() {
       },
       { id: "db.browser", title: "Open Storage browser", group: "Storage", run: () => setWorkspace("data") },
       { id: "layout.reset", title: "Reset workspace layouts", group: "Layout", run: resetLayouts },
+      ...panelCommands,
     ],
-    [ready, sim, storage, resetLayouts, loadDemo, loadReference, rerunCurrent, rerunInMode, otherMode, runBusy, run, agentCommands],
+    [ready, sim, storage, resetLayouts, loadDemo, loadReference, rerunCurrent, rerunInMode, otherMode, runBusy, run, agentCommands, panelCommands],
   );
-
-  const preset = WORKSPACES.find((w) => w.id === workspace) ?? WORKSPACES[0];
 
   return (
     <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun }}>
@@ -170,7 +256,11 @@ export function App() {
             workspaces={WORKSPACES}
             workspace={workspace}
             onWorkspace={setWorkspace}
-            layoutName={`${preset?.title.toLowerCase() ?? workspace} · autosaved`}
+            layouts={layouts}
+            layoutActive={activeLayout}
+            onSelectLayout={selectLayout}
+            onSaveLayout={saveLayout}
+            onDeleteLayout={deleteLayout}
             onResetLayout={resetLayouts}
             runLabel={run ? `${run.header.runId} · ${run.header.scenarioId ?? "?"} v${run.header.scenarioVersion ?? "?"}` : "run: —"}
             runOpen={runAnchor !== null}
@@ -232,7 +322,7 @@ export function App() {
 
         {/* The row is reserved by the shell grid, so nothing shifts when the workspace chunk arrives. */}
         <div className="workspace">
-          <Suspense fallback={null}>{preset && <LazyWorkspaceHost key={preset.id} preset={preset} storage={storage} layoutEpoch={layoutEpoch} />}</Suspense>
+          <Suspense fallback={null}>{preset && <LazyWorkspaceHost key={preset.id} preset={preset} storage={storage} layoutEpoch={layoutEpoch} onApi={(api) => (dockRef.current = api)} />}</Suspense>
         </div>
 
         <StatusBar snap={snap} status={status} info={info} header={run?.header} replaying={view?.mode === "replay"} />

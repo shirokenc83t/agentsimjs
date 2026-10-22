@@ -108,3 +108,7 @@
 .query-row { display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; padding: 0 8px; font-size: var(--type-mono-size); border-bottom: 1px solid var(--ln); }
 .query-detail { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; margin-top: 4px; background: var(--bg2); border: 1px solid var(--ln); border-radius: var(--radius-control); font-size: var(--type-mono-size); }
 .stage-joint { padding: 0 4px; font-size: var(--type-label-size); font-weight: 600; color: var(--fg); background: color-mix(in srgb, var(--bg0) 80%, transparent); border: 1px solid var(--ln2); border-radius: var(--radius-control); pointer-events: none; }
+
+/* The Performance HUD in its floating window (not over the Scene any more). */
+.perf-panel { height: 100%; overflow: auto; }
+.perf-panel .hud { position: static; border: 0; background: transparent; min-width: 0; pointer-events: auto; padding: 8px 10px; }

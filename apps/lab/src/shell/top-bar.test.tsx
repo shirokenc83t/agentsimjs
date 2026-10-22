@@ -16,7 +16,11 @@ function bar(over: Partial<TopBarProps> = {}) {
     workspaces: WORKSPACES,
     workspace: "debug",
     onWorkspace: vi.fn(),
-    layoutName: "debug · autosaved",
+    layouts: ["wide map", "logs first"],
+    layoutActive: undefined,
+    onSelectLayout: vi.fn(),
+    onSaveLayout: vi.fn(),
+    onDeleteLayout: vi.fn(),
     onResetLayout: vi.fn(),
     runLabel: "run-000001 · f1-demo v1",
     runOpen: false,
@@ -42,7 +46,6 @@ describe("TopBar", () => {
 
   it("shows the layout with its reset, the run selector, and the palette", async () => {
     const p = bar();
-    expect(screen.getByTestId("layout-name")).toHaveTextContent("debug · autosaved");
     await userEvent.click(screen.getByTestId("layout-reset"));
     expect(p.onResetLayout).toHaveBeenCalled();
     await userEvent.click(screen.getByTestId("run-label"));
@@ -50,6 +53,30 @@ describe("TopBar", () => {
     expect(screen.getByTestId("run-label")).toHaveTextContent("run-000001 · f1-demo v1");
     await userEvent.click(screen.getByRole("button", { name: "Command palette" }));
     expect(p.onPalette).toHaveBeenCalled();
+  });
+
+  it("lists the named layouts, loads one, saves the dock under a name asked in place, and deletes the one in use", async () => {
+    const p = bar({ layoutActive: "wide map" });
+    expect(screen.getByRole("combobox", { name: "Layout" })).toHaveValue("wide map");
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["autosaved", "wide map", "logs first"]);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Layout" }), "logs first");
+    expect(p.onSelectLayout).toHaveBeenCalledWith("logs first");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Layout" }), "");
+    expect(p.onSelectLayout).toHaveBeenLastCalledWith(undefined);
+    await userEvent.click(screen.getByTestId("layout-save"));
+    await userEvent.type(screen.getByRole("textbox", { name: "Name of the layout" }), "mine{Enter}");
+    expect(p.onSaveLayout).toHaveBeenCalledWith("mine");
+    expect(screen.queryByRole("textbox", { name: "Name of the layout" })).toBeNull();
+    await userEvent.click(screen.getByTestId("layout-delete"));
+    expect(p.onDeleteLayout).toHaveBeenCalled();
+  });
+
+  it("a name that is not saved (Escape) is dropped", async () => {
+    const p = bar();
+    await userEvent.click(screen.getByTestId("layout-save"));
+    await userEvent.type(screen.getByRole("textbox", { name: "Name of the layout" }), "x{Escape}");
+    expect(p.onSaveLayout).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("layout-delete")).toBeNull(); // nothing named in use
   });
 
   it("has the ◷ REPLAY segment only while a recording is shown", () => {

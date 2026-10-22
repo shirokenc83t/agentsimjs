@@ -150,10 +150,18 @@ export async function sendTo(page: Page, agentId: string, x: number, y: number) 
   await expect(page.getByTestId("send-to")).toHaveAttribute("aria-pressed", "false");
 }
 
-/** Activates a dockview panel tab (e.g. "Run configuration" next to the scenario editor in Author). */
+/** Activates a dockview panel tab (e.g. "Run configuration" next to the scenario editor in Author); the tab's name is `[n] Title`. */
 export async function openPanelTab(page: Page, title: string) {
-  await page.getByRole("tab", { name: title, exact: true }).click();
-  await expect(page.getByRole("tab", { name: title, exact: true })).toHaveAttribute("aria-selected", "true");
+  const tab = page.getByRole("tab", { name: new RegExp(String.raw`^(\[\d+\] )?${title}$`) });
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+}
+
+/** Opens the Performance window (a floating window, collapsed to its title bar until it is opened). */
+export async function openPerf(page: Page) {
+  const hud = page.getByTestId("perf-hud");
+  if (!(await hud.isVisible())) await page.getByTestId("wb-collapse-perf").click();
+  await expect(hud).toBeVisible();
 }
 
 /** Counts what the main thread posts to the sim worker (`window.__simMsgs`): install before the page loads. */

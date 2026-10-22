@@ -1,13 +1,17 @@
 import { GLYPH, useUiContext } from "@agentsim/ui";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { WorkspaceId } from "../workspaces/presets.ts";
 
 export interface TopBarProps {
   readonly workspaces: readonly { readonly id: WorkspaceId; readonly title: string }[];
   readonly workspace: WorkspaceId;
   readonly onWorkspace: (id: WorkspaceId) => void;
-  /** The layout of the open workspace: its name, and whether the user has changed it from the default. */
-  readonly layoutName: string;
+  /** Named layouts of the open workspace, and the one in use (none: the autosaved working layout). */
+  readonly layouts: readonly string[];
+  readonly layoutActive: string | undefined;
+  readonly onSelectLayout: (name: string | undefined) => void;
+  readonly onSaveLayout: (name: string) => void;
+  readonly onDeleteLayout: () => void;
   readonly onResetLayout: () => void;
   /** `run-000001 · f1-demo v1`, or `run: —` with no run. */
   readonly runLabel: string;
@@ -46,15 +50,7 @@ export function TopBar(props: TopBarProps) {
         ))}
       </nav>
       <div className="sp" />
-      <div className="seg r" data-testid="layout-segment">
-        <span className="k k-opt">layout</span>
-        <span className="mono" data-testid="layout-name">
-          {props.layoutName}
-        </span>
-        <button type="button" className="tb" onClick={props.onResetLayout} data-tip="Reset this workspace's layout" data-testid="layout-reset">
-          reset
-        </button>
-      </div>
+      <LayoutSegment {...props} />
       <div className="seg r">
         <span className="k k-opt">run</span>
         <button
@@ -85,6 +81,53 @@ function ReplaySegment() {
   return (
     <div className="seg r rpseg" role="status" data-testid="replay-segment">
       {GLYPH.replay} REPLAY · viewing t {at.toFixed(1)} s<span className="k k-opt"> · live run keeps running {GLYPH.running}</span>
+    </div>
+  );
+}
+
+/** The layout of the open workspace: the named ones to load, save (the name is asked in place), delete, and the reset to the preset. */
+function LayoutSegment(props: TopBarProps) {
+  const [naming, setNaming] = useState(false);
+  return (
+    <div className="seg r" data-testid="layout-segment">
+      <span className="k k-opt">layout</span>
+      <select className="tb" aria-label="Layout" value={props.layoutActive ?? ""} onChange={(e) => props.onSelectLayout(e.target.value === "" ? undefined : e.target.value)} data-testid="layout-select">
+        <option value="">autosaved</option>
+        {props.layouts.map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </select>
+      {naming ? (
+        <input
+          className="tb mono"
+          autoFocus
+          aria-label="Name of the layout"
+          placeholder="name, Enter to save"
+          maxLength={40}
+          data-testid="layout-name-input"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              props.onSaveLayout(e.currentTarget.value);
+              setNaming(false);
+            } else if (e.key === "Escape") setNaming(false);
+          }}
+          onBlur={() => setNaming(false)}
+        />
+      ) : (
+        <button type="button" className="tb" onClick={() => setNaming(true)} data-tip="Save the dock as a named layout" data-testid="layout-save">
+          save
+        </button>
+      )}
+      {props.layoutActive !== undefined && (
+        <button type="button" className="tb" onClick={props.onDeleteLayout} data-tip="Delete this named layout" data-testid="layout-delete">
+          delete
+        </button>
+      )}
+      <button type="button" className="tb" onClick={props.onResetLayout} data-tip="Reset this workspace's layout to the preset" data-testid="layout-reset">
+        reset
+      </button>
     </div>
   );
 }

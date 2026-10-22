@@ -3,11 +3,10 @@ import "./panels.css";
 import Button from "@mui/material/Button";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import { PerformanceHud, SceneView, useUiContext, type GridViewMode, type HudStats, type SceneRenderer } from "@agentsim/ui";
+import { SceneView, useUiContext, type GridViewMode, type SceneRenderer } from "@agentsim/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { attachRendererProbe } from "../probe.ts";
 import { usePolled, useSource } from "../services.tsx";
-import { HudBudgetRows } from "./hud-budget.tsx";
 import { sandboxTarget, useSandboxTarget, useSandboxView } from "./sandbox-store.ts";
 import { useSandboxOverlay } from "./use-sandbox-overlay.ts";
 import { useExploreOverlay } from "./use-explore-overlay.ts";
@@ -22,7 +21,6 @@ import { useSensorOverlays } from "./use-sensor-overlays.ts";
 export function ScenePanel() {
   const source = useSource();
   const [renderer, setRenderer] = useState<SceneRenderer | undefined>(undefined);
-  const [interpolation, setInterpolation] = useState(true);
   const [mode, setMode] = useState<GridViewMode>("occupancy");
   const [overlay, setOverlay] = useState<MapOverlay>("truth");
   const [showRays, setShowRays] = useState(false);
@@ -132,30 +130,17 @@ export function ScenePanel() {
     return source.onTrail(refresh);
   }, [renderer, source, snap.grid, snap.entityIds]);
 
-  const getStats = useCallback((): HudStats => {
-    const r = renderer;
-    const s = source.stats();
-    const meanInterval = r?.frameIntervalMs.mean() ?? 0;
-    return {
-      fps: meanInterval > 0 ? 1000 / meanInterval : 0,
-      frameWorkMeanMs: r?.frameWorkMs.mean() ?? 0,
-      frameWorkP95Ms: r?.frameWorkMs.percentile(0.95) ?? 0,
-      frameIntervalP95Ms: r?.frameIntervalMs.percentile(0.95) ?? 0,
-      simTickRateHz: s.simTickRateHz,
-      simTicksPerSecond: s.simTicksPerSecond,
-      simTickP95Ms: s.simTickP95Ms,
-      stateLatencyP95Ms: s.stateLatencyP95Ms,
-      interpolationIntervalMs: s.interpolationIntervalMs,
-      entities: s.entities,
-    };
-  }, [source, renderer]);
-
   // The status bar's frame time: published from here, where the renderer and its frame timers are.
   useEffect(() => {
     if (!renderer) return;
     const publish = () => {
-      const h = getStats();
-      publishFrameStats({ fps: h.fps, workMeanMs: h.frameWorkMeanMs, workP95Ms: h.frameWorkP95Ms });
+      const meanInterval = renderer.frameIntervalMs.mean();
+      publishFrameStats({
+        fps: meanInterval > 0 ? 1000 / meanInterval : 0,
+        workMeanMs: renderer.frameWorkMs.mean(),
+        workP95Ms: renderer.frameWorkMs.percentile(0.95),
+        intervalP95Ms: renderer.frameIntervalMs.percentile(0.95),
+      });
     };
     publish();
     const t = setInterval(publish, 500);
@@ -163,7 +148,7 @@ export function ScenePanel() {
       clearInterval(t);
       publishFrameStats(undefined);
     };
-  }, [renderer, getStats]);
+  }, [renderer]);
 
   return (
     <SceneView interpolator={source.poses} onRenderer={onRenderer}>
@@ -320,15 +305,6 @@ export function ScenePanel() {
           </dl>
         </div>
       )}
-      <PerformanceHud
-        extra={<HudBudgetRows source={source} runId={snap.run?.runId} />}
-        getStats={getStats}
-        interpolation={interpolation}
-        onInterpolationChange={(on) => {
-          setInterpolation(on);
-          source.poses.setInterpolation(on);
-        }}
-      />
     </SceneView>
   );
 }

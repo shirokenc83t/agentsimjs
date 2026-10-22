@@ -14,7 +14,7 @@
   --dv-activegroup-hiddenpanel-tab-color: var(--fg2);
   --dv-inactivegroup-visiblepanel-tab-color: var(--fg2);
   --dv-inactivegroup-hiddenpanel-tab-color: var(--fg3);
-  --dv-separator-border: var(--ln);
+  --dv-separator-border: transparent;
   --dv-paneview-header-border-color: var(--ln);
   --dv-paneview-active-outline-color: var(--ac);
   --dv-drag-over-background-color: var(--acbg);
@@ -23,8 +23,50 @@
   --dv-tabs-container-scrollbar-color: var(--ln2);
   --dv-icon-hover-background-color: var(--bg3);
   --dv-active-sash-color: var(--ac);
-  --dv-floating-box-shadow: none;
-  --dv-floating-border: 1px solid var(--ln);
-  --dv-tabs-and-actions-container-font-size: var(--type-body-size);
-  --dv-tabs-and-actions-container-height: 30px;
+  --dv-floating-box-shadow: var(--float);
+  --dv-floating-border: 1px solid var(--ln2);
+  --dv-border-radius: 0;
+  --dv-tab-border-radius: 0;
+  --dv-sash-border-radius: 0;
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--fg3);
+  --dv-tabs-and-actions-container-font-size: var(--type-title-size);
+  --dv-tabs-and-actions-container-height: 28px;
+}
+
+/* Three levels of surface (ADR-0042 §3): the dock behind the panels with its dot grid, the panels (bg1) on it with a gap between them, their title bars (bg2). */
+.dockview-theme-agentsim .dv-dockview { background: var(--dock) var(--dock-pattern); }
+/* The content of a panel is positioned inside its own area: a panel that fills its parent with absolute positioning (the Scene) stays under the title bar. */
+.dockview-theme-agentsim .dv-content-container { position: relative; }
+.dockview-theme-agentsim .dv-groupview { border: 1px solid var(--ln); }
+/* Title bar: numbered tabs in capitals (the tab's text is `[2] Explorer`), the focused panel marked by a 2 px accent edge on top and its active tab. */
+.dockview-theme-agentsim .dv-tab { text-transform: uppercase; letter-spacing: var(--type-title-tracking); font-weight: var(--type-title-weight); }
+.dockview-theme-agentsim .dv-tab:hover { color: var(--fg); background: var(--bg3); }
+.dockview-theme-agentsim .dv-groupview.dv-active-group > .dv-tabs-and-actions-container { box-shadow: inset 0 2px 0 var(--ac); }
+.dockview-theme-agentsim .dv-tabs-and-actions-container { border-bottom: 1px solid var(--ln); }
+
+/* Splitters: visible, with a grip. The sash sits in the gap between two panels; its grip is a short run of dots, neutral on hover and accent while dragged. */
+.dockview-theme-agentsim .dv-split-view-container > .dv-sash-container > .dv-sash { position: absolute; }
+.dockview-theme-agentsim .dv-split-view-container > .dv-sash-container > .dv-sash::after { content: ""; position: absolute; inset: 0; margin: auto; background: radial-gradient(circle, var(--ln2) 1px, transparent 1.6px) center / 6px 6px; }
+.dockview-theme-agentsim .dv-split-view-container.dv-horizontal > .dv-sash-container > .dv-sash::after { width: 4px; height: 36px; }
+.dockview-theme-agentsim .dv-split-view-container.dv-vertical > .dv-sash-container > .dv-sash::after { width: 36px; height: 4px; }
+.dockview-theme-agentsim .dv-split-view-container > .dv-sash-container > .dv-sash:hover::after { background-image: radial-gradient(circle, var(--fg3) 1px, transparent 1.6px); }
+.dockview-theme-agentsim .dv-split-view-container > .dv-sash-container > .dv-sash:active::after { background-image: radial-gradient(circle, var(--ac) 1px, transparent 1.6px); }
+
+/* Window buttons and the context line of a title bar. */
+.dockview-theme-agentsim .wbtn { display: flex; align-items: center; gap: 2px; padding: 0 4px; height: 100%; }
+.dockview-theme-agentsim .tmeta { color: var(--fg3); font-size: var(--type-label-size); margin-right: 8px; white-space: nowrap; }
+.dockview-theme-agentsim .wb { appearance: none; font: inherit; width: 22px; height: 20px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; background: transparent; color: var(--fg2); cursor: pointer; }
+.dockview-theme-agentsim .wb:hover { color: var(--fg); background: var(--bg3); border-color: var(--fg3); }
+.dockview-theme-agentsim .wb[data-tip]::after { top: calc(100% + 6px); left: auto; right: 0; }
+
+/* A floating window: the one surface with a shadow (the variable above), a neutral edge; collapsed, only its title bar. */
+.dockview-theme-agentsim .dv-resize-container { box-shadow: var(--float); border: 1px solid var(--ln2); }
+.dockview-theme-agentsim .dv-groupview.collapsed .dv-content-container { display: none; }
+.dockview-theme-agentsim .dv-groupview.collapsed { border-bottom: 0; }
+
+/* A narrow title bar keeps its tabs and buttons and drops the context line. */
+.dockview-theme-agentsim .dv-tabs-and-actions-container { container-type: inline-size; }
+@container (max-width: 380px) {
+  .tmeta { display: none; }
 }
