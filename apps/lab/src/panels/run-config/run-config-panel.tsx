@@ -1,9 +1,4 @@
 import "../panels.css";
-import Button from "@mui/material/Button";
-import Checkbox from "@mui/material/Checkbox";
-import FormControlLabel from "@mui/material/FormControlLabel";
-import NativeSelect from "@mui/material/NativeSelect";
-import TextField from "@mui/material/TextField";
 import type { RunConfigSummary } from "@agentsim/storage";
 import {
   parseRunConfig,
@@ -17,13 +12,15 @@ import {
   type RunConfigWarning,
   type ScenarioAgentsView,
 } from "@agentsim/scenarios";
-import { useCallback, useEffect, useMemo, useState, type InputHTMLAttributes } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCurrentRun, useServices, useStorageStatus } from "../../services.tsx";
 import type { LabRun } from "../../sim/run-controller.ts";
 import { CostProfileForm } from "./cost-profile-form.tsx";
-import { Issue, NumberField, OptionField } from "./fields.tsx";
+import { FieldErrorProvider, Issue, NumberField, OptionField } from "./fields.tsx";
 import {
+  changedLines,
   driveScopes,
+  errorLine,
   getEntry,
   plannerKind,
   planningScopes,
@@ -31,11 +28,13 @@ import {
   rebasePreset,
   scopeFromId,
   scopeId,
+  sectionStatus,
   setEntry,
   validateDraft,
   withField,
   withPlanner,
   type Scope,
+  type SectionStatus,
 } from "./model.ts";
 import { StrategyPicker } from "./strategy-picker.tsx";
 
@@ -112,9 +111,9 @@ export function RunConfigPanel() {
     return (
       <div className="panel" data-testid="run-config-panel">
         <p className="muted">No scenario loaded. The run configuration applies to a loaded scenario version.</p>
-        <Button variant="contained" onClick={() => !current.busy && current.loadDemo()} aria-disabled={current.busy}>
+        <button type="button" className="btn pri" onClick={() => !current.busy && current.loadDemo()} aria-disabled={current.busy}>
           Load F1 demo
-        </Button>
+        </button>
       </div>
     );
   }
@@ -128,6 +127,24 @@ export function RunConfigPanel() {
   return <RunConfigEditor key={loaded.run.header.runId} loaded={loaded} />;
 }
 
+const SECTIONS = [
+  { id: "run", n: 1, title: "RUN" },
+  { id: "planning", n: 2, title: "PLANNING" },
+  { id: "drive", n: 3, title: "GROUND DRIVE" },
+  { id: "beliefs", n: 4, title: "BELIEFS" },
+  { id: "effective", n: 5, title: "EFFECTIVE" },
+  { id: "presets", n: 6, title: "PRESETS" },
+] as const;
+
+/** The rail's glyph for a section: ✕ n for errors, ▲ n for warnings, ✓ when it is clean. */
+function StatusGlyph(props: { status: SectionStatus | undefined }) {
+  const s = props.status;
+  if (!s) return null;
+  if (s.errors > 0) return <span className="st st-alm">✕ {s.errors}</span>;
+  if (s.warnings > 0) return <span className="st st-warn">▲ {s.warnings}</span>;
+  return <span className="st st-ok">✓</span>;
+}
+
 function RunConfigEditor(props: { loaded: Loaded }) {
   const { view, version, run } = props.loaded;
   const current = useCurrentRun();
@@ -135,8 +152,13 @@ function RunConfigEditor(props: { loaded: Loaded }) {
   const [planningScope, setPlanningScope] = useState("default");
   const [driveScope, setDriveScope] = useState("default");
   const [beliefsScope, setBeliefsScope] = useState("default");
+  const [section, setSection] = useState<(typeof SECTIONS)[number]["id"]>("run");
   const validation = useMemo(() => validateDraft(draft, view, version), [draft, view, version]);
   const sameAsRun = validation.ok && validation.resolved.runConfigHash === run.header.runConfigHash;
+  const error = validation.ok ? undefined : validation.error;
+  const warnings = validation.ok ? validation.resolved.warnings : [];
+  const status = sectionStatus(error, warnings.length);
+  const changes = useMemo(() => changedLines(JSON.stringify(props.loaded.initial, null, 2), JSON.stringify(draft, null, 2)).size, [draft, props.loaded.initial]);
 
   const pScope = scopeFromId(planningScope);
   const pEntry = getEntry(draft, "planning", pScope);
@@ -159,166 +181,207 @@ function RunConfigEditor(props: { loaded: Loaded }) {
   const weighted = alg !== undefined && typeof alg !== "string" ? alg["weighted-astar"].weight : undefined;
   const setAlgorithm = (name: AlgorithmName | undefined) =>
     setP(withField(pEntry, "algorithm", name === undefined ? undefined : name === "weighted-astar" ? { "weighted-astar": { weight: weighted ?? 1.5 } } : name));
+  const goTo = (id: (typeof SECTIONS)[number]["id"]) => {
+    setSection(id);
+    document.querySelector(`[data-section="${id}"]`)?.scrollIntoView?.({ block: "start" });
+  };
 
   return (
-    <div className="panel run-config" data-testid="run-config-panel">
-      <h3>
-        Run configuration <span className="muted mono">{draft.scenario.id} v{draft.scenario.version}</span>
-      </h3>
+    <div className="panel run-config rc" data-testid="run-config-panel">
+      <div className="rc-body">
+        <nav className="rc-rail" aria-label="Run configuration sections">
+          {SECTIONS.map((s) => (
+            <button key={s.id} type="button" className={`nv${section === s.id ? " on" : ""}`} aria-current={section === s.id ? "true" : undefined} onClick={() => goTo(s.id)} data-testid={`rc-nav-${s.id}`}>
+              <span className="n">{s.n}</span>
+              {s.title}
+              {s.id === "effective" ? <span className="c3">{validation.ok ? `${validation.resolved.agents.length} agents` : ""}</span> : s.id === "presets" ? null : <StatusGlyph status={status[s.id]} />}
+            </button>
+          ))}
+        </nav>
 
-      <section>
-        <h4>Run</h4>
-        <div className="row">
-          <NumberField
-            label="seed"
-            value={draft.seed}
-            integer
-            placeholder={`scenario default ${view.document.defaultSeed}`}
-            onChange={(v) => setDraft((d) => withField(d, "seed", v))}
-            testId="rc-seed"
-          />
-          <OptionField
-            label="time mode"
-            value={draft.timeMode}
-            options={["lockstep", "realtime"] as const}
-            inheritLabel="lockstep (default)"
-            onChange={(v) => setDraft((d) => withField(d, "timeMode", v))}
-            testId="rc-time-mode"
-          />
-        </div>
-      </section>
+        <FieldErrorProvider value={error}>
+          <div className="rc-form">
+            <p className="rc-meta mono">
+              {draft.scenario.id} v{draft.scenario.version} · {changes === 0 ? "as the run" : `draft · ${changes} change${changes === 1 ? "" : "s"}`}
+            </p>
+            <section className="fs" data-section="run">
+              <h4 className="sec">
+                <b>1 · RUN</b>
+                <span className="rule" />
+              </h4>
+              <NumberField
+                label="seed"
+                value={draft.seed}
+                integer
+                placeholder={`scenario default ${view.document.defaultSeed}`}
+                onChange={(v) => setDraft((d) => withField(d, "seed", v))}
+                testId="rc-seed"
+                fieldKey="seed"
+              />
+              <OptionField
+                label="time mode"
+                value={draft.timeMode}
+                options={["lockstep", "realtime"] as const}
+                inheritLabel="lockstep (default)"
+                onChange={(v) => setDraft((d) => withField(d, "timeMode", v))}
+                testId="rc-time-mode"
+                fieldKey="timeMode"
+              />
+            </section>
 
-      <section data-testid="rc-planning">
-        <h4>Planning</h4>
-        <ScopeSelect label="Planning level" value={planningScope} scopes={planningScopes(view)} onChange={setPlanningScope} testId="rc-planning-scope" entries={(s) => getEntry(draft, "planning", s) !== undefined} />
-        <div className="row">
-          <OptionField label="planner" value={kind === "inherit" ? undefined : kind} options={PLANNERS} inheritLabel="(inherit)" onChange={setPlanner} testId="rc-planner" />
-          {kind !== "strategy" && <OptionField label="algorithm" value={algorithmName(alg)} options={ALGORITHMS} onChange={setAlgorithm} testId="rc-algorithm" />}
-          {kind !== "strategy" && weighted !== undefined && (
-            <NumberField label="weight (≥ 1)" value={weighted} step={0.1} onChange={(w) => setP(withField(pEntry, "algorithm", { "weighted-astar": { weight: w ?? 1 } }))} testId="rc-weight" />
-          )}
-          <NumberField
-            label="onboard expansions / tick"
-            value={pEntry?.onboardComputeExpansionsPerTick}
-            integer
-            onChange={(v) => setP(withField(pEntry, "onboardComputeExpansionsPerTick", v))}
-            testId="rc-per-tick"
-          />
-          <NumberField label="total budget (expansions)" value={pEntry?.totalBudget} integer onChange={(v) => setP(withField(pEntry, "totalBudget", v))} testId="rc-total-budget" />
-        </div>
-        <div className="row">
-          <NumberField label="explore radius (m)" value={pEntry?.radiusM} placeholder="ugv 20 · uav 40" onChange={(v) => setP(withField(pEntry, "radiusM", v))} testId="rc-explore-radius" />
-          <NumberField label="explore window margin (m)" value={pEntry?.windowMarginM} placeholder="10" onChange={(v) => setP(withField(pEntry, "windowMarginM", v))} testId="rc-window-margin" />
-        </div>
-        {pEntry?.strategy !== undefined && <StrategyPicker key={planningScope} value={pEntry.strategy} onChange={(strategy) => setP(withPlanner(pEntry, { strategy }))} issue={strategyIssue} />}
-        {validation.ok && <Warnings warnings={validation.resolved.warnings} />}
-        <FormControlLabel
-          control={
-            <Checkbox
-              size="small"
-              checked={pEntry?.costProfile !== undefined}
-              onChange={(e) => setP(withField(pEntry, "costProfile", e.target.checked ? { weights: { distance: 1 } } : undefined))}
-              slotProps={{ input: { "data-testid": "rc-override-profile" } as InputHTMLAttributes<HTMLInputElement> }}
-            />
-          }
-          label={`Set the cost profile for ${scopeLabel(pScope)}`}
-        />
-        {pEntry?.costProfile !== undefined && <CostProfileForm value={pEntry.costProfile} onChange={(c) => setP(withField(pEntry, "costProfile", c))} testId="rc-profile" />}
-      </section>
+            <section className="fs" data-testid="rc-planning" data-section="planning">
+              <h4 className="sec">
+                <b>2 · PLANNING</b>
+                <span className="rule" />
+                <ScopeSelect label="Planning level" value={planningScope} scopes={planningScopes(view)} onChange={setPlanningScope} testId="rc-planning-scope" entries={(s) => getEntry(draft, "planning", s) !== undefined} />
+              </h4>
+              <OptionField label="planner" sub="algorithm or strategy" value={kind === "inherit" ? undefined : kind} options={PLANNERS} inheritLabel="(inherit)" onChange={setPlanner} testId="rc-planner" />
+              {kind !== "strategy" && <OptionField label="algorithm" value={algorithmName(alg)} options={ALGORITHMS} onChange={setAlgorithm} testId="rc-algorithm" fieldKey="algorithm" />}
+              {kind !== "strategy" && weighted !== undefined && (
+                <NumberField label="weight (≥ 1)" value={weighted} step={0.1} onChange={(w) => setP(withField(pEntry, "algorithm", { "weighted-astar": { weight: w ?? 1 } }))} testId="rc-weight" fieldKey="weight" />
+              )}
+              <NumberField
+                label="expansions / tick"
+                sub="onboard compute"
+                value={pEntry?.onboardComputeExpansionsPerTick}
+                integer
+                onChange={(v) => setP(withField(pEntry, "onboardComputeExpansionsPerTick", v))}
+                testId="rc-per-tick"
+                fieldKey="onboardComputeExpansionsPerTick"
+              />
+              <NumberField label="total budget" unit="exp" value={pEntry?.totalBudget} integer onChange={(v) => setP(withField(pEntry, "totalBudget", v))} testId="rc-total-budget" fieldKey="totalBudget" />
+              <NumberField label="explore radius" unit="m" value={pEntry?.radiusM} placeholder="ugv 20 · uav 40" onChange={(v) => setP(withField(pEntry, "radiusM", v))} testId="rc-explore-radius" fieldKey="radiusM" />
+              <NumberField label="explore window margin" unit="m" value={pEntry?.windowMarginM} placeholder="10" onChange={(v) => setP(withField(pEntry, "windowMarginM", v))} testId="rc-window-margin" fieldKey="windowMarginM" />
+              {pEntry?.strategy !== undefined && <StrategyPicker key={planningScope} value={pEntry.strategy} onChange={(strategy) => setP(withPlanner(pEntry, { strategy }))} issue={strategyIssue} />}
+              {validation.ok && <Warnings warnings={validation.resolved.warnings} />}
+              <label className="rc-check">
+                <input
+                  type="checkbox"
+                  checked={pEntry?.costProfile !== undefined}
+                  onChange={(e) => setP(withField(pEntry, "costProfile", e.target.checked ? { weights: { distance: 1 } } : undefined))}
+                  data-testid="rc-override-profile"
+                />
+                Set the cost profile for {scopeLabel(pScope)}
+              </label>
+              {pEntry?.costProfile !== undefined && <CostProfileForm value={pEntry.costProfile} onChange={(c) => setP(withField(pEntry, "costProfile", c))} testId="rc-profile" />}
+            </section>
 
-      <section data-testid="rc-drive">
-        <h4>Ground drive (UGV)</h4>
-        <ScopeSelect label="Drive level" value={driveScope} scopes={driveScopes(view)} onChange={setDriveScope} testId="rc-drive-scope" entries={(s) => getEntry(draft, "drive", s) !== undefined} />
-        <div className="row wrap">
-          <OptionField label="drive" value={dEntry?.drive} options={DRIVES} onChange={(v) => setD(withField(dEntry, "drive", v))} testId="rc-drive" />
-          <OptionField
-            label="reverse allowed"
-            value={dEntry?.reverseAllowed === undefined ? undefined : dEntry.reverseAllowed ? "yes" : "no"}
-            options={YES_NO}
-            onChange={(v) => setD(withField(dEntry, "reverseAllowed", v === undefined ? undefined : v === "yes"))}
-            testId="rc-reverse"
-          />
-          <NumberField label="max reverse speed (m/s)" value={dEntry?.maxReverseSpeedMps} onChange={(v) => setD(withField(dEntry, "maxReverseSpeedMps", v))} testId="rc-max-reverse" />
-          <NumberField label="max yaw rate (rad/s)" value={dEntry?.maxYawRateRadps} onChange={(v) => setD(withField(dEntry, "maxYawRateRadps", v))} testId="rc-yaw-rate" />
-          <NumberField label="wheelbase (m)" value={dEntry?.wheelbaseM} onChange={(v) => setD(withField(dEntry, "wheelbaseM", v))} testId="rc-wheelbase" />
-          <NumberField label="max steering (rad)" value={dEntry?.maxSteeringAngleRad} onChange={(v) => setD(withField(dEntry, "maxSteeringAngleRad", v))} testId="rc-steering" />
-          <NumberField label="max steering rate (rad/s)" value={dEntry?.maxSteeringRateRadps} onChange={(v) => setD(withField(dEntry, "maxSteeringRateRadps", v))} testId="rc-steering-rate" />
-        </div>
-      </section>
+            <section className="fs" data-testid="rc-drive" data-section="drive">
+              <h4 className="sec">
+                <b>3 · GROUND DRIVE</b>
+                <span className="rule" />
+                <ScopeSelect label="Drive level" value={driveScope} scopes={driveScopes(view)} onChange={setDriveScope} testId="rc-drive-scope" entries={(s) => getEntry(draft, "drive", s) !== undefined} />
+              </h4>
+              <OptionField label="drive" value={dEntry?.drive} options={DRIVES} onChange={(v) => setD(withField(dEntry, "drive", v))} testId="rc-drive" fieldKey="drive" />
+              <OptionField
+                label="reverse allowed"
+                value={dEntry?.reverseAllowed === undefined ? undefined : dEntry.reverseAllowed ? "yes" : "no"}
+                options={YES_NO}
+                onChange={(v) => setD(withField(dEntry, "reverseAllowed", v === undefined ? undefined : v === "yes"))}
+                testId="rc-reverse"
+                fieldKey="reverseAllowed"
+              />
+              <NumberField label="max reverse speed" unit="m/s" value={dEntry?.maxReverseSpeedMps} onChange={(v) => setD(withField(dEntry, "maxReverseSpeedMps", v))} testId="rc-max-reverse" fieldKey="maxReverseSpeedMps" />
+              <NumberField label="max yaw rate" unit="rad/s" value={dEntry?.maxYawRateRadps} onChange={(v) => setD(withField(dEntry, "maxYawRateRadps", v))} testId="rc-yaw-rate" fieldKey="maxYawRateRadps" />
+              <NumberField label="wheelbase" unit="m" value={dEntry?.wheelbaseM} onChange={(v) => setD(withField(dEntry, "wheelbaseM", v))} testId="rc-wheelbase" fieldKey="wheelbaseM" />
+              <NumberField label="max steering" unit="rad" value={dEntry?.maxSteeringAngleRad} onChange={(v) => setD(withField(dEntry, "maxSteeringAngleRad", v))} testId="rc-steering" fieldKey="maxSteeringAngleRad" />
+              <NumberField label="max steering rate" unit="rad/s" value={dEntry?.maxSteeringRateRadps} onChange={(v) => setD(withField(dEntry, "maxSteeringRateRadps", v))} testId="rc-steering-rate" fieldKey="maxSteeringRateRadps" />
+            </section>
 
-      <section data-testid="rc-beliefs">
-        <h4>Beliefs (initial map)</h4>
-        <ScopeSelect label="Beliefs level" value={beliefsScope} scopes={planningScopes(view)} onChange={setBeliefsScope} testId="rc-beliefs-scope" entries={(s) => getEntry(draft, "beliefs", s) !== undefined} />
-        <div className="row wrap">
-          <OptionField
-            label="initial map"
-            value={initValue(bEntry?.init)}
-            options={["unknown", "ideal", ...priorIds.map((p) => `prior:${p}`)]}
-            inheritLabel="unknown (default)"
-            onChange={(v) => setB(withField(bEntry, "init", initFrom(v)))}
-            testId="rc-beliefs-init"
-          />
-        </div>
-        <p className="muted">
-          unknown: the agent learns the map by sensing. prior: it starts from a scenario map, which may be wrong. ideal: it plans on the ground truth, for baselines only — labelled “ideal” in the Explorer and the Inspector.
-        </p>
-      </section>
+            <section className="fs" data-testid="rc-beliefs" data-section="beliefs">
+              <h4 className="sec">
+                <b>4 · BELIEFS</b>
+                <span className="rule" />
+                <ScopeSelect label="Beliefs level" value={beliefsScope} scopes={planningScopes(view)} onChange={setBeliefsScope} testId="rc-beliefs-scope" entries={(s) => getEntry(draft, "beliefs", s) !== undefined} />
+              </h4>
+              <OptionField
+                label="initial map"
+                value={initValue(bEntry?.init)}
+                options={["unknown", "ideal", ...priorIds.map((p) => `prior:${p}`)]}
+                inheritLabel="unknown (default)"
+                onChange={(v) => setB(withField(bEntry, "init", initFrom(v)))}
+                testId="rc-beliefs-init"
+                fieldKey="init"
+                help="unknown · prior · ideal (baselines only)"
+              />
+              <p className="muted rc-note">
+                unknown: the agent learns the map by sensing. prior: it starts from a scenario map, which may be wrong. ideal: it plans on the ground truth, for baselines only — labelled “ideal” in the Explorer and the Inspector.
+              </p>
+            </section>
 
-      <section data-testid="rc-validation">
-        <h4>Validation</h4>
-        {validation.ok ? (
-          <p data-testid="rc-valid">✓ valid for {validation.resolved.agents.length} agents</p>
-        ) : (
-          <Issue code={validation.error.code} message={validation.error.message} testId="rc-error">
-            {validation.error.path && <span className="muted mono"> at {validation.error.path}</span>}
-          </Issue>
+            {validation.ok && <EffectiveTable agents={validation.resolved.agents} />}
+            <Presets draft={draft} scenario={draft.scenario} onLoad={setDraft} />
+          </div>
+        </FieldErrorProvider>
+
+        <aside className="rc-text" aria-label="Text view">
+          <JsonView draft={draft} base={props.loaded.initial} error={error} onApply={setDraft} />
+          <section className="rc-val" data-testid="rc-validation" aria-label="Validation">
+            {validation.ok ? (
+              <p className="vr" data-testid="rc-valid">
+                <span className="st st-ok">✓ valid</span> for {validation.resolved.agents.length} agents
+              </p>
+            ) : (
+              <Issue code={validation.error.code} message={validation.error.message} testId="rc-error">
+                {validation.error.path && <span className="muted mono"> at {validation.error.path}</span>}
+              </Issue>
+            )}
+            {warnings.slice(0, MAX_WARNINGS_SHOWN).map((w) => (
+              <p key={`${w.code}-${w.agentId}`} className="vr">
+                <span className="st st-warn">▲ {w.code}</span> <span className="c2">{w.agentId}</span>
+              </p>
+            ))}
+            <dl className="kv">
+              <dt>run config hash</dt>
+              <dd className="mono" data-testid="rc-run-config-hash">
+                {validation.ok ? validation.resolved.runConfigHash : "—"} {sameAsRun ? <span className="muted">(= current run)</span> : <span className="muted">(current run {run.header.runConfigHash})</span>}
+              </dd>
+              <dt>effective config hash</dt>
+              <dd className="mono" data-testid="rc-effective-config-hash">
+                {validation.ok ? validation.resolved.effectiveConfigHash : "—"}
+              </dd>
+            </dl>
+          </section>
+        </aside>
+      </div>
+
+      <div className="rc-acts" role="group" aria-label="Actions">
+        <button
+          type="button"
+          className="btn pri"
+          onClick={() => validation.ok && !current.busy && current.runWithConfig(validation.resolved.document)}
+          aria-disabled={!validation.ok || current.busy}
+          data-testid="rc-run"
+        >
+          ▶ Run with this configuration
+        </button>
+        <button type="button" className="btn" onClick={() => setDraft(props.loaded.initial)} data-testid="rc-revert">
+          Revert to the current run's
+        </button>
+        <span className="sp" />
+        {error && <span className="st st-alm">✕ 1 error</span>}
+        {warnings.length > 0 && (
+          <span className="st st-warn">
+            ▲ {warnings.length} warning{warnings.length === 1 ? "" : "s"}
+          </span>
         )}
-        <dl className="kv">
-          <dt>run config hash</dt>
-          <dd className="mono" data-testid="rc-run-config-hash">
-            {validation.ok ? validation.resolved.runConfigHash : "—"} {sameAsRun ? <span className="muted">(= current run)</span> : <span className="muted">(current run {run.header.runConfigHash})</span>}
-          </dd>
-          <dt>effective config hash</dt>
-          <dd className="mono" data-testid="rc-effective-config-hash">
-            {validation.ok ? validation.resolved.effectiveConfigHash : "—"}
-          </dd>
-        </dl>
-        <div className="row">
-          <Button
-            variant="contained"
-            onClick={() => validation.ok && !current.busy && current.runWithConfig(validation.resolved.document)}
-            aria-disabled={!validation.ok || current.busy}
-            data-testid="rc-run"
-          >
-            Run with this configuration
-          </Button>
-          <Button variant="outlined" color="inherit" onClick={() => setDraft(props.loaded.initial)} data-testid="rc-revert">
-            Revert to the current run's
-          </Button>
-        </div>
         {current.error && <Issue code="run_failed" message={current.error} testId="rc-run-error" />}
-      </section>
-
-      {validation.ok && <EffectiveTable agents={validation.resolved.agents} />}
-      <Presets draft={draft} scenario={draft.scenario} onLoad={setDraft} />
-      <JsonView draft={draft} onApply={setDraft} />
+      </div>
     </div>
   );
 }
 
+/** The scope of an entry: the level (default, a kind, an agent) as a compact select in the section's title. */
 function ScopeSelect(props: { label: string; value: string; scopes: Scope[]; onChange: (id: string) => void; testId: string; entries: (s: Scope) => boolean }) {
   return (
-    <label className="field">
-      <span className="field-label">{props.label}</span>
-      <NativeSelect value={props.value} onChange={(e) => props.onChange(e.target.value)} inputProps={{ "aria-label": props.label, "data-testid": props.testId } as object}>
-        {props.scopes.map((s) => (
-          <option key={scopeId(s)} value={scopeId(s)}>
-            {scopeLabel(s)}
-            {props.entries(s) ? " ●" : ""}
-          </option>
-        ))}
-      </NativeSelect>
-    </label>
+    <select className="rc-scope mono" value={props.value} onChange={(e) => props.onChange(e.target.value)} aria-label={props.label} data-testid={props.testId}>
+      {props.scopes.map((s) => (
+        <option key={scopeId(s)} value={scopeId(s)}>
+          {scopeLabel(s)}
+          {props.entries(s) ? " ●" : ""}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -341,8 +404,11 @@ function Warnings(props: { warnings: readonly RunConfigWarning[] }) {
 function EffectiveTable(props: { agents: readonly EffectiveAgentConfig[] }) {
   const rows = props.agents.slice(0, MAX_EFFECTIVE_ROWS);
   return (
-    <section data-testid="rc-effective">
-      <h4>Effective configuration</h4>
+    <section className="fs" data-testid="rc-effective" data-section="effective">
+      <h4 className="sec">
+        <b>5 · EFFECTIVE CONFIGURATION</b>
+        <span className="rule" />
+      </h4>
       <table className="effective-table">
         <thead>
           <tr>
@@ -424,24 +490,27 @@ function Presets(props: { draft: RunConfigDocument; scenario: RunConfigDocument[
     setMsg({ ok: true, text: `loaded ${stored.id} v${stored.version}${rebased ? ` (saved for ${p.value.scenario.id} v${p.value.scenario.version}; applied to v${props.scenario.version})` : ""}` });
   };
   return (
-    <section data-testid="rc-presets">
-      <h4>Presets</h4>
-      <div className="row wrap">
-        <NativeSelect value={selected} onChange={(e) => setSelected(e.target.value)} inputProps={{ "aria-label": "Preset", "data-testid": "rc-preset-select" } as object}>
+    <section className="fs" data-testid="rc-presets" data-section="presets">
+      <h4 className="sec">
+        <b>6 · PRESETS</b>
+        <span className="rule" />
+      </h4>
+      <div className="rc-inline">
+        <select className="mono" value={selected} onChange={(e) => setSelected(e.target.value)} aria-label="Preset" data-testid="rc-preset-select">
           <option value="">{list.length === 0 ? "(no presets)" : "(choose a preset)"}</option>
           {list.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name} · v{s.latestVersion}
             </option>
           ))}
-        </NativeSelect>
-        <Button variant="outlined" color="inherit" disabled={!ready || selected === ""} onClick={() => void load()} data-testid="rc-preset-load">
+        </select>
+        <button type="button" className="btn" disabled={!ready || selected === ""} onClick={() => void load()} data-testid="rc-preset-load">
           Load
-        </Button>
-        <TextField size="small" label="preset name" value={name} onChange={(e) => setName(e.target.value.slice(0, 200))} slotProps={{ htmlInput: { "data-testid": "rc-preset-name" } as InputHTMLAttributes<HTMLInputElement> }} />
-        <Button variant="outlined" color="inherit" disabled={!ready || name.trim() === ""} onClick={() => void save()} data-testid="rc-preset-save">
+        </button>
+        <input className="mono" value={name} placeholder="preset name" aria-label="preset name" onChange={(e) => setName(e.target.value.slice(0, 200))} data-testid="rc-preset-name" />
+        <button type="button" className="btn" disabled={!ready || name.trim() === ""} onClick={() => void save()} data-testid="rc-preset-save">
           Save as new version
-        </Button>
+        </button>
       </div>
       {msg && (
         <p className={msg.ok ? "" : "danger"} role="status" data-testid="rc-preset-msg">
@@ -452,11 +521,20 @@ function Presets(props: { draft: RunConfigDocument; scenario: RunConfigDocument[
   );
 }
 
-/** The canonical document as JSON; edits are applied only through the same parser, never merged by hand. */
-function JsonView(props: { draft: RunConfigDocument; onApply: (d: RunConfigDocument) => void }) {
+/**
+ * The canonical document as JSON, with its line numbers: the lines that differ from the current run's are marked with the accent,
+ * the line an error points at with the alarm tint. Edits are applied only through the same parser, never merged by hand.
+ */
+function JsonView(props: { draft: RunConfigDocument; base: RunConfigDocument; error: { path?: string | undefined; message?: string | undefined } | undefined; onApply: (d: RunConfigDocument) => void }) {
   const shown = useMemo(() => JSON.stringify(props.draft, null, 2), [props.draft]);
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
+  const [top, setTop] = useState(0);
+  const area = useRef<HTMLTextAreaElement>(null);
+  const value = text ?? shown;
+  const changed = useMemo(() => changedLines(JSON.stringify(props.base, null, 2), value), [props.base, value]);
+  const failing = errorLine(value, props.error);
+  const lines = value.split("\n");
   const apply = () => {
     if (text === null) return;
     const r = parseRunConfig(text);
@@ -466,23 +544,19 @@ function JsonView(props: { draft: RunConfigDocument; onApply: (d: RunConfigDocum
     props.onApply(r.value);
   };
   return (
-    <section data-testid="rc-json">
-      <h4>JSON</h4>
-      <TextField
-        multiline
-        fullWidth
-        minRows={6}
-        maxRows={24}
-        value={text ?? shown}
-        onChange={(e) => setText(e.target.value)}
-        slotProps={{ htmlInput: { "data-testid": "rc-json-text", className: "mono", spellCheck: false, "aria-label": "Run configuration JSON" } as InputHTMLAttributes<HTMLTextAreaElement> }}
-      />
-      <div className="row">
-        <Button variant="outlined" color="inherit" disabled={text === null} onClick={apply} data-testid="rc-json-apply">
+    <section className="rc-json" data-testid="rc-json">
+      <div className="rc-json-bar">
+        <span className="sec">
+          <b>JSON</b>
+        </span>
+        <span className="muted mono">{text === null ? "synced with the form" : "edited: not applied"}</span>
+        <span className="sp" />
+        <button type="button" className="btn" disabled={text === null} onClick={apply} data-testid="rc-json-apply">
           Apply JSON
-        </Button>
-        <Button
-          variant="text"
+        </button>
+        <button
+          type="button"
+          className="btn"
           disabled={text === null}
           onClick={() => {
             setText(null);
@@ -490,7 +564,34 @@ function JsonView(props: { draft: RunConfigDocument; onApply: (d: RunConfigDocum
           }}
         >
           Discard edits
-        </Button>
+        </button>
+      </div>
+      <div className="rc-code">
+        <div className="rc-gutter mono" aria-hidden="true" style={{ transform: `translateY(${-top}px)` }}>
+          {lines.map((_, i) => (
+            <span key={i} className={`ln${changed.has(i + 1) ? " ch" : ""}${failing === i + 1 ? " er" : ""}`}>
+              {i + 1}
+            </span>
+          ))}
+        </div>
+        <div className="rc-bands" aria-hidden="true">
+          <div style={{ transform: `translateY(${-top}px)` }}>
+            {lines.map((_, i) => (
+              <span key={i} className={`band${changed.has(i + 1) ? " ch" : ""}${failing === i + 1 ? " er" : ""}`} />
+            ))}
+          </div>
+        </div>
+        <textarea
+          ref={area}
+          className="mono"
+          value={value}
+          spellCheck={false}
+          wrap="off"
+          aria-label="Run configuration JSON"
+          data-testid="rc-json-text"
+          onChange={(e) => setText(e.target.value)}
+          onScroll={(e) => setTop(e.currentTarget.scrollTop)}
+        />
       </div>
       {error && <Issue code={error.code} message={error.message} testId="rc-json-error" />}
     </section>

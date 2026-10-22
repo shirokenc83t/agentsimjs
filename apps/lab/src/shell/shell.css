@@ -79,3 +79,6 @@
 @media (max-width: 1500px) {
   .tile.opt, .hide-narrow, .top .k-opt { display: none; }
 }
+
+/* Tooltips are nowrap pseudo-elements that count as overflow: near the right edge they would make the page scroll sideways. */
+.shell { overflow: clip; }

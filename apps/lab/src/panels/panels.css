@@ -189,3 +189,116 @@
 .itab:hover { color: var(--fg); background: var(--bg3); }
 .itab.on { color: var(--fg); background: var(--bg1); font-weight: 600; box-shadow: inset 0 -2px 0 var(--ac); }
 .inspector-section.researcher-view { margin: 0; border: 0; border-top: 1px dashed var(--warn); border-bottom: 1px solid var(--ln); background: color-mix(in srgb, var(--warn) 6%, transparent); border-radius: 0; }
+
+/* Author · Run configuration and Scenario editor (ADR-0042): a section rail, one-line fields, the text view and a fixed action bar. */
+.btn { appearance: none; height: 26px; padding: 0 10px; border: 1px solid var(--ln2); border-radius: 0; background: var(--bg1); color: var(--fg); font: inherit; font-size: var(--type-label-size); cursor: pointer; }
+.btn:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg3); border-color: var(--fg2); }
+.btn:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: 1px; }
+.btn.pri { background: var(--ac); border-color: var(--ac); color: var(--acfg); font-weight: 600; }
+.btn.pri:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--ac); border-color: var(--fg); }
+.btn.on { background: var(--acbg); box-shadow: inset 0 -2px 0 var(--ac); font-weight: 600; }
+.btn.dng:hover:not(:disabled) { color: var(--alm); border-color: var(--alm); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+.chip { appearance: none; height: 22px; padding: 0 8px; border: 1px solid var(--ln2); border-radius: 0; background: var(--bg1); color: var(--fg2); font: inherit; font-size: var(--type-label-size); cursor: pointer; }
+.chip:hover { background: var(--bg3); color: var(--fg); border-color: var(--fg2); }
+.chip.on { background: var(--acbg); color: var(--fg); box-shadow: inset 0 -2px 0 var(--ac); font-weight: 600; }
+.sp { flex: 1; }
+.c2 { color: var(--fg2); }
+.c3 { color: var(--fg3); }
+.st { font-weight: 600; font-size: var(--type-label-size); letter-spacing: 0.03em; white-space: nowrap; }
+
+.run-config.rc { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.rc-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 168px minmax(0, 1fr) minmax(240px, 36%); }
+.rc-rail { display: flex; flex-direction: column; padding: 6px 0; border-right: 1px solid var(--ln); background: var(--bg1); overflow: auto; }
+.rc-rail .nv { appearance: none; border: 0; background: transparent; text-align: left; color: var(--fg2); padding: 0 10px; height: 26px; cursor: pointer; font: inherit; font-size: var(--type-label-size); letter-spacing: var(--type-label-tracking); display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.rc-rail .nv:hover { background: var(--bg3); color: var(--fg); }
+.rc-rail .nv.on { color: var(--fg); background: var(--acbg); box-shadow: inset 0 0 0 1px var(--ac); font-weight: 600; }
+.rc-rail .nv .n { color: var(--fg3); font-weight: 400; width: 12px; }
+.rc-rail .nv .st, .rc-rail .nv .c3 { margin-left: auto; }
+
+.rc-form { min-width: 0; overflow: auto; padding: 4px 0; }
+.rc-meta { margin: 0; padding: 4px 14px; color: var(--fg3); font-size: var(--type-label-size); }
+.rc .fs { margin: 0; padding: 8px 14px 10px; border-bottom: 1px solid var(--ln); }
+.rc .sec, .se h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: var(--type-label-size); font-weight: 400; color: var(--fg3); letter-spacing: 0.1em; text-transform: uppercase; }
+.rc .sec b { color: var(--fg); font-weight: 600; }
+.rc .sec .rule { flex: 1; height: 1px; background: var(--ln); }
+.se h4::after { content: ""; flex: 1; height: 1px; background: var(--ln); }
+.rc-scope { height: 22px; max-width: 220px; background: var(--bg1); color: var(--fg2); border: 1px solid var(--ln2); border-radius: 0; font-size: var(--type-label-size); text-transform: none; letter-spacing: 0; }
+
+/* One line per field: label, input, help. The three states of the input are never colour alone: dashed, edge, tint and the code. */
+.rc-row { display: grid; grid-template-columns: minmax(0, 190px) minmax(0, 220px) minmax(0, 1fr); align-items: center; gap: 10px; min-height: 28px; }
+.rc-label { color: var(--fg2); }
+.rc-label small { display: block; color: var(--fg3); font-size: var(--type-label-size); }
+.rc-input { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; background: var(--bg0); border: 1px solid var(--ln2); }
+.rc-input input, .rc-input select { flex: 1; min-width: 0; height: 22px; border: 0; padding: 0; background: transparent; color: var(--fg); font: inherit; outline: none; }
+.rc-input select { background: var(--bg0); }
+.rc-input .unit { color: var(--fg3); }
+.rc-input:focus-within { outline: var(--focus-ring) solid var(--ac); outline-offset: 1px; }
+.rc-row.inh .rc-input { border-style: dashed; }
+.rc-row.inh .rc-input input, .rc-row.inh .rc-input select { color: var(--fg3); }
+.rc-row.set .rc-input { border-color: var(--ac); box-shadow: inset 0 0 0 1px var(--ac); }
+.rc-row.err .rc-input { border-color: var(--alm); background: var(--almbg); }
+.rc-help { color: var(--fg3); font-size: var(--type-label-size); overflow: hidden; text-overflow: ellipsis; }
+.rc-help.st-alm { color: var(--alm); white-space: normal; }
+.rc-help .code { display: inline-block; font-weight: 600; padding: 0 4px; border: 1px solid currentColor; }
+.rc-check { display: flex; align-items: center; gap: 8px; margin: 6px 0; color: var(--fg2); }
+.rc-note { margin: 6px 0 0; font-size: var(--type-label-size); }
+.rc-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rc-inline select, .rc-inline input, .rc-select, .rc-text-in { height: 24px; background: var(--bg0); color: var(--fg); border: 1px solid var(--ln2); border-radius: 0; font: inherit; padding: 0 8px; }
+.rc-text-in.err, .rc-constraint.err { border-color: var(--alm); background: var(--almbg); }
+.rc .field-grid { grid-template-columns: 1fr; gap: 0; margin-top: 4px; }
+.rc .cost-profile { border: 0; border-top: 1px solid var(--ln); border-radius: 0; padding: 6px 0 0; margin: 6px 0; }
+.rc-constraint { flex: 1; min-width: 220px; height: 24px; padding: 0 8px; background: var(--bg0); color: var(--fg); border: 1px solid var(--ln2); border-radius: 0; font: inherit; }
+.rc-textarea { width: 100%; box-sizing: border-box; background: var(--bg0); color: var(--fg); border: 1px solid var(--ln2); border-radius: 0; padding: 6px 8px; font: inherit; resize: vertical; }
+
+/* The text view: line numbers, changed lines on the accent tint, the failing line on the alarm tint. */
+.rc-text { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--ln); background: var(--bg1); }
+.rc-json { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.rc-json-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--ln); background: var(--bg2); }
+.rc-code { position: relative; flex: 1; min-height: 120px; overflow: hidden; background: var(--bg0); font-size: 11.5px; line-height: 19px; }
+.rc-gutter { position: absolute; left: 0; top: 6px; width: 34px; display: flex; flex-direction: column; text-align: right; color: var(--fg3); z-index: 2; pointer-events: none; }
+.rc-gutter .ln { display: block; height: 19px; padding-right: 8px; }
+.rc-gutter .ln.ch { color: var(--ac); box-shadow: inset -2px 0 0 var(--ac); }
+.rc-gutter .ln.er { color: var(--alm); box-shadow: inset -2px 0 0 var(--alm); }
+.rc-bands { position: absolute; inset: 0; top: 6px; overflow: hidden; pointer-events: none; }
+.rc-bands .band { display: block; height: 19px; }
+.rc-bands .band.ch { background: var(--acbg); }
+.rc-bands .band.er { background: var(--almbg); }
+.rc-code textarea { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; padding: 6px 8px 6px 42px; border: 0; background: transparent; color: var(--fg); font: inherit; line-height: 19px; white-space: pre; resize: none; outline: none; overflow: auto; z-index: 1; }
+.rc-code textarea:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
+.rc-val { flex: none; max-height: 45%; overflow: auto; border-top: 1px solid var(--ln); padding: 4px 8px; }
+.rc-val .vr { margin: 2px 0; }
+.rc-val .kv { margin: 6px 0 0; }
+.rc-acts { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--ln); background: var(--bg2); }
+.rc-acts .issue { margin: 0; flex-basis: auto; }
+
+/* Scenario editor: a vertical tool rail with keys, the paint target above the map, a floating brush over it, the properties on the right. */
+.scenario-editor.se { display: flex; padding: 0; overflow: hidden; }
+.se .editor-main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.se-sub { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; min-height: 30px; padding: 3px 10px; border-bottom: 1px solid var(--ln); background: var(--bg1); }
+.se-sub .edit-target { margin: 0; padding: 2px 8px; border: 1px solid var(--ln2); border-radius: 0; font-weight: 600; }
+.se-sub .edit-target.prior { border-style: dashed; border-color: var(--warn); color: var(--warn); background: var(--warnbg); }
+.se-sub .researcher-banner { margin: 0; }
+.se-chips { display: inline-flex; }
+.se-stage { flex: 1; min-height: 0; display: flex; }
+.se-tools { flex: none; width: 150px; display: flex; flex-direction: column; padding: 6px 0; border-right: 1px solid var(--ln); background: var(--bg1); overflow: auto; }
+.se-tools hr { width: 100%; border: 0; border-top: 1px solid var(--ln); margin: 6px 0; }
+.se-tools .tool { appearance: none; border: 0; background: transparent; color: var(--fg2); height: 26px; padding: 0 10px; display: flex; align-items: center; gap: 8px; font: inherit; font-size: var(--type-label-size); text-align: left; cursor: pointer; }
+.se-tools .tool:hover:not(:disabled) { background: var(--bg3); color: var(--fg); }
+.se-tools .tool:disabled { opacity: 0.45; cursor: not-allowed; }
+.se-tools .tool.on { color: var(--fg); background: var(--acbg); box-shadow: inset 0 0 0 1px var(--ac); font-weight: 600; }
+.se-tools .tool .g { width: 14px; text-align: center; color: var(--fg3); }
+.se-tools .tool .kb { margin-left: auto; color: var(--fg3); font-weight: 400; }
+.se .editor-view { position: relative; flex: 1; min-width: 0; }
+.se-brush { position: absolute; top: 12px; right: 12px; width: 230px; background: var(--bg1); border: 1px solid var(--ln2); box-shadow: var(--float); z-index: 5; }
+.se-brush-bar { height: 24px; display: flex; align-items: center; padding: 0 8px; background: var(--bg2); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); letter-spacing: 0.1em; font-weight: 600; }
+.se-brush-body { padding: 6px 8px 8px; }
+.se-brush-body .rc-row { grid-template-columns: minmax(0, 1fr); gap: 2px; margin-bottom: 4px; }
+.se-brush-body .rc-help { display: none; }
+.se-side { width: 400px; flex: none; display: flex; flex-direction: column; padding: 0; border-left: 1px solid var(--ln); overflow: hidden; }
+.se-props { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px; }
+.se-props section { margin: 0 0 14px; }
+.se-acts { flex-wrap: wrap; padding: 8px 12px; border-top: 0; border-bottom: 1px solid var(--ln); }
+.se .rc-row, .se-props .rc-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.se-props .rc-row .rc-help { grid-column: 1 / -1; margin-top: -4px; }
+.rc-tf { display: inline-flex; flex-direction: column; gap: 2px; min-width: 0; }

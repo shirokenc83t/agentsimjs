@@ -292,4 +292,22 @@ describe("RunConfigPanel: the planner choice (ADR-0037, F2b M4)", () => {
     expect(screen.getByTestId("rc-algorithm")).toBeInTheDocument();
     expect(screen.getByTestId("rc-run-config-hash")).toHaveTextContent("(= current run)");
   });
+
+  it("marks the field an error points at with its code, the section in the rail, and the lines of the JSON that changed", async () => {
+    setup();
+    // As the run: every field of the planning section is either inherited or set, the rail is clean, no line is marked.
+    expect(screen.getByTestId("rc-nav-planning")).toHaveTextContent("✓");
+    expect(screen.getByTestId("rc-per-tick").closest(".rc-row")).toHaveAttribute("data-state", "inh");
+    await userEvent.type(screen.getByTestId("rc-per-tick"), "0");
+    const row = screen.getByTestId("rc-per-tick").closest(".rc-row");
+    expect(row).toHaveAttribute("data-state", "err");
+    expect(row).toHaveTextContent("budget_out_of_range");
+    expect(screen.getByTestId("rc-nav-planning")).toHaveTextContent("✕ 1");
+    expect(screen.getByTestId("rc-nav-drive")).toHaveTextContent("✓");
+    expect(screen.getByTestId("rc-run")).toHaveAttribute("aria-disabled", "true");
+    await userEvent.clear(screen.getByTestId("rc-per-tick"));
+    await userEvent.type(screen.getByTestId("rc-per-tick"), "500");
+    expect(screen.getByTestId("rc-per-tick").closest(".rc-row")).toHaveAttribute("data-state", "set");
+    expect(screen.getByTestId("rc-json").querySelectorAll(".rc-gutter .ln.ch").length).toBeGreaterThan(0);
+  });
 });

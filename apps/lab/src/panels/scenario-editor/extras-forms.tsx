@@ -1,5 +1,4 @@
-import Button from "@mui/material/Button";
-import TextField from "@mui/material/TextField";
+import { Button, TextField } from "../controls.tsx";
 import type { ObjectSpec, ScenarioError } from "@agentsim/scenarios";
 import { useState, type InputHTMLAttributes } from "react";
 import { Issue, NumberField } from "../run-config/fields.tsx";

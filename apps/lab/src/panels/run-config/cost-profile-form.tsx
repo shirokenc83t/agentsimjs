@@ -1,8 +1,4 @@
-import Button from "@mui/material/Button";
-import IconButton from "@mui/material/IconButton";
-import TextField from "@mui/material/TextField";
 import { F1_FEATURES, type CostProfile, type Feature } from "@agentsim/scenarios";
-import type { InputHTMLAttributes } from "react";
 import { Issue, NumberField } from "./fields.tsx";
 import { constraintIssue, profileIssue } from "./model.ts";
 
@@ -60,30 +56,26 @@ export function CostProfileForm(props: { value: CostProfile; onChange: (p: CostP
         const ci = c.trim() === "" ? { code: "constraint_invalid", message: "empty constraint" } : constraintIssue(c);
         return (
           <div key={k} className="constraint-row">
-            <TextField
-              size="small"
+            <input
+              className={`mono rc-constraint${ci ? " err" : ""}`}
               value={c}
-              label={`constraint ${k + 1}`}
-              error={ci !== undefined}
+              aria-label={`constraint ${k + 1}`}
+              aria-invalid={ci !== undefined ? true : undefined}
+              placeholder={`constraint ${k + 1}`}
+              spellCheck={false}
+              data-testid={`${props.testId}-constraint-${k}`}
               onChange={(e) => setConstraints(constraints.map((x, j) => (j === k ? e.target.value.slice(0, MAX_CONSTRAINT_CHARS) : x)))}
-              slotProps={{ htmlInput: { "data-testid": `${props.testId}-constraint-${k}`, className: "mono", spellCheck: false } as InputHTMLAttributes<HTMLInputElement> }}
             />
-            <IconButton aria-label={`Remove constraint ${k + 1}`} onClick={() => setConstraints(constraints.filter((_, j) => j !== k))} size="small">
+            <button type="button" className="btn" aria-label={`Remove constraint ${k + 1}`} onClick={() => setConstraints(constraints.filter((_, j) => j !== k))}>
               ✕
-            </IconButton>
+            </button>
             {ci && <Issue code={ci.code} message={ci.message} testId={`${props.testId}-constraint-${k}-issue`} />}
           </div>
         );
       })}
-      <Button
-        size="small"
-        variant="text"
-        disabled={constraints.length >= MAX_CONSTRAINTS}
-        onClick={() => setConstraints([...constraints, ""])}
-        data-testid={`${props.testId}-add-constraint`}
-      >
+      <button type="button" className="btn" disabled={constraints.length >= MAX_CONSTRAINTS} onClick={() => setConstraints([...constraints, ""])} data-testid={`${props.testId}-add-constraint`}>
         + constraint
-      </Button>
+      </button>
       {/* Constraint problems are shown on their row; the profile line reports the rest (weights, features). */}
       {!issue ? (
         <p className="muted" data-testid={`${props.testId}-ok`}>
