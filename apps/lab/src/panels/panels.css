@@ -57,8 +57,8 @@
 .bar { color: var(--ok); }
 .bar s { color: var(--ln2); text-decoration: none; }
 .inspector-section { margin: 0; padding: 6px 12px 8px; border-bottom: 1px solid var(--ln); }
-.inspector-section h4 { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px; font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: var(--type-label-tracking); text-transform: uppercase; color: var(--fg3); }
-.inspector-section h4::after { content: ""; flex: 1; height: 1px; background: var(--ln); }
+.inspector-section h4 { display: block; overflow: hidden; margin: 2px 0 4px; font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: var(--type-label-tracking); text-transform: uppercase; color: var(--fg3); }
+.inspector-section h4::after { content: ""; display: inline-block; vertical-align: middle; width: 100%; margin: 0 -100% 0 8px; height: 1px; background: var(--ln); }
 /* Values keep at least 45 % of the width; long schema keys wrap instead of squeezing values mid-word. */
 .inspector .kv { grid-template-columns: minmax(0, max-content) minmax(45%, 1fr); }
 .inspector .kv dt { overflow-wrap: anywhere; display: flex; align-items: baseline; gap: 6px; }
