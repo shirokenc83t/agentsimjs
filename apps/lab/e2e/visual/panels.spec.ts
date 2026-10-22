@@ -24,6 +24,8 @@ for (const theme of THEMES) {
       // The boot mirror of the theme setting (ADR-0032 §2): the first paint is already in this theme.
       await page.addInitScript((t) => window.localStorage.setItem("agentsim.ui.theme", t), theme);
       await loadDemo(page);
+      // The floating Performance window sits over the panels' corners; these images are of the panels themselves.
+      await page.addStyleTag({ content: ".dv-resize-container { display: none !important; }" });
     });
 
     test("shell: toolbar and status line", async ({ page }) => {
@@ -50,6 +52,7 @@ for (const theme of THEMES) {
     test("Inspector (F2: mind view, researcher view, commands)", async ({ page }) => {
       test.setTimeout(90_000);
       await loadF2(page, "discovery");
+      await page.addStyleTag({ content: ".dv-resize-container { display: none !important; }" });
       await page.getByTestId("explorer-row-ugv-001").click();
       await expect(page.getByTestId("mind-request-status")).toContainText("would be sent now");
       await expect(page.getByTestId("researcher-unknown")).toBeVisible();
