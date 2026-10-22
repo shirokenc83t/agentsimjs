@@ -4,7 +4,6 @@ import { initTheme, UiThemeProvider, useUiContext } from "@agentsim/ui";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
-import { applyAppearance, readAppearance } from "./config/appearance.ts";
 import { connectRecorder, resolveEnvironment } from "./config/environment.ts";
 import { probeEnabled } from "./probe.ts";
 import type { RunSource } from "./sim/run-source.ts";
@@ -16,7 +15,6 @@ import { loadLiveSource } from "./workspaces/registry.tsx";
 
 // Theme before first render, from the localStorage mirror of ui.theme (ADR-0032 §2); no inline script (§10).
 initTheme();
-applyAppearance(readAppearance());
 
 const env = resolveEnvironment(import.meta.env["VITE_AGENTSIM_ENV"] as string | undefined);
 const storage = env.createStorage();

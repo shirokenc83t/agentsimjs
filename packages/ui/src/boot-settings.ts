@@ -14,16 +14,6 @@ export const BOOT_SETTINGS = {
     key: "agentsim.quotaThresholdBytes",
     why: "It decides how storage is opened, so it must be readable before storage (and user_data) exists.",
   },
-  /** No motion at all (on top of the OS preference): a UI convenience read at first paint. */
-  "ui.reducedMotion": {
-    key: "agentsim.ui.reducedMotion",
-    why: "It must hold from the first paint, before storage opens, so no transition plays that the viewer asked not to see.",
-  },
-  /** The dot grid of the dock area, on or off. */
-  "ui.dockGrid": {
-    key: "agentsim.ui.dockGrid",
-    why: "The dock is drawn at first paint, before storage opens; the grid must not flash on and off.",
-  },
 } as const;
 
 export type BootSetting = keyof typeof BOOT_SETTINGS;

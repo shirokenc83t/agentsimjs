@@ -2,6 +2,7 @@ import type { StorageInfo } from "@agentsim/storage";
 import type { DockviewApi } from "dockview-react";
 import { Banner, CommandPalette, downloadBytes, THEME_PREFERENCES, type Command } from "@agentsim/ui";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { applyAppearance, loadAppearance } from "./config/appearance.ts";
 import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStorageStatus, useThemeSetting, type CurrentRun } from "./services.tsx";
 import type { PresetId } from "@agentsim/core";
 import { closePanel, dockPanel, floatPanel, focusNext, focusNumber, isFloating, openPanel, syncCollapsed, toggleCollapse, toggleMaximize } from "./workspaces/dock-actions.ts";
@@ -21,6 +22,10 @@ export function App() {
   const { sim, source, storage } = useServices();
   const status = useStorageStatus(storage);
   const setTheme = useThemeSetting(storage);
+  // The appearance preferences saved in user data, once storage is ready.
+  useEffect(() => {
+    if (status.state === "ready") void loadAppearance(storage.ports.userData).then(applyAppearance, () => {});
+  }, [status.state, storage]);
   const snap = usePolled(useCallback(() => sim.snapshot(), [sim]), 100);
   // What the panels show (the live run, or a recording read from storage): the player is its time control.
   const view = usePolled(useCallback(() => source?.snapshot(), [source]), 100);

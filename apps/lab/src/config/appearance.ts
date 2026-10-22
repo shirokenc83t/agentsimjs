@@ -1,18 +1,22 @@
-import { readBootSetting, writeBootSetting } from "@agentsim/ui";
+import type { UserDataStore } from "@agentsim/storage";
 
-/** The two per-viewer appearance preferences besides the theme: no motion at all, and the dot grid of the dock area. */
+/** The two appearance preferences besides the theme: no motion at all, and the dot grid of the dock area. Kept in `user_data`, like the theme. */
 export interface Appearance {
   readonly reducedMotion: boolean;
   readonly dockGrid: boolean;
 }
 
-export function readAppearance(): Appearance {
-  return { reducedMotion: readBootSetting("ui.reducedMotion") === "1", dockGrid: readBootSetting("ui.dockGrid") !== "off" };
+export const DEFAULT_APPEARANCE: Appearance = { reducedMotion: false, dockGrid: true };
+const NAMESPACE = "ui";
+const KEYS = { reducedMotion: "reducedMotion", dockGrid: "dockGrid" } as const;
+
+export async function loadAppearance(store: Pick<UserDataStore, "get">): Promise<Appearance> {
+  const [motion, grid] = await Promise.all([store.get(NAMESPACE, KEYS.reducedMotion), store.get(NAMESPACE, KEYS.dockGrid)]);
+  return { reducedMotion: typeof motion === "boolean" ? motion : DEFAULT_APPEARANCE.reducedMotion, dockGrid: typeof grid === "boolean" ? grid : DEFAULT_APPEARANCE.dockGrid };
 }
 
-export function writeAppearance(a: Appearance): void {
-  writeBootSetting("ui.reducedMotion", a.reducedMotion ? "1" : "0");
-  writeBootSetting("ui.dockGrid", a.dockGrid ? "on" : "off");
+export async function saveAppearance(store: Pick<UserDataStore, "set">, a: Appearance): Promise<void> {
+  await Promise.all([store.set(NAMESPACE, KEYS.reducedMotion, a.reducedMotion), store.set(NAMESPACE, KEYS.dockGrid, a.dockGrid)]);
 }
 
 /** Puts the preferences on the document element (`data-motion`, `data-dockgrid`); the stylesheets follow them. */

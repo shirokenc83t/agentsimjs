@@ -1,7 +1,7 @@
 import "./panels.css";
 import { formatBytes, isThemePreference, THEME_PREFERENCES, useTheme } from "@agentsim/ui";
-import { useState } from "react";
-import { readAppearance, applyAppearance, writeAppearance, type Appearance } from "../config/appearance.ts";
+import { useEffect, useState } from "react";
+import { applyAppearance, DEFAULT_APPEARANCE, loadAppearance, saveAppearance, type Appearance } from "../config/appearance.ts";
 import { readQuotaThreshold, writeQuotaThreshold } from "../config/environment.ts";
 import { useAppActions, useServices, useStorageStatus } from "../services.tsx";
 
@@ -46,13 +46,17 @@ export function SettingsPanel() {
   const status = useStorageStatus(storage);
   const [thresholdMb, setThresholdMb] = useState(() => Math.round(readQuotaThreshold() / (1024 * 1024)));
   const [persistMsg, setPersistMsg] = useState<string | null>(null);
-  const [appearance, setAppearance] = useState<Appearance>(readAppearance);
+  const [appearance, setAppearance] = useState<Appearance>(DEFAULT_APPEARANCE);
+  const ready = status.state === "ready";
+  useEffect(() => {
+    if (ready) void loadAppearance(storage.ports.userData).then(setAppearance, () => {});
+  }, [ready, storage]);
   const [section, setSection] = useState<(typeof SECTIONS)[number]["id"]>("appearance");
   const set = (patch: Partial<Appearance>) => {
     const next = { ...appearance, ...patch };
     setAppearance(next);
-    writeAppearance(next);
     applyAppearance(next);
+    if (ready) void saveAppearance(storage.ports.userData, next);
   };
   const goTo = (id: (typeof SECTIONS)[number]["id"]) => {
     setSection(id);
