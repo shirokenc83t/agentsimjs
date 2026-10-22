@@ -41,14 +41,6 @@ button, select, input { font: inherit; color: inherit; }
 .field { background: var(--bg0); border: 1px solid var(--ln2); border-radius: var(--radius-control); padding: 3px 8px; }
 
 .shell { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
-.toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--bg1); border-bottom: 1px solid var(--ln); flex-wrap: wrap; }
-.toolbar .brand { font-weight: 600; margin-right: 8px; }
-.toolbar .spacer { flex: 1; }
-.tabs { display: inline-flex; gap: 2px; }
-.tabs .btn[aria-pressed="true"] { border-color: var(--ac); background: var(--acbg); }
-.statusline { display: flex; gap: 16px; padding: 3px 10px; background: var(--bg1); border-top: 1px solid var(--ln); font-family: var(--font-mono); font-size: var(--type-mono-size); color: var(--fg2); flex-wrap: wrap; }
-.statusline .warn { color: var(--warn); }
-.statusline .danger { color: var(--alm); }
 .workspace { min-height: 0; position: relative; }
 .workspace-fill { position: absolute; inset: 0; }
 
@@ -88,7 +80,12 @@ table.grid th { color: var(--fg2); font-weight: normal; }
 .warn { color: var(--warn); }
 .ok { color: var(--ok); }
 
-/* Workspace tabs (MUI Tabs, compact) in the toolbar. */
-.workspace-tabs { min-height: 30px; }
-.workspace-tabs .MuiTab-root { min-height: 30px; padding: 4px 12px; color: var(--fg2); }
-.workspace-tabs .MuiTab-root.Mui-selected { color: var(--fg); }
+/* Tooltips of icon-only and compact controls, after 400 ms (ADR-0042 §6): `data-tip` on the control, shown on hover and on keyboard focus. */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip) / ""; position: absolute; top: calc(100% + 4px); left: 0; z-index: var(--z-popover); white-space: nowrap; pointer-events: none;
+  padding: 3px 8px; background: var(--bg3); color: var(--fg); border: 1px solid var(--fg3); font-size: var(--type-label-size); font-weight: 400;
+  box-shadow: var(--float); opacity: 0; visibility: hidden; transition: opacity 0s linear 0s, visibility 0s linear 0s;
+}
+[data-tip]:is(:hover, :focus-visible)::after { opacity: 1; visibility: visible; transition-delay: 400ms; }
+[data-tip].tip-right::after { left: auto; right: 0; }

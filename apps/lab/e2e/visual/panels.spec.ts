@@ -28,9 +28,10 @@ for (const theme of THEMES) {
 
     test("shell: toolbar and status line", async ({ page }) => {
       await settle(page);
-      await expect(page.getByRole("toolbar", { name: "Run control" })).toHaveScreenshot(`shell-toolbar-${theme}.png`);
+      // The top bar and the player; the telemetry tiles are measured values of the worker and change from run to run.
+      await expect(page.getByTestId("shell-header")).toHaveScreenshot(`shell-toolbar-${theme}.png`, { mask: [page.locator(".telem")] });
       // Storage sizes depend on the database file and the browser's quota; how far the run is saved depends on when the writer flushed.
-      await expect(page.getByTestId("statusline")).toHaveScreenshot(`shell-statusline-${theme}.png`, { mask: [page.getByTestId("status-storage-size"), page.getByTestId("status-recording-saved")] });
+      await expect(page.getByTestId("statusline")).toHaveScreenshot(`shell-statusline-${theme}.png`, { mask: [page.getByTestId("status-storage-size"), page.getByTestId("status-recording-saved"), page.getByTestId("status-frame")] });
     });
 
     test("Explorer and Inspector (agent)", async ({ page }) => {

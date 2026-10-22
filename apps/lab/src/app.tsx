@@ -1,34 +1,25 @@
-import PauseIcon from "@mui/icons-material/Pause";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import SkipNextIcon from "@mui/icons-material/SkipNext";
-import Button from "@mui/material/Button";
-import IconButton from "@mui/material/IconButton";
-import NativeSelect from "@mui/material/NativeSelect";
-import Tab from "@mui/material/Tab";
-import Tabs from "@mui/material/Tabs";
-import Tooltip from "@mui/material/Tooltip";
-import { LATEST_SCHEMA_VERSION, type StorageInfo } from "@agentsim/storage";
-import { Banner, CommandPalette, downloadBytes, formatBytes, formatSimTime, type Command } from "@agentsim/ui";
+import type { StorageInfo } from "@agentsim/storage";
+import { Banner, CommandPalette, downloadBytes, type Command } from "@agentsim/ui";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStorageStatus, useThemeSetting, type CurrentRun } from "./services.tsx";
 import type { PresetId } from "@agentsim/core";
 import { LAYOUT_NAMESPACE, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
-import { LazyRecordingStatus, LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadRunController } from "./workspaces/registry.tsx";
+import { LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadRunController } from "./workspaces/registry.tsx";
+import { Player } from "./shell/player.tsx";
+import { shellKey } from "./shell/shortcuts.ts";
+import { StatusBar } from "./shell/status-bar.tsx";
+import { TopBar } from "./shell/top-bar.tsx";
+import "./shell/shell.css";
 import type { LabRun } from "./sim/run-controller.ts";
 
-const SPEEDS = [
-  { label: "×0.5", hz: 5 },
-  { label: "×1", hz: 10 },
-  { label: "×2", hz: 20 },
-  { label: "×4", hz: 40 },
-] as const;
-
-/** Lab shell (UI-SPEC §2): toolbar, banners, workspace, status line, command palette. */
+/** Lab shell (UI-SPEC §2): top bar, player, banners, workspace, status bar, command palette. */
 export function App() {
   const { sim, source, storage } = useServices();
   const status = useStorageStatus(storage);
   const setTheme = useThemeSetting(storage);
   const snap = usePolled(useCallback(() => sim.snapshot(), [sim]), 100);
+  // What the panels show (the live run, or a recording read from storage): the player is its time control.
+  const view = usePolled(useCallback(() => source?.snapshot(), [source]), 100);
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceId>("scene");
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -100,11 +91,19 @@ export function App() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
+        return;
       }
+      const k = shellKey(e, e.target, WORKSPACES.length);
+      if (!k) return;
+      e.preventDefault();
+      if (k.kind === "workspace") setWorkspace((WORKSPACES[k.index] as (typeof WORKSPACES)[number]).id);
+      else if (k.kind === "step") sim.step();
+      else if (sim.snapshot().running) sim.pause();
+      else sim.play();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [sim]);
 
   const resetLayouts = useCallback(() => {
     if (storage.status().state === "ready") for (const w of WORKSPACES) void storage.ports.userData.delete(LAYOUT_NAMESPACE, layoutKey(w.id));
@@ -166,93 +165,49 @@ export function App() {
     <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun }}>
       <CurrentRunProvider value={currentRun}>
       <div className="shell">
-        <header className="toolbar" role="toolbar" aria-label="Run control">
-          <span className="brand">▣ AgentSimJS-NG</span>
-          <Button
-            variant="text"
-            color="inherit"
-            className="mono"
-            onClick={(e) => setRunAnchor(e.currentTarget)}
-            aria-haspopup="dialog"
-            aria-expanded={runAnchor !== null}
-            data-testid="run-label"
+        <div data-testid="shell-header">
+          <TopBar
+            workspaces={WORKSPACES}
+            workspace={workspace}
+            onWorkspace={setWorkspace}
+            layoutName={`${preset?.title.toLowerCase() ?? workspace} · autosaved`}
+            onResetLayout={resetLayouts}
+            runLabel={run ? `${run.header.runId} · ${run.header.scenarioId ?? "?"} v${run.header.scenarioVersion ?? "?"}` : "run: —"}
+            runOpen={runAnchor !== null}
+            onRunClick={setRunAnchor}
+            replaying={view?.mode === "replay"}
+            onPalette={() => setPaletteOpen(true)}
           >
-            {run ? `${run.header.runId} · ${run.header.scenarioId ?? "?"} v${run.header.scenarioVersion ?? "?"}` : "run: —"}
-          </Button>
-          {runAnchor && (
-            <Suspense fallback={null}>
-              <LazyRunPopover
-                anchor={runAnchor}
-                onClose={() => setRunAnchor(null)}
-                run={run}
-                snap={snap}
-                busy={runBusy || !ready}
-                error={runError}
-                onLoadDemo={loadDemo}
-                onLoadReference={loadReference}
-                onRerun={() => rerunCurrent()}
-                listRuns={listRuns}
-                onResimulate={resimulate}
-              />
-            </Suspense>
-          )}
-          {snap.running ? (
-            <Tooltip title="Pause">
-              <IconButton onClick={() => sim.pause()} aria-label="Pause" data-testid="pause">
-                <PauseIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          ) : (
-            <Tooltip title="Play">
-              <IconButton onClick={() => sim.play()} aria-label="Play" data-testid="play">
-                <PlayArrowIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-          <Button variant="outlined" color="inherit" onClick={() => sim.step()} aria-label="Step one tick" data-testid="step" startIcon={<SkipNextIcon fontSize="small" />}>
-            step
-          </Button>
-          <span className="muted">mode</span>
-          {snap.run ? (
-            // A scenario run's time mode is part of the run (header, runConfigHash): read-only while it is loaded.
-            // Changing it starts a new run of the same scenario version (2026-10-09).
-            <>
-              <span className="mono" data-testid="time-mode" title="The time mode is part of the run. Re-run to change it.">
-                {snap.mode}
-              </span>
-              <Button
-                variant="text"
-                size="small"
-                onClick={() => !runBusy && run && rerunInMode(otherMode)}
-                aria-disabled={runBusy || !run}
-                data-testid="rerun-in-mode"
-              >
-                re-run in {otherMode}
-              </Button>
-            </>
-          ) : (
-            <NativeSelect value={snap.mode} inputProps={{ "aria-label": "Time mode" }} onChange={(e) => sim.setMode(e.target.value === "realtime" ? "realtime" : "lockstep")}>
-              <option value="lockstep">lockstep</option>
-              <option value="realtime">realtime</option>
-            </NativeSelect>
-          )}
-          <NativeSelect value={snap.tickRateHz} inputProps={{ "aria-label": "Speed" }} onChange={(e) => sim.setTickRate(Number(e.target.value))}>
-            {SPEEDS.map((s) => (
-              <option key={s.hz} value={s.hz}>{s.label}</option>
-            ))}
-          </NativeSelect>
-          <span className="spacer" />
-          <Tabs value={workspace} onChange={(_e, id: WorkspaceId) => setWorkspace(id)} aria-label="Workspaces" className="workspace-tabs">
-            {WORKSPACES.map((w) => (
-              <Tab key={w.id} value={w.id} label={w.title} data-testid={`tab-${w.id}`} />
-            ))}
-          </Tabs>
-          <Tooltip title="Command palette (Ctrl/Cmd+K)">
-            <Button variant="outlined" color="inherit" onClick={() => setPaletteOpen(true)} aria-label="Command palette">
-              ⌘K
-            </Button>
-          </Tooltip>
-        </header>
+            {runAnchor && (
+              <Suspense fallback={null}>
+                <LazyRunPopover
+                  anchor={runAnchor}
+                  onClose={() => setRunAnchor(null)}
+                  run={run}
+                  snap={snap}
+                  busy={runBusy || !ready}
+                  error={runError}
+                  onLoadDemo={loadDemo}
+                  onLoadReference={loadReference}
+                  onRerun={() => rerunCurrent()}
+                  listRuns={listRuns}
+                  onResimulate={resimulate}
+                />
+              </Suspense>
+            )}
+          </TopBar>
+          <Player
+            sim={sim}
+            snap={snap}
+            view={view}
+            compact={workspace === "author" || workspace === "data" || workspace === "settings"}
+            recorded={run?.header.recording === "stored"}
+            busy={runBusy}
+            onRerunInMode={(mode) => run && rerunInMode(mode)}
+            onScrubBack={setReplayRun}
+            onBackToLive={() => setReplayRun(undefined)}
+          />
+        </div>
 
         <div>
           {replayRun !== undefined && (
@@ -280,36 +235,7 @@ export function App() {
           <Suspense fallback={null}>{preset && <LazyWorkspaceHost key={preset.id} preset={preset} storage={storage} layoutEpoch={layoutEpoch} />}</Suspense>
         </div>
 
-        <footer className="statusline" aria-label="Status" data-testid="statusline">
-          <span data-testid="status-simtime">sim {formatSimTime(snap.simTimeS)}</span>
-          <span data-testid="status-tick">tick {snap.tick}</span>
-          <span>{snap.entityIds.length} entities</span>
-          <span>{snap.running ? "▶ running" : "❚❚ paused"}</span>
-          <span data-testid="status-storage" className={status.state === "ready" && status.mode === "opfs-sahpool" ? "" : "warn"}>
-            db: {status.state === "ready" ? status.mode : status.state}
-          </span>
-          {info && (
-            <span data-testid="status-storage-size">
-              {formatBytes(info.dbFileBytes)} · {formatBytes(info.usageBytes)} / {formatBytes(info.quotaBytes)} · schema v{LATEST_SCHEMA_VERSION}
-            </span>
-          )}
-          {run && (
-            <Suspense fallback={null}>
-              <LazyRecordingStatus header={run.header} snap={snap} />
-            </Suspense>
-          )}
-          {snap.preparing && (
-            <span data-testid="status-preparing" title="Planning views and HPA* graphs are built before tick 0 (ADR-0024)">
-              ⧗ preparing planning graphs {snap.preparing.done}/{snap.preparing.total}
-            </span>
-          )}
-          {snap.degradations > 0 && (
-            <span className="warn" data-testid="status-degradations" title="Realtime tick skips; each one is traced (ADR-0013)">
-              ▲ {snap.degradations} degradation{snap.degradations === 1 ? "" : "s"} (last: {snap.lastSkippedTicks} ticks skipped)
-            </span>
-          )}
-          {snap.error && <span className="danger">✕ {snap.error}</span>}
-        </footer>
+        <StatusBar snap={snap} status={status} info={info} header={run?.header} replaying={view?.mode === "replay"} />
 
         <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
       </div>

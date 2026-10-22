@@ -37,6 +37,9 @@ export const loadLiveSource = () => import("../sim/live-run-source.ts");
 /** A replay session (a recorded run in the panels, read from storage), loaded when one is opened (ADR-0035 addition of 2026-10-17, item 9). */
 export const LazyReplayHost = lazy(() => import("../panels/replay-host.tsx").then((m) => ({ default: m.ReplayHost })));
 
+/** Flag markers on the player's scrub track, loaded when a stored run is shown. */
+export const LazyPlayerMarks = lazy(() => import("../shell/player-marks.tsx").then((m) => ({ default: m.PlayerMarks })));
+
 /** The run header popover, loaded on first open (the toolbar keeps only the run label). */
 export const LazyRunPopover = lazy(() => import("../run-info.tsx").then((m) => ({ default: m.RunPopover })));
 
