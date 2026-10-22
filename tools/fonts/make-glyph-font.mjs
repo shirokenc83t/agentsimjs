@@ -51,6 +51,7 @@ const hole = (pts) => (area(pts) < 0 ? [...pts].reverse() : pts);
 
 const CX = 300;
 const CY = 350;
+const MID = 365;
 const diamond = (r) => [
   [CX, CY - r],
   [CX - r * 0.96, CY],
@@ -60,18 +61,22 @@ const diamond = (r) => [
 
 /** The glyphs: code point → name and contours. All within x 40..560, y -150..800. */
 export const GLYPHS = [
-  { code: 0x2715, name: "multiplication-x", contours: [solid(bar(80, 60, 520, 640, 104)), solid(bar(80, 640, 520, 60, 104))] },
-  { code: 0x25b2, name: "triangle-up", contours: [solid([[30, 30], [300, 690], [570, 30]])] },
-  { code: 0x25bc, name: "triangle-down", contours: [solid([[30, 670], [570, 670], [300, 10]])] },
-  { code: 0x25b6, name: "triangle-right", contours: [solid([[90, 20], [90, 680], [550, 350]])] },
+  { code: 0x2715, name: "multiplication-x", contours: [solid(bar(115, 180, 485, 550, 98)), solid(bar(115, 550, 485, 180, 98))] },
+  { code: 0x25b2, name: "triangle-up", contours: [solid([[40, 0], [300, 480], [560, 0]])] },
+  { code: 0x25bc, name: "triangle-down", contours: [solid([[40, 480], [560, 480], [300, 0]])] },
+  { code: 0x25b6, name: "triangle-right", contours: [solid([[75, 105], [75, 625], [525, 365]])] },
   { code: 0x275a, name: "heavy-bar", contours: [solid([[190, 20], [190, 680], [410, 680], [410, 20]])] },
   { code: 0x25cf, name: "disc", contours: [solid(circle(CX, CY, 300, 32))] },
-  { code: 0x25cb, name: "ring", contours: [solid(circle(CX, CY, 300, 32)), hole(circle(CX, CY, 225, 32))] },
+  { code: 0x25cb, name: "ring", contours: [solid(circle(CX, CY, 300, 32)), hole(circle(CX, CY, 205, 32))] },
   {
     code: 0x25f7,
     name: "ring-upper-right-quadrant",
-    // The ring, and the upper right quarter of what it encloses, filled.
-    contours: [solid(circle(CX, CY, 300, 32)), hole(circle(CX, CY, 225, 32)), solid([[CX, CY], [CX, CY + 225], ...[1, 2, 3, 4, 5, 6].map((i) => [Math.round(CX + 225 * Math.sin((i * Math.PI) / 14)), Math.round(CY + 225 * Math.cos((i * Math.PI) / 14))]), [CX + 225, CY]])],
+    // The ring (outer diameter 520, stroke 90, centred on half cap height), and the upper right quarter of what it encloses, a solid wedge to the centre.
+    contours: [
+      solid(circle(CX, MID, 260, 32)),
+      hole(circle(CX, MID, 170, 32)),
+      solid([[CX, MID], [CX, MID + 170], ...[1, 2, 3, 4, 5, 6].map((i) => [Math.round(CX + 170 * Math.sin((i * Math.PI) / 14)), Math.round(MID + 170 * Math.cos((i * Math.PI) / 14))]), [CX + 170, MID]]),
+    ],
   },
   { code: 0x25c6, name: "diamond", contours: [solid(diamond(340))] },
   { code: 0x25c7, name: "diamond-outline", contours: [solid(diamond(340)), hole(diamond(250))] },

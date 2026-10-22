@@ -201,6 +201,24 @@ for (const theme of THEMES) {
       await expect(page.getByTestId("ed-side")).toHaveScreenshot(`editor-priors-${theme}.png`);
     });
 
+    test("replay: the player badge and the top bar's replay segment", async ({ page }) => {
+      test.setTimeout(120_000);
+      await page.getByTestId("run-label").click();
+      const id = (await page.getByTestId("run-id").textContent()) ?? "";
+      await page.keyboard.press("Escape");
+      await step(page, 1);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 15_000 });
+      await openWorkspace(page, "data");
+      await page.getByRole("button", { name: "Refresh" }).click();
+      await page.getByTestId(`replay-${id}`).click();
+      await expect(page.getByTestId("replay-bar")).toBeVisible({ timeout: 15_000 });
+      await openWorkspace(page, "scene");
+      await expect(page.getByTestId("replay-bar")).toBeVisible();
+      await settle(page);
+      await expect(page.getByTestId("player")).toHaveScreenshot(`replay-player-${theme}.png`, { mask: [page.getByTestId("replay-pose-rate")] });
+      await expect(page.getByTestId("shell-header")).toHaveScreenshot(`replay-toolbar-${theme}.png`, { mask: [page.locator(".telem")] });
+    });
+
     test("Settings", async ({ page }) => {
       await openWorkspace(page, "settings");
       await settle(page);
