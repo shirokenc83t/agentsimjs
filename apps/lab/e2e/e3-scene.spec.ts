@@ -28,6 +28,7 @@ test("the demo grid is drawn from one atlas page, agents are labelled, and click
   await page.getByTestId("wb-collapse-legend").click(); // the legend is a window of its own
   await expect(page.getByText("occupied, unknown height")).toBeVisible();
   await page.getByTestId("view-occupancy").click();
+  await page.getByTestId("wb-collapse-legend").click(); // folded again: it sits inside the map, over ground points the clicks below use
 
   const rover = await page.evaluate(() => window.__agentsim?.scene?.screenOf("ugv-001"));
   expect(rover).toBeDefined();

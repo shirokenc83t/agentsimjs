@@ -19,11 +19,25 @@ describe("workspace presets", () => {
     expect(panelNumber(preset("debug"), "timeline")).toBe(2);
   });
 
-  it("every workspace has the Performance window, floating and collapsed to start with", () => {
+  it("the Performance window starts collapsed inside the map of the Scene and the Debug, and is in no other workspace", () => {
     for (const w of WORKSPACES) {
       const perf = w.panels.find((p) => p.id === "perf");
-      expect(perf?.floating?.collapsed, w.id).toBe(true);
+      if (w.id === "scene" || w.id === "debug") {
+        expect(perf?.floating?.collapsed, w.id).toBe(true);
+        expect(perf?.floating?.host, w.id).toBe("scene");
+      } else expect(perf, w.id).toBeUndefined();
     }
+  });
+
+  it("the Scene's own windows stack from the bottom of the map, the Performance window lowest, each at its own height", () => {
+    const stack = ["perf", "legend", "overview"].map((id) => preset("scene").panels.find((p) => p.id === id)?.floating?.stack);
+    expect(stack).toEqual([0, 1, 2]);
+  });
+
+  it("the Debug lays the Timeline out after the column beside the Scene, so it sits under the Scene alone, as tall as its lanes", () => {
+    const t = preset("debug").panels.find((p) => p.id === "timeline");
+    expect(t?.late).toBe(true);
+    expect(t?.initialHeight).toBeLessThanOrEqual(240);
   });
 
   it("saved layouts are versioned past the one without numbered tabs and the floating window", () => {

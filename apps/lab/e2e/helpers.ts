@@ -140,8 +140,20 @@ export async function stepUntilEnded(page: Page, maxHundreds: number) {
   }
 }
 
+/**
+ * Closes the Scene's floating windows (Overview, Legend, Performance). They sit inside the map, so they can cover the ground point a spec is about to click;
+ * a spec that clicks the map closes them first (the palette opens one again).
+ */
+export async function closeFloats(page: Page) {
+  for (const id of ["overview", "legend", "perf"]) {
+    const close = page.getByTestId(`wb-close-${id}`);
+    if (await close.isVisible()) await close.click();
+  }
+}
+
 /** Selects an agent in the Explorer and sends it to (x, y) m with the "send to" mode. */
 export async function sendTo(page: Page, agentId: string, x: number, y: number) {
+  await closeFloats(page);
   await page.getByTestId(`explorer-row-${agentId}`).click();
   await page.getByTestId("send-to").click();
   await expect(page.getByTestId("send-to")).toHaveAttribute("aria-pressed", "true");

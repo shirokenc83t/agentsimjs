@@ -12,7 +12,7 @@ import {
   type RunConfigWarning,
   type ScenarioAgentsView,
 } from "@agentsim/scenarios";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { useCurrentRun, useServices, useStorageStatus } from "../../services.tsx";
 import type { LabRun } from "../../sim/run-controller.ts";
 import { CostProfileForm } from "./cost-profile-form.tsx";
@@ -58,6 +58,9 @@ const MAX_WARNINGS_SHOWN = 8;
 function plannerLabel(p: EffectiveAgentConfig["planning"]): string {
   return p.strategy ? `strategy:${p.strategy.id}@${p.strategy.version}` : (algorithmName(p.algorithm) ?? "");
 }
+
+/** How many values an entry sets (its own fields; a nested object such as a cost profile counts once). */
+const countSet = (e: object | undefined): number => (e === undefined ? 0 : Object.values(e).filter((v) => v !== undefined).length);
 
 const scopeLabel = (s: Scope): string => (s.level === "default" ? "default (all agents)" : s.level === "byKind" ? `all ${s.kind.toUpperCase()}s` : `agent "${s.key}"`);
 
@@ -153,6 +156,22 @@ function RunConfigEditor(props: { loaded: Loaded }) {
   const [driveScope, setDriveScope] = useState("default");
   const [beliefsScope, setBeliefsScope] = useState("default");
   const [section, setSection] = useState<(typeof SECTIONS)[number]["id"]>("run");
+  // The text view: a column the researcher can widen, narrow or fold away (the form keeps the rest).
+  const [jsonOpen, setJsonOpen] = useState(true);
+  const [jsonW, setJsonW] = useState<number | undefined>(undefined);
+  const body = useRef<HTMLDivElement>(null);
+  const clampW = (w: number) => Math.round(Math.max(220, Math.min((body.current?.clientWidth ?? 1200) - 168 - 320, w)));
+  const dragSplit = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.buttons !== 1 || !body.current) return;
+    setJsonW(clampW(body.current.getBoundingClientRect().right - e.clientX));
+  };
+  const keySplit = (e: KeyboardEvent<HTMLDivElement>) => {
+    const w = jsonW ?? Math.round((body.current?.clientWidth ?? 1200) * 0.36);
+    if (e.key === "ArrowLeft") setJsonW(clampW(w + 24));
+    else if (e.key === "ArrowRight") setJsonW(clampW(w - 24));
+    else return;
+    e.preventDefault();
+  };
   const validation = useMemo(() => validateDraft(draft, view, version), [draft, view, version]);
   const sameAsRun = validation.ok && validation.resolved.runConfigHash === run.header.runConfigHash;
   const error = validation.ok ? undefined : validation.error;
@@ -188,7 +207,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
 
   return (
     <div className="panel run-config rc" data-testid="run-config-panel">
-      <div className="rc-body">
+      <div ref={body} className="rc-body" style={{ gridTemplateColumns: jsonOpen ? `168px minmax(0, 1fr) 6px ${jsonW === undefined ? "36%" : `${jsonW}px`}` : "168px minmax(0, 1fr)" }}>
         <nav className="rc-rail" aria-label="Run configuration sections">
           {SECTIONS.map((s) => (
             <button key={s.id} type="button" className={`nv${section === s.id ? " on" : ""}`} aria-current={section === s.id ? "true" : undefined} onClick={() => goTo(s.id)} data-testid={`rc-nav-${s.id}`}>
@@ -203,6 +222,10 @@ function RunConfigEditor(props: { loaded: Loaded }) {
           <div className="rc-form">
             <p className="rc-meta mono">
               {draft.scenario.id} v{draft.scenario.version} · {changes === 0 ? "as the run" : `draft · ${changes} change${changes === 1 ? "" : "s"}`}
+              <span className="sp" />
+              <button type="button" className={`chip${jsonOpen ? " on" : ""}`} aria-pressed={jsonOpen} onClick={() => setJsonOpen((o) => !o)} data-testid="rc-json-toggle" data-tip="Show or fold the JSON view">
+                {jsonOpen ? "▸ fold JSON" : "◂ JSON"}
+              </button>
             </p>
             <section className="fs" data-section="run">
               <h4 className="sec">
@@ -233,7 +256,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
               <h4 className="sec">
                 <b>2 · PLANNING</b>
                 <span className="rule" />
-                <ScopeSelect label="Planning level" value={planningScope} scopes={planningScopes(view)} onChange={setPlanningScope} testId="rc-planning-scope" entries={(s) => getEntry(draft, "planning", s) !== undefined} />
+                <ScopeSelect label="Planning level" value={planningScope} scopes={planningScopes(view)} onChange={setPlanningScope} testId="rc-planning-scope" setCount={(s) => countSet(getEntry(draft, "planning", s))} />
               </h4>
               <OptionField label="planner" sub="algorithm or strategy" value={kind === "inherit" ? undefined : kind} options={PLANNERS} inheritLabel="(inherit)" onChange={setPlanner} testId="rc-planner" />
               {kind !== "strategy" && <OptionField label="algorithm" value={algorithmName(alg)} options={ALGORITHMS} onChange={setAlgorithm} testId="rc-algorithm" fieldKey="algorithm" />}
@@ -270,7 +293,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
               <h4 className="sec">
                 <b>3 · GROUND DRIVE</b>
                 <span className="rule" />
-                <ScopeSelect label="Drive level" value={driveScope} scopes={driveScopes(view)} onChange={setDriveScope} testId="rc-drive-scope" entries={(s) => getEntry(draft, "drive", s) !== undefined} />
+                <ScopeSelect label="Drive level" value={driveScope} scopes={driveScopes(view)} onChange={setDriveScope} testId="rc-drive-scope" setCount={(s) => countSet(getEntry(draft, "drive", s))} />
               </h4>
               <OptionField label="drive" value={dEntry?.drive} options={DRIVES} onChange={(v) => setD(withField(dEntry, "drive", v))} testId="rc-drive" fieldKey="drive" />
               <OptionField
@@ -292,7 +315,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
               <h4 className="sec">
                 <b>4 · BELIEFS</b>
                 <span className="rule" />
-                <ScopeSelect label="Beliefs level" value={beliefsScope} scopes={planningScopes(view)} onChange={setBeliefsScope} testId="rc-beliefs-scope" entries={(s) => getEntry(draft, "beliefs", s) !== undefined} />
+                <ScopeSelect label="Beliefs level" value={beliefsScope} scopes={planningScopes(view)} onChange={setBeliefsScope} testId="rc-beliefs-scope" setCount={(s) => countSet(getEntry(draft, "beliefs", s))} />
               </h4>
               <OptionField
                 label="initial map"
@@ -314,7 +337,21 @@ function RunConfigEditor(props: { loaded: Loaded }) {
           </div>
         </FieldErrorProvider>
 
-        <aside className="rc-text" aria-label="Text view">
+        {jsonOpen && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize the JSON view"
+            aria-valuenow={jsonW}
+            tabIndex={0}
+            className="rc-split"
+            data-testid="rc-json-split"
+            onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
+            onPointerMove={dragSplit}
+            onKeyDown={keySplit}
+          />
+        )}
+        <aside className="rc-text" aria-label="Text view" hidden={!jsonOpen}>
           <JsonView draft={draft} base={props.loaded.initial} error={error} onApply={setDraft} />
           <section className="rc-val" data-testid="rc-validation" aria-label="Validation">
             {validation.ok ? (
@@ -356,7 +393,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
           ▶ Run with this configuration
         </button>
         <button type="button" className="btn" onClick={() => setDraft(props.loaded.initial)} data-testid="rc-revert">
-          Revert to the current run's
+          Revert to the current run
         </button>
         <span className="sp" />
         {error && <span className="st st-alm">✕ 1 error</span>}
@@ -372,13 +409,13 @@ function RunConfigEditor(props: { loaded: Loaded }) {
 }
 
 /** The scope of an entry: the level (default, a kind, an agent) as a compact select in the section's title. */
-function ScopeSelect(props: { label: string; value: string; scopes: Scope[]; onChange: (id: string) => void; testId: string; entries: (s: Scope) => boolean }) {
+function ScopeSelect(props: { label: string; value: string; scopes: Scope[]; onChange: (id: string) => void; testId: string; setCount: (s: Scope) => number }) {
   return (
     <select className="rc-scope mono" value={props.value} onChange={(e) => props.onChange(e.target.value)} aria-label={props.label} data-testid={props.testId}>
       {props.scopes.map((s) => (
         <option key={scopeId(s)} value={scopeId(s)}>
           {scopeLabel(s)}
-          {props.entries(s) ? " ●" : ""}
+          {props.setCount(s) > 0 ? ` · ${props.setCount(s)} set` : ""}
         </option>
       ))}
     </select>

@@ -207,7 +207,7 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
           <span className={`st-${state}`}>
             {STATE_GLYPH[state]} {actionLabel(action)}
           </span>
-          {action && <span className="muted"> · since {action.startedAtS.toFixed(1)} s</span>}
+          {action && <span className="muted nowrap"> · since {action.startedAtS.toFixed(1)} s</span>}
         </div>
       </div>
       <Unavailable source={source} feature="mindView" title="What the mind receives">
@@ -443,6 +443,8 @@ export function InspectorPanel() {
   const selection = useUiContext((s) => s.selection);
   // The two tabs: the agent and the cell last selected. Selecting one shows its tab; either tab can be opened for the other one's last selection.
   const [tab, setTab] = useState<"agent" | "cell">("agent");
+  // What each agent believes of a cell is read from the live run's maps, which a recording does not hold: in a replay the tab is off, and says why.
+  const cellOff = source.unavailable("cellBeliefs");
   const [last, setLast] = useState<{ agent?: string | undefined; cell?: string | undefined; runId?: string | undefined }>({});
   const runId = snap.runId;
   useEffect(() => {
@@ -454,25 +456,40 @@ export function InspectorPanel() {
       setTab("agent");
     } else if (selection?.kind === "cell") {
       setLast((cur) => ({ ...cur, cell: selection.id }));
-      setTab("cell");
+      if (!cellOff) setTab("cell");
     }
-  }, [selection]);
+  }, [selection, cellOff]);
   const agentId = selection?.kind === "agent" ? selection.id : last.agent;
   const cellId = selection?.kind === "cell" ? selection.id : last.cell;
   let body: ReactNode = <p className="muted">Select an agent or a cell (Scene, Explorer).</p>;
   if (!snap.run) body = <p className="muted">No run loaded.</p>;
   else if (tab === "agent" && agentId) body = <AgentInspector id={agentId} snap={snap} source={source} views={views} />;
-  else if (tab === "cell" && cellId) body = <CellInspector id={cellId} snap={snap} source={source} />;
+  else if (tab === "cell" && cellId && !cellOff) body = <CellInspector id={cellId} snap={snap} source={source} />;
   else if (tab === "cell") body = <p className="muted">Click a cell in the Scene to see it here.</p>;
   return (
     <div className="panel inspector" data-testid="inspector">
       <div className="inspector-tabs" role="tablist" aria-label="Inspector">
         {(["agent", "cell"] as const).map((t) => (
-          <button key={t} type="button" role="tab" aria-selected={tab === t} className={`itab${tab === t ? " on" : ""}`} onClick={() => setTab(t)} data-testid={`inspector-tab-${t}`}>
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t && !(t === "cell" && cellOff)}
+            aria-disabled={t === "cell" && cellOff !== undefined ? true : undefined}
+            className={`itab${tab === t && !(t === "cell" && cellOff) ? " on" : ""}`}
+            data-tip={t === "cell" && cellOff !== undefined ? `Live only: ${cellOff}` : undefined}
+            onClick={() => (t === "cell" && cellOff !== undefined ? undefined : setTab(t))}
+            data-testid={`inspector-tab-${t}`}
+          >
             {t === "agent" ? "AGENT" : "CELL"}
           </button>
         ))}
       </div>
+      {cellOff !== undefined && (
+        <p className="muted inspector-live-only" data-testid="inspector-cell-off">
+          CELL is live only: {cellOff}
+        </p>
+      )}
       {body}
     </div>
   );

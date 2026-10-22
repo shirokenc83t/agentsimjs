@@ -1,6 +1,6 @@
 import type { DockviewApi, DockviewGroupPanel, IDockviewPanel } from "dockview-react";
 import type { PanelId } from "./registry.tsx";
-import { panelNumber, tabTitle, type PresetPanel, type WorkspacePreset } from "./presets.ts";
+import { panelNumber, PERF_WINDOW, tabTitle, type PresetPanel, type WorkspacePreset } from "./presets.ts";
 import { PANELS } from "./registry.tsx";
 
 /**
@@ -13,6 +13,10 @@ import { PANELS } from "./registry.tsx";
 export const FLOAT_SIZE = { width: 440, height: 340 } as const;
 /** Height (px) of a collapsed floating window: its title bar. */
 export const COLLAPSED_HEIGHT_PX = 29;
+/** Width (px) of a collapsed floating window: its title and summary, not the width it has open. */
+export const COLLAPSED_WIDTH_PX = 300;
+/** Space (px) between windows stacked in a panel, and from its edges. */
+const STACK_GAP_PX = 6;
 
 export const isFloating = (panel: IDockviewPanel): boolean => panel.api.location.type === "floating";
 
@@ -50,15 +54,17 @@ export function closePanel(panel: IDockviewPanel): void {
   panel.api.close();
 }
 
-// The height a window had before it was collapsed: what opening it again restores.
-const before = new WeakMap<DockviewGroupPanel, number>();
+// The size a window had before it was collapsed: what opening it again restores.
+const before = new WeakMap<DockviewGroupPanel, { width: number; height: number }>();
 
 /** A floating window is collapsed when it is no taller than its title bar (so a saved layout that holds one collapsed is read the same way). */
-export const isCollapsed = (group: DockviewGroupPanel): boolean => group.api.location.type === "floating" && group.height <= COLLAPSED_HEIGHT_PX + 2;
+export const isCollapsed = (group: DockviewGroupPanel): boolean =>
+  group.api.location.type === "floating" && (group.height > 0 ? group.height <= COLLAPSED_HEIGHT_PX + 2 : group.element.classList.contains("collapsed"));
 
 /** Marks the collapsed windows for the stylesheet (their body is hidden); call after the layout changes or is loaded. */
 export function syncCollapsed(api: DockviewApi): void {
-  for (const g of api.groups) g.element.classList.toggle("collapsed", isCollapsed(g));
+  // A group that is not laid out yet (no height) keeps what it was given when it was added.
+  for (const g of api.groups) if (g.height > 0 || g.api.location.type !== "floating") g.element.classList.toggle("collapsed", isCollapsed(g));
 }
 
 /** Collapses a floating window to its title bar, or opens it again at the height it had. */
@@ -66,11 +72,11 @@ export function toggleCollapse(group: DockviewGroupPanel): void {
   if (group.api.location.type !== "floating") return;
   if (isCollapsed(group)) {
     group.element.classList.remove("collapsed");
-    group.api.setSize({ height: before.get(group) ?? FLOAT_SIZE.height });
+    group.api.setSize(before.get(group) ?? FLOAT_SIZE);
   } else {
-    if (group.height > COLLAPSED_HEIGHT_PX + 2) before.set(group, group.height);
+    if (group.height > COLLAPSED_HEIGHT_PX + 2) before.set(group, { width: group.width, height: group.height });
     group.element.classList.add("collapsed");
-    group.api.setSize({ height: COLLAPSED_HEIGHT_PX });
+    group.api.setSize({ width: COLLAPSED_WIDTH_PX, height: COLLAPSED_HEIGHT_PX });
   }
 }
 
@@ -105,23 +111,36 @@ export function openPanel(api: DockviewApi, preset: WorkspacePreset, id: PanelId
     open.api.setActive();
     return;
   }
-  const p = preset.panels.find((x) => x.id === id);
-  addPresetPanel(api, preset, p ?? { id });
+  // The Performance window is in no workspace but the Scene and the Debug: opened from the status bar or the palette, it is open, at the bottom right of the dock.
+  const p: PresetPanel = preset.panels.find((x) => x.id === id) ?? (id === "perf" && PERF_WINDOW.floating ? { id, floating: { ...PERF_WINDOW.floating, collapsed: false, host: undefined } } : { id });
+  addPresetPanel(api, preset, p);
+}
+
+/**
+ * Where a floating window starts: at the bottom right of the panel it belongs to (inside its bounds, `stack` windows up from its bottom), else at the bottom right
+ * of the dock. The offsets are measured from the dock's own edges, which is what a floating group is anchored to.
+ */
+function floatingPosition(api: DockviewApi, f: NonNullable<PresetPanel["floating"]>): { bottom: number; right: number } {
+  const host = f.host ? api.getPanel(f.host)?.group.element : undefined;
+  const root = host?.closest(".dv-dockview");
+  const h = host?.getBoundingClientRect();
+  const r = root?.getBoundingClientRect();
+  const stackPx = (f.stack ?? 0) * (COLLAPSED_HEIGHT_PX + STACK_GAP_PX);
+  if (!h || !r || h.width === 0) return { bottom: 16 + stackPx, right: 16 };
+  return { bottom: Math.max(0, r.bottom - h.bottom) + STACK_GAP_PX + stackPx + 24, right: Math.max(0, r.right - h.right) + STACK_GAP_PX + 4 };
 }
 
 /** Adds a preset's panel to the dock: docked beside the one it names, or as a floating window. */
 export function addPresetPanel(api: DockviewApi, preset: WorkspacePreset, p: PresetPanel): void {
   const base = { id: p.id, component: p.id, title: tabTitle(preset, p.id, PANELS[p.id].title) };
   if (p.floating) {
-    const edge = p.floating.offsetPx ?? 16;
-    const position = p.floating.anchor === "top-right" ? { top: edge, right: 16 } : { bottom: edge, right: 16 };
-    const panel = api.addPanel({ ...base, floating: { width: p.floating.width, height: p.floating.height, position } });
-    before.set(panel.group, p.floating.height);
-    if (p.floating.collapsed) {
-      // Not `toggleCollapse`: the window has no size yet to be read as open.
-      panel.group.element.classList.add("collapsed");
-      panel.group.api.setSize({ height: COLLAPSED_HEIGHT_PX });
-    }
+    const f = p.floating;
+    const position = floatingPosition(api, f);
+    const width = f.collapsed ? COLLAPSED_WIDTH_PX : f.width;
+    const height = f.collapsed ? COLLAPSED_HEIGHT_PX : f.height;
+    const panel = api.addPanel({ ...base, floating: { width, height, position } });
+    before.set(panel.group, { width: f.width, height: f.height });
+    if (f.collapsed) panel.group.element.classList.add("collapsed");
     return;
   }
   const referenced = p.position && api.getPanel(p.position.referencePanel);
@@ -129,11 +148,14 @@ export function addPresetPanel(api: DockviewApi, preset: WorkspacePreset, p: Pre
     ...base,
     ...(referenced && p.position ? { position: { referencePanel: p.position.referencePanel, direction: p.position.direction } } : {}),
     ...(p.initialWidth === undefined ? {} : { initialWidth: p.initialWidth }),
+    ...(p.initialHeight === undefined ? {} : { initialHeight: p.initialHeight }),
   });
 }
 
 /** Lays a preset out from nothing (the first time, and on reset). */
 export function applyPreset(api: DockviewApi, preset: WorkspacePreset): void {
   api.clear();
-  for (const p of preset.panels) addPresetPanel(api, preset, p);
+  // The floating windows come last (they sit inside the panels already laid out), and a `late` panel after the docked ones beside it.
+  const order = [...preset.panels.filter((p) => !p.floating && !p.late), ...preset.panels.filter((p) => !p.floating && p.late), ...preset.panels.filter((p) => p.floating)];
+  for (const p of order) addPresetPanel(api, preset, p);
 }

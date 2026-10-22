@@ -20,6 +20,12 @@
 .agent-badge.warning { background: var(--warnbg); border-color: var(--warn); }
 .agent-badge.warning::first-letter { color: var(--warn); font-weight: 700; }
 .agent-label.has-attention { background: var(--bg0); }
+.nowrap { white-space: nowrap; }
+/* An agent listed in the attention group is dimmed in the fleet below: its row is there for the whole list, not for the news. */
+.explorer-row.in-attention:not([aria-selected="true"]) { opacity: 0.55; }
+/* A stacked label (it was moved down to clear another): a thin leader from its top to its marker. */
+.agent-label { position: relative; }
+.agent-label.stacked::before { content: ""; position: absolute; left: 6px; bottom: 100%; width: 1px; height: var(--lead, 0px); background: var(--fg3); }
 .map-pin { color: var(--alm); font-weight: 700; font-size: 14px; text-shadow: 0 0 2px var(--bg0), 0 0 2px var(--bg0); }
 .cluster-chip { pointer-events: auto; cursor: pointer; padding: 0 6px; font-size: var(--type-label-size); color: var(--fg); background: var(--bg1); border: 1px solid var(--ln2); white-space: nowrap; }
 .cluster-chip:hover { background: var(--bg3); border-color: var(--fg2); }
@@ -57,13 +63,14 @@
 .prompt .pr { color: var(--kind-amber); }
 .prompt .cur { display: inline-block; width: 7px; height: 14px; background: var(--fg); }
 .prompt select { background: transparent; border: 0; color: var(--fg); font: inherit; padding: 0 2px; cursor: pointer; }
-.kinds { flex: none; display: flex; gap: 4px; padding: 4px 8px; flex-wrap: wrap; background: var(--bg1); border-bottom: 1px solid var(--ln); }
+.kinds { flex: none; display: flex; gap: 4px; padding: 4px 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; background: var(--bg1); border-bottom: 1px solid var(--ln); }
+.kinds .kt { flex: none; white-space: nowrap; }
 .kt { appearance: none; font: inherit; font-size: var(--type-label-size); border: 1px solid var(--ln); background: transparent; color: var(--fg2); padding: 0 5px; height: 18px; cursor: pointer; }
 .kt:hover { background: var(--bg3); border-color: var(--fg3); }
 .kt.off { opacity: 0.5; text-decoration: line-through; }
 .tag { display: inline-block; font-weight: 600; font-size: var(--type-label-size); }
 .lfoot { flex: none; display: flex; gap: 12px; height: 20px; align-items: center; padding: 0 10px; background: var(--bg2); border-top: 1px solid var(--ln); color: var(--fg3); font-size: var(--type-label-size); white-space: nowrap; overflow: hidden; }
-.event-detail { margin: 0; max-height: 40%; overflow: auto; padding: 6px 8px; border-top: 1px solid var(--ln); font-size: var(--type-label-size); white-space: pre-wrap; }
+.event-detail { margin: 0; flex: none; max-height: 96px; overflow: auto; padding: 6px 8px; border-top: 1px solid var(--ln); font-size: var(--type-label-size); white-space: pre-wrap; }
 
 /* Explorer (virtualized list) and Inspector. */
 .explorer { display: flex; flex-direction: column; padding: 0; }
@@ -217,11 +224,15 @@
 .rc-rail .nv .st, .rc-rail .nv .c3 { margin-left: auto; }
 
 .rc-form { min-width: 0; overflow: auto; padding: 4px 0; }
-.rc-meta { margin: 0; padding: 4px 14px; color: var(--fg3); font-size: var(--type-label-size); }
+.rc-meta { display: flex; align-items: center; gap: 8px; margin: 0; padding: 4px 14px; color: var(--fg3); font-size: var(--type-label-size); }
+.rc-split { cursor: col-resize; background: var(--bg2); border-left: 1px solid var(--ln); touch-action: none; }
+.rc-split:hover, .rc-split:focus-visible { background: var(--bg3); outline: none; box-shadow: inset 0 0 0 1px var(--fg3); }
+.rc-split:active { box-shadow: inset 0 0 0 1px var(--ac); }
+.rc-text[hidden] { display: none; }
 .rc .fs { margin: 0; padding: 8px 14px 10px; border-bottom: 1px solid var(--ln); }
-.rc .sec, .se h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: var(--type-label-size); font-weight: 400; color: var(--fg3); letter-spacing: 0.1em; text-transform: uppercase; }
-.rc .sec b { color: var(--fg); font-weight: 600; }
-.rc .sec .rule { flex: 1; height: 1px; background: var(--ln); }
+.sec, .se h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: var(--type-label-size); font-weight: 400; color: var(--fg3); letter-spacing: 0.1em; text-transform: uppercase; }
+.sec b { color: var(--fg); font-weight: 600; }
+.sec .rule { flex: 1; height: 1px; background: var(--ln); }
 .se h4::after { content: ""; flex: 1; height: 1px; background: var(--ln); }
 .rc-scope { height: 22px; max-width: 220px; background: var(--bg1); color: var(--fg2); border: 1px solid var(--ln2); border-radius: 0; font-size: var(--type-label-size); text-transform: none; letter-spacing: 0; }
 
@@ -236,7 +247,8 @@
 .rc-input:focus-within { outline: var(--focus-ring) solid var(--ac); outline-offset: 1px; }
 .rc-row.inh .rc-input { border-style: dashed; }
 .rc-row.inh .rc-input input, .rc-row.inh .rc-input select { color: var(--fg3); }
-.rc-row.set .rc-input { border-color: var(--ac); box-shadow: inset 0 0 0 1px var(--ac); }
+/* A value that is set has a solid neutral edge and the note "set here"; the accent is for focus alone (ADR-0042 §6). */
+.rc-row.set .rc-input { border-color: var(--fg2); }
 .rc-row.err .rc-input { border-color: var(--alm); background: var(--almbg); }
 .rc-help { color: var(--fg3); font-size: var(--type-label-size); overflow: hidden; text-overflow: ellipsis; }
 .rc-help.st-alm { color: var(--alm); white-space: normal; }
@@ -252,7 +264,7 @@
 .rc-textarea { width: 100%; box-sizing: border-box; background: var(--bg0); color: var(--fg); border: 1px solid var(--ln2); border-radius: 0; padding: 6px 8px; font: inherit; resize: vertical; }
 
 /* The text view: line numbers, changed lines on the accent tint, the failing line on the alarm tint. */
-.rc-text { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--ln); background: var(--bg1); }
+.rc-text { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg1); }
 .rc-json { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .rc-json-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--ln); background: var(--bg2); }
 .rc-code { position: relative; flex: 1; min-height: 120px; overflow: hidden; background: var(--bg0); font-size: 11.5px; line-height: 19px; }
@@ -291,7 +303,7 @@
 .se-tools .tool .kb { margin-left: auto; color: var(--fg3); font-weight: 400; }
 .se .editor-view { position: relative; flex: 1; min-width: 0; }
 .se-brush { position: absolute; top: 12px; right: 12px; width: 230px; background: var(--bg1); border: 1px solid var(--ln2); box-shadow: var(--float); z-index: 5; }
-.se-brush-bar { height: 24px; display: flex; align-items: center; padding: 0 8px; background: var(--bg2); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); letter-spacing: 0.1em; font-weight: 600; }
+.se-brush-bar { height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 4px 0 8px; cursor: grab; touch-action: none; user-select: none; background: var(--bg2); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); letter-spacing: 0.1em; font-weight: 600; }
 .se-brush-body { padding: 6px 8px 8px; }
 .se-brush-body .rc-row { grid-template-columns: minmax(0, 1fr); gap: 2px; margin-bottom: 4px; }
 .se-brush-body .rc-help { display: none; }
@@ -303,6 +315,7 @@
 .se-props .rc-row .rc-help { grid-column: 1 / -1; margin-top: -4px; }
 /* In the narrow sidebar the state is the input's look (dashed, edge, tint); the help line is kept only for an error. */
 .se-props .rc-row .rc-help:not(.st-alm) { display: none; }
+.se-props .rc-row.set .rc-label::after { content: " · set"; color: var(--fg3); font-size: var(--type-label-size); }
 .rc-tf { display: inline-flex; flex-direction: column; gap: 2px; min-width: 0; }
 
 /* Settings: the rail of the Run configuration, rows of label and control, a segmented control and switches. */
@@ -330,3 +343,17 @@
 /* The popover is narrow: long hashes and profile names wrap instead of running off its edge. */
 .run-info .kv dd { overflow-wrap: anywhere; min-width: 0; }
 .run-info .kv { grid-template-columns: max-content minmax(0, 1fr); }
+/* A title with a descriptive part: the kind in capitals, the description in sentence case. */
+.inspector h4 .sub { text-transform: none; letter-spacing: 0; font-weight: 400; }
+/* The recording choice in the run popover. */
+.recording-controls { margin: 8px 0; }
+.recording-controls .rec-field { display: inline-flex; align-items: center; gap: 8px; }
+.recording-controls .prose { margin: 0 0 6px; font-size: var(--type-label-size); }
+.run-info .stored-runs li { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.run-info .stored-runs li .btn { height: 22px; }
+.itab[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.inspector-live-only { margin: 4px 12px; font-size: var(--type-label-size); }
+.se-brush.folded { width: 150px; }
+.se-brush-body[hidden] { display: none; }
+.se-brush-bar .wb { appearance: none; width: 22px; height: 20px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; background: transparent; color: var(--fg2); cursor: pointer; }
+.se-brush-bar .wb:hover { color: var(--fg); background: var(--bg3); border-color: var(--fg3); }

@@ -40,7 +40,6 @@ export function TopBar(props: TopBarProps) {
             className={`ws${w.id === props.workspace ? " on" : ""}`}
             aria-current={w.id === props.workspace ? "page" : undefined}
             aria-label={`${w.title} workspace, key ${i + 1}`}
-            data-tip={`${w.title} · ${i + 1}`}
             onClick={() => props.onWorkspace(w.id)}
             data-testid={`tab-${w.id}`}
           >

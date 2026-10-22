@@ -33,7 +33,7 @@ import { RollingStats } from "../perf/rolling-stats.ts";
 import { identityOf, type MarkerStyle } from "../theme/identity.ts";
 import { type SceneTokens } from "../theme/tokens.ts";
 import { dashedRingGeometry } from "./agent-markers.ts";
-import { clusterPoints } from "./declutter.ts";
+import { clusterPoints, stackLabels } from "./declutter.ts";
 import { CHUNK_UPLOADS_PER_FRAME, type ChunkQueue, type GridDims } from "./atlas-layout.ts";
 import { BeliefAtlas, type BeliefViewMode } from "./belief-atlas.ts";
 import { SensorOverlay, type ExplorationView } from "./overlay-layers.ts";
@@ -681,6 +681,22 @@ export class SceneRenderer {
     // `visible` is what the label renderer reads each frame (it owns the element's display).
     this.labelObjects.forEach((o, i) => {
       o.visible = !hidden.has(i);
+    });
+    // Labels that would cover each other (a UAV above a UGV at the base) are stacked, each moved down clear of the last, with a leader line to its marker.
+    const shown = points.filter((pt) => !hidden.has(pt.index));
+    const boxes = shown.map((pt) => {
+      const el = (this.labelObjects[pt.index] as CSS2DObject).element;
+      const lh = el.offsetHeight || 18;
+      return { index: pt.index, x: pt.x, y: pt.y + 0.4 * lh, w: el.offsetWidth || 60, h: lh, keep: pt.keep };
+    });
+    const offsets = stackLabels(boxes);
+    shown.forEach((pt, k) => {
+      const o = this.labelObjects[pt.index] as CSS2DObject;
+      const dy = offsets[k] ?? 0;
+      const lh = boxes[k]?.h ?? 18;
+      o.center.set(0, 1.4 + dy / lh);
+      o.element.classList.toggle("stacked", dy > 0);
+      o.element.style.setProperty("--lead", dy > 0 ? `${dy + 0.4 * lh}px` : "0px");
     });
   }
 

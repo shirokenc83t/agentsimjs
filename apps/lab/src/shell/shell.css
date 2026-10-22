@@ -21,7 +21,7 @@
 /* Row 2: the player. */
 .player { display: grid; grid-template-columns: auto 140px minmax(0, 1fr) auto; align-items: stretch; height: 56px; background: var(--bg2); border-bottom: 2px solid var(--ln2); }
 .player.compact { height: 40px; grid-template-columns: auto auto minmax(0, 1fr); }
-.player.rp { background-image: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--fg) 6%, transparent) 9px 18px); border-bottom-color: var(--fg2); }
+.player.rp { background-color: var(--bg3); background-image: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--fg) 6%, transparent) 9px 18px); border-top: 2px solid var(--fg2); border-bottom-color: var(--fg2); }
 .ply { display: flex; align-items: center; gap: 4px; padding: 0 12px; border-right: 1px solid var(--ln); }
 .pb { appearance: none; font: inherit; width: 32px; height: 32px; border: 1px solid var(--ln2); background: var(--bg1); color: var(--fg); cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
 .pb:hover { background: var(--bg3); border-color: var(--fg3); }
@@ -68,7 +68,9 @@
 
 /* Row 5: the status bar. */
 .bot { display: flex; align-items: stretch; height: 24px; background: var(--bg1); border-top: 1px solid var(--ln); white-space: nowrap; overflow: hidden; font-size: var(--type-label-size); color: var(--fg2); }
-.bot .seg { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-right: 1px solid var(--ln); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bot .seg { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-right: 1px solid var(--ln); flex: none; white-space: nowrap; }
+.bot [data-hid] { display: none; }
+.bot .more { color: var(--fg2); cursor: default; }
 .bot .seg.r, .bot .seg.pri { flex: none; }
 .bot .sp { flex: 1 1 0; min-width: 0; }
 .bot .seg.r { border-right: 0; border-left: 1px solid var(--ln); }
@@ -86,3 +88,5 @@
 /* Reduced motion: the viewer's setting, or the OS's. */
 [data-motion="reduce"] *, [data-motion="reduce"] *::before, [data-motion="reduce"] *::after { transition: none !important; animation: none !important; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+.bot .segbtn { appearance: none; font: inherit; color: inherit; background: transparent; border: 0; border-left: 1px solid var(--ln); cursor: pointer; }
+.bot .segbtn:hover { background: var(--bg3); color: var(--fg); }

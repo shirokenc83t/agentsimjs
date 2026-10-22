@@ -56,13 +56,41 @@ test("every panel action is a palette command, and Alt+number focuses a panel", 
   await expect.poll(async () => (await panel(page, "scene"))?.location).toBe("grid");
 });
 
-test("the Performance window floats in every workspace, collapsed until it is opened", async ({ page }) => {
+/** The box of a floating window (its resize container) and of the Scene's map area. */
+async function boxes(page: Page, id: string) {
+  const win = await page.getByTestId(`window-buttons-${id}`).locator("xpath=ancestor::div[contains(@class,'dv-resize-container')][1]").boundingBox();
+  const map = await page.getByTestId("scene-canvas").boundingBox();
+  return { win, map };
+}
+
+test("the floating windows sit inside the Scene's map, collapsed to their title; elsewhere the Performance window opens from the status bar", async ({ page }) => {
+  test.setTimeout(90_000);
   await loadDemo(page);
-  for (const id of ["scene", "debug", "author", "data", "settings"] as const) {
-    await openWorkspace(page, id);
-    await expect.poll(async () => (await panel(page, "perf"))?.location).toBe("floating");
-    expect((await panel(page, "perf"))?.collapsed, `${id}: collapsed`).toBe(true);
+  for (const id of ["perf", "overview", "legend"] as const) {
+    await expect.poll(async () => (await panel(page, id))?.location).toBe("floating");
+    expect((await panel(page, id))?.collapsed, `${id}: collapsed`).toBe(true);
+    const { win, map } = await boxes(page, id);
+    if (!win || !map) throw new Error(`no box for ${id}`);
+    // Inside the map, and no wider than a title with its summary and its buttons.
+    expect(win.x, `${id}: left`).toBeGreaterThanOrEqual(map.x);
+    expect(win.x + win.width, `${id}: right`).toBeLessThanOrEqual(map.x + map.width + 1);
+    expect(win.y, `${id}: top`).toBeGreaterThanOrEqual(map.y);
+    expect(win.y + win.height, `${id}: bottom`).toBeLessThanOrEqual(map.y + map.height + 1);
+    expect(win.width, `${id}: collapsed width`).toBeLessThanOrEqual(320);
   }
+  // Debug has the Performance window inside its map; Author, Data and Settings have none until it is opened.
+  await openWorkspace(page, "debug");
+  await expect.poll(async () => (await panel(page, "perf"))?.location).toBe("floating");
+  for (const id of ["author", "data", "settings"] as const) {
+    await openWorkspace(page, id);
+    await expect.poll(async () => (await panel(page, "perf")) === undefined, { message: `${id}: no Performance window` }).toBe(true);
+  }
+  await page.getByTestId("status-frame").click();
+  await expect.poll(async () => (await panel(page, "perf"))?.location).toBe("floating");
+  await expect.poll(async () => (await panel(page, "perf"))?.collapsed).toBe(false);
+  await expect(page.getByTestId("perf-hud")).toBeVisible();
+
+  // In the Scene: opened and collapsed with its button; closed, it comes back from the palette.
   await openWorkspace(page, "scene");
   await expect(page.getByTestId("perf-hud")).toBeHidden();
   await page.getByTestId("wb-collapse-perf").click();
@@ -70,11 +98,25 @@ test("the Performance window floats in every workspace, collapsed until it is op
   await expect.poll(async () => (await panel(page, "perf"))?.collapsed).toBe(false);
   await page.getByTestId("wb-collapse-perf").click();
   await expect(page.getByTestId("perf-hud")).toBeHidden();
-  // A window that was collapsed by hand and closed comes back from the palette.
   await page.getByTestId("wb-close-perf").click();
   await expect.poll(async () => (await panel(page, "perf")) === undefined).toBe(true);
   await runCommand(page, "Open panel: Performance");
   await expect.poll(async () => (await panel(page, "perf"))?.location).toBe("floating");
+});
+
+test("a floating window's title bar is a grip, the title, a summary and three labelled buttons: collapse, dock, close", async ({ page }) => {
+  test.setTimeout(60_000);
+  await loadDemo(page);
+  const bar = page.getByTestId("window-buttons-perf");
+  await expect(bar.getByRole("button")).toHaveCount(3);
+  for (const name of ["Open Performance", "Dock Performance", "Close Performance"]) await expect(bar.getByRole("button", { name })).toBeVisible();
+  await expect(page.getByTestId("window-buttons-perf").getByTestId("panel-context")).toContainText(/fps|no frames/);
+  // No second close on the tab, and no overflow control, in a floating window.
+  const container = bar.locator("xpath=ancestor::div[contains(@class,'dv-resize-container')][1]");
+  await expect(container.locator(".dv-default-tab-action")).toBeHidden();
+  await expect(container.locator(".dv-tabs-overflow-dropdown-default")).toBeHidden();
+  // The glyph of a state is not a button: no ✓ in the title bar.
+  expect(await container.locator(".dv-tabs-and-actions-container").first().textContent()).not.toContain("✓");
 });
 
 test("a dock saved under a name comes back, and it stays after a reload", async ({ page }) => {

@@ -73,3 +73,15 @@
 
 /* Settings, Appearance: the dot grid of the dock area can be turned off. */
 [data-dockgrid="off"] .dockview-theme-agentsim .dv-dockview { background: var(--dock); }
+
+/* A floating window with one panel (ADR-0042 §7): grip, title, summary, then collapse, dock and close. No second close on the tab, no overflow control, no tab strip look. */
+.dockview-theme-agentsim .dv-resize-container .dv-default-tab-action,
+.dockview-theme-agentsim .dv-resize-container .dv-tabs-overflow-dropdown-default,
+.dockview-theme-agentsim .dv-resize-container .dv-tabs-overflow-container > button { display: none; }
+.dockview-theme-agentsim .dv-resize-container .dv-tab { display: flex; align-items: center; white-space: nowrap; border-right: 0; background: transparent; color: var(--fg); font-weight: 600; cursor: grab; }
+.dockview-theme-agentsim .dv-resize-container .dv-tab::before { content: "⋮⋮"; letter-spacing: -2px; color: var(--fg3); margin-right: 6px; font-weight: 400; }
+.dockview-theme-agentsim .dv-resize-container .dv-tab:hover { background: transparent; }
+.dockview-theme-agentsim .dv-resize-container .dv-void-container { flex: 1; min-width: 0; }
+.dockview-theme-agentsim .wb svg { display: block; }
+/* The summary of a floating window stays whatever its width: it is what a collapsed window shows. */
+.dockview-theme-agentsim .dv-resize-container .tmeta { display: inline !important; }

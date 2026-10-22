@@ -60,12 +60,12 @@ export function RecordingStatus({ header, snap }: { header: RunHeader; snap: Sim
   const t = describeRecording({ header, tick: snap.tick, persisted, state: recording.state, backlogRecords: recording.backlogRecords });
   return (
     <>
-      <span data-testid="status-recording" className={`seg${t.recorded ? "" : " warn"}`} title="How this run is recorded (ADR-0035): the recording profile and its hash, next to the run configuration's">
+      <span data-testid="status-recording" data-prio="7" className={`seg${t.recorded ? "" : " warn"}`} title="How this run is recorded (ADR-0035): the recording profile and its hash, next to the run configuration's">
         {t.label}
       </span>
-      {t.saved !== undefined && <span className="seg" data-testid="status-recording-saved">{t.saved}</span>}
+      {t.saved !== undefined && <span className="seg" data-prio="6" data-testid="status-recording-saved">{t.saved}</span>}
       {t.waiting !== undefined && (
-        <span className="seg warn" data-testid="status-recording-state">
+        <span className="seg warn" data-prio="2" data-testid="status-recording-state">
           {t.waiting}
         </span>
       )}

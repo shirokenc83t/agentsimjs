@@ -79,7 +79,7 @@ export function ExplorerPanel() {
                 onClick={() => setAttnFilter(f)}
                 data-testid={`attention-filter-${f}`}
               >
-                {f === "alarm" ? GLYPH.fail : f === "warning" ? GLYPH.warn : "all"}
+                {f === "alarm" ? `${GLYPH.fail} only` : f === "warning" ? `${GLYPH.warn} only` : "all"}
               </button>
             ))}
           </div>
@@ -129,7 +129,8 @@ export function ExplorerPanel() {
                 role="option"
                 aria-selected={row.index === selectedIndex}
                 data-testid={`explorer-row-${a.id}`}
-                className="explorer-row selectable"
+                className={`explorer-row selectable${attn.byAgent.get(a.id)?.conditions[0] ? " in-attention" : ""}`}
+                title={attn.byAgent.get(a.id)?.conditions[0] ? "Listed above, in attention" : undefined}
                 onClick={() => select(row.index)}
                 style={{ position: "absolute", top: 0, left: 0, right: 0, height: row.size, transform: `translateY(${row.start}px)` }}
               >

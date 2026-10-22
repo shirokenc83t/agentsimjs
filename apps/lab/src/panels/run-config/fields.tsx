@@ -1,4 +1,4 @@
-import { createContext, useContext, type InputHTMLAttributes, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { errorKey } from "./model.ts";
 
 /** A resolver or schema error as the form got it: the stable code, the message and the path into the document. */
@@ -22,6 +22,14 @@ function useFieldError(key: string | undefined): FieldError | undefined {
 }
 
 type InputState = "inh" | "set" | "err";
+
+/** A typed number: a dot or a comma as the decimal mark; nothing for an empty or a half-typed text ("-", "1e"). */
+function parseNumber(t: string): number | undefined {
+  const s = t.trim().replace(",", ".");
+  if (s === "") return undefined;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 /**
  * One line: the label (with a short second line), the input, then the help: where the value comes from, or the error with its code
@@ -77,6 +85,11 @@ export function NumberField(props: {
 }) {
   const error = useFieldError(props.fieldKey);
   const state: InputState = error ? "err" : props.value === undefined ? "inh" : "set";
+  // The text as typed: a number input would show a comma in some locales and drop a decimal point typed last. A dot or a comma is read as the decimal mark.
+  const [text, setText] = useState(props.value === undefined ? "" : String(props.value));
+  useEffect(() => {
+    setText((cur) => (parseNumber(cur) === props.value ? cur : props.value === undefined ? "" : String(props.value)));
+  }, [props.value]);
   return (
     <FieldRow
       label={props.label}
@@ -86,17 +99,18 @@ export function NumberField(props: {
       help={props.help ?? (props.value === undefined ? "inherited" : "set here")}
     >
       <input
-        type="number"
-        {...inputProps(props.testId, { step: props.step ?? (props.integer ? 1 : "any") })}
+        type="text"
+        inputMode={props.integer ? "numeric" : "decimal"}
+        {...inputProps(props.testId)}
         aria-label={props.label}
         aria-invalid={error ? true : undefined}
-        value={props.value ?? ""}
+        value={text}
         placeholder={props.placeholder ?? "inherit"}
         onChange={(e) => {
-          const t = e.target.value.trim();
-          if (t === "") return props.onChange(undefined);
-          const n = Number(t);
-          if (Number.isFinite(n)) props.onChange(props.integer ? Math.trunc(n) : n);
+          setText(e.target.value);
+          const n = parseNumber(e.target.value);
+          if (e.target.value.trim() === "") props.onChange(undefined);
+          else if (n !== undefined) props.onChange(props.integer ? Math.trunc(n) : n);
         }}
       />
       {props.unit && <span className="unit">{props.unit}</span>}

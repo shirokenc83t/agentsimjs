@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loadDemo, loadF2, openWorkspace, sendTo, stepUntilEnded } from "./helpers.ts";
+import { loadDemo, loadF2, openWorkspace, sendTo, step, stepUntilEnded } from "./helpers.ts";
 
 // F3b: the Scene workspace (ADR-0042, UI-SPEC section 4): controls in a toolbar row off the canvas, short labels and 24 identities, one-line Explorer rows, the
 // floating Overview and Legend windows, and attention: a failed agent has a badge and a ring on the map, a row in the Explorer's attention group and a tile in the player.
@@ -113,4 +113,30 @@ test("the Inspector has an agent tab and a cell tab; the cell tab says what each
   // The agent's tab is still there with its agent.
   await page.getByTestId("inspector-tab-agent").click();
   await expect(page.getByTestId("inspector-agent")).toContainText("ugv-001");
+});
+
+test("labels never cover each other: a UAV above a UGV at the base gets its label stacked below, with a leader line", async ({ page }) => {
+  test.setTimeout(90_000);
+  await loadDemo(page);
+  await step(page, 1);
+  await expect.poll(() => page.locator(".agent-label:visible").count()).toBeGreaterThanOrEqual(3);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const boxes = Array.from(document.querySelectorAll<HTMLElement>(".agent-label"))
+            .filter((e) => e.style.display !== "none" && e.offsetWidth > 0)
+            .map((e) => e.getBoundingClientRect());
+          let overlaps = 0;
+          for (let i = 0; i < boxes.length; i++)
+            for (let j = i + 1; j < boxes.length; j++) {
+              const a = boxes[i] as DOMRect;
+              const b = boxes[j] as DOMRect;
+              if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) overlaps++;
+            }
+          return overlaps;
+        }),
+      { timeout: 10_000 },
+    )
+    .toBe(0);
 });

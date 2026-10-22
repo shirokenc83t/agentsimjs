@@ -72,6 +72,8 @@ export interface RunPopoverProps {
   /** Stored runs that can be re-simulated (newest first), with their recorded input counts. */
   listRuns: () => Promise<{ runId: string; label: string; inputs: number }[]>;
   onResimulate: (runId: string) => void;
+  /** Shows a stored run in the panels, read from storage. */
+  onReplay?: ((runId: string) => void) | undefined;
 }
 
 /**
@@ -150,13 +152,13 @@ export function RunPopover(props: RunPopoverProps) {
         <div className="row">
           {/* Busy buttons stay focusable (aria-disabled, clicks ignored): disabling them would drop focus out of
               the popover, and Escape would no longer close it. */}
-          <button type="button" className="btn pri" onClick={() => !busy && props.onLoadDemo()} aria-disabled={busy} data-testid="load-demo">
+          <button type="button" className="btn" onClick={() => !busy && props.onLoadDemo()} aria-disabled={busy} data-testid="load-demo">
             Load F1 demo
           </button>
           <button type="button" className="btn" onClick={() => !busy && props.onLoadReference()} aria-disabled={busy} data-testid="load-reference">
             Load 1 km² reference world
           </button>
-          <button type="button" className="btn" onClick={() => !busy && run && props.onRerun()} aria-disabled={busy || !run} disabled={!run} data-testid="rerun">
+          <button type="button" className="btn pri" onClick={() => !busy && run && props.onRerun()} aria-disabled={busy || !run} disabled={!run} data-testid="rerun">
             Re-run
           </button>
         </div>
@@ -173,6 +175,11 @@ export function RunPopover(props: RunPopoverProps) {
                 <span className="mono" data-testid={`stored-run-inputs-${r.runId}`}>
                   {r.inputs} input{r.inputs === 1 ? "" : "s"}
                 </span>{" "}
+                {props.onReplay && (
+                  <button type="button" className="btn" onClick={() => props.onReplay?.(r.runId)} data-testid={`replay-stored-${r.runId}`} aria-label={`Replay ${r.runId}`} title="Show this run from storage: the live run is not touched">
+                    ◷ replay
+                  </button>
+                )}{" "}
                 <button type="button" className="btn" onClick={() => !busy && props.onResimulate(r.runId)} aria-disabled={busy} data-testid={`resimulate-${r.runId}`} title="Run it again from its scenario version, run configuration and inputs: a new run (to look at a recording, open it from the Storage browser)">
                   Re-simulate
                 </button>

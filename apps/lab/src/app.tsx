@@ -215,11 +215,14 @@ export function App() {
       ...(preset?.panels ?? []).map((p) => ({ id: `panel.open.${p.id}`, title: `Open panel: ${PANELS[p.id as PanelId].title}`, group: "Panel", run: () => dockRef.current && preset && openPanel(dockRef.current, preset, p.id) })),
     ];
   }, [preset]);
+  // The Performance window is in the Scene and the Debug; elsewhere it opens from here (the status bar's frame segment, the palette).
+  const openPerformance = useCallback(() => {
+    if (dockRef.current && presetRef.current) openPanel(dockRef.current, presetRef.current, "perf");
+  }, []);
   const commands = useMemo<Command[]>(
     () => [
       ...WORKSPACES.map((w, i) => ({ id: `ws.${w.id}`, title: `Switch to ${w.title} workspace`, group: "Workspace", keys: String(i + 1), run: () => setWorkspace(w.id) })),
-      { id: "sim.play", title: "Play", group: "Run", keys: "Space", run: () => sim.play() },
-      { id: "sim.pause", title: "Pause", group: "Run", keys: "Space", run: () => sim.pause() },
+      { id: "sim.toggle", title: "Play / pause", group: "Run", keys: "Space", run: () => (sim.snapshot().running ? sim.pause() : sim.play()) },
       { id: "sim.step", title: "Step one tick", group: "Run", keys: ".", run: () => sim.step() },
       { id: "sim.step10", title: "Step 10 ticks", group: "Run", run: () => sim.step(10) },
       { id: "sim.step100", title: "Step 100 ticks", group: "Run", run: () => sim.step(100) },
@@ -248,9 +251,10 @@ export function App() {
       { id: "db.browser", title: "Open Storage browser", group: "Storage", run: () => setWorkspace("data") },
       { id: "layout.reset", title: "Reset workspace layouts", group: "Layout", run: resetLayouts },
       ...THEME_PREFERENCES.map((t) => ({ id: `theme.${t}`, title: `Theme: ${t}`, group: "Theme", run: () => setTheme(t) })),
+      { id: "panel.perf", title: "Open the Performance window", group: "Panel", run: openPerformance },
       ...panelCommands,
     ],
-    [ready, sim, storage, resetLayouts, setTheme, loadDemo, loadReference, rerunCurrent, rerunInMode, otherMode, runBusy, run, agentCommands, panelCommands],
+    [ready, sim, storage, resetLayouts, setTheme, openPerformance, loadDemo, loadReference, rerunCurrent, rerunInMode, otherMode, runBusy, run, agentCommands, panelCommands],
   );
 
   return (
@@ -288,6 +292,10 @@ export function App() {
                   onRerun={() => rerunCurrent()}
                   listRuns={listRuns}
                   onResimulate={resimulate}
+                  onReplay={(runId) => {
+                    setReplayRun(runId);
+                    setRunAnchor(null);
+                  }}
                 />
               </Suspense>
             )}
@@ -331,7 +339,7 @@ export function App() {
           <Suspense fallback={null}>{preset && <LazyWorkspaceHost key={preset.id} preset={preset} storage={storage} layoutEpoch={layoutEpoch} onApi={(api) => (dockRef.current = api)} />}</Suspense>
         </div>
 
-        <StatusBar snap={snap} status={status} info={info} header={run?.header} replaying={view?.mode === "replay"} />
+        <StatusBar snap={snap} status={status} info={info} header={run?.header} replaying={view?.mode === "replay"} onOpenPerf={openPerformance} />
 
         <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
       </div>

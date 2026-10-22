@@ -72,3 +72,20 @@ test("the player is one row in Author, Data and Settings", async ({ page }) => {
   expect((await page.getByTestId("topbar").boundingBox())?.height).toBeCloseTo(28, 0);
   expect((await page.getByTestId("statusline").boundingBox())?.height).toBeCloseTo(24, 0);
 });
+
+test("the status bar drops whole segments by priority into a `…` with a tooltip, never a cut word", async ({ page }) => {
+  test.setTimeout(90_000);
+  for (const width of [1440, 1000]) {
+    await page.setViewportSize({ width, height: 900 });
+    await loadDemo(page);
+    await step(page, 1);
+    const bar = page.getByTestId("statusline");
+    const cut = await bar.evaluate((el) => Array.from(el.querySelectorAll<HTMLElement>("[data-prio]:not([data-hid])")).filter((s) => s.scrollWidth > s.clientWidth + 1).map((s) => s.textContent));
+    expect(cut, `${width}: segments cut`).toEqual([]);
+    // What matters stays: the run state, the sim time, the tick, the recording's saved point and the frame rate.
+    for (const id of ["status-state", "status-simtime", "status-tick", "status-recording-saved", "status-frame"]) await expect(page.getByTestId(id), `${width}: ${id}`).toBeVisible();
+  }
+  // At 1000 px the lowest priorities are in the `…`, named in its tooltip.
+  await expect(page.getByTestId("status-more")).toHaveAttribute("title", /hash /);
+  await expect(page.getByTestId("status-more")).toHaveAttribute("title", /db: /);
+});

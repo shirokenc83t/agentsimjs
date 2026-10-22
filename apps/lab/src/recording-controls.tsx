@@ -12,12 +12,17 @@ export function RecordingControls({ realtime }: { realtime: boolean }) {
   const parsed = profileOfSelection(sel);
   const heavy = parsed.ok && isHeavyProfile(parsed.profile);
   return (
-    <fieldset className="recording-controls" data-testid="recording-controls">
-      <legend className="muted">Recording</legend>
+    <section className="recording-controls" data-testid="recording-controls">
+      <h4 className="sec">
+        <b>RECORDING</b>
+        <span className="rule" />
+      </h4>
+      <p className="prose muted">A recorded run is saved while it runs: it can be replayed, scrubbed and exported. The profile says what is kept.</p>
       <div className="row">
-        <label>
-          profile{" "}
+        <label className="rec-field">
+          <span className="muted">profile</span>
           <select
+            className="rc-select mono"
             aria-label="Recording profile"
             data-testid="recording-preset"
             value={sel.preset}
@@ -32,7 +37,7 @@ export function RecordingControls({ realtime }: { realtime: boolean }) {
             <option value="custom">custom (JSON)</option>
           </select>
         </label>
-        <label>
+        <label className="rc-check">
           <input type="checkbox" checked={sel.optOut} onChange={(e) => setRecordingSelection({ optOut: e.target.checked })} data-testid="recording-opt-out" /> Don't record this run
         </label>
       </div>
@@ -63,6 +68,6 @@ export function RecordingControls({ realtime }: { realtime: boolean }) {
           ▲ A realtime run with this profile writes a lot: if the writer falls behind, the run waits and each wait is traced as a storage_backpressure degradation.
         </p>
       )}
-    </fieldset>
+    </section>
   );
 }

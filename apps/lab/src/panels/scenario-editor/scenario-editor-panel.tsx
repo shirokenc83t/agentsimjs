@@ -22,6 +22,7 @@ import { ExtrasValidation, ObjectForm, PriorList } from "./extras-forms.tsx";
 import { EditorView } from "./editor-view.ts";
 import { agentIdsOf, ScenarioDraft, type Brush, type PaintLayer, type PriorBrush, type PriorBrushValue } from "./model.ts";
 import { editorSession, type Tool } from "./session.ts";
+import { CollapseIcon, ExpandIcon } from "../../workspaces/window-icons.tsx";
 
 const TOOLS: readonly { id: Tool; label: string; key: string; glyph: string; hint: string }[] = [
   { id: "navigate", label: "navigate", key: "V", glyph: "✥", hint: "drag to rotate, right-drag to pan, wheel to zoom" },
@@ -72,6 +73,12 @@ export function ScenarioEditorPanel() {
   /** A prior drawn over the world, the prior the paint tool edits (`undefined`: the world), and how it is drawn. */
   const [priorShown, setPriorShown] = useState<string | undefined>(undefined);
   const [priorEditing, setPriorEditing] = useState<string | undefined>(undefined);
+  // The brush window: folded to its title bar until opened (it starts at a corner and never over what is being painted), movable inside the map's area; the prior's brush opens it.
+  const [brushOpen, setBrushOpen] = useState(false);
+  const [brushAt, setBrushAt] = useState<{ x: number; y: number } | undefined>(undefined);
+  useEffect(() => {
+    if (priorEditing !== undefined) setBrushOpen(true);
+  }, [priorEditing]);
   const [priorMode, setPriorMode] = useState<BeliefViewMode>("belief");
   const [priorBrush, setPriorBrush] = useState<PriorBrush>({ value: "unknown", radiusCells: 3 });
   const [msg, setMsg] = useState<Msg | null>(null);
@@ -374,9 +381,37 @@ export function ScenarioEditorPanel() {
               {!draft && <p className="editor-empty muted">Open a stored scenario, import a file, or create a new one.</p>}
             </SceneView>
             {draft && tool === "paint" && (
-              <div className="se-brush" role="dialog" aria-label={priorEditing !== undefined ? "Prior brush" : "Brush"}>
-                <div className="se-brush-bar">{priorEditing !== undefined ? "PRIOR BRUSH" : "BRUSH"}</div>
-                <div className="se-brush-body">
+              <div
+                className={`se-brush${brushOpen ? "" : " folded"}`}
+                role="dialog"
+                aria-label={priorEditing !== undefined ? "Prior brush" : "Brush"}
+                data-testid="ed-brush-window"
+                style={brushAt ? { left: brushAt.x, top: brushAt.y, right: "auto" } : undefined}
+              >
+                <div
+                  className="se-brush-bar"
+                  onPointerDown={(e) => {
+                    if ((e.target as HTMLElement).closest("button")) return;
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                  }}
+                  onPointerMove={(e) => {
+                    if (e.buttons !== 1) return;
+                    const win = e.currentTarget.parentElement;
+                    const area = win?.parentElement?.getBoundingClientRect();
+                    if (!win || !area) return;
+                    // Inside the map's area, whatever the pointer does.
+                    const x = Math.max(0, Math.min(area.width - win.offsetWidth, e.clientX - area.left - win.offsetWidth / 2));
+                    const y = Math.max(0, Math.min(area.height - 24, e.clientY - area.top - 12));
+                    setBrushAt({ x, y });
+                  }}
+                >
+                  <span>{priorEditing !== undefined ? "PRIOR BRUSH" : "BRUSH"}</span>
+                  <span className="sp" />
+                  <button type="button" className="wb" onClick={() => setBrushOpen((o) => !o)} aria-label={brushOpen ? "Collapse the brush" : "Open the brush"} aria-expanded={brushOpen} data-testid="ed-brush-toggle">
+                    {brushOpen ? <CollapseIcon /> : <ExpandIcon />}
+                  </button>
+                </div>
+                <div className="se-brush-body" hidden={!brushOpen}>
                   {draft && tool === "paint" && priorEditing !== undefined && (
           <div data-testid="ed-prior-brush">
             

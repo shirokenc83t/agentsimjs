@@ -75,3 +75,41 @@ export function clusterPoints(points: readonly ScreenPoint[], radiusPx: number):
   }
   return out.sort((a, b) => (a.members[0] as number) - (b.members[0] as number));
 }
+
+/** The screen box of a label that is shown (px; `x`, `y` its top left). */
+export interface LabelBox {
+  readonly index: number;
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+  /** An agent that needs attention, or the selected one: its label is placed first and does not move. */
+  readonly keep: boolean;
+}
+
+const GAP_PX = 2;
+const overlaps = (a: LabelBox, b: LabelBox, dy: number) => a.x < b.x + b.w && b.x < a.x + a.w && a.y + dy < b.y + b.h && b.y < a.y + dy + a.h;
+
+/**
+ * Labels that would cover each other (an aerial agent above a ground one, two starting at the same base): each is moved down, by whole label heights, until it
+ * touches none that is already placed; the labels that keep theirs are placed first. Returns the offset (px, down) of each box, in the order given. Pure, and the
+ * same boxes give the same offsets.
+ */
+export function stackLabels(boxes: readonly LabelBox[]): number[] {
+  const order = boxes.map((_, i) => i).sort((a, b) => Number(boxes[b]?.keep) - Number(boxes[a]?.keep) || (boxes[a]?.y ?? 0) - (boxes[b]?.y ?? 0) || (boxes[a]?.x ?? 0) - (boxes[b]?.x ?? 0) || (boxes[a]?.index ?? 0) - (boxes[b]?.index ?? 0));
+  const offset = boxes.map(() => 0);
+  const placed: { box: LabelBox; dy: number }[] = [];
+  for (const i of order) {
+    const b = boxes[i] as LabelBox;
+    let dy = 0;
+    // Each step clears at least one more box; the loop ends at the latest below the lowest of them.
+    for (let guard = 0; guard < boxes.length + 1; guard++) {
+      const hit = placed.find((p) => overlaps(b, { ...p.box, y: p.box.y + p.dy }, dy));
+      if (!hit) break;
+      dy = hit.box.y + hit.dy + hit.box.h + GAP_PX - b.y;
+    }
+    offset[i] = dy;
+    placed.push({ box: b, dy });
+  }
+  return offset;
+}

@@ -2,8 +2,21 @@ import { KIND_STYLE, useUiContext } from "@agentsim/ui";
 import { MARK_LEGEND } from "../panels/debug/marks.ts";
 import type { IDockviewHeaderActionsProps } from "dockview-react";
 import { useContext, useEffect, useReducer } from "react";
+import { usePolled } from "../services.tsx";
+import { getFrameStats } from "../shell/frame-stats.ts";
 import { PresetContext } from "./preset-context.ts";
+import { CloseIcon, CollapseIcon, DockIcon, ExpandIcon, FloatIcon, MaximizeIcon, RestoreIcon } from "./window-icons.tsx";
 import { closePanel, dockPanel, floatPanel, isCollapsed, isFloating, toggleCollapse, toggleMaximize } from "./dock-actions.ts";
+
+/** The one-line summary of the Performance window, readable while it is collapsed: the rendering rate and the frame work. */
+function PerfSummary() {
+  const frame = usePolled(getFrameStats, 500);
+  return (
+    <span className="tmeta mono" data-testid="panel-context">
+      {frame ? `${frame.fps.toFixed(0)} fps · ${frame.workMeanMs.toFixed(1)} ms` : "no frames yet"}
+    </span>
+  );
+}
 
 /**
  * What the panel is about, in its title bar (the "context line"): the run and the moment for the panels that follow the cursor, the selection for the
@@ -35,6 +48,14 @@ function PanelContext(props: { panelId: string }) {
       break;
     case "inspector":
       text = selection ? `${selection.kind} ${selection.id}` : "no selection";
+      break;
+    case "perf":
+      return <PerfSummary />;
+    case "overview":
+      text = "whole map";
+      break;
+    case "legend":
+      text = "markers, overlays";
       break;
   }
   return text ? (
@@ -71,23 +92,25 @@ export function WindowButtons(props: IDockviewHeaderActionsProps) {
       <PanelContext panelId={id} />
       {floating && (
         <button type="button" className="wb" onClick={() => toggleCollapse(group)} aria-label={`${collapsed ? "Open" : "Collapse"} ${title}`} data-tip={collapsed ? "Open the window" : "Collapse to the title bar"} data-testid={`wb-collapse-${id}`}>
-          {collapsed ? "▸" : "▾"}
+          {collapsed ? <ExpandIcon /> : <CollapseIcon />}
         </button>
       )}
       {floating ? (
         <button type="button" className="wb" onClick={() => dockPanel(api, activePanel, preset)} aria-label={`Dock ${title}`} data-tip="Dock it back into the grid" data-testid={`wb-dock-${id}`}>
-          ↙
+          <DockIcon />
         </button>
       ) : (
         <button type="button" className="wb" onClick={() => floatPanel(api, activePanel)} aria-label={`Float ${title}`} data-tip="Float it over the dock" data-testid={`wb-float-${id}`}>
-          ↗
+          <FloatIcon />
         </button>
       )}
-      <button type="button" className="wb" onClick={() => toggleMaximize(api, activePanel)} aria-label={`${maximized ? "Restore" : "Maximize"} ${title}`} data-tip={maximized ? "Restore" : "Maximize"} data-testid={`wb-maximize-${id}`}>
-        {maximized ? "▣" : "□"}
-      </button>
+      {!floating && (
+        <button type="button" className="wb" onClick={() => toggleMaximize(api, activePanel)} aria-label={`${maximized ? "Restore" : "Maximize"} ${title}`} data-tip={maximized ? "Restore" : "Maximize"} data-testid={`wb-maximize-${id}`}>
+          {maximized ? <RestoreIcon /> : <MaximizeIcon />}
+        </button>
+      )}
       <button type="button" className="wb" onClick={() => closePanel(activePanel)} aria-label={`Close ${title}`} data-tip="Close (the palette opens it again)" data-testid={`wb-close-${id}`}>
-        ×
+        <CloseIcon />
       </button>
     </div>
   );
