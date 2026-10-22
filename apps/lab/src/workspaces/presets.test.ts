@@ -29,9 +29,11 @@ describe("workspace presets", () => {
     }
   });
 
-  it("the Scene's own windows stack from the bottom of the map, the Performance window lowest, each at its own height", () => {
-    const stack = ["perf", "legend", "overview"].map((id) => preset("scene").panels.find((p) => p.id === id)?.floating?.stack);
-    expect(stack).toEqual([0, 1, 2]);
+  it("the Legend sits above the Performance window at the right of the map and the Overview at the left, so that the two open together do not touch", () => {
+    const f = (id: string) => preset("scene").panels.find((p) => p.id === id)?.floating;
+    expect([f("perf")?.stack, f("legend")?.stack, f("overview")?.stack]).toEqual([0, 1, 1]);
+    expect(f("overview")?.side).toBe("left");
+    expect(f("legend")?.side).toBeUndefined();
   });
 
   it("the Debug lays the Timeline out after the column beside the Scene, so it sits under the Scene alone, as tall as its lanes", () => {

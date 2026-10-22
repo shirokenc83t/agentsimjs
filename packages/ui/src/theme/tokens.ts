@@ -165,8 +165,8 @@ export const STATE_GLYPH: Readonly<Record<StateName, string>> = { run: "▶", ok
 export const GLYPH = { fail: "✕", warn: "▲", paused: "❚❚", replay: "◷", running: "▶", ok: "✓", idle: "○", info: "●" } as const;
 
 export const FONT = {
-  sans: "'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif",
-  mono: "'JetBrains Mono', ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace",
+  sans: "'IBM Plex Sans', 'AgentSim Glyphs', system-ui, -apple-system, 'Segoe UI', sans-serif",
+  mono: "'JetBrains Mono', 'AgentSim Glyphs', ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace",
 } as const;
 
 /**

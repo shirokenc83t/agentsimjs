@@ -15,9 +15,10 @@ export interface PresetPanel {
   readonly late?: boolean;
   /**
    * A panel that starts as a floating window (inside the app, ADR-0042 §1), not in the grid: its open size, whether it starts collapsed to its title bar, and where it
-   * sits: at the bottom right of the panel it belongs to (`host`), `stack` windows up from the bottom of it (0 is the lowest).
+   * sits: at the bottom right of the panel it belongs to (`host`), `stack` windows up from the bottom of it (0 is the lowest), `side: "left"` at the bottom left of it instead
+   * (the Overview and the Legend open together without covering each other: one at each side of the map).
    */
-  readonly floating?: { readonly width: number; readonly height: number; readonly collapsed: boolean; readonly host?: PanelId | undefined; readonly stack?: number };
+  readonly floating?: { readonly width: number; readonly height: number; readonly collapsed: boolean; readonly host?: PanelId | undefined; readonly stack?: number; readonly side?: "left" };
 }
 
 export interface WorkspacePreset {
@@ -32,8 +33,8 @@ export interface WorkspacePreset {
  * the frame segment of the status bar or from the palette (`openPanel` falls back to this, open, at the bottom right of the dock).
  */
 export const PERF_WINDOW: PresetPanel = { id: "perf", floating: { width: 300, height: 400, collapsed: true, host: "scene", stack: 0 } };
-/** The windows of the Scene (ADR-0042 section 8): the Overview of the whole map and the Legend stacked above the Performance window inside the map; both start collapsed. */
-const OVERVIEW_WINDOW: PresetPanel = { id: "overview", floating: { width: 240, height: 200, collapsed: true, host: "scene", stack: 2 } };
+/** The windows of the Scene (ADR-0042 section 8): the Legend above the Performance window at the bottom right of the map and the Overview at its bottom left (open together they do not touch); all start collapsed. */
+const OVERVIEW_WINDOW: PresetPanel = { id: "overview", floating: { width: 240, height: 200, collapsed: true, host: "scene", stack: 1, side: "left" } };
 const LEGEND_WINDOW: PresetPanel = { id: "legend", floating: { width: 340, height: 330, collapsed: true, host: "scene", stack: 1 } };
 
 /**

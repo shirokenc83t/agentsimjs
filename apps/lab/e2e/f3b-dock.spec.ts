@@ -65,6 +65,7 @@ async function boxes(page: Page, id: string) {
 
 test("the floating windows sit inside the Scene's map, collapsed to their title; elsewhere the Performance window opens from the status bar", async ({ page }) => {
   test.setTimeout(90_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
   await loadDemo(page);
   for (const id of ["perf", "overview", "legend"] as const) {
     await expect.poll(async () => (await panel(page, id))?.location).toBe("floating");
@@ -78,6 +79,19 @@ test("the floating windows sit inside the Scene's map, collapsed to their title;
     expect(win.y + win.height, `${id}: bottom`).toBeLessThanOrEqual(map.y + map.height + 1);
     expect(win.width, `${id}: collapsed width`).toBeLessThanOrEqual(320);
   }
+  // Open together, the Overview and the Legend do not cover each other.
+  await page.getByTestId("wb-collapse-overview").click();
+  await page.getByTestId("wb-collapse-legend").click();
+  await expect.poll(async () => (await panel(page, "legend"))?.collapsed).toBe(false);
+  await expect.poll(async () => (await panel(page, "overview"))?.collapsed).toBe(false);
+  const both = { o: (await boxes(page, "overview")).win, l: (await boxes(page, "legend")).win, map: (await boxes(page, "legend")).map };
+  if (!both.o || !both.l || !both.map) throw new Error("no boxes");
+  const apart = both.o.x + both.o.width <= both.l.x + 1 || both.l.x + both.l.width <= both.o.x + 1 || both.o.y + both.o.height <= both.l.y + 1 || both.l.y + both.l.height <= both.o.y + 1;
+  expect(apart, `overview ${JSON.stringify(both.o)} against legend ${JSON.stringify(both.l)}`).toBe(true);
+  expect(both.o.x, "overview inside the map").toBeGreaterThanOrEqual(both.map.x);
+  await page.getByTestId("wb-collapse-overview").click();
+  await page.getByTestId("wb-collapse-legend").click();
+
   // Debug has the Performance window inside its map; Author, Data and Settings have none until it is opened.
   await openWorkspace(page, "debug");
   await expect.poll(async () => (await panel(page, "perf"))?.location).toBe("floating");

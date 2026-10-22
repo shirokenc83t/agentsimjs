@@ -1,9 +1,9 @@
 /* GENERATED from packages/ui/src/theme/tokens.ts and base.css by css.ts — do not edit (ADR-0032 §1).
    Regenerate: UPDATE_THEME_CSS=1 pnpm exec vitest run --project node tools/theme */
 :root {
-  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
-  --font-prose: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'IBM Plex Sans', 'AgentSim Glyphs', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'AgentSim Glyphs', ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --font-prose: 'IBM Plex Sans', 'AgentSim Glyphs', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --type-title-size: 13px;
   --type-title-weight: 600;
   --type-title-tracking: 0.06em;

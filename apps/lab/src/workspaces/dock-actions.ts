@@ -120,14 +120,15 @@ export function openPanel(api: DockviewApi, preset: WorkspacePreset, id: PanelId
  * Where a floating window starts: at the bottom right of the panel it belongs to (inside its bounds, `stack` windows up from its bottom), else at the bottom right
  * of the dock. The offsets are measured from the dock's own edges, which is what a floating group is anchored to.
  */
-function floatingPosition(api: DockviewApi, f: NonNullable<PresetPanel["floating"]>): { bottom: number; right: number } {
+function floatingPosition(api: DockviewApi, f: NonNullable<PresetPanel["floating"]>): { bottom: number; right: number } | { bottom: number; left: number } {
   const host = f.host ? api.getPanel(f.host)?.group.element : undefined;
   const root = host?.closest(".dv-dockview");
   const h = host?.getBoundingClientRect();
   const r = root?.getBoundingClientRect();
   const stackPx = (f.stack ?? 0) * (COLLAPSED_HEIGHT_PX + STACK_GAP_PX);
-  if (!h || !r || h.width === 0) return { bottom: 16 + stackPx, right: 16 };
-  return { bottom: Math.max(0, r.bottom - h.bottom) + STACK_GAP_PX + stackPx + 24, right: Math.max(0, r.right - h.right) + STACK_GAP_PX + 4 };
+  if (!h || !r || h.width === 0) return f.side === "left" ? { bottom: 16 + stackPx, left: 16 } : { bottom: 16 + stackPx, right: 16 };
+  const bottom = Math.max(0, r.bottom - h.bottom) + STACK_GAP_PX + stackPx + 24;
+  return f.side === "left" ? { bottom, left: Math.max(0, h.left - r.left) + STACK_GAP_PX + 4 } : { bottom, right: Math.max(0, r.right - h.right) + STACK_GAP_PX + 4 };
 }
 
 /** Adds a preset's panel to the dock: docked beside the one it names, or as a floating window. */
