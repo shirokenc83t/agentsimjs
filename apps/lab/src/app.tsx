@@ -1,6 +1,6 @@
 import type { StorageInfo } from "@agentsim/storage";
 import type { DockviewApi } from "dockview-react";
-import { Banner, CommandPalette, downloadBytes, type Command } from "@agentsim/ui";
+import { Banner, CommandPalette, downloadBytes, THEME_PREFERENCES, type Command } from "@agentsim/ui";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStorageStatus, useThemeSetting, type CurrentRun } from "./services.tsx";
 import type { PresetId } from "@agentsim/core";
@@ -212,10 +212,10 @@ export function App() {
   }, [preset]);
   const commands = useMemo<Command[]>(
     () => [
-      ...WORKSPACES.map((w) => ({ id: `ws.${w.id}`, title: `Switch to ${w.title} workspace`, group: "Workspace", run: () => setWorkspace(w.id) })),
-      { id: "sim.play", title: "Play", group: "Run", run: () => sim.play() },
-      { id: "sim.pause", title: "Pause", group: "Run", run: () => sim.pause() },
-      { id: "sim.step", title: "Step one tick", group: "Run", run: () => sim.step() },
+      ...WORKSPACES.map((w, i) => ({ id: `ws.${w.id}`, title: `Switch to ${w.title} workspace`, group: "Workspace", keys: String(i + 1), run: () => setWorkspace(w.id) })),
+      { id: "sim.play", title: "Play", group: "Run", keys: "Space", run: () => sim.play() },
+      { id: "sim.pause", title: "Pause", group: "Run", keys: "Space", run: () => sim.pause() },
+      { id: "sim.step", title: "Step one tick", group: "Run", keys: ".", run: () => sim.step() },
       { id: "sim.step10", title: "Step 10 ticks", group: "Run", run: () => sim.step(10) },
       { id: "sim.step100", title: "Step 100 ticks", group: "Run", run: () => sim.step(100) },
       { id: "run.demo", title: "Load F1 demo scenario (new run)", group: "Run", disabled: !ready || runBusy, run: loadDemo },
@@ -242,9 +242,10 @@ export function App() {
       },
       { id: "db.browser", title: "Open Storage browser", group: "Storage", run: () => setWorkspace("data") },
       { id: "layout.reset", title: "Reset workspace layouts", group: "Layout", run: resetLayouts },
+      ...THEME_PREFERENCES.map((t) => ({ id: `theme.${t}`, title: `Theme: ${t}`, group: "Theme", run: () => setTheme(t) })),
       ...panelCommands,
     ],
-    [ready, sim, storage, resetLayouts, loadDemo, loadReference, rerunCurrent, rerunInMode, otherMode, runBusy, run, agentCommands, panelCommands],
+    [ready, sim, storage, resetLayouts, setTheme, loadDemo, loadReference, rerunCurrent, rerunInMode, otherMode, runBusy, run, agentCommands, panelCommands],
   );
 
   return (

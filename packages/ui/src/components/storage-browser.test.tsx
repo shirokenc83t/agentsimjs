@@ -98,7 +98,9 @@ describe("StorageBrowser", () => {
     const confirm = screen.getByRole("button", { name: "Delete the run" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(cancel).toHaveFocus();
-    // Tab and Shift+Tab cycle inside the dialog.
+    // Tab and Shift+Tab cycle inside the dialog: Cancel, Export first, Delete the run.
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: "Export first" })).toHaveFocus();
     await userEvent.tab();
     expect(confirm).toHaveFocus();
     await userEvent.tab();
@@ -161,5 +163,34 @@ describe("StorageBrowser", () => {
     setup({ importRun: vi.fn(async () => ({ ok: false as const, error: { code: "broken_recording" as const, message: "snapshot refers to a missing section" } })) });
     await userEvent.upload(await screen.findByTestId("import-run-file"), new File([new Uint8Array([1])], "bad.jsonl"));
     expect(await screen.findByTestId("storage-message")).toHaveTextContent("run file rejected (broken_recording): snapshot refers to a missing section");
+  });
+
+  it("shows usage against the quota as a gauge with the minimum quota marked, and warns when storage is not persistent", async () => {
+    setup({ info: vi.fn(async () => ({ ...info, persisted: false })) });
+    const meter = await screen.findByRole("meter", { name: "Usage against the quota" });
+    expect(meter).toHaveAttribute("aria-valuenow", String(1e6));
+    expect(meter).toHaveAttribute("aria-valuemax", String(1e9));
+    expect(screen.getByTestId("quota-min-mark")).toBeInTheDocument();
+    expect(screen.getByTestId("storage-persisted")).toHaveTextContent("▲");
+  });
+
+  it("labels every row action in words, and breaks a run's size down by kind of data", async () => {
+    setup({}, {});
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    const row = await screen.findByTestId("run-row-run-000001");
+    expect(row).toHaveTextContent("⭳ .sqlite");
+    expect(row).toHaveTextContent("⭳ JSONL");
+    expect(row).toHaveTextContent("✕ delete");
+    expect(row.querySelectorAll(".size-bar i").length).toBeGreaterThan(0);
+    expect(row.querySelector(".size-bar")).toHaveAttribute("aria-label", expect.stringMatching(/records/));
+  });
+
+  it("the delete dialog offers to export the run first: the file is saved and the dialog stays", async () => {
+    const { download } = setup();
+    await userEvent.click(await screen.findByTestId("create-sample-run"));
+    await userEvent.click(await screen.findByRole("button", { name: "Delete run-000001" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Export first" }));
+    await waitFor(() => expect(download).toHaveBeenCalledWith(new Uint8Array([4]), "run-000001.sqlite"));
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
   });
 });

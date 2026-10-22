@@ -82,3 +82,7 @@
 
 /* Tooltips are nowrap pseudo-elements that count as overflow: near the right edge they would make the page scroll sideways. */
 .shell { overflow: clip; }
+
+/* Reduced motion: the viewer's setting, or the OS's. */
+[data-motion="reduce"] *, [data-motion="reduce"] *::before, [data-motion="reduce"] *::after { transition: none !important; animation: none !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }

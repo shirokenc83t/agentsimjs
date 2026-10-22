@@ -1,7 +1,7 @@
 /* Styles of lazy panels and overlays: loaded with their chunks, not in the initial stylesheet (ADR-0032 §3
    bundle gate). Colours only from token variables (no literals, enforced by pnpm lint). */
 /* Run header popover (toolbar). */
-.run-info { padding: 10px 14px; min-width: 320px; }
+.run-info { padding: 10px 14px; min-width: 320px; max-width: min(560px, calc(100vw - 16px)); background: var(--bg1); border: 1px solid var(--ln2); box-shadow: var(--float); z-index: var(--z-popover); }
 .run-info h3 { margin: 0 0 8px; font-size: var(--type-title-size); }
 
 /* Scene overlays: agent ID labels (CSS2D) above the canvas; they never take pointer events. */
@@ -304,3 +304,24 @@
 /* In the narrow sidebar the state is the input's look (dashed, edge, tint); the help line is kept only for an error. */
 .se-props .rc-row .rc-help:not(.st-alm) { display: none; }
 .rc-tf { display: inline-flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+/* Settings: the rail of the Run configuration, rows of label and control, a segmented control and switches. */
+.settings.rc { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.st-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 200px minmax(0, 1fr); }
+.st-row { display: grid; grid-template-columns: 240px minmax(0, 1fr); align-items: center; gap: 10px; min-height: 30px; }
+.segc { display: inline-flex; border: 1px solid var(--ln2); }
+.segc label { position: relative; display: flex; align-items: center; height: 24px; padding: 0 10px; border-right: 1px solid var(--ln2); background: var(--bg1); color: var(--fg2); font-size: var(--type-label-size); cursor: pointer; }
+.segc label:last-child { border-right: 0; }
+.segc label:hover { background: var(--bg3); color: var(--fg); }
+.segc label.on { background: var(--acbg); color: var(--fg); box-shadow: inset 0 -2px 0 var(--ac); font-weight: 600; }
+.segc label:has(input:focus-visible) { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
+.segc input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.tog { position: relative; display: inline-flex; align-items: center; gap: 8px; color: var(--fg2); cursor: pointer; }
+.tog input { position: absolute; z-index: 1; left: 0; width: 28px; height: 14px; margin: 0; opacity: 0; cursor: pointer; }
+.tog i { width: 28px; height: 14px; border: 1px solid var(--ln2); background: var(--bg0); position: relative; display: inline-block; flex: none; }
+.tog i::after { content: ""; position: absolute; left: 1px; top: 1px; width: 10px; height: 10px; background: var(--fg3); }
+.tog.on i { background: var(--acbg); border-color: var(--ac); }
+.tog.on i::after { left: 15px; background: var(--ac); }
+.tog:has(input:focus-visible) i { outline: var(--focus-ring) solid var(--ac); outline-offset: 1px; }
+.st-keys { margin: 0; grid-template-columns: 160px minmax(0, 1fr); }
+.st-keys kbd { font: inherit; font-size: var(--type-label-size); color: var(--fg); border: 1px solid var(--ln2); padding: 0 5px; }

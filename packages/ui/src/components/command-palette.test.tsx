@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { CommandPalette, filterCommands, type Command } from "./command-palette.tsx";
+import { CommandPalette, filterCommands, matchedChars, type Command } from "./command-palette.tsx";
 
 const cmds = (spy = vi.fn()): Command[] => [
   { id: "ws.scene", title: "Switch to Scene workspace", group: "Workspace", run: () => spy("scene") },
@@ -77,5 +77,28 @@ describe("CommandPalette", () => {
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(opener).toHaveFocus();
+  });
+
+  it("groups the results under their group's heading, in the order the groups first appear", () => {
+    const mixed: Command[] = [
+      { id: "a", title: "Switch to Scene workspace", group: "Workspace", run: () => {} },
+      { id: "b", title: "Export database (.sqlite)", group: "Storage", run: () => {} },
+      { id: "c", title: "Switch to Data workspace", group: "Workspace", run: () => {} },
+    ];
+    render(<CommandPalette open commands={mixed} onClose={vi.fn()} />);
+    const heads = screen.getAllByRole("presentation").map((h) => h.textContent);
+    expect(heads).toEqual(["Workspace", "Storage"]);
+    // The two workspace commands sit together under their heading.
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Switch to Scene workspace", "Switch to Data workspace", "Export database (.sqlite)"]);
+  });
+
+  it("marks the letters the query matched and shows a command's key", async () => {
+    const withKey: Command[] = [{ id: "p", title: "Play", group: "Run", keys: "Space", run: () => {} }, ...cmds()];
+    render(<CommandPalette open commands={withKey} onClose={vi.fn()} />);
+    expect(screen.getByText("Space")).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("textbox", { name: "Command" }), "exp");
+    expect(Array.from(document.querySelectorAll(".palette mark")).map((m) => m.textContent)).toEqual(["Exp"]);
+    expect(matchedChars("Export database", ["exp", "data"]).filter(Boolean).length).toBe(7);
+    expect(matchedChars("Play", [])).toEqual([false, false, false, false]);
   });
 });

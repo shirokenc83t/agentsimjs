@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 export interface Command {
   readonly id: string;
@@ -6,17 +6,49 @@ export interface Command {
   readonly group: string;
   readonly run: () => void;
   readonly disabled?: boolean;
+  /** The key that does the same, shown at the right of the row (`Space`, `.`, `1`). */
+  readonly keys?: string;
 }
 
+/** The commands that match every term, with those of one group together (groups in the order they first appear, each group in its own order). */
 export function filterCommands(commands: readonly Command[], query: string): Command[] {
   const q = query.trim().toLowerCase();
   const enabled = commands.filter((c) => !c.disabled);
-  if (!q) return enabled;
-  const terms = q.split(/\s+/);
-  return enabled.filter((c) => {
+  const terms = q ? q.split(/\s+/) : [];
+  const found = terms.length === 0 ? enabled : enabled.filter((c) => {
     const hay = `${c.group} ${c.title}`.toLowerCase();
     return terms.every((t) => hay.includes(t));
   });
+  const order = [...new Set(found.map((c) => c.group))];
+  return found.map((c, i) => [c, i] as const).sort((a, b) => order.indexOf(a[0].group) - order.indexOf(b[0].group) || a[1] - b[1]).map(([c]) => c);
+}
+
+/** Which characters of `text` the terms matched (each term as a substring, case-insensitive). */
+export function matchedChars(text: string, terms: readonly string[]): boolean[] {
+  const out = text.split("").map(() => false);
+  const low = text.toLowerCase();
+  for (const t of terms) {
+    if (t === "") continue;
+    for (let at = low.indexOf(t); at >= 0; at = low.indexOf(t, at + t.length)) for (let k = at; k < at + t.length; k++) out[k] = true;
+  }
+  return out;
+}
+
+/** The title with the matched letters in `mark`s (the text itself when nothing matched, so it stays one text node). */
+function Marked(props: { text: string; terms: readonly string[] }) {
+  const hit = matchedChars(props.text, props.terms);
+  if (!hit.some(Boolean)) return <>{props.text}</>;
+  const parts: { text: string; on: boolean }[] = [];
+  props.text.split("").forEach((ch, i) => {
+    const last = parts[parts.length - 1];
+    if (last && last.on === hit[i]) last.text += ch;
+    else parts.push({ text: ch, on: hit[i] === true });
+  });
+  return (
+    <>
+      {parts.map((p, i) => (p.on ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}
+    </>
+  );
 }
 
 /** Command palette skeleton (UI-SPEC §2): Ctrl/Cmd+K, type to filter, arrows + Enter, Esc to close. */
@@ -28,6 +60,7 @@ export function CommandPalette(props: { open: boolean; commands: readonly Comman
   /** Where the focus was when the palette opened: Escape gives it back there. */
   const opener = useRef<Element | null>(null);
   const results = useMemo(() => filterCommands(commands, query), [commands, query]);
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
   // Reset on close, not on open: an effect runs after paint, so a reset on open could wipe what the user
   // already typed after Ctrl+K (and Enter would then run the first command of the unfiltered list).
@@ -85,10 +118,17 @@ export function CommandPalette(props: { open: boolean; commands: readonly Comman
         />
         <ul id="palette-list" role="listbox" aria-label="Commands">
           {results.map((c, i) => (
-            <li key={c.id} className="selectable" role="option" aria-selected={i === active} onMouseEnter={() => setActive(i)} onClick={() => run(c)}>
-              <span>{c.title}</span>
-              <span className="group">{c.group}</span>
-            </li>
+            <Fragment key={c.id}>
+              {results[i - 1]?.group !== c.group && (
+                <li role="presentation" className="group-head">
+                  {c.group}
+                </li>
+              )}
+              <li className="selectable" role="option" aria-selected={i === active} onMouseEnter={() => setActive(i)} onClick={() => run(c)}>
+                <span>{terms.length > 0 ? <Marked text={c.title} terms={terms} /> : c.title}</span>
+                {c.keys && <kbd>{c.keys}</kbd>}
+              </li>
+            </Fragment>
           ))}
           {results.length === 0 && <li className="muted">No matching commands</li>}
         </ul>

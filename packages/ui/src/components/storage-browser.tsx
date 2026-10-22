@@ -24,6 +24,22 @@ function holds(s: RunSizes): string {
   return [part("records", s.records), part("blobs", s.blobs), part("snapshots", s.snapshots), part("belief frames", s.beliefFrames)].join(" · ");
 }
 
+/** A run's size by kind of data as one stacked bar: records, blobs, snapshots, belief frames (the text next to it has the numbers). */
+function SizeBar(props: { sizes: RunSizes }) {
+  const kinds = [
+    ["records", props.sizes.records.bytes],
+    ["blobs", props.sizes.blobs.bytes],
+    ["snapshots", props.sizes.snapshots.bytes],
+    ["belief frames", props.sizes.beliefFrames.bytes],
+  ] as const;
+  const total = Math.max(1, kinds.reduce((n, [, b]) => n + b, 0));
+  return (
+    <span className="size-bar" role="img" aria-label={kinds.map(([k, b]) => `${k} ${formatBytes(b)}`).join(", ")}>
+      {kinds.map(([k, b], i) => (b > 0 ? <i key={k} className={`k${i}`} style={{ width: `${(100 * b) / total}%` }} /> : null))}
+    </span>
+  );
+}
+
 /** Storage browser (UI-SPEC §4, ADR-0010): runs, size, quota, export/import of `.sqlite`. */
 export function StorageBrowser(props: StorageBrowserProps) {
   const { client, download = downloadBytes, nowWallMs = Date.now } = props;
@@ -171,24 +187,40 @@ export function StorageBrowser(props: StorageBrowserProps) {
 
   return (
     <div className="panel" data-testid="storage-browser">
-      <h3>Storage</h3>
       {info && (
-        <dl className="kv" data-testid="storage-info">
-          <dt>mode</dt>
-          <dd data-testid="storage-mode">{info.mode}</dd>
-          <dt>database</dt>
-          <dd>{formatBytes(info.dbFileBytes)} · SQLite {info.sqliteVersion} · schema v{info.schemaVersion}</dd>
-          <dt>usage / quota</dt>
-          <dd>
-            {formatBytes(info.usageBytes)} / {formatBytes(info.quotaBytes)}
-          </dd>
-          <dt>persistent</dt>
-          <dd>{info.persisted === null ? "unknown" : info.persisted ? "yes" : "no (may be evicted)"}</dd>
-          <dt>min. quota</dt>
-          <dd>{formatBytes(info.quotaThresholdBytes)}</dd>
-        </dl>
+        <div className="gauges" data-testid="storage-info">
+          <div className="gauge">
+            <span className="gl">USAGE / QUOTA</span>
+            {info.usageBytes !== null && info.quotaBytes !== null ? (
+              <div className="meter" role="meter" aria-label="Usage against the quota" aria-valuemin={0} aria-valuenow={info.usageBytes} aria-valuemax={info.quotaBytes}>
+                <i style={{ width: `${Math.min(100, (100 * info.usageBytes) / Math.max(1, info.quotaBytes))}%` }} />
+                <b data-testid="quota-min-mark" title={`minimum quota ${formatBytes(info.quotaThresholdBytes)}`} style={{ left: `${Math.min(100, (100 * info.quotaThresholdBytes) / Math.max(1, info.quotaBytes))}%` }} />
+              </div>
+            ) : null}
+            <span>
+              {formatBytes(info.usageBytes)} / {formatBytes(info.quotaBytes)} <span className="muted">· min. {formatBytes(info.quotaThresholdBytes)}</span>
+            </span>
+          </div>
+          <div className="gauge">
+            <span className="gl">DATABASE</span>
+            <span>{formatBytes(info.dbFileBytes)}</span>
+            <span className="muted">
+              SQLite {info.sqliteVersion} · schema v{info.schemaVersion}
+            </span>
+          </div>
+          <div className="gauge">
+            <span className="gl">PERSISTENT</span>
+            <span data-testid="storage-persisted" className={info.persisted === true ? "st-ok" : "st-warn"}>
+              {info.persisted === null ? "? unknown" : info.persisted ? "✓ yes" : "▲ no (may be evicted)"}
+            </span>
+          </div>
+          <div className="gauge">
+            <span className="gl">MODE</span>
+            <span data-testid="storage-mode">{info.mode}</span>
+          </div>
+        </div>
       )}
-      <div className="row">
+      <div className="sbar">
         <button className="btn" disabled={busy} onClick={createSampleRun} data-testid="create-sample-run">
           Create sample run
         </button>
@@ -251,12 +283,13 @@ export function StorageBrowser(props: StorageBrowserProps) {
             <tr key={r.runId} data-testid={`run-row-${r.runId}`}>
               <td>{r.runId}</td>
               <td>{r.label}</td>
-              <td>{r.status}</td>
+              <td className={r.status === "completed" ? "st-ok" : r.status === "aborted" ? "st-warn" : "st-run"}>{r.status === "completed" ? "✓" : r.status === "aborted" ? "○" : "▶"} {r.status}</td>
               <td>{r.recordCount}</td>
               <td className="muted" data-testid={`run-size-${r.runId}`}>
+                {sizes[r.runId] && <SizeBar sizes={sizes[r.runId] as RunSizes} />}
                 {sizes[r.runId] ? holds(sizes[r.runId] as RunSizes) : "…"}
               </td>
-              <td>
+              <td className="row-actions">
                 {props.onReplay && (
                   <button
                     className="btn"
@@ -266,14 +299,14 @@ export function StorageBrowser(props: StorageBrowserProps) {
                     aria-label={`Replay ${r.runId}`}
                     data-testid={`replay-${r.runId}`}
                   >
-                    {GLYPH.replay}
+                    {GLYPH.replay} Replay
                   </button>
                 )}
                 <button className="btn" disabled={busy} onClick={() => exportOne(r.runId)} aria-label={`Export ${r.runId}`}>
-                  ⭳
+                  ⭳ .sqlite
                 </button>
                 <button className="btn" disabled={busy} onClick={() => exportJsonl(r.runId)} aria-label={`Export ${r.runId} as JSON lines`} title="Export as a JSON-lines file" data-testid={`export-jsonl-${r.runId}`}>
-                  ⭳ jsonl
+                  ⭳ JSONL
                 </button>
                 <button
                   className="btn"
@@ -282,7 +315,7 @@ export function StorageBrowser(props: StorageBrowserProps) {
                   onClick={() => setConfirming(r.runId)}
                   aria-label={`Delete ${r.runId}`}
                 >
-                  delete
+                  ✕ delete
                 </button>
               </td>
             </tr>
@@ -297,18 +330,24 @@ export function StorageBrowser(props: StorageBrowserProps) {
         </tbody>
       </table>
       {confirming !== null && (
-        <div ref={dialog} role="alertdialog" aria-modal="true" aria-label={`Delete ${confirming}`} className="panel" data-testid="delete-run-dialog" onKeyDown={trapTab}>
-          <p>
-            Delete {confirming} ({sizes[confirming] ? formatBytes(totalBytes(sizes[confirming] as RunSizes)) : "size unknown"})? Its records, snapshots, blobs and belief frames go with it, and it cannot
-            be restored.
-          </p>
-          <div className="row">
-            <button ref={cancelButton} className="btn" onClick={() => setConfirming(null)}>
-              Cancel
-            </button>
-            <button className="btn danger" disabled={busy} onClick={() => void deleteRun(confirming)}>
-              Delete the run
-            </button>
+        <div className="scrim">
+          <div ref={dialog} role="alertdialog" aria-modal="true" aria-label={`Delete ${confirming}`} className="confirm" data-testid="delete-run-dialog" onKeyDown={trapTab}>
+            <div className="confirm-bar">DELETE {confirming}</div>
+            <p className="prose">
+              Delete {confirming} ({sizes[confirming] ? formatBytes(totalBytes(sizes[confirming] as RunSizes)) : "size unknown"})? Its records, snapshots, blobs and belief frames go with it, and it cannot be restored.
+            </p>
+            <div className="row">
+              <button ref={cancelButton} className="btn" onClick={() => setConfirming(null)}>
+                Cancel
+              </button>
+              <button className="btn" disabled={busy} onClick={() => void exportOne(confirming)}>
+                Export first
+              </button>
+              <span className="sp" />
+              <button className="btn danger" disabled={busy} onClick={() => void deleteRun(confirming)}>
+                Delete the run
+              </button>
+            </div>
           </div>
         </div>
       )}

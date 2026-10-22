@@ -70,3 +70,6 @@
 @container (max-width: 380px) {
   .tmeta { display: none; }
 }
+
+/* Settings, Appearance: the dot grid of the dock area can be turned off. */
+[data-dockgrid="off"] .dockview-theme-agentsim .dv-dockview { background: var(--dock); }
