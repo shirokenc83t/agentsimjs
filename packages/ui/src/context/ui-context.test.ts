@@ -56,6 +56,11 @@ describe("UI context bus (ADR-0016)", () => {
     expect(store.getState().selectedRecord).toBeUndefined();
     store.getState().selectRecord({ runId: "run-000001", seq: 42 });
     expect(store.getState().selectedRecord).toEqual({ runId: "run-000001", seq: 42 });
+    // The same run shown another way keeps it; another run does not.
+    store.getState().setRun("run-000001", "replay");
+    store.getState().selectRecord({ runId: "run-000001", seq: 42 });
+    store.getState().setRun("run-000001", "live");
+    expect(store.getState().selectedRecord).toEqual({ runId: "run-000001", seq: 42 });
     store.getState().setRun("run-000002");
     expect(store.getState().selectedRecord).toBeUndefined();
   });

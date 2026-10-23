@@ -66,6 +66,7 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
       { id: "eventList", position: { referencePanel: "scene", direction: "right" }, initialWidth: 500 },
       { id: "inspector", position: { referencePanel: "eventList", direction: "below" }, initialHeight: 230 },
       { id: "traceTree", background: true },
+      { id: "logInspector", background: true },
       PERF_WINDOW,
     ],
   },
@@ -97,5 +98,5 @@ export const LAYOUT_NAMESPACE = "layout";
  * Saved layouts are keyed with this version: a preset that gains panels (F1 e4: Explorer, Inspector; F3a: the Debug workspace) starts
  * from the new preset instead of a saved layout that lacks them.
  */
-export const LAYOUT_VERSION = 9;
+export const LAYOUT_VERSION = 10;
 export const layoutKey = (workspace: WorkspaceId) => `${workspace}@${LAYOUT_VERSION}`;

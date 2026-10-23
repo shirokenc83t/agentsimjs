@@ -64,6 +64,34 @@
 .log-error .log-caret { margin: 2px 0 0; color: var(--alm); font-size: var(--type-label-size); white-space: pre; overflow: auto; }
 .log-tail { flex: none; display: flex; align-items: center; gap: 8px; padding: 2px 10px; background: var(--bg1); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); }
 .kinds .sep { flex: none; width: 1px; height: 14px; align-self: center; background: var(--ln2); }
+/* The multi-log inspector (ADR-0035 section 7). */
+.log-inspector { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.li-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 3px 10px; background: var(--bg0); border-bottom: 1px solid var(--ln); font-size: var(--type-mono-size); white-space: nowrap; overflow: hidden; }
+.li-bar .ps { color: var(--ok); }
+.li-main { flex: 1; min-height: 0; display: flex; }
+.li-tree { flex: none; width: 150px; overflow: auto; border-right: 1px solid var(--ln); background: var(--bg1); padding: 4px 0; }
+.li-row { display: flex; align-items: center; }
+.li-row .li-name { flex: 1; font-weight: 600; }
+.li-row .li-metrics { flex: none; width: 28px; text-align: center; }
+.li-comp { padding-left: 22px; color: var(--fg2); }
+.li-panes { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+.li-empty { margin: 0; padding: 10px 12px; }
+.li-pane { flex: 1 1 0; min-height: 90px; display: flex; flex-direction: column; border-bottom: 1px solid var(--ln); min-width: 0; }
+.li-pane-head { flex: none; display: flex; align-items: center; gap: 6px; padding: 2px 8px; background: var(--bg2); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); }
+.li-pane-head .li-title { flex: none; max-width: 120px; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.li-pane-head .log-filter { flex: 1 1 120px; min-width: 60px; height: 20px; padding: 0 6px; background: var(--bg1); color: var(--fg); border: 1px solid var(--ln2); font: inherit; border-radius: 0; }
+.li-pane-head .log-filter.err { border-color: var(--alm); background: var(--almbg); }
+.li-bad { flex: none; padding: 1px 8px; background: var(--almbg); color: var(--alm); font-size: var(--type-label-size); }
+.pane-body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.pane-new { position: absolute; z-index: 3; top: 2px; right: 8px; }
+.pane-body.series { overflow: auto; }
+.pane-body.series svg { flex: 1; min-height: 70px; width: 100%; background: var(--bg0); cursor: crosshair; }
+.pane-body.series .axis { stroke: var(--ln2); stroke-width: 1; }
+.pane-body.series .tick { fill: var(--fg3); font-size: var(--type-label-size); font-family: var(--font-mono); }
+.pane-body.series .line { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.pane-body.series .cursor { stroke: var(--ac); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.pane-body.series .legend { flex: none; margin: 0; padding: 2px 8px; list-style: none; display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: var(--type-label-size); }
+.pane-body.series .legend i { display: inline-block; width: 8px; height: 8px; }
 /* The SQL console (UI-SPEC section 7). */
 .sql-console { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .sql-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 3px 10px; background: var(--bg0); border-bottom: 1px solid var(--ln); font-size: var(--type-mono-size); white-space: nowrap; overflow: hidden; }

@@ -57,6 +57,15 @@ test("the console's live tail and the same filter read from storage hold the sam
   await expect.poll(async () => (await listed(page)).count, { timeout: 15_000 }).toBeGreaterThan(paused.count);
   await expect.poll(async () => (await listed(page)).last, { timeout: 15_000 }).toBe((await exported(page)).last);
   expect(await listed(page)).toEqual(await exported(page));
+
+  // And the SQL console, which has no filter language, gives the same for the same question written in SQL (acceptance 7 as written: the tail against the SQL console's result).
+  const tail = await listed(page);
+  await openWorkspace(page, "data");
+  await page.getByTestId("sql-editor").fill("SELECT count(*) AS n, max(seq) AS last FROM trace_records WHERE run_id = 'run-000001' AND kind = 'action'");
+  await page.getByTestId("sql-run").click();
+  await expect(page.getByTestId("sql-status")).toContainText("1 row", { timeout: 15_000 });
+  const cells = await page.getByTestId("sql-row-0").locator('[role="cell"]').allTextContents();
+  expect({ count: Number(cells[0]), last: Number(cells[1]) }).toEqual(tail);
 });
 
 test("the console's keys: / focuses the filter, j k move, space opens a row, [ ] go to the flags, y copies, Esc leaves the filter", async ({ page, context }) => {

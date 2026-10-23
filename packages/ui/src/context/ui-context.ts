@@ -53,7 +53,9 @@ export function createUiContextStore() {
     timeSelection: undefined,
     selectedRecord: undefined,
     // Changing the run resets the cursor and selection: they belong to the previous run.
-    setRun: (runId, mode = "live") => set({ runId, mode, simTime: 0, selection: undefined, timeSelection: undefined, selectedRecord: undefined }),
+    // The same run shown another way (the live run opened for scrubbing) keeps what was picked on it: the picked record and the selected window belong to the run.
+    setRun: (runId, mode = "live") =>
+      set((s) => ({ runId, mode, simTime: 0, selection: undefined, ...(runId === s.runId ? {} : { timeSelection: undefined, selectedRecord: undefined }) })),
     setSimTime: (simTime) => set({ simTime: Number.isFinite(simTime) && simTime >= 0 ? simTime : 0 }),
     select: (selection) => set({ selection }),
     selectRecord: (selectedRecord) => set({ selectedRecord }),
