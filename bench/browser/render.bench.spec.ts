@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { recordRenderer, recordResults, summarize } from "../../tools/bench/measure.ts";
 import { isSoftwareRenderer, RENDERER_PROBE } from "../../tools/test/gpu.ts";
-import { openPanelTab, openWorkspace, runCommand, sendTo, waitForStorageReady } from "../../apps/lab/e2e/helpers.ts";
+import { loadF2, openPanelTab, openWorkspace, runCommand, sendTo, waitForStorageReady } from "../../apps/lab/e2e/helpers.ts";
 
 // Reference scene (F0): empty ground, lights, orbit camera, one interpolated dummy entity.
 // Thresholds in bench/thresholds.json; wall-clock frame intervals are reported only (ADR-0021).
@@ -259,4 +259,31 @@ test("render loop on the 1 km² reference world with the belief overlay", async 
     "render.beliefShowMs": summarize([showMs]),
   });
   console.log(JSON.stringify({ belief1km: { sandboxMs, showMs, uploadFrames: uploading.length, steadyFrames: steady.length, steadyFramesWithBeliefChunks: streamed } }));
+});
+
+// F3b M3 (ADR-0013, ADR-0035 section 5): frame time with the log console tailing a recorded 20-agent run in the Debug workspace, everything the run writes pushed to it by a live
+// subscription and the Timeline and the trace tree open beside it. The console is a list of at most a screenful of rows and a tail that appends and scrolls; this measures that it does
+// not cost the frame anything (budget 4 ms p95). Reported as `render.frameWork.logTail` (a threshold entry for it is Max's to add).
+test("render loop with the log console tailing a 20-agent run", async ({ page }) => {
+  test.setTimeout(240_000);
+  await loadF2(page, "agents");
+  const ground = await page.locator('[data-testid^="explorer-row-ugv-"]').evaluateAll((els) => els.map((e) => (e.getAttribute("data-testid") ?? "").replace("explorer-row-", "")));
+  expect(ground.length).toBeGreaterThan(2);
+  for (const id of ground.slice(0, 6)) {
+    await page.getByTestId(`explorer-row-${id}`).click();
+    await runCommand(page, `Explore selected agent (${id})`);
+  }
+  await openWorkspace(page, "debug");
+  await page.getByTestId("log-filter").fill("-source:*/body");
+  await expect(page.getByTestId("log-tail")).toHaveAttribute("data-state", "following");
+  await page.getByTestId("play").click();
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => window.__agentsim && (window.__agentsim.frameLog.length = 0));
+  await page.waitForTimeout(6000);
+  const steady = await page.evaluate(() => window.__agentsim?.frameLog.slice() ?? []);
+  const rows = Number(await page.getByTestId("event-scroller").getAttribute("data-count"));
+  expect(steady.length).toBeGreaterThan(30);
+  expect(rows, "the console received what the run wrote").toBeGreaterThan(100);
+  recordResults("browser.json", { "render.frameWork.logTail": summarize(steady.map(([, w]) => w)) });
+  console.log(JSON.stringify({ logTail: { steadyFrames: steady.length, consoleRows: rows } }));
 });
