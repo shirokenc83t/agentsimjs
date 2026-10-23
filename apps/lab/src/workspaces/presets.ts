@@ -75,7 +75,7 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
     title: "Author",
     panels: [{ id: "runConfig" }, { id: "scenarioEditor" }],
   },
-  { id: "data", title: "Data", panels: [{ id: "storage" }] },
+  { id: "data", title: "Data", panels: [{ id: "storage" }, { id: "sqlConsole", position: { referencePanel: "storage", direction: "below" }, initialHeight: 330 }] },
   { id: "settings", title: "Settings", panels: [{ id: "settings" }] },
 ];
 
@@ -97,5 +97,5 @@ export const LAYOUT_NAMESPACE = "layout";
  * Saved layouts are keyed with this version: a preset that gains panels (F1 e4: Explorer, Inspector; F3a: the Debug workspace) starts
  * from the new preset instead of a saved layout that lacks them.
  */
-export const LAYOUT_VERSION = 8;
+export const LAYOUT_VERSION = 9;
 export const layoutKey = (workspace: WorkspaceId) => `${workspace}@${LAYOUT_VERSION}`;

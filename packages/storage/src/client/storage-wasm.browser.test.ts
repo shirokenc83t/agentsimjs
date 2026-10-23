@@ -294,6 +294,87 @@ describe("storage worker (browser)", () => {
     simEnd.close();
   });
 
+  it("the SQL console in the real worker: it reads, every write is refused, user_data is not read, and a long statement is stopped while the recorder's batches go on being saved", async () => {
+    const run = "run-000001";
+    const profile = RECORDING_PRESETS["default-research"];
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    const channel = new MessageChannel();
+    const simEnd = channel.port1;
+    const fromStorage: { type: string; head?: { throughSeq: number } }[] = [];
+    const at: number[] = [];
+    simEnd.onmessage = (ev) => {
+      const m = ev.data as { type: string; head?: { throughSeq: number } };
+      fromStorage.push(m);
+      if (m.type === "persisted") at.push(performance.now());
+    };
+    c.attachRecorderPort(channel.port2);
+    const until = async (cond: () => boolean, ms = 3000) => {
+      for (let i = 0; i < ms / 10 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
+      expect(cond()).toBe(true);
+    };
+    expect((await c.ports.runs.create({ ...header(run), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) })).ok).toBe(true);
+    await until(() => fromStorage.some((m) => m.type === "header"));
+    simEnd.postMessage({ type: "batch", batch: { runId: run, records: [0, 1, 2].map((n) => rec(run, n)), throughSeq: 2, tick: 2, simTimeS: 0.2 } });
+    await until(() => fromStorage.some((m) => m.type === "persisted"));
+    await c.ports.userData.set("ui", "secret", "hunter2");
+
+    // It reads.
+    const read = await c.sql.run("SELECT count(*) AS n FROM trace_records WHERE run_id = 'run-000001'").result;
+    expect(read).toMatchObject({ ok: true, value: { columns: ["n"], rows: [[3]] } });
+    expect((await c.sql.schema()).tables.map((x) => x.name)).toEqual(expect.arrayContaining(["trace_records", "metrics", "runs"]));
+    // Every write is refused, and the database is as it was.
+    for (const w of ["DELETE FROM trace_records", "DROP TABLE trace_records", "INSERT INTO runs (run_id) VALUES ('x')", "UPDATE runs SET label = 'x'", "ATTACH DATABASE ':memory:' AS o", "VACUUM", "PRAGMA writable_schema = 1", "SELECT 1; DELETE FROM runs", "SELECT load_extension('x')"]) {
+      const r = await c.sql.run(w).result;
+      expect(r.ok, w).toBe(false);
+    }
+    expect(await c.ports.trace.count(run)).toBe(3);
+    expect((await c.sql.run("SELECT value FROM user_data").result)).toMatchObject({ ok: false, error: { code: "denied" } });
+    expect(await c.ports.userData.get("ui", "secret")).toBe("hunter2");
+    // A long statement is stopped, and the recorder's batches are saved all the while: no gap of the persisted head is longer than the console may hold the writer.
+    const before = at.length;
+    const batchesFrom = 3;
+    let seq = batchesFrom;
+    const feeder = setInterval(() => {
+      simEnd.postMessage({ type: "batch", batch: { runId: run, records: [rec(run, seq)], throughSeq: seq, tick: seq, simTimeS: seq * 0.1 } });
+      seq++;
+    }, 15);
+    await new Promise((r) => setTimeout(r, 300)); // the recorder is saving before the statement starts
+    const t0 = performance.now();
+    const long = await c.sql.run("WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM x) SELECT count(*) FROM x", { maxRows: 10, timeoutMs: 5000 }).result;
+    const took = performance.now() - t0;
+    await new Promise((r) => setTimeout(r, 300));
+    clearInterval(feeder);
+    expect(long).toMatchObject({ ok: false, error: { code: "too_slow" } });
+    expect(took).toBeLessThan(2000);
+    await until(() => (fromStorage.at(-1)?.head?.throughSeq ?? 0) >= seq - 1, 5000);
+    expect(fromStorage.filter((m) => m.type === "rejected")).toEqual([]);
+    // The persisted head moved before the statement, and again after it, and the longest wait between two moves is about the step cap of the console, not the statement.
+    const all = at.slice(before);
+    const gaps = all.slice(1).map((x, i) => x - (all[i] as number));
+    expect(all.filter((x) => x < t0).length).toBeGreaterThan(3);
+    expect(all.filter((x) => x > t0 + took).length).toBeGreaterThan(3);
+    expect(Math.max(...gaps, 0)).toBeLessThan(1500);
+    expect(await c.ports.trace.count(run)).toBe(seq); // every batch is there
+    simEnd.close();
+  });
+
+  it("the SQL console behaves the same in the in-memory fallback (no OPFS): it reads, refuses a write, does not read user_data and stops a long statement", async () => {
+    const c = spawn({ simulateNoOpfs: true });
+    const ready = await c.ready();
+    expect(ready.mode).toBe("memory-fallback");
+    await c.ports.runs.create(header("run-000001"));
+    await c.ports.trace.append([rec("run-000001", 0), rec("run-000001", 1)]);
+    await c.ports.userData.set("ui", "secret", "hunter2");
+    expect(await c.sql.run("SELECT count(*) AS n FROM trace_records").result).toMatchObject({ ok: true, value: { rows: [[2]] } });
+    expect(await c.sql.run("DELETE FROM trace_records").result).toMatchObject({ ok: false, error: { code: "not_read_only" } });
+    expect(await c.sql.run("WITH x AS (SELECT 1) DELETE FROM trace_records").result).toMatchObject({ ok: false, error: { code: "denied" } });
+    expect(await c.sql.run("SELECT value FROM user_data").result).toMatchObject({ ok: false, error: { code: "denied" } });
+    expect(await c.sql.run("WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM x) SELECT count(*) FROM x", { maxRows: 10, timeoutMs: 300 }).result).toMatchObject({ ok: false, error: { code: "timeout" } });
+    expect(await c.ports.trace.count("run-000001")).toBe(2);
+    expect(await c.ports.userData.get("ui", "secret")).toBe("hunter2");
+  });
+
   it("flow control: a slow writer saves every batch, in order, only later (nothing is dropped, nothing reordered)", async () => {
     const profile = RECORDING_PRESETS["default-research"];
     const recorded = { ...header("run-000001"), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) };

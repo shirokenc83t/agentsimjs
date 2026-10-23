@@ -3,6 +3,7 @@ import type { MetricSample, RecorderItem, RunHeader, RunStatus, TraceRecord } fr
 import type { Database, SAHPoolUtil, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { openWasmSqlDriver, SecondConnectionError } from "../drivers/wasm-sql-driver.ts";
 import { LiveSubscriptions } from "../live-subscriptions.ts";
+import { SqlConsole, type SqlJobSignal, type SqlRunLimits } from "../sql-console.ts";
 import type { BeliefFrame, BeliefFrameQuery, CachedResponse, MetricQuery, SnapshotWrite, StoragePorts, StoredBlob, StoredMetricSample, StoredRunInput } from "../ports.ts";
 import type { ReplayHandlers, ReplayView, StorageExtensions } from "../replay.ts";
 import type { SqlDriver } from "../sql/driver.ts";
@@ -145,6 +146,7 @@ class Engine {
     } else {
       this.driver = openWasmSqlDriver(null, () => (this.raw = new this.sqlite3.oo1.DB(":memory:", "c")));
     }
+    this.console = undefined;
     this.driver.exec("PRAGMA temp_store = MEMORY");
     migrate(this.driver, now);
     this.ports = createSqlPorts(this.driver, now);
@@ -152,6 +154,12 @@ class Engine {
 
   get storage(): StoragePorts {
     return this.ports;
+  }
+
+  private console: SqlConsole | undefined;
+  /** The SQL console's executor for the current connection (one per connection: a replaced connection gets its own). */
+  get sqlConsole(): SqlConsole {
+    return (this.console ??= new SqlConsole({ sqlite3: this.sqlite3, db: this.raw }));
   }
 
   /** Executes `fn` in one transaction (batched appends; each append is its own savepoint). */
@@ -285,6 +293,16 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
 
   /** Set once storage can no longer serve requests (closed or failed to open); never cleared. */
   let terminal: { code: "closed" | "open_failed"; message: string } | undefined;
+
+  /** The SQL console's statement that is running, if any: it runs beside the queue (the recorder's batches are stored between its slices), never inside it. */
+  let sqlJob: { readonly jobId: string; readonly signal: SqlJobSignal; readonly done: Promise<void> } | undefined;
+  /** Stops the statement that is running and waits until it has let go of the connection (before anything that replaces or closes it). */
+  async function stopSqlJob(): Promise<void> {
+    const job = sqlJob;
+    if (!job) return;
+    job.signal.cancelled = true;
+    await job.done;
+  }
 
   const status = (s: StorageStatus) => scope.postMessage(s);
   const respond = (r: StorageResponse, transfer?: Transferable[]) => scope.postMessage(r, transfer);
@@ -503,6 +521,30 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
       let value: unknown;
       let transfer: Transferable[] | undefined;
       switch (req.op) {
+        case "sql.run": {
+          // Not answered here: the statement is sliced and yields to the queue, so it must not be awaited by it.
+          const jobId = String(a);
+          const signal: SqlJobSignal = { cancelled: false };
+          const limits = (req.args[2] ?? undefined) as Partial<SqlRunLimits> | undefined;
+          const wasBusy = e.sqlConsole.busy; // another statement is running: this one is refused as busy, and is not the job
+          const done = e.sqlConsole
+            .run(String(b), limits, signal)
+            .then((result) => respond({ type: "response", id: req.id, ok: true, value: result }))
+            .catch((err: unknown) => fail(req.id, "storage_error", err instanceof Error ? err.message : String(err)))
+            .finally(() => {
+              if (sqlJob?.jobId === jobId) sqlJob = undefined;
+            });
+          if (wasBusy || !e.sqlConsole.busy) return void (await done); // refused before it started (busy, a write, a bad limit): answered already
+          sqlJob = { jobId, signal, done };
+          return;
+        }
+        case "sql.cancel": {
+          const job = sqlJob;
+          if (job !== undefined && job.jobId === String(a)) job.signal.cancelled = true;
+          value = job !== undefined && job.jobId === String(a);
+          break;
+        }
+        case "sql.schema": value = e.sqlConsole.schema(); break;
         case "live.subscribe": value = live.subscribe(String(a), String(b), String(req.args[2] ?? "")); break;
         case "live.change": value = live.change(String(a), String(b ?? "")); break;
         case "live.unsubscribe": value = live.unsubscribe(String(a)); break;
@@ -527,7 +569,8 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "runs.sizes": value = await s.runs.sizes(String(a)); break;
         case "admin.compact": {
           // Only when nothing is recording: a VACUUM stalls the queue the recorder writes through.
-          const recording = recordedRunId !== undefined && now() - lastBatchAt < RECORDING_QUIET_MS;
+          // A VACUUM cannot run while a statement of the SQL console holds a read either.
+          const recording = (recordedRunId !== undefined && now() - lastBatchAt < RECORDING_QUIET_MS) || e.sqlConsole.busy;
           value = { freedBytes: recording ? 0 : e.compactIfWorth(), skipped: recording };
           break;
         }
@@ -602,11 +645,13 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         }
         case "admin.importDb": {
           if (!(a instanceof Uint8Array)) return fail(req.id, "invalid_args", "expected Uint8Array");
+          await stopSqlJob(); // the connection is replaced: no statement may hold the old one
           value = await e.importDb(a);
           break;
         }
         case "admin.close": {
           live.dispose();
+          await stopSqlJob();
           e.close();
           release?.();
           respond({ type: "response", id: req.id, ok: true, value: undefined });

@@ -39,6 +39,7 @@ export const OPS = [
   "beliefFrames.append", "beliefFrames.query", "beliefFrames.keyframeAtOrBefore",
   "metrics.append", "metrics.query",
   "live.subscribe", "live.change", "live.unsubscribe",
+  "sql.run", "sql.cancel", "sql.schema",
   "replay.beliefAt", "replay.world",
   "admin.info", "admin.compact", "admin.exportDb", "admin.exportRun", "admin.exportRunJsonl", "admin.importDb", "admin.importRun", "admin.close",
   "test.openSecondConnection", "test.setSimulatedQuota",

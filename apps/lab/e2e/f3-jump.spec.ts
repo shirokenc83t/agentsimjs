@@ -58,6 +58,7 @@ test("clicking an event moves the cursor: the belief overlay and the agent are w
     // The console follows a live run to its end: this is a scroll up, to the middle of what is read.
     el.scrollTop = el.scrollHeight * 0.4;
   });
+  await expect(page.getByTestId("log-tail")).toHaveAttribute("data-state", "paused"); // the tail has let go of the end: the rows below stay where they are
   await expect.poll(async () => Number(((await rows.first().textContent()) ?? "").split(" s")[0]), { timeout: 10_000 }).toBeGreaterThanOrEqual(10);
   const candidates = await rows.evaluateAll((els) => els.map((el) => ({ testid: el.getAttribute("data-testid") ?? "", t: Number((el.textContent ?? "").split(" s")[0]) })));
   const target = [...candidates].reverse().find((c) => c.t >= 10 && c.t <= 50);

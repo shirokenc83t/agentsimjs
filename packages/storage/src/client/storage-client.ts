@@ -1,5 +1,6 @@
 import { err, type CodedError, type Result } from "@agentsim/core";
 import type { LiveBatch, LiveError } from "../live-subscriptions.ts";
+import type { SqlError, SqlResult, SqlRunLimits, SqlSchema } from "../sql-console.ts";
 import type { StoragePorts } from "../ports.ts";
 import type { ReplayClient } from "../replay.ts";
 import type { RunFileErrorCode } from "../run-bundle.ts";
@@ -59,9 +60,21 @@ export interface LiveClient {
   unsubscribe(viewId: string): Promise<void>;
 }
 
+/**
+ * The SQL console (UI-SPEC section 7): one read-only statement at a time, run in the storage worker beside the recorder's writes (sliced; see `sql-console.ts`). A statement that
+ * writes, or is more than one, or reads `user_data`, comes back as an error and nothing changes.
+ */
+export interface SqlClient {
+  /** Starts a statement: `result` settles with its rows or why it was refused or stopped; `cancel` stops it between slices. */
+  run(sql: string, limits?: Partial<SqlRunLimits>): { readonly jobId: string; readonly result: Promise<Result<SqlResult, SqlError>>; cancel(): Promise<void> };
+  /** The tables, their columns and the keys of the latest payloads, for completion. */
+  schema(): Promise<SqlSchema>;
+}
+
 export interface StorageClient {
   readonly ports: StoragePorts;
   readonly live: LiveClient;
+  readonly sql: SqlClient;
   /** Replay reads rebuilt in the storage worker: an agent's belief map at a tick, and the world a run was made in. */
   readonly replay: ReplayClient;
   readonly admin: StorageAdmin;
@@ -228,6 +241,15 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
     },
   };
 
+  let sqlJobs = 0;
+  const sql: SqlClient = {
+    run(statement, limits) {
+      const jobId = `q${++sqlJobs}`;
+      return { jobId, result: call("sql.run", [jobId, statement, limits ?? null]), cancel: () => call<boolean>("sql.cancel", [jobId]).then(() => undefined) };
+    },
+    schema: () => call("sql.schema"),
+  };
+
   const admin: StorageAdmin = {
     info: () => call("admin.info"),
     exportDb: () => call("admin.exportDb"),
@@ -258,6 +280,7 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
   return {
     ports,
     live,
+    sql,
     replay: rpc("replay", ["beliefAt", "world"]) as unknown as ReplayClient,
     admin,
     status: () => current,

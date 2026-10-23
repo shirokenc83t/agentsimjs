@@ -64,6 +64,31 @@
 .log-error .log-caret { margin: 2px 0 0; color: var(--alm); font-size: var(--type-label-size); white-space: pre; overflow: auto; }
 .log-tail { flex: none; display: flex; align-items: center; gap: 8px; padding: 2px 10px; background: var(--bg1); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); }
 .kinds .sep { flex: none; width: 1px; height: 14px; align-self: center; background: var(--ln2); }
+/* The SQL console (UI-SPEC section 7). */
+.sql-console { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.sql-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 3px 10px; background: var(--bg0); border-bottom: 1px solid var(--ln); font-size: var(--type-mono-size); white-space: nowrap; overflow: hidden; }
+.sql-bar .ps { color: var(--ok); }
+.sql-bar .pf { color: var(--fg3); }
+.sql-limit { display: inline-flex; align-items: center; gap: 4px; color: var(--fg2); }
+.sql-limit .log-filter { flex: none; width: 70px; min-width: 0; }
+.sql-main { flex: none; display: flex; min-height: 0; max-height: 46%; }
+.sql-schema { flex: none; width: 220px; overflow: auto; border-right: 1px solid var(--ln); background: var(--bg1); padding: 4px 0; }
+.sql-table { padding-bottom: 4px; }
+.sql-col { padding-left: 22px; color: var(--fg2); }
+.sql-editor-wrap { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sql-editor { box-sizing: border-box; width: 100%; height: 104px; resize: vertical; padding: 6px 10px; background: var(--bg0); color: var(--fg); border: 0; border-bottom: 1px solid var(--ln); font: inherit; font-size: var(--type-mono-size); line-height: 1.5; outline: none; }
+.sql-editor:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
+.sql-complete { position: absolute; z-index: 5; left: 24px; top: 40px; margin: 0; padding: 2px 0; list-style: none; min-width: 180px; max-height: 190px; overflow: auto; background: var(--bg3); border: 1px solid var(--fg3); box-shadow: var(--float); font-size: var(--type-mono-size); }
+.sql-complete li { padding: 1px 10px; cursor: pointer; }
+.sql-complete li.on, .sql-complete li:hover { background: var(--acbg); outline: 1px solid var(--ac); outline-offset: -1px; }
+.sql-actions { flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--bg1); border-bottom: 1px solid var(--ln); }
+.sql-status { flex: none; padding: 3px 10px; font-size: var(--type-label-size); background: var(--bg2); border-bottom: 1px solid var(--ln); white-space: pre-wrap; overflow-wrap: anywhere; }
+.sql-grid { flex: 1; min-height: 60px; overflow: auto; background: var(--bg0); }
+.sql-head { display: grid; position: sticky; top: 0; z-index: 2; gap: 8px; padding: 0 10px; height: 20px; align-items: center; background: var(--bg2); border-bottom: 1px solid var(--ln); color: var(--fg2); font-size: var(--type-label-size); font-weight: 600; }
+.sql-row { display: grid; gap: 8px; padding: 0 10px; align-items: center; font-size: var(--type-mono-size); white-space: nowrap; }
+.sql-row.zebra { background: color-mix(in srgb, var(--bg1) 60%, transparent); }
+.sql-head > span, .sql-row > span { overflow: hidden; text-overflow: ellipsis; }
+.sql-row .num { text-align: right; font-variant-numeric: tabular-nums; }
 /* The trace tree (UI-SPEC section 4). */
 .trace-tree { overflow: auto; padding: 0; }
 .trace-tree .tt-empty { margin: 0; padding: 10px 12px; }
