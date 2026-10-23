@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { identityOf, KIND_STYLE, ROW_PX } from "@agentsim/ui";
 import type { TraceRecord } from "@agentsim/trace";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, type KeyboardEvent } from "react";
+import { copyOfRecord } from "./derived-tag.tsx";
 import { resultOf, summary } from "./log-rows.ts";
 
 /** The list's own controls, for the console around it: where it is, and moving it. */
@@ -139,6 +140,7 @@ export const LogList = forwardRef<LogListHandle, LogListProps>(function LogList(
           const tag = style?.tag ?? r.kind.slice(0, 3).toUpperCase();
           const result = resultOf(r);
           const open = expanded.has(r.seq);
+          const copyOf = copyOfRecord(r.payload);
           const id = r.agentId === undefined ? -1 : entityIds.indexOf(r.agentId);
           return (
             <div
@@ -153,6 +155,7 @@ export const LogList = forwardRef<LogListHandle, LogListProps>(function LogList(
               data-seq={r.seq}
               data-kind={r.kind}
               data-agent={r.agentId ?? ""}
+              title={r.source}
               className={`event-row selectable${it.index % 2 === 1 ? " zebra" : ""}${result?.failed ? " alm" : ""}${open ? " open" : ""}`}
               onClick={() => props.onSelect(r)}
               onDoubleClick={() => props.onJump(r)}
@@ -170,7 +173,14 @@ export const LogList = forwardRef<LogListHandle, LogListProps>(function LogList(
                 [{tag}]
               </span>
               <span className="mono muted">{r.source}</span>
-              <span className="mono">{summary(r)}</span>
+              <span className="mono">
+                {copyOf !== undefined && (
+                  <span className="muted" data-testid={`row-copy-${r.seq}`} title={`A copy of ${copyOf}: the derived run carries it from its parent`}>
+                    ◇{" "}
+                  </span>
+                )}
+                {summary(r)}
+              </span>
               <span className={`mono${result?.failed ? " danger" : result ? " ok" : ""}`}>{result?.text ?? ""}</span>
               {open && <pre className="log-payload mono">{JSON.stringify(r, null, 2)}</pre>}
             </div>

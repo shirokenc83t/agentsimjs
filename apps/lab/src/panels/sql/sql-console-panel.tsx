@@ -7,6 +7,8 @@ import { loadSnippets, storeSnippets, withoutSnippet, withSnippet, type SqlSnipp
 import { useServices } from "../../services.tsx";
 import { complete, type Completion } from "./sql-complete.ts";
 import { toCsv, toJsonl } from "./sql-export.ts";
+import { cellText, columnWidths } from "./sql-grid.ts";
+import { highlightSql } from "./sql-highlight.ts";
 
 const EXAMPLE = "SELECT kind, count(*) AS n FROM trace_records GROUP BY kind ORDER BY n DESC";
 
@@ -31,6 +33,7 @@ export function SqlConsolePanel() {
   const [naming, setNaming] = useState(false);
   const job = useRef<{ cancel(): Promise<void> } | undefined>(undefined);
   const editor = useRef<HTMLTextAreaElement>(null);
+  const painted = useRef<HTMLPreElement>(null);
   /** Where the caret goes after the text was replaced by a completion or an inserted name. */
   const caret = useRef<number | null>(null);
   useLayoutEffect(() => {
@@ -212,17 +215,31 @@ export function SqlConsolePanel() {
           </div>
         )}
         <div className="sql-editor-wrap">
-          <textarea
-            ref={editor}
-            className="sql-editor mono"
-            value={sql}
-            spellCheck={false}
-            onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
-            onKeyDown={onKeyDown}
-            onBlur={() => setTimeout(() => setOpen(undefined), 120)}
-            aria-label="SQL statement"
-            data-testid="sql-editor"
-          />
+          <div className="sql-stack">
+            {/* The colours are drawn behind the text area, whose own text is transparent: the caret, the selection and the keys stay the browser's. */}
+            <pre ref={painted} className="sql-hl mono" aria-hidden="true" data-testid="sql-highlight">
+              {highlightSql(sql).map((t, i) => (
+                <span key={i} className={t.kind === "plain" ? undefined : `sq-${t.kind}`}>
+                  {t.text}
+                </span>
+              ))}
+              {"\n"}
+            </pre>
+            <textarea
+              ref={editor}
+              className="sql-editor mono"
+              value={sql}
+              spellCheck={false}
+              onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
+              onKeyDown={onKeyDown}
+              onScroll={(e) => {
+                if (painted.current) painted.current.scrollTop = e.currentTarget.scrollTop;
+              }}
+              onBlur={() => setTimeout(() => setOpen(undefined), 120)}
+              aria-label="SQL statement"
+              data-testid="sql-editor"
+            />
+          </div>
           {open && (
             <ul className="sql-complete mono" role="listbox" aria-label="Completions" data-testid="sql-complete">
               {open.items.map((item, i) => (
@@ -233,7 +250,7 @@ export function SqlConsolePanel() {
             </ul>
           )}
           <div className="sql-actions">
-            <button type="button" className="btn pri" disabled={running || sql.trim() === ""} onClick={() => void run()} data-testid="sql-run" data-tip="Run · Ctrl+Enter">
+            <button type="button" className="btn pri tip-up" disabled={running || sql.trim() === ""} onClick={() => void run()} data-testid="sql-run" data-tip="Run · Ctrl+Enter">
               Run
             </button>
             <button type="button" className="btn" disabled={!running} onClick={cancel} data-testid="sql-cancel">
@@ -249,14 +266,14 @@ export function SqlConsolePanel() {
           </div>
         </div>
       </div>
-      <Status running={running} outcome={outcome} />
+      <Status running={running} outcome={outcome} limit={maxRows} />
       {result && <Grid result={result} />}
     </div>
   );
 }
 
-function Status(props: { running: boolean; outcome: Outcome }) {
-  const { running, outcome } = props;
+function Status(props: { running: boolean; outcome: Outcome; limit: string }) {
+  const { running, outcome, limit } = props;
   if (running) {
     return (
       <div className="sql-status mono muted" data-testid="sql-status">
@@ -275,8 +292,8 @@ function Status(props: { running: boolean; outcome: Outcome }) {
     const r = outcome.result;
     return (
       <div className="sql-status mono" data-testid="sql-status">
-        <span className="ok">✓</span> {r.rows.length} {r.rows.length === 1 ? "row" : "rows"} · {r.elapsedMs.toFixed(0)} ms
-        {r.truncated && <span className="warn"> · stopped at the row limit: there are more</span>}
+        <span className="ok">✓</span> {r.rows.length} {r.rows.length === 1 ? "row" : "rows"} · {r.elapsedMs.toFixed(0)} ms · limit {limit}
+        {r.truncated && <span className="warn"> · ▲ stopped at the row limit: there are more</span>}
         {r.cellsCut && <span className="muted"> · long cells are cut</span>}
       </div>
     );
@@ -292,8 +309,10 @@ function Grid(props: { result: SqlResult }) {
   const { columns, rows } = props.result;
   const scroller = useRef<HTMLDivElement>(null);
   const virtual = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => ROW_PX.compact, overscan: 12 });
-  const template = `repeat(${Math.max(1, columns.length)}, minmax(120px, 1fr))`;
-  const minWidth = Math.max(1, columns.length) * 120;
+  // Columns are as wide as their content (in characters), left to right, with the panel's width left over at the right: a short result is not stretched across it.
+  const widths = columnWidths(props.result);
+  const template = widths.map((w) => `${w}ch`).join(" ");
+  const minWidth = `calc(${widths.reduce((a, b) => a + b, 0)}ch + ${widths.length * 8 + 20}px)`;
   return (
     <div className="sql-grid" ref={scroller} role="table" aria-label="Result" aria-rowcount={rows.length + 1} data-testid="sql-grid" data-rows={rows.length}>
       <div style={{ minWidth }}>
@@ -314,8 +333,8 @@ function Grid(props: { result: SqlResult }) {
               style={{ position: "absolute", top: 0, left: 0, right: 0, height: it.size, transform: `translateY(${it.start}px)`, gridTemplateColumns: template }}
             >
               {(rows[it.index] ?? []).map((v, i) => (
-                <span key={i} role="cell" className={v === null ? "muted" : typeof v === "number" ? "num" : ""} title={v === null ? "NULL" : String(v)}>
-                  {v === null ? "NULL" : String(v)}
+                <span key={i} role="cell" className={v === null ? "muted" : typeof v === "number" ? "num" : ""} title={cellText(v)}>
+                  {cellText(v)}
                 </span>
               ))}
             </div>

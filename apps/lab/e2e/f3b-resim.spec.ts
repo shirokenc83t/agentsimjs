@@ -85,8 +85,9 @@ test("a drag on the Timeline's ruler selects a window, Esc clears it, 'Re-simula
   // The derived run opens in the panels like any recorded run, marked as derived, and its scrub range is the window.
   await page.getByTestId("resim-notice-open").click();
   await expect(page.getByTestId("replay-bar")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("replay-segment")).toContainText("◇ of run-000001");
-  await expect(page.getByTestId("replay-segment")).toContainText("✓ matches");
+  await expect(page.getByTestId("replay-segment")).toContainText("of run-000001");
+  await expect(page.getByTestId("replay-segment")).toContainText("✓");
+  await expect(page.getByTestId("replay-segment")).toHaveAttribute("title", /every recorded checkpoint in the window was reproduced/);
   await expect(page.getByTestId("player-derived")).toContainText(`${(t0 as number).toFixed(1)}–${(t1 as number).toFixed(1)} s`);
   const start = Number(await page.getByTestId("replay-cursor").getAttribute("min"));
   expect(start).toBeGreaterThan((t0 as number) - 0.3);

@@ -3,8 +3,9 @@ import { KIND_STYLE, useUiContext } from "@agentsim/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { useAppActions, usePolled, useSource } from "../../services.tsx";
 import { gapLabel } from "../../sim/gap-click.ts";
-import { collapseMarks, flagRole, glyphOf, isFailure, nearestMark, type Mark } from "./marks.ts";
-import { LABEL_PX, LANE_PX, laneAt, MERGE_PX, RULER_PX, rulerTicks, selectionFromDrag } from "./timeline-geometry.ts";
+import { DerivedTag } from "./derived-tag.tsx";
+import { BIN_PX, binMarks, describeAt, flagRole, glyphOf, isFailure, nearestMark, type Mark } from "./marks.ts";
+import { LABEL_PX, LANE_PX, laneAt, RULER_PX, rulerTicks, selectionFromDrag } from "./timeline-geometry.ts";
 import { useJump } from "./use-jump.ts";
 import { useRunMarks } from "./use-run-marks.ts";
 
@@ -113,24 +114,38 @@ export function TimelinePanel() {
       ctx.stroke();
       ctx.restore();
     }
-    // Marks as glyphs in the kind's hue (a failure ✕ in the alarm colour); marks too close to tell apart are one glyph with a count (never colour alone: the glyph is the kind).
-    ctx.textAlign = "center";
-    for (const cl of collapseMarks(marks, lanes, scale, track, MERGE_PX)) {
-      const m = cl.shown;
+    // Marks: failures and reflexes (the flags) each where they are, never counted; the others in fixed bins of 32 px (one glyph, a count that fits, or a density bar where a flag
+    // takes the count's place, the counts then in the tooltip). The glyph is the kind (never colour alone).
+    const binned = binMarks(marks, lanes, scale, track, BIN_PX);
+    for (const b of binned.bins) {
+      const m = b.shown;
       const family = KIND_STYLE[m.kind as keyof typeof KIND_STYLE]?.family ?? "slate";
-      const cx = LABEL_PX + cl.px;
-      const cy = RULER_PX + cl.lane * LANE_PX + LANE_PX / 2;
-      const role = flagRole(m);
-      ctx.fillStyle = role === "alarm" ? color("--alm") : role === "warning" ? color("--warn") : color(`--kind-${family}`);
-      // A flag is as tall as its lane.
-      if (role) ctx.fillRect(Math.round(cx) - 1, RULER_PX + cl.lane * LANE_PX, 2, LANE_PX - 1);
-      ctx.fillText(glyphOf(m), cx + (role ? 6 : 0), cy);
-      if (cl.count > 1) {
+      const cy = RULER_PX + b.lane * LANE_PX + LANE_PX / 2;
+      ctx.fillStyle = color(`--kind-${family}`);
+      if (b.mode === "bar") {
+        const h = Math.max(3, Math.round(((LANE_PX - 5) * b.count) / binned.maxCount));
+        ctx.globalAlpha = 0.85;
+        ctx.fillRect(LABEL_PX + b.x0 + 2, RULER_PX + (b.lane + 1) * LANE_PX - 2 - h, BIN_PX - 4, h);
+        ctx.globalAlpha = 1;
+        continue;
+      }
+      ctx.textAlign = "center";
+      const cx = LABEL_PX + (b.mode === "count" ? b.x0 + 8 : b.px);
+      ctx.fillText(glyphOf(m), cx, cy);
+      if (b.mode === "count") {
         ctx.fillStyle = color("--fg2");
         ctx.textAlign = "left";
-        ctx.fillText(`×${cl.count}`, cx + 6, cy);
-        ctx.textAlign = "center";
+        ctx.fillText(`×${b.count}`, cx + 7, cy);
       }
+    }
+    for (const f of binned.flags) {
+      const m = f.mark;
+      const role = flagRole(m);
+      const cx = LABEL_PX + f.px;
+      ctx.fillStyle = role === "alarm" ? color("--alm") : color("--warn");
+      ctx.fillRect(Math.round(cx) - 1, RULER_PX + f.lane * LANE_PX, 2, LANE_PX - 1);
+      ctx.textAlign = "center";
+      ctx.fillText(glyphOf(m), cx + 6, RULER_PX + f.lane * LANE_PX + LANE_PX / 2);
     }
     ctx.textAlign = "left";
     // The selected range: a tint over the lanes and a band on the ruler with its ends (the one being dragged is read now, like the cursor).
@@ -182,7 +197,14 @@ export function TimelinePanel() {
   };
   const onPointerMove = (e: PointerEvent<HTMLCanvasElement>) => {
     const d = drag.current;
-    if (!d) return;
+    if (!d) {
+      // What is under the pointer, in words: a flag, or the counts of a bin.
+      const box = e.currentTarget.getBoundingClientRect();
+      const lane = laneAt(e.clientY - box.top, lanes.length);
+      const at = e.clientX - box.left - LABEL_PX;
+      e.currentTarget.title = lane >= 0 && at >= 0 ? describeAt(binMarks(marks, lanes, scale, width - LABEL_PX, BIN_PX), lane, at) : "";
+      return;
+    }
     d.to = px(e);
     if (Math.abs(d.to - d.from) >= 3) d.moved = true;
     if (d.moved) requestAnimationFrame(draw);
@@ -223,6 +245,7 @@ export function TimelinePanel() {
     <div className="panel timeline" data-testid="timeline" tabIndex={-1} onKeyDown={onKeyDown}>
       <div className="timeline-head">
         <span className="muted">{marks.length} marks</span>
+        <DerivedTag derived={snap.replay?.derived} />
         <span data-testid="timeline-counts" className="mono">
           <span className={reflexes > 0 ? "warn" : "attn-zero"}>▲ {reflexes} reflex</span> · <span className={failures > 0 ? "danger" : "attn-zero"}>✕ {failures} failure</span>
         </span>

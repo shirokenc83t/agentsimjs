@@ -50,10 +50,16 @@
 .timeline-lanes { overflow: auto; flex: 1; }
 .timeline-lanes canvas { display: block; cursor: pointer; }
 .event-list { display: flex; flex-direction: column; padding: 0; }
-.event-scroller { flex: 1; min-height: 80px; overflow: auto; outline: none; background: var(--bg0); }
+.event-scroller { flex: 1; min-height: 80px; overflow: auto; outline: none; background: var(--bg0); container: eventlist / inline-size; }
 .event-scroller:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
 .event-row { display: grid; grid-template-columns: 62px 96px 46px 112px minmax(0, 1fr) 118px; align-items: center; gap: 8px; padding: 0 10px; font-size: var(--type-mono-size); white-space: nowrap; overflow: hidden; }
 .event-row > span { overflow: hidden; text-overflow: ellipsis; }
+/* A row's columns by priority: time, agent, tag and summary are always there and the result stays at the right; below about 640 px the source goes first (it is in the row's
+   tooltip and in the opened row), and the summary takes what is left with an ellipsis. */
+@container eventlist (max-width: 640px) {
+  .event-row { grid-template-columns: 62px minmax(0, 96px) 46px minmax(0, 1fr) minmax(0, 96px); }
+  .event-row > span:nth-child(4) { display: none; }
+}
 .event-row.zebra { background: color-mix(in srgb, var(--bg1) 60%, transparent); }
 .event-row.alm:not([aria-selected="true"]) { background: var(--almbg); }
 /* The prompt's input, the mistake under it, the tail's state (UI-SPEC section 5). */
@@ -69,14 +75,24 @@
 .li-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 3px 10px; background: var(--bg0); border-bottom: 1px solid var(--ln); font-size: var(--type-mono-size); white-space: nowrap; overflow: hidden; }
 .li-bar .ps { color: var(--ok); }
 .li-main { flex: 1; min-height: 0; display: flex; }
-.li-tree { flex: none; width: 150px; overflow: auto; border-right: 1px solid var(--ln); background: var(--bg1); padding: 4px 0; }
+.li-tree { flex: none; width: 200px; overflow: auto; border-right: 1px solid var(--ln); background: var(--bg1); padding: 4px 0; }
+.li-tree.rail { width: 30px; overflow: hidden; }
+.li-tree .li-fold { display: block; margin: 0 6px 4px; white-space: nowrap; }
+.li-tree.rail .li-fold { margin: 0 3px 4px; }
 .li-row { display: flex; align-items: center; }
 .li-row .li-name { flex: 1; font-weight: 600; }
 .li-row .li-metrics { flex: none; width: 28px; text-align: center; }
 .li-comp { padding-left: 22px; color: var(--fg2); }
-.li-panes { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+.li-area { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.li-tabs { flex: none; display: flex; gap: 4px; padding: 3px 8px; background: var(--bg1); border-bottom: 1px solid var(--ln); overflow-x: auto; }
+.li-tabs .kt.on { background: var(--bg3); border-color: var(--fg2); }
+.li-panes { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(0, 1fr); overflow: hidden; }
+.li-panes[data-layout="tabs"] { display: block; }
+.li-panes[data-layout="tabs"] .li-cell { height: 100%; }
+.li-cell { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--ln); border-bottom: 1px solid var(--ln); overflow: hidden; }
+.li-cell[hidden] { display: none; }
 .li-empty { margin: 0; padding: 10px 12px; }
-.li-pane { flex: 1 1 0; min-height: 90px; display: flex; flex-direction: column; border-bottom: 1px solid var(--ln); min-width: 0; }
+.li-pane { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; min-width: 0; }
 .li-pane-head { flex: none; display: flex; align-items: center; gap: 6px; padding: 2px 8px; background: var(--bg2); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); }
 .li-pane-head .li-title { flex: none; max-width: 120px; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
 .li-pane-head .log-filter { flex: 1 1 120px; min-width: 60px; height: 20px; padding: 0 6px; background: var(--bg1); color: var(--fg); border: 1px solid var(--ln2); font: inherit; border-radius: 0; }
@@ -104,7 +120,16 @@
 .sql-table { padding-bottom: 4px; }
 .sql-col { padding-left: 22px; color: var(--fg2); }
 .sql-editor-wrap { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.sql-editor { box-sizing: border-box; width: 100%; height: 104px; resize: vertical; padding: 6px 10px; background: var(--bg0); color: var(--fg); border: 0; border-bottom: 1px solid var(--ln); font: inherit; font-size: var(--type-mono-size); line-height: 1.5; outline: none; }
+.sql-stack { position: relative; flex: none; background: var(--bg0); border-bottom: 1px solid var(--ln); }
+.sql-editor, .sql-hl { box-sizing: border-box; width: 100%; margin: 0; padding: 6px 10px; border: 0; font: inherit; font-size: var(--type-mono-size); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2; }
+.sql-editor { display: block; height: 104px; resize: vertical; position: relative; background: transparent; color: transparent; caret-color: var(--fg); outline: none; }
+.sql-editor::selection { background: var(--acbg); color: transparent; }
+.sql-hl { position: absolute; inset: 0; overflow: hidden; color: var(--fg); pointer-events: none; }
+.sql-hl .sq-keyword { color: var(--kind-violet); }
+.sql-hl .sq-string { color: var(--kind-green); }
+.sql-hl .sq-number { color: var(--kind-amber); }
+.sql-hl .sq-function { color: var(--kind-cyan); }
+.sql-hl .sq-comment { color: var(--fg3); }
 .sql-editor:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
 .sql-complete { position: absolute; z-index: 5; left: 24px; top: 40px; margin: 0; padding: 2px 0; list-style: none; min-width: 180px; max-height: 190px; overflow: auto; background: var(--bg3); border: 1px solid var(--fg3); box-shadow: var(--float); font-size: var(--type-mono-size); }
 .sql-complete li { padding: 1px 10px; cursor: pointer; }
@@ -141,8 +166,12 @@
 .prompt .pr { color: var(--kind-amber); }
 .prompt .cur { display: inline-block; width: 7px; height: 14px; background: var(--fg); }
 .prompt select { background: transparent; border: 0; color: var(--fg); font: inherit; padding: 0 2px; cursor: pointer; }
-.kinds { flex: none; display: flex; gap: 4px; padding: 4px 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; background: var(--bg1); border-bottom: 1px solid var(--ln); }
+.kinds { flex: none; display: flex; gap: 4px; padding: 4px 28px 4px 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; background: var(--bg1); border-bottom: 1px solid var(--ln); mask-image: linear-gradient(to right, black calc(100% - 28px), transparent); }
+/* One row that scrolls, with a fade at its right edge: a chip is never cut without saying there is more (the last chip clears the fade at the end of the scroll). */
 .kinds .kt { flex: none; white-space: nowrap; }
+/* The log's own actions (saved filters, export, re-simulate) are a row of their own under the chips, which scroll: an action is never scrolled out of reach. */
+.log-actions { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 3px 8px; background: var(--bg1); border-bottom: 1px solid var(--ln); }
+.log-actions .kt { flex: none; white-space: nowrap; }
 .kt { appearance: none; font: inherit; font-size: var(--type-label-size); border: 1px solid var(--ln); background: transparent; color: var(--fg2); padding: 0 5px; height: 18px; cursor: pointer; }
 .kt:hover { background: var(--bg3); border-color: var(--fg3); }
 .kt.off { opacity: 0.5; text-decoration: line-through; }

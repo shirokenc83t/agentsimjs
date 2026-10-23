@@ -64,36 +64,91 @@ export const MARK_LEGEND: readonly { readonly glyph: string; readonly name: stri
   { glyph: "◇", name: "snapshot", kind: "snapshot" },
 ];
 
-/** What the lanes draw: marks of one lane that fall within `mergePx` of each other become one, with a count; the one shown is the most telling of them. */
-export interface MarkCluster {
+/** The width (px) of a bin of the Timeline: a count label (`▪×19`) fits in one. */
+export const BIN_PX = 32;
+
+/** A flag (a failure, a reflex, a refused start) at its place on its lane: it is drawn on its own, never folded into a count. */
+export interface FlagMark {
   readonly lane: number;
-  /** Position along the track (px) of the first mark of the cluster. */
+  /** Position along the track (px). */
   readonly px: number;
-  readonly t: number;
-  readonly count: number;
-  readonly shown: Mark;
+  readonly mark: Mark;
 }
 
-const rank = (m: Mark): number => (isFailure(m) ? 3 : m.kind === "reflex" ? 2 : m.kind === "degradation" || m.kind === "injected" ? 1 : 0);
+/** The marks of a lane that fall in one bin of `BIN_PX`: one glyph if they are one, a count if they are more, a density bar where the count has no room beside a flag. */
+export interface MarkBin {
+  readonly lane: number;
+  /** The left edge of the bin along the track (px). */
+  readonly x0: number;
+  /** Where its glyph goes: the first mark's position (px). */
+  readonly px: number;
+  readonly count: number;
+  /** The mark whose glyph stands for the bin: the first, or for a bin of several the one of the majority kind. */
+  readonly shown: Mark;
+  /** How many of each kind, most first. */
+  readonly kinds: readonly { readonly kind: string; readonly count: number }[];
+  /** One mark: its glyph. More: `count` (a label) or `bar` (a density bar, the counts in the tooltip, because a flag takes the place of the label). */
+  readonly mode: "glyph" | "count" | "bar";
+}
 
-export function collapseMarks(marks: readonly Mark[], lanes: readonly string[], scaleS: number, trackPx: number, mergePx: number): MarkCluster[] {
-  const out: MarkCluster[] = [];
-  const open = new Map<number, { cluster: { lane: number; px: number; t: number; count: number; shown: Mark }; lastPx: number }>();
-  for (const m of [...marks].sort((a, b) => a.t - b.t || a.seq - b.seq)) {
+export interface BinnedMarks {
+  readonly flags: readonly FlagMark[];
+  readonly bins: readonly MarkBin[];
+  /** The largest count of a bin: the height of a full density bar. */
+  readonly maxCount: number;
+}
+
+/**
+ * What the lanes draw. Flags are never counted: each is drawn where it is. The other marks of a lane are put in fixed bins of `BIN_PX` along the track, so two counts never
+ * touch; a bin that has a flag in it or next to it shows a density bar instead of a count (a flag's glyph and a count would run into each other).
+ */
+export function binMarks(marks: readonly Mark[], lanes: readonly string[], scaleS: number, trackPx: number, binPx = BIN_PX): BinnedMarks {
+  const flags: FlagMark[] = [];
+  const groups = new Map<string, { lane: number; bin: number; items: Mark[]; px: number }>();
+  const sorted = [...marks].sort((a, b) => a.t - b.t || a.seq - b.seq);
+  for (const m of sorted) {
     const lane = laneIndex(lanes, m);
-    const px = (m.t / scaleS) * trackPx;
-    const cur = open.get(lane);
-    if (cur && px - cur.lastPx <= mergePx) {
-      cur.cluster.count++;
-      cur.lastPx = px;
-      if (rank(m) > rank(cur.cluster.shown)) cur.cluster.shown = m;
-    } else {
-      const cluster = { lane, px, t: m.t, count: 1, shown: m };
-      open.set(lane, { cluster, lastPx: px });
-      out.push(cluster);
+    const px = scaleS > 0 ? (m.t / scaleS) * trackPx : 0;
+    if (flagRole(m) !== undefined) {
+      flags.push({ lane, px, mark: m });
+      continue;
     }
+    const bin = Math.floor(px / binPx);
+    const key = `${lane}:${bin}`;
+    const g = groups.get(key);
+    if (g) g.items.push(m);
+    else groups.set(key, { lane, bin, items: [m], px });
   }
-  return out;
+  const bins: MarkBin[] = [];
+  let maxCount = 1;
+  for (const g of groups.values()) {
+    const byKind = new Map<string, number>();
+    for (const m of g.items) byKind.set(m.kind, (byKind.get(m.kind) ?? 0) + 1);
+    const kinds = [...byKind.entries()].map(([kind, count]) => ({ kind, count })).sort((a, b) => b.count - a.count || (a.kind < b.kind ? -1 : 1));
+    const majority = kinds[0]?.kind;
+    const x0 = g.bin * binPx;
+    const crowded = g.items.length > 1 && flags.some((f) => f.lane === g.lane && f.px >= x0 - 8 && f.px <= x0 + binPx + 8);
+    maxCount = Math.max(maxCount, g.items.length);
+    bins.push({
+      lane: g.lane,
+      x0,
+      px: g.px,
+      count: g.items.length,
+      shown: g.items.find((m) => m.kind === majority) ?? (g.items[0] as Mark),
+      kinds,
+      mode: g.items.length === 1 ? "glyph" : crowded ? "bar" : "count",
+    });
+  }
+  return { flags, bins, maxCount };
+}
+
+/** What a hover over a lane tells: the marks of the bin or the flag under `px` on that lane, in words. Empty when there is nothing there. */
+export function describeAt(binned: BinnedMarks, lane: number, px: number, binPx = BIN_PX): string {
+  const flag = binned.flags.find((f) => f.lane === lane && Math.abs(f.px - px) <= 6);
+  if (flag) return `${flag.mark.kind}${flag.mark.op ? ` ${flag.mark.op}` : ""}${flag.mark.code ? ` · ${flag.mark.code}` : ""} · ${flag.mark.t.toFixed(1)} s`;
+  const bin = binned.bins.find((b) => b.lane === lane && px >= b.x0 && px < b.x0 + binPx);
+  if (!bin) return "";
+  return `${bin.count} ${bin.count === 1 ? "mark" : "marks"}: ${bin.kinds.map((k) => `${k.kind} ×${k.count}`).join(", ")}`;
 }
 
 /** The lane a mark goes on: the agent's, or the run lane (`undefined` agent → index 0 of `lanes`, which starts with the run). */

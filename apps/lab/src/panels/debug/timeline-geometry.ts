@@ -2,8 +2,6 @@
 export const RULER_PX = 18;
 export const LANE_PX = 19;
 export const LABEL_PX = 86;
-/** Marks of a lane closer than this (px) are drawn as one with a count. */
-export const MERGE_PX = 7;
 
 const STEPS_S = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
 

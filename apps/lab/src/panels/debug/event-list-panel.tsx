@@ -4,6 +4,7 @@ import { parseFilter, type FilterError, type TraceRecord } from "@agentsim/trace
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { loadSavedFilters, storeSavedFilters, withoutSavedFilter, withSavedFilter, type SavedFilter } from "../../config/saved-filters.ts";
 import { useAppActions, usePolled, useServices, useSource } from "../../services.tsx";
+import { DerivedTag } from "./derived-tag.tsx";
 import { resultOf } from "./log-rows.ts";
 import { shownChoices, termValues, toggleChoice, withTermValues } from "./filter-text.ts";
 import { LogList, type LogListHandle } from "./log-list.tsx";
@@ -75,12 +76,13 @@ export function EventListPanel() {
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
   const [message, setMessage] = useState<string | undefined>(undefined);
 
-  // A new run or a new filter starts the list again.
+  // A new run or a new filter starts the list again. The selected record is the shared one: another filter does not unselect it (the trace tree still shows it), the detail
+  // keeps it, and the list marks it when the new result has it.
   useEffect(() => {
-    setSelected(undefined);
     setExpanded(new Set());
     setAtEnd(true);
   }, [runId, query]);
+  useEffect(() => setSelected(undefined), [runId]);
   // The tail follows: the list at its end stays at its end as records arrive.
   useEffect(() => {
     if (live && atEnd) list.current?.scrollToEnd();
@@ -96,10 +98,21 @@ export function EventListPanel() {
   useEffect(() => {
     if (picked === undefined || picked.runId !== runId || selected?.seq === picked.seq) return;
     const r = rows.find((x) => x.seq === picked.seq);
-    if (!r) return;
-    setSelected(r);
-    list.current?.scrollToSeq(r.seq);
-  }, [picked, runId, rows, selected?.seq]);
+    if (r) {
+      setSelected(r);
+      list.current?.scrollToSeq(r.seq);
+      return;
+    }
+    // Not in this filter's result: its detail is read from storage all the same, so the console and the trace tree always speak of the same record.
+    if (runId === undefined) return;
+    let off = false;
+    void storage.ports.trace.query({ runId, afterSeq: picked.seq - 1, limit: 1 }).then(([x]) => {
+      if (!off && x?.seq === picked.seq) setSelected(x);
+    });
+    return () => {
+      off = true;
+    };
+  }, [picked, runId, rows, selected?.seq, storage]);
   const goToEnd = () => {
     flush();
     setAtEnd(true);
@@ -211,6 +224,7 @@ export function EventListPanel() {
     <div className="panel event-list" data-testid="event-list">
       <div className="prompt mono" role="group" aria-label="Filter">
         <span className="ps">{runId ?? "no run"}</span>
+        <DerivedTag derived={snap.replay?.derived} />
         <span className="pf">$</span>
         <input
           ref={input}
@@ -290,7 +304,8 @@ export function EventListPanel() {
             {t}
           </button>
         ))}
-        <span className="sp" />
+      </div>
+      <div className="log-actions" role="group" aria-label="Log actions">
         <select
           className="kt"
           value=""

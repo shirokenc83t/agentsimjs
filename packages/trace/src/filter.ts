@@ -134,11 +134,28 @@ function unquote(value: string): Result<string, FilterError> {
   return ok(out);
 }
 
+/** What to do instead, for the words of a boolean language that this one does not have. */
+function hintFor(token: string): string {
+  switch (token.toUpperCase()) {
+    case "AND":
+    case "&&":
+      return ": terms are already joined by AND; remove it";
+    case "OR":
+    case "||":
+      return ": there is no OR; give several values in one term (kind:action,flag) instead";
+    case "NOT":
+    case "!":
+      return ": put a minus in front of the term to exclude it (-kind:flag)";
+    default:
+      return "";
+  }
+}
+
 function term(token: string): Result<FilterTerm, FilterError> {
   const negated = token.startsWith("-");
   const body = negated ? token.slice(1) : token;
   const colon = body.indexOf(":");
-  if (colon <= 0) return bad(`"${token.slice(0, 40)}" is not key:value`);
+  if (colon <= 0) return bad(`"${token.slice(0, 40)}" is not key:value${hintFor(token)}`);
   const key = body.slice(0, colon);
   const value = body.slice(colon + 1);
   if (value === "") return bad(`${key}: needs a value`);

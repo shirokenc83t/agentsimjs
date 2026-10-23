@@ -71,6 +71,11 @@ describe("parseFilter", () => {
     expect(rejects("kind:")).toMatch(/needs a value/);
     expect(rejects("kind:event,")).toMatch(/empty value/);
     expect(rejects("just words")).toMatch(/not key:value/);
+    // The words of a boolean language this one does not have say what to do instead.
+    expect(rejects("kind:action AND agent:ugv-001")).toMatch(/terms are already joined by AND; remove it/);
+    expect(rejects("kind:action or kind:flag")).toMatch(/no OR; give several values in one term/);
+    expect(rejects("NOT kind:flag")).toMatch(/minus in front of the term/);
+    expect(rejects("just words")).not.toMatch(/ — |: terms/);
     expect(rejects('text:"unclosed')).toMatch(/quote/);
     expect(rejects("text:")).toMatch(/needs a value/);
   });
