@@ -57,6 +57,10 @@ export const SimControl = Type.Union([
   }),
   Type.Object({ type: Type.Literal("control"), op: Type.Literal("setTickRate"), tickRateHz: TickRateHz }),
   Type.Object({ type: Type.Literal("control"), op: Type.Literal("setMode"), mode: TimeMode }),
+  /** A headless run goes on with a live view (ADR-0029): rendering starts from the next tick, paced at the tick rate. */
+  Type.Object({ type: Type.Literal("control"), op: Type.Literal("liveView") }),
+  /** Stops a headless run before its end condition (or one that has none): it pauses, writes its end snapshot and reports itself done. */
+  Type.Object({ type: Type.Literal("control"), op: Type.Literal("stop") }),
 ]);
 
 /** Returns a consumed pose buffer to the worker's pool (no per-tick allocation, ADR-0019). */
@@ -94,6 +98,12 @@ export const SimLoad = Type.Object({
   recording: Type.Optional(
     Type.Union([Type.Object({ mode: Type.Literal("none") }, { additionalProperties: false }), Type.Object({ mode: Type.Literal("stored"), profile: Type.Unknown() }, { additionalProperties: false })]),
   ),
+  /**
+   * A headless run (ADR-0029): no render state is posted (no `state`, no poses, no chunks), and it runs as fast as lockstep allows. It is orthogonal to the time mode,
+   * rejects `realtime`, and is always recorded (no opt-out: ADR-0035 addition of 2026-10-17, item 6). `untilS` is its end condition in sim seconds: the worker stops there,
+   * writes the end snapshot and reports the run done; without it the run goes on until it is stopped.
+   */
+  headless: Type.Optional(Type.Object({ untilS: Type.Optional(Type.Number({ exclusiveMinimum: 0, maximum: 86_400 })) }, { additionalProperties: false })),
 });
 
 /**
@@ -530,10 +540,45 @@ export const SimRecordingState = Type.Object({
   backlogBytes: Type.Integer({ minimum: 0 }),
 });
 
-export const SimToMain = Type.Union([SimReady, SimState, SimStats, SimDegradation, SimError, SimLoaded, SimEvents, SimGrid, SimChunks, SimTrail, SimInput, SimPreset, SimPreparing, SimPrepared, SimAgentView, SimResearcherData, SimCellBeliefs, SimBeliefChunks, SimRays, SimTopology, SimBudget, SimRecordingState, SimStrategyTestResult]);
+/**
+ * Progress of a headless run (ADR-0029, ADR-0035 section 7), at most 10 Hz while it is loaded, and once more when it ends or stops: where it is, how fast it goes
+ * against real time, what it waits for, how much it has written, and the ticks at which it took snapshots.
+ */
+export const SimProgress = Type.Object({
+  type: Type.Literal("progress"),
+  runId: RunId,
+  /** The run is headless (no render state); false once it goes on with a live view. */
+  headless: Type.Boolean(),
+  running: Type.Boolean(),
+  /** The end condition was reached: the run is over (its end snapshot is written). */
+  done: Type.Boolean(),
+  tick: Type.Integer({ minimum: 0 }),
+  simTimeS: Type.Number({ minimum: 0 }),
+  /** The end condition in sim seconds, when the run has one (what the ETA is measured to). */
+  untilS: Type.Optional(Type.Number({ minimum: 0 })),
+  /** Wall time since the run began to run, ms (worker clock; metadata, never read by the simulation). */
+  wallMs: Type.Number({ minimum: 0 }),
+  ticksPerSecond: Type.Number({ minimum: 0 }),
+  /** Sim seconds per wall second over the last window: the speed against real time. */
+  simSecondsPerSecond: Type.Number({ minimum: 0 }),
+  tickTimeMeanMs: Type.Number({ minimum: 0 }),
+  tickTimeP95Ms: Type.Number({ minimum: 0 }),
+  /** What the run is waiting for: nothing, the minds' decisions (lockstep), the run header, the writer (backlog above its high mark) or the storage quota. */
+  waiting: Type.Union([Type.Literal("none"), Type.Literal("decision"), Type.Literal("header"), Type.Literal("storage_backpressure"), Type.Literal("storage_quota")]),
+  /** Records handed to the writer so far (profile applied), and the part of them not yet reported saved. */
+  recordsHandedOver: Type.Integer({ minimum: 0 }),
+  backlogRecords: Type.Integer({ minimum: 0 }),
+  backlogBytes: Type.Integer({ minimum: 0 }),
+  /** The ticks at which the run took a snapshot (start, every S, the end). */
+  snapshotTicks: Type.Array(Type.Integer({ minimum: 0 }), { maxItems: 100_000 }),
+  stateHash: Type.Optional(Hash8),
+});
+
+export const SimToMain = Type.Union([SimReady, SimState, SimStats, SimDegradation, SimError, SimLoaded, SimEvents, SimGrid, SimChunks, SimTrail, SimInput, SimPreset, SimPreparing, SimPrepared, SimAgentView, SimResearcherData, SimCellBeliefs, SimBeliefChunks, SimRays, SimTopology, SimBudget, SimRecordingState, SimProgress, SimStrategyTestResult]);
 export type SimToMain = Static<typeof SimToMain>;
 export type SimStateMessage = Static<typeof SimState>;
 export type SimStatsMessage = Static<typeof SimStats>;
+export type SimProgressMessage = Static<typeof SimProgress>;
 export type SimLoadedMessage = Static<typeof SimLoaded>;
 export type SimLoadMessage = Static<typeof SimLoad>;
 export type SimCommandMessage = Static<typeof SimCommand>;

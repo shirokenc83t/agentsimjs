@@ -467,3 +467,34 @@
 .se-brush-body[hidden] { display: none; }
 .se-brush-bar .wb { appearance: none; width: 22px; height: 20px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; background: transparent; color: var(--fg2); cursor: pointer; }
 .se-brush-bar .wb:hover { color: var(--fg); background: var(--bg3); border-color: var(--fg3); }
+
+/* The headless run monitor (Experiments workspace). */
+.hm { display: flex; flex-direction: column; gap: 10px; padding: 10px 14px; overflow: auto; }
+.hm-empty { margin: 0; padding: 10px 0; max-width: 70ch; }
+.hm-head { display: flex; align-items: center; gap: 10px; font-size: var(--type-mono-size); }
+.hm-head .ps { color: var(--ok); }
+.hm-state { padding: 0 8px; border: 1px solid var(--ln2); background: var(--bg2); }
+.hm-state.running { color: var(--run); border-color: var(--run); }
+.hm-state.done { color: var(--ok); border-color: var(--ok); }
+.hm-state.paused { color: var(--warn); border-color: var(--warn); }
+.hm-bar { position: relative; height: 14px; background: var(--bg0); border: 1px solid var(--ln2); }
+.hm-fill { height: 100%; background: var(--ac); }
+.hm-fill[data-open="true"] { width: 100%; background: repeating-linear-gradient(135deg, var(--acbg) 0 6px, transparent 6px 12px); }
+.hm-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--fg2); }
+.hm-line { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: var(--type-mono-size); margin-top: 4px; }
+.hm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.hm-cell { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; background: var(--bg1); border: 1px solid var(--ln); }
+.hm-cell.wide { grid-column: 1 / -1; }
+.hm-cell b { font-size: var(--type-telemetry-size); font-weight: var(--type-telemetry-weight); }
+.hm-cell small { font-size: var(--type-label-size); color: var(--fg3); font-weight: 400; }
+.hm-cell .lbl { color: var(--fg3); font-size: var(--type-label-size); letter-spacing: 0.06em; }
+.hm-cell.wide b { font-size: var(--type-mono-size); font-weight: 400; }
+.hm-sparks { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.hm-spark { margin: 0; }
+.hm-spark svg { display: block; background: var(--bg0); border: 1px solid var(--ln); }
+.hm-spark polyline { fill: none; stroke: var(--run); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.hm-spark figcaption { font-size: var(--type-label-size); margin-top: 2px; }
+.hm-note { margin: 2px 0 4px; font-size: var(--type-label-size); }
+.hm-rows { margin: 0; padding: 4px 8px; list-style: none; max-height: 220px; overflow: auto; background: var(--bg0); border: 1px solid var(--ln); font-size: var(--type-mono-size); }
+.hm-rows li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-acts { display: flex; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px solid var(--ln); }

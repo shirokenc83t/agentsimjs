@@ -54,9 +54,12 @@ test("clicking an event moves the cursor: the belief overlay and the agent are w
   const rows = page.locator('[data-testid^="event-row-"][data-kind="action"]');
   await expect.poll(() => rows.count(), { timeout: 15_000 }).toBeGreaterThan(2);
   // An action record late enough that the rover has seen something: scroll the (virtualized) list to a later stretch and take a row from it.
-  await page.getByRole("listbox", { name: "Events" }).evaluate((el) => {
-    // The console follows a live run to its end: this is a scroll up, to the middle of what is read.
-    el.scrollTop = el.scrollHeight * 0.4;
+  const list = page.getByRole("listbox", { name: "Events" });
+  // A list that does not scroll has no "up" (under load fewer rows have arrived by now): wait until it does.
+  await expect.poll(() => list.evaluate((el) => el.scrollHeight - el.clientHeight), { timeout: 15_000 }).toBeGreaterThan(40);
+  await list.evaluate((el) => {
+    // The console follows a live run to its end: this is a scroll up, to the middle of what is read (never past its end).
+    el.scrollTop = (el.scrollHeight - el.clientHeight) * 0.4;
   });
   await expect(page.getByTestId("log-tail")).toHaveAttribute("data-state", "paused"); // the tail has let go of the end: the rows below stay where they are
   await expect.poll(async () => Number(((await rows.first().textContent()) ?? "").split(" s")[0]), { timeout: 10_000 }).toBeGreaterThanOrEqual(10);

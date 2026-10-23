@@ -51,6 +51,7 @@ export class RunRecording {
   /** Blobs already handed to the recorder: a section that has not changed is sent once. */
   private readonly sentBlobs = new Set<string>();
   private lastSnapshotTick = -1;
+  private readonly snapshotAt: number[] = [];
   private lastKeyframeTick = -1;
   private readonly frameSeq = new Map<string, number>();
   private readonly nextPoseDueS = new Map<string, number>();
@@ -82,6 +83,11 @@ export class RunRecording {
 
   private get tick(): number {
     return this.run.world.tick;
+  }
+
+  /** The ticks at which a snapshot was taken (start, every S, the end): the marks of a progress view. */
+  get snapshotTicks(): readonly number[] {
+    return this.snapshotAt;
   }
 
   /** The start of the run (after load, before the first step): the first snapshot, keyframes, checkpoint and pose samples. */
@@ -152,6 +158,7 @@ export class RunRecording {
     const fresh = [...external].filter(([h]) => !this.sentBlobs.has(h)).map(([h, b]) => ({ id: h, bytes: b }));
     for (const b of fresh) this.sentBlobs.add(b.id);
     this.lastSnapshotTick = tick;
+    this.snapshotAt.push(tick);
     // The keyframes read the container's root: before it is handed over (the worker may take its buffer with it).
     const own = draft ?? { frames: [], blobs: [] };
     if (this.beliefFrames) this.keyframesFromSnapshot(bytes, own);

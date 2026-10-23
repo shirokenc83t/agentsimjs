@@ -52,6 +52,7 @@ export {
   type SimChunksMessage,
   type SimStateMessage,
   type SimStatsMessage,
+  type SimProgressMessage,
   type SimLoadedMessage,
   type SimLoadMessage,
 } from "./worker-protocol/messages.ts";

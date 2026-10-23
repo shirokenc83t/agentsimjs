@@ -392,6 +392,16 @@ function RunConfigEditor(props: { loaded: Loaded }) {
         >
           ▶ Run with this configuration
         </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => validation.ok && !current.busy && current.runHeadlessWithConfig(validation.resolved.document)}
+          aria-disabled={!validation.ok || current.busy}
+          data-testid="rc-run-headless"
+          data-tip="No live view, as fast as lockstep allows, always recorded (the recording profile and the length are in the run popover)"
+        >
+          Run headless
+        </button>
         <button type="button" className="btn" onClick={() => setDraft(props.loaded.initial)} data-testid="rc-revert">
           Revert to the current run
         </button>

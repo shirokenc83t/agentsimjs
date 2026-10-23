@@ -100,6 +100,9 @@ const SANDBOX_SLICE_MS = 6;
 const SANDBOX_MAX_PENDING = 8;
 /** Panel streams (status, events) are batched at ≤ 10 Hz (UI-SPEC §10). */
 const PANEL_INTERVAL_MS = 100;
+/** A headless run steps for at most this long (wall ms) and this many ticks per poll, then yields so the worker stays responsive (nothing is dropped). */
+const HEADLESS_SLICE_MS = 20;
+const HEADLESS_MAX_PER_POLL = 400;
 
 /**
  * Sim worker host (ADR-0019): owns the wall-clock timer (outside deterministic packages) and drives the
@@ -137,6 +140,14 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   /** The backlog when the wait began: what caused it (the one reported with the degradation, not the smaller one the wait ended on). */
   let waitingBacklog: { readonly records: number; readonly bytes: number } | undefined;
   let reported: "ok" | "storage_backpressure" | "storage_quota" = "ok";
+  /** A headless run (ADR-0029): no render state is posted and the run goes as fast as lockstep allows; `untilS` is its end condition, when it has one. */
+  let headless: { readonly untilS: number | undefined } | undefined;
+  let headlessDone = false;
+  /** Wall time the run has been running (while playing), for the progress view. */
+  let wallAccum = 0;
+  let playedAt = 0;
+  let rates = { ticksPerSecond: 0, simSecondsPerSecond: 0 };
+  let lastProgressAt = Number.NEGATIVE_INFINITY;
 
   const poseFloats = () => world.entityIds.length * POSE_STRIDE;
 
@@ -274,6 +285,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     const sorted = [...tickTimes].sort((a, b) => a - b);
     const mean = sorted.length ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0;
     const p95 = sorted.length ? (sorted[Math.min(sorted.length - 1, Math.ceil(0.95 * sorted.length) - 1)] ?? 0) : 0;
+    rates = { ticksPerSecond: elapsed > 0 ? (ticksThisWindow * 1000) / elapsed : 0, simSecondsPerSecond: elapsed > 0 ? (ticksThisWindow * world.dtS * 1000) / elapsed : 0 };
     scope.postMessage({
       type: "stats",
       running,
@@ -323,6 +335,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
 
   const loop = () => {
     if (!running) return;
+    if (headless) return headlessLoop();
     const t0 = clock.now();
     // Header first: a recorded run does not step until the storage worker has its header (like a wait for decisions, it is not a backlog).
     const n = deciding || gated() ? 0 : driver.advance(t0);
@@ -338,19 +351,106 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
 
   const play = () => {
     if (running) return;
+    if (headlessDone) return; // the end condition was reached: the run is over
     running = true;
     driver.start(clock.now());
     windowStart = clock.now();
+    playedAt = clock.now();
     ticksThisWindow = 0;
-    timer = clock.setTimer(loop, pollMs());
+    timer = clock.setTimer(loop, headless ? 1 : pollMs());
     postStats();
   };
 
   function pause() {
+    if (running) wallAccum += Math.max(0, clock.now() - playedAt);
     running = false;
     clock.clearTimer(timer);
     recorder?.collect(world.tick, world.simTimeS); // what the recorder holds goes out; a pause is not the end of the run
     postStats();
+    if (headless) postProgress(true);
+  }
+
+  // ---- headless runs (ADR-0029) -------------------------------------------------------------------------------------------
+
+  const reachedEnd = (): boolean => headless?.untilS !== undefined && world.simTimeS >= headless.untilS - 1e-9;
+
+  /** What a headless run is waiting for right now. */
+  const waitingFor = (): "none" | "decision" | "header" | "storage_backpressure" | "storage_quota" => {
+    if (recorder?.awaitingHeader) return "header";
+    if (quotaPaused) return "storage_quota";
+    if (recorder?.waiting) return "storage_backpressure";
+    if (deciding || world.outstandingCount > 0) return "decision";
+    return "none";
+  };
+
+  /** Progress of the loaded run, at most at the panel rate unless `force` (a pause, the end, a switch to the live view). */
+  function postProgress(force: boolean): void {
+    if (!world.runId || (!headless && !force)) return;
+    const now = clock.now();
+    if (!force && now - lastProgressAt < PANEL_INTERVAL_MS) return;
+    lastProgressAt = now;
+    const sorted = [...tickTimes].sort((a, b) => a - b);
+    const mean = sorted.length ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0;
+    const p95 = sorted.length ? (sorted[Math.min(sorted.length - 1, Math.ceil(0.95 * sorted.length) - 1)] ?? 0) : 0;
+    const b = recorder?.backlog;
+    scope.postMessage({
+      type: "progress",
+      runId: world.runId,
+      headless: headless !== undefined,
+      running,
+      done: headlessDone,
+      tick: world.tick,
+      simTimeS: world.simTimeS,
+      ...(headless?.untilS === undefined ? {} : { untilS: headless.untilS }),
+      wallMs: wallAccum + (running ? Math.max(0, now - playedAt) : 0),
+      ticksPerSecond: running ? rates.ticksPerSecond : 0,
+      simSecondsPerSecond: running ? rates.simSecondsPerSecond : 0,
+      tickTimeMeanMs: mean,
+      tickTimeP95Ms: p95,
+      waiting: running ? waitingFor() : "none",
+      recordsHandedOver: recorder?.recordsHandedOver ?? 0,
+      backlogRecords: b?.records ?? 0,
+      backlogBytes: b?.bytes ?? 0,
+      snapshotTicks: [...(recording?.snapshotTicks ?? [])],
+      ...(world.stateHash === undefined ? {} : { stateHash: world.stateHash }),
+    });
+  }
+
+  /**
+   * One poll of a headless run: as many ticks as fit in a slice, checked tick by tick for the writer's backlog like a step (a headless run waits for the writer: wall time
+   * only), no render state, and progress at the panel rate. A run with an end condition stops there with its end snapshot written.
+   */
+  function headlessLoop(): void {
+    if (!running) return;
+    const t0 = clock.now();
+    let n = 0;
+    while (n < HEADLESS_MAX_PER_POLL && !deciding && world.outstandingCount === 0 && !gated() && !reachedEnd()) {
+      scheduler.step();
+      n++;
+      if (recorder) {
+        recorder.collect(world.tick, world.simTimeS);
+        syncRecordingState();
+      }
+      if (clock.now() - t0 >= HEADLESS_SLICE_MS) break;
+    }
+    recordTicks(n, clock.now() - t0);
+    syncRecordingState();
+    if (world.outstandingCount > 0) awaitDecisions();
+    if (reachedEnd()) {
+      finishHeadless();
+      return;
+    }
+    postProgress(false);
+    if (clock.now() - windowStart >= 1000) postStats();
+    timer = clock.setTimer(headlessLoop, 1);
+  }
+
+  /** The end condition was reached: the run stops, its end snapshot is written and the main thread is told it is done. */
+  function finishHeadless(): void {
+    headlessDone = true;
+    pause();
+    endRecording();
+    postProgress(true);
   }
 
   /**
@@ -451,7 +551,8 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     }
     recorder?.collect(world.tick, world.simTimeS);
     syncRecordingState();
-    postState(true);
+    if (headless) postProgress(true);
+    else postState(true);
     postStats();
   };
 
@@ -490,6 +591,11 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   };
 
   const load = (m: Extract<MainToSim, { type: "load" }>) => {
+    // A headless run is always recorded (ADR-0035 addition of 2026-10-17, item 6): there is no opt-out.
+    if (m.headless && m.recording?.mode !== "stored") {
+      scope.postMessage({ type: "error", code: "headless_needs_recording", message: "a headless run is always recorded: there is no opt-out" });
+      return;
+    }
     // A recorded run needs the channel to the storage worker and a valid profile; refused before anything changes.
     let profile: ReturnType<typeof parseRecordingProfile> | undefined;
     if (m.recording?.mode === "stored") {
@@ -514,6 +620,11 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     const prepared = r.value.preparePlanning((done, total) => scope.postMessage({ type: "preparing", runId: m.runId, done, total }));
     if (!prepared.ok) {
       scope.postMessage({ type: "error", code: prepared.error.code, message: prepared.error.message });
+      return;
+    }
+    // `realtime` is not meaningful headless (ADR-0029): refused before anything changes.
+    if (m.headless && r.value.loaded.timeMode === "realtime") {
+      scope.postMessage({ type: "error", code: "headless_realtime", message: "a headless run goes as fast as lockstep allows: realtime is not meaningful for it, and the run configuration asks for it" });
       return;
     }
     scope.postMessage({ type: "prepared", runId: m.runId, ...prepared.value, ms: Math.max(0, clock.now() - t0) });
@@ -545,6 +656,11 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     mode = r.value.loaded.timeMode;
     driver = makeDriver();
     degradations = 0;
+    headless = m.headless === undefined ? undefined : { untilS: m.headless.untilS };
+    headlessDone = false;
+    wallAccum = 0;
+    rates = { ticksPerSecond: 0, simSecondsPerSecond: 0 };
+    lastProgressAt = Number.NEGATIVE_INFINITY;
     postedTick = -1;
     sentIds = false;
     pool.length = 0;
@@ -558,7 +674,8 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     recording?.start(); // the first snapshot, keyframes, checkpoint and poses: held with the rest until the header is stored
     recorder?.collect(0, 0); // what genesis emitted (start events, first requests, configuration records): held until the header is stored
     scope.postMessage(r.value.loaded);
-    scope.postMessage(r.value.gridMessage());
+    // A headless run posts no render state: the grid and its chunks go with the first live view.
+    if (!headless) scope.postMessage(r.value.gridMessage());
     // Re-simulation of a stored run: its inputs, in input order at their ticks (the world assigns the same IDs).
     for (const input of m.inputs ?? []) {
       const ri = world.inject({ agentId: input.agentId, name: input.name, params: input.params }, input.tick);
@@ -568,7 +685,8 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
       }
       scope.postMessage({ type: "input", runId: m.runId, input: ri.value });
     }
-    postState(true);
+    if (headless) postProgress(true);
+    else postState(true);
     postStats();
   };
 
@@ -679,7 +797,31 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
             if (running) driver.start(clock.now()); // a speed change is not a backlog
             postStats();
             break;
+          case "stop":
+            // The researcher ends a headless run: the same end as its end condition (a snapshot at its tick), marked done.
+            if (headless === undefined || headlessDone || world.runId === undefined) break;
+            finishHeadless();
+            break;
+          case "liveView":
+            // A headless run goes on with a live view: rendering starts from the next tick (the grid, the chunks and the agent table go first).
+            if (headless === undefined) break;
+            headless = undefined;
+            if (world instanceof ScenarioHostedWorld) scope.postMessage(world.gridMessage());
+            postState(true);
+            postProgress(true);
+            if (running) {
+              clock.clearTimer(timer);
+              driver.start(clock.now());
+              timer = clock.setTimer(loop, pollMs());
+            }
+            postStats();
+            break;
           case "setMode":
+            // A headless run never takes realtime (ADR-0029).
+            if (headless !== undefined && m.mode === "realtime") {
+              scope.postMessage({ type: "error", code: "headless_realtime", message: `run ${world.runId ?? ""} is headless: realtime is not meaningful for it` });
+              break;
+            }
             // A scenario run's time mode is part of the run (header, runConfigHash): it is set at load and locked.
             // Changing it means a new run of the same scenario version. Only the F0 dummy world accepts it.
             if (world.runId !== undefined) {

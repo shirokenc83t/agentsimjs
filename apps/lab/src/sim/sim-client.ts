@@ -1,4 +1,4 @@
-import { SIM_PROTOCOL_VERSION, type MainToSim, type PresetId, type SimInputMessage, type SimLoadedMessage, type SimLoadMessage, type SimStrategyTestMessage, type SimStrategyTestResultMessage, type SimToMain, type TimeMode } from "@agentsim/core";
+import { SIM_PROTOCOL_VERSION, type MainToSim, type PresetId, type SimInputMessage, type SimProgressMessage, type SimLoadedMessage, type SimLoadMessage, type SimStrategyTestMessage, type SimStrategyTestResultMessage, type SimToMain, type TimeMode } from "@agentsim/core";
 import type { TraceRecord } from "@agentsim/trace";
 import { ChunkQueue, RollingStats, StateInterpolator, type GridSpec } from "@agentsim/ui";
 import { TrailStore, type ExecutedPath } from "./trail-store.ts";
@@ -36,6 +36,10 @@ export interface SimSnapshot {
   readonly preparing?: { readonly runId: string; readonly done: number; readonly total: number };
   /** The recording's latest state for the loaded run (ADR-0035 §6): `ok`, or why the run waits (the writer is behind, the storage quota is near). */
   readonly recording?: { readonly runId: string; readonly state: "ok" | "storage_backpressure" | "storage_quota"; readonly backlogRecords: number };
+  /** The loaded run is headless (no render state is posted for it): its progress comes from the `progress` stream, and this snapshot follows it. */
+  readonly headless?: boolean;
+  /** The latest progress of the loaded run, when it is or was headless: what a monitor that opens late shows at once. */
+  readonly progress?: SimProgressMessage;
   /** What the last load prepared, and its wall time (never in the trace or a hash). */
   readonly prepared?: { readonly runId: string; readonly views: number; readonly graphs: number; readonly ms: number };
 }
@@ -170,6 +174,13 @@ export class SimClient {
       case "degradation":
         this.snap = { ...this.snap, degradations: this.snap.degradations + 1, lastSkippedTicks: m.skippedTicks };
         break;
+      case "progress": {
+        // A headless run posts no state: its tick and clock come from its progress; the panels that show it listen to the stream too.
+        if (m.runId === this.snap.run?.runId) this.snap = { ...this.snap, tick: m.tick, simTimeS: m.simTimeS, running: m.running, headless: m.headless, progress: m, ...(m.stateHash === undefined ? {} : { stateHash: m.stateHash, hashTick: m.tick }) };
+        const listeners = this.streams.get("progress");
+        if (listeners) for (const l of listeners) (l as (x: typeof m) => void)(m);
+        break;
+      }
       case "recording":
         this.snap = { ...this.snap, recording: { runId: m.runId, state: m.state, backlogRecords: m.backlogRecords } };
         break;
@@ -212,6 +223,17 @@ export class SimClient {
   pause(): void {
     this.post({ type: "control", op: "pause" });
     this.snap = { ...this.snap, running: false };
+  }
+
+  /** Ends a headless run now: it pauses, writes its end snapshot and reports itself done (a run that is not headless is not touched). */
+  stop(): void {
+    this.post({ type: "control", op: "stop" });
+  }
+
+  /** A headless run goes on with a live view: rendering starts from the next tick. */
+  liveView(): void {
+    this.post({ type: "control", op: "liveView" });
+    this.snap = { ...this.snap, headless: false };
   }
 
   /** Runs `count` ticks at once in the worker (lockstep), then stays paused. */

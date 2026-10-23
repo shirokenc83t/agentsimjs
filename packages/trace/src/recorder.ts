@@ -168,6 +168,8 @@ export class RunRecorder {
   private panel: TraceRecord[] = [];
   private inFlight: InFlight[] = [];
   private lastThroughSeq = -1;
+  /** Records kept by the profile and handed over (or held for the header), cumulative: what a progress view counts as written. */
+  private handedOver = 0;
   private sim: SimHead = { tick: 0, simTimeS: 0 };
   private persistedAt: PersistedHead | undefined;
 
@@ -193,6 +195,11 @@ export class RunRecorder {
 
   get persistedHead(): PersistedHead | undefined {
     return this.persistedAt;
+  }
+
+  /** Records kept by the profile and handed over (or held until the header is stored) since the run began. */
+  get recordsHandedOver(): number {
+    return this.handedOver;
   }
 
   /** Records handed over and not yet reported saved. */
@@ -260,6 +267,7 @@ export class RunRecorder {
         if (kept) {
           const safe = redactSecrets(kept);
           this.held.push(safe);
+          this.handedOver++;
           this.heldBytes += estimateRecordBytes(safe);
           // Pose samples are for scrubbing, not for reading: the Log's stream does not carry them (the Scene has its own poses).
           if (channelOf(safe) !== "poses") this.panel.push(safe);

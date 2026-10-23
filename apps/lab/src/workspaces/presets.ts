@@ -1,7 +1,7 @@
 import type { PanelId } from "./registry.tsx";
 
 /** Workspaces available in F0 (UI-SPEC §3, §11). Others arrive with their phases. */
-export type WorkspaceId = "scene" | "debug" | "author" | "data" | "settings";
+export type WorkspaceId = "scene" | "debug" | "author" | "data" | "settings" | "experiments";
 
 export interface PresetPanel {
   readonly id: PanelId;
@@ -78,6 +78,8 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
   },
   { id: "data", title: "Data", panels: [{ id: "storage" }, { id: "sqlConsole", position: { referencePanel: "storage", direction: "below" }, initialHeight: 330 }] },
   { id: "settings", title: "Settings", panels: [{ id: "settings" }] },
+  // Experiments (UI-SPEC section 3): ships with only the headless run monitor; the batch runner and the results of F13 join it there.
+  { id: "experiments", title: "Experiments", panels: [{ id: "headlessMonitor" }] },
 ];
 
 /**

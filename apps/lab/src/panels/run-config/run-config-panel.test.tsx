@@ -36,7 +36,7 @@ function setup(over: Partial<CurrentRun> = {}) {
   const ports = createMemoryPorts();
   const storage = { ports, status: () => ({ state: "ready", mode: "memory-fallback" }), onStatus: () => () => {} } as unknown as StorageClient;
   const runWithConfig = vi.fn();
-  const current: CurrentRun = { run: labRun(), busy: false, error: null, loadDemo: vi.fn(), runWithConfig, startScenarioRun: vi.fn(), ...over };
+  const current: CurrentRun = { run: labRun(), busy: false, error: null, loadDemo: vi.fn(), runWithConfig, runHeadlessWithConfig: vi.fn(), startScenarioRun: vi.fn(), ...over };
   render(
     <ServicesProvider value={{ storage, sim: {} as SimClient, source: {} as RunSource, setReplaySource: () => {} }}>
       <CurrentRunProvider value={current}>

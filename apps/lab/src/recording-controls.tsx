@@ -7,7 +7,7 @@ import { getRecordingSelection, isHeavyProfile, profileOfSelection, setRecording
  * and "Don't record this run", the researcher's explicit opt-out for the next run only (never a default). Warns before a realtime run with a
  * heavy profile: a slow writer can make a realtime run fall behind, and each such wait is a traced degradation.
  */
-export function RecordingControls({ realtime }: { realtime: boolean }) {
+export function RecordingControls({ realtime, onRunHeadless, headlessDisabled }: { realtime: boolean; onRunHeadless?: () => void; headlessDisabled?: boolean }) {
   const sel = useSyncExternalStore(subscribeRecordingSelection, getRecordingSelection);
   const parsed = profileOfSelection(sel);
   const heavy = parsed.ok && isHeavyProfile(parsed.profile);
@@ -62,6 +62,30 @@ export function RecordingControls({ realtime }: { realtime: boolean }) {
             </p>
           )}
         </>
+      )}
+      {onRunHeadless && (
+        <div className="row" data-testid="headless-controls">
+          <label className="rec-field">
+            <span className="muted">headless: run for</span>
+            <input
+              className="log-filter mono rc-num"
+              value={String(sel.headlessUntilS)}
+              inputMode="decimal"
+              aria-label="Headless run length in sim seconds"
+              data-testid="headless-until"
+              onChange={(e) => setRecordingSelection({ headlessUntilS: Number(e.target.value) })}
+            />
+            <span className="muted">sim s</span>
+          </label>
+          <button type="button" className="btn" disabled={headlessDisabled || !parsed.ok} onClick={onRunHeadless} data-testid="run-headless-popover" data-tip="No live view, as fast as lockstep allows, in lockstep: always recorded with this profile">
+            Run headless
+          </button>
+        </div>
+      )}
+      {onRunHeadless && sel.optOut && (
+        <p className="muted" data-testid="headless-opt-out-note">
+          ○ A headless run is always recorded: the opt-out above applies to the next live run only.
+        </p>
       )}
       {realtime && heavy && !sel.optOut && (
         <p className="warn" data-testid="recording-heavy-warning">

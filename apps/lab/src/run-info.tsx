@@ -69,6 +69,8 @@ export interface RunPopoverProps {
   /** The 1 km² / 0.5 m reference world (built in the sim worker). */
   onLoadReference: () => void;
   onRerun: () => void;
+  /** Runs the scenario again headless, with the recording choice above and the duration chosen there. */
+  onRunHeadless: () => void;
   /** Stored runs that can be re-simulated (newest first), with their recorded input counts. */
   listRuns: () => Promise<{ runId: string; label: string; inputs: number }[]>;
   onResimulate: (runId: string) => void;
@@ -148,7 +150,7 @@ export function RunPopover(props: RunPopoverProps) {
         ) : (
           <p className="muted">No scenario loaded: the F0 placeholder world is running.</p>
         )}
-        <RecordingControls realtime={snap.mode === "realtime"} />
+        <RecordingControls realtime={snap.mode === "realtime"} onRunHeadless={() => !busy && run && props.onRunHeadless()} headlessDisabled={busy || !run} />
         <div className="row">
           {/* Busy buttons stay focusable (aria-disabled, clicks ignored): disabling them would drop focus out of
               the popover, and Escape would no longer close it. */}

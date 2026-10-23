@@ -60,6 +60,8 @@ export interface CurrentRun {
   loadDemo(): void;
   /** A new run of the current run's scenario version with another run configuration (new ID, new header). */
   runWithConfig(runConfig: unknown): void;
+  /** A new headless run (ADR-0029) of the current run's scenario version with another run configuration: lockstep, always recorded, for the duration chosen. */
+  runHeadlessWithConfig(runConfig: unknown): void;
   /** A new run of a stored scenario version (scenario editor "Run"); the documents are validated by the worker. */
   startScenarioRun(scenario: unknown, scenarioVersion: number, runConfig: unknown, label: string): void;
 }
@@ -69,6 +71,7 @@ const CurrentRunContext = createContext<CurrentRun>({
   error: null,
   loadDemo: () => {},
   runWithConfig: () => {},
+  runHeadlessWithConfig: () => {},
   startScenarioRun: () => {},
 });
 export const CurrentRunProvider = CurrentRunContext.Provider;

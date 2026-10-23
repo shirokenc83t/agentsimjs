@@ -2,7 +2,7 @@ import type { PresetId, SimLoadedMessage } from "@agentsim/core";
 import { F1_DEMO_ID, F1_REFERENCE_WORLD_ID, F2_DISCOVERY_ID, F2_PRIOR_REFERENCE_ID, F2_TWENTY_AGENTS_ID, f1DemoRunConfig, f1ReferenceWorldRunConfig, f2PriorRunConfig, f2RunConfig } from "@agentsim/scenarios";
 import type { StorageClient, StoredRunInput } from "@agentsim/storage";
 import { recordingProfileHash, TRACE_SCHEMA_VERSION, type RunHeader } from "@agentsim/trace";
-import { DEFAULT_RECORDING, takeRecordingChoice, type RecordingChoice } from "./recording-choice.ts";
+import { DEFAULT_RECORDING, takeHeadlessChoice, takeRecordingChoice, type RecordingChoice } from "./recording-choice.ts";
 import type { SimClient } from "./sim-client.ts";
 import { SIMULATOR_VERSION } from "./simulator-version.ts";
 
@@ -12,6 +12,13 @@ export interface LabRun {
   readonly header: RunHeader;
   readonly scenario: unknown;
   readonly runConfig: unknown;
+  /** The run is headless (ADR-0029): no render state, always recorded, with an end condition in sim seconds when it has one. */
+  readonly headless?: HeadlessOptions;
+}
+
+/** What a headless run is asked: the sim seconds after which it stops (absent: it runs until it is stopped). */
+export interface HeadlessOptions {
+  readonly untilS?: number;
 }
 
 /**
@@ -141,6 +148,7 @@ export async function startRun(
   label: string,
   inputs: readonly StoredRunInput[] = [],
   recording: RecordingChoice = takeRecordingChoice(),
+  headless?: HeadlessOptions,
 ): Promise<LabRun> {
   if (storage.status().state !== "ready") throw new Error("storage_unavailable: runs need storage (see the status line)");
   // A recorded run needs the direct channel between the sim worker and the storage worker; there is no silent fallback to "not recorded".
@@ -149,13 +157,27 @@ export async function startRun(
   await recorder?.flushed();
   recorder?.dispose();
   recorder = new InputRecorder(storage, sim, runId);
-  const loaded = await sim.load({ runId, scenario, scenarioVersion, runConfig, ...(inputs.length > 0 ? { inputs: [...inputs] } : {}), recording });
+  const loaded = await sim.load({ runId, scenario, scenarioVersion, runConfig, ...(inputs.length > 0 ? { inputs: [...inputs] } : {}), recording, ...(headless === undefined ? {} : { headless: headless.untilS === undefined ? {} : { untilS: headless.untilS } }) });
   // Wall time is run metadata only; it never reaches the simulation (ADR-0002).
   const header = headerOf(loaded, runConfig, label, Date.now(), SIMULATOR_VERSION, recording);
   const created = await storage.ports.runs.create(header);
   if (!created.ok) throw new Error(`${created.error.code}: ${created.error.message}`);
   await recorder.headerCreated();
-  return { loaded, header, scenario, runConfig };
+  if (headless !== undefined) markWhenDone(storage, sim, runId);
+  return { loaded, header, scenario, runConfig, ...(headless === undefined ? {} : { headless }) };
+}
+
+/**
+ * A headless run ends by itself (its end condition) or is stopped: the worker reports it done, and the run's status follows: `completed` when it reached its end
+ * (or had none), `aborted` when it was stopped before its end condition.
+ */
+function markWhenDone(storage: StorageClient, sim: SimClient, runId: string): void {
+  const off = sim.subscribe("progress", (m) => {
+    if (m.runId !== runId || !m.done) return;
+    off();
+    const early = m.untilS !== undefined && m.simTimeS < m.untilS - 1e-6;
+    void storage.ports.runs.setStatus(runId, early ? "aborted" : "completed");
+  });
 }
 
 /**
@@ -208,6 +230,14 @@ export function withTimeMode(runConfig: unknown, mode: "lockstep" | "realtime"):
  */
 export function rerunInMode(storage: StorageClient, sim: SimClient, run: LabRun, mode: "lockstep" | "realtime"): Promise<LabRun> {
   return startRun(storage, sim, run.scenario, run.loaded.scenarioVersion, withTimeMode(run.runConfig, mode), run.header.label);
+}
+
+/**
+ * Runs the same scenario version and run configuration again, headless (ADR-0029): as a new run, in lockstep (a headless run never takes realtime: a run
+ * configuration that asks for it is run in lockstep, and the new run's header says so), always recorded with the chosen profile, until `untilS` sim seconds.
+ */
+export function rerunHeadless(storage: StorageClient, sim: SimClient, run: LabRun, choice = takeHeadlessChoice(), runConfig: unknown = run.runConfig): Promise<LabRun> {
+  return startRun(storage, sim, run.scenario, run.loaded.scenarioVersion, withTimeMode(runConfig, "lockstep"), run.header.label, [], choice.recording, { untilS: choice.untilS });
 }
 
 /** Re-runs: the same scenario version and run configuration, as a new run (new ID, new header). */

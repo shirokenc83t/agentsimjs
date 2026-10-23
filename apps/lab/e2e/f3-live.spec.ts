@@ -43,6 +43,8 @@ test("the console's live tail and the same filter read from storage hold the sam
   expect(await listed(page)).toEqual(await exported(page));
 
   // Scrolled up, the tail pauses: what arrives is counted and not shown; taking it gives the list the same records as storage.
+  // (A list that does not scroll has no "up": wait until it does.)
+  await expect.poll(() => page.getByTestId("event-scroller").evaluate((el) => el.scrollHeight - el.clientHeight), { timeout: 15_000 }).toBeGreaterThan(40);
   await page.getByTestId("event-scroller").evaluate((el) => {
     el.scrollTop = 0;
   });

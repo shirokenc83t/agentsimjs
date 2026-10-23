@@ -17,6 +17,7 @@ const TraceTreePanel = lazy(() => import("../panels/debug/trace-tree-panel.tsx")
 const OverviewPanel = lazy(() => import("../panels/overview-panel.tsx").then((m) => ({ default: m.OverviewPanel })));
 const LegendPanel = lazy(() => import("../panels/legend-panel.tsx").then((m) => ({ default: m.LegendPanel })));
 const PerfPanel = lazy(() => import("../panels/perf-panel.tsx").then((m) => ({ default: m.PerfPanel })));
+const HeadlessMonitorPanel = lazy(() => import("../panels/headless/headless-monitor-panel.tsx").then((m) => ({ default: m.HeadlessMonitorPanel })));
 const ScenarioEditorPanel = lazy(() => import("../panels/scenario-editor/scenario-editor-panel.tsx").then((m) => ({ default: m.ScenarioEditorPanel })));
 
 /**
@@ -53,7 +54,7 @@ export const LazyPlayerMarks = lazy(() => import("../shell/player-marks.tsx").th
 /** The run header popover, loaded on first open (the toolbar keeps only the run label). */
 export const LazyRunPopover = lazy(() => import("../run-info.tsx").then((m) => ({ default: m.RunPopover })));
 
-export type PanelId = "overview" | "legend" | "perf" | "scene" | "explorer" | "inspector" | "timeline" | "eventList" | "traceTree" | "sqlConsole" | "logInspector" | "runConfig" | "scenarioEditor" | "storage" | "settings";
+export type PanelId = "overview" | "legend" | "perf" | "scene" | "explorer" | "inspector" | "timeline" | "eventList" | "traceTree" | "sqlConsole" | "logInspector" | "headlessMonitor" | "runConfig" | "scenarioEditor" | "storage" | "settings";
 
 export const PANELS: Record<PanelId, { readonly title: string; readonly component: ComponentType }> = {
   perf: { title: "Performance", component: PerfPanel },
@@ -66,6 +67,7 @@ export const PANELS: Record<PanelId, { readonly title: string; readonly componen
   eventList: { title: "Log", component: EventListPanel },
   traceTree: { title: "Trace", component: TraceTreePanel },
   logInspector: { title: "Logs", component: LogInspectorPanel },
+  headlessMonitor: { title: "Headless monitor", component: HeadlessMonitorPanel },
   runConfig: { title: "Run configuration", component: RunConfigPanel },
   scenarioEditor: { title: "Scenario editor", component: ScenarioEditorPanel },
   storage: { title: "Storage", component: StoragePanel },
