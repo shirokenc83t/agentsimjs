@@ -60,6 +60,8 @@
 .prompt { flex: none; display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 10px; background: var(--bg0); border-bottom: 1px solid var(--ln); white-space: nowrap; overflow: hidden; }
 .prompt .ps { color: var(--ok); }
 .prompt .pf { color: var(--fg3); }
+/* A key state quoted in prose ("●●●● set"): an inline mono chip, like code in prose, so the symbols are drawn at the chrome's size and not at the sans text's (one glyph size). */
+.keystate { display: inline-block; padding: 0 5px; background: var(--bg3); border: 1px solid var(--ln); font-family: var(--font-mono); font-size: var(--type-mono-size); line-height: 1.3; white-space: nowrap; }
 .prompt .pr { color: var(--kind-amber); }
 .prompt .cur { display: inline-block; width: 7px; height: 14px; background: var(--fg); }
 .prompt select { background: transparent; border: 0; color: var(--fg); font: inherit; padding: 0 2px; cursor: pointer; }

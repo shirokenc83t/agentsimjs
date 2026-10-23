@@ -61,9 +61,9 @@ const diamond = (r) => [
 
 /** The glyphs: code point → name and contours. All within x 40..560, y -150..800. */
 export const GLYPHS = [
-  { code: 0x2715, name: "multiplication-x", contours: [solid(bar(115, 180, 485, 550, 98)), solid(bar(115, 550, 485, 180, 98))] },
-  { code: 0x25b2, name: "triangle-up", contours: [solid([[40, 0], [300, 480], [560, 0]])] },
-  { code: 0x25bc, name: "triangle-down", contours: [solid([[40, 480], [560, 480], [300, 0]])] },
+  { code: 0x2715, name: "multiplication-x", contours: [solid(bar(57, 122, 543, 608, 105)), solid(bar(57, 608, 543, 122, 105))] },
+  { code: 0x25b2, name: "triangle-up", contours: [solid([[20, 0], [300, 560], [580, 0]])] },
+  { code: 0x25bc, name: "triangle-down", contours: [solid([[20, 560], [580, 560], [300, 0]])] },
   { code: 0x25b6, name: "triangle-right", contours: [solid([[75, 105], [75, 625], [525, 365]])] },
   { code: 0x275a, name: "heavy-bar", contours: [solid([[190, 20], [190, 680], [410, 680], [410, 20]])] },
   { code: 0x25cf, name: "disc", contours: [solid(circle(CX, CY, 300, 32))] },
