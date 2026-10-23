@@ -58,6 +58,8 @@ export class RunRecording {
   /** The metrics channel (ADR-0035 section 4): observer data, folded at the profile's rate. */
   private readonly metrics: MetricSampler;
   private metricCursor = 0;
+  /** The `metrics` channel is on unless the profile says `off`: an off channel observes and records nothing. */
+  private readonly metricsOn: boolean;
 
   constructor(
     private readonly target: RecordingTarget,
@@ -75,6 +77,7 @@ export class RunRecording {
     this.keyframeEveryTicks = Math.max(1, Math.round(profile.channels.beliefs.keyframeEveryS / target.dtS));
     this.beliefFrames = profile.channels.beliefs.level === "chunks";
     this.metrics = new MetricSampler(profile.channels.metrics.rateHz);
+    this.metricsOn = profile.channels.metrics.level !== "off";
   }
 
   private get tick(): number {
@@ -236,6 +239,7 @@ export class RunRecording {
    * and what it records is not reachable from a decision request. The observer's belief error is taken from the reports of that observer the run traced.
    */
   private sampleMetrics(): void {
+    if (!this.metricsOn) return;
     const tick = this.tick;
     const t = this.run.world.simTimeS;
     const h = this.target.health?.();

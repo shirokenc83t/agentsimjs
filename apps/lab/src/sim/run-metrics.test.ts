@@ -84,6 +84,23 @@ describe("the metrics channel of a recorded run", () => {
     expect(samplesOf(t.items).length).toBeGreaterThan(60);
   });
 
+  it("a profile with the metrics channel off records no metric sample at all, and the run is the same: the state hash of every tick equals a run with metrics on", () => {
+    const off = setup(profileOf("default-research", (p) => ({ ...p, channels: { ...p.channels, metrics: { rateHz: 1, level: "off" as const } } })));
+    const on = setup(profileOf("default-research"));
+    off.explore();
+    on.explore();
+    for (let i = 0; i < 60; i++) {
+      off.step(1);
+      on.step(1);
+      expect(off.world.stateHash, `tick ${i + 1}`).toBe(on.world.stateHash);
+    }
+    expect(samplesOf(off.items)).toEqual([]);
+    expect(off.items.filter((i) => i.type === "metrics")).toEqual([]);
+    expect(samplesOf(on.items).length).toBeGreaterThan(0);
+    // The records the run traced are the same too: the observer's reports are still traced (they are records of the beliefs channel), only the series are not taken.
+    expect(off.records().map((r) => r.id)).toEqual(on.records().map((r) => r.id));
+  });
+
   it("no metric value is reachable from a decision request: the requests the minds get, with metrics being recorded, hold no metric name or value", () => {
     const t = setup(profileOf("debug-full"));
     t.explore();
