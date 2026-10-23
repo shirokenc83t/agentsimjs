@@ -53,7 +53,7 @@ describe("workspace presets", () => {
   it("'debug · logs' ships with the Debug: the multi-log inspector fills the area with the Timeline below it and no Scene", () => {
     expect(BUILTIN_LAYOUTS.debug?.map((b) => b.name)).toEqual([DEBUG_LOGS_LAYOUT]);
     const ids = DEBUG_LOGS_PRESET.panels.map((p) => p.id);
-    expect(ids).toEqual(["logInspector", "timeline", "perf"]);
+    expect(ids).toEqual(["logInspector", "timeline"]); // the Performance window floats inside the Scene's map: with no Scene it is opened from the status bar
     expect(panelNumber(DEBUG_LOGS_PRESET, "logInspector")).toBe(1);
     expect(DEBUG_LOGS_PRESET.panels.find((p) => p.id === "timeline")?.position).toEqual({ referencePanel: "logInspector", direction: "below" });
   });

@@ -89,7 +89,7 @@ export const DEBUG_LOGS_LAYOUT = "debug \u00b7 logs";
 export const DEBUG_LOGS_PRESET: WorkspacePreset = {
   id: "debug",
   title: "Debug",
-  panels: [{ id: "logInspector" }, { id: "timeline", position: { referencePanel: "logInspector", direction: "below" }, initialHeight: 190, late: true }, PERF_WINDOW],
+  panels: [{ id: "logInspector" }, { id: "timeline", position: { referencePanel: "logInspector", direction: "below" }, initialHeight: 190, late: true }],
 };
 
 /** The layouts that ship with a workspace, by name. */
