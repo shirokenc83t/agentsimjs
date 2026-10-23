@@ -240,6 +240,60 @@ describe("storage worker (browser)", () => {
     simEnd.close();
   });
 
+  it("live subscriptions in the storage worker: matches are pushed after they are stored, the history query with the same filter returns the same, and a closed view leaves nothing behind", async () => {
+    const run = "run-000001";
+    const profile = RECORDING_PRESETS["default-research"];
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    const channel = new MessageChannel();
+    const simEnd = channel.port1;
+    const fromStorage: { type: string }[] = [];
+    simEnd.onmessage = (ev) => fromStorage.push(ev.data as { type: string });
+    c.attachRecorderPort(channel.port2);
+    const until = async (cond: () => boolean) => {
+      for (let i = 0; i < 300 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
+      expect(cond()).toBe(true);
+    };
+    expect((await c.ports.runs.create({ ...header(run), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) })).ok).toBe(true);
+    await until(() => fromStorage.some((m) => m.type === "header"));
+
+    const records: { seq: number; simTime: number }[] = [];
+    const samples: { tick: number }[] = [];
+    const rejected = await c.live.subscribe("bad", run, "kind:nonsense", () => undefined);
+    expect(rejected).toMatchObject({ ok: false, error: { code: "invalid_filter" } });
+    expect((await c.live.subscribe("tail", run, "kind:event t:>=2", (b) => records.push(...b.records))).ok).toBe(true);
+    expect((await c.live.subscribe("tail", run, "kind:event", () => undefined)).ok).toBe(false); // one subscription per view
+    expect((await c.live.subscribe("soc", run, "metric:agent.soc source:uav-001/body", (b) => samples.push(...b.samples))).ok).toBe(true);
+
+    simEnd.postMessage({ type: "batch", batch: { runId: run, records: [0, 1, 2, 3].map((n) => rec(run, n)), throughSeq: 3, tick: 3, simTimeS: 0.3 } });
+    simEnd.postMessage({ type: "metrics", runId: run, samples: [{ source: "uav-001/body", name: "agent.soc", tick: 1, simTime: 0.1, value: 0.9 }, { source: "ugv-001/body", name: "agent.soc", tick: 1, simTime: 0.1, value: 0.8 }, { source: "uav-001/body", name: "agent.soc", tick: 2, simTime: 0.2, value: 0.89 }] });
+    // A batch of the main thread's own (an append through the client) is offered too.
+    await c.ports.trace.append([rec(run, 4)]);
+    await until(() => records.length >= 3 && samples.length >= 2);
+    expect(records.map((r) => r.seq)).toEqual([2, 3, 4]);
+    expect(samples.map((s) => s.tick)).toEqual([1, 2]);
+    // The history query with the same filter is the same set.
+    expect((await c.ports.trace.query({ runId: run, limit: 10, filter: "kind:event t:>=2" })).map((r) => r.seq)).toEqual(records.map((r) => r.seq));
+    expect((await c.ports.metrics.query({ runId: run, limit: 10, filter: "metric:agent.soc source:uav-001/body" })).map((s) => s.tick)).toEqual(samples.map((s) => s.tick));
+    await expect(c.ports.trace.query({ runId: run, limit: 10, filter: "kind:event'; DROP TABLE trace_records; --" })).rejects.toThrow(/invalid filter/);
+    expect(await c.ports.trace.count(run)).toBe(5);
+
+    // Changing the filter takes effect for what is stored next; closing the view stops everything and leaves nothing: the same view can open again.
+    expect((await c.live.change("tail", "kind:event t:>=100")).ok).toBe(true);
+    await c.live.unsubscribe("soc");
+    const before = records.length;
+    simEnd.postMessage({ type: "batch", batch: { runId: run, records: [rec(run, 5)], throughSeq: 5, tick: 5, simTimeS: 0.5 } });
+    simEnd.postMessage({ type: "metrics", runId: run, samples: [{ source: "uav-001/body", name: "agent.soc", tick: 3, simTime: 0.3, value: 0.88 }] });
+    await until(() => fromStorage.some((m) => m.type === "persisted" && (m as unknown as { head: { throughSeq: number } }).head.throughSeq >= 5));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(records.length).toBe(before);
+    expect(samples.map((s) => s.tick)).toEqual([1, 2]);
+    await c.live.unsubscribe("tail");
+    expect((await c.live.subscribe("soc", run, "metric:agent.soc", () => undefined)).ok).toBe(true);
+    await c.live.unsubscribe("soc");
+    simEnd.close();
+  });
+
   it("flow control: a slow writer saves every batch, in order, only later (nothing is dropped, nothing reordered)", async () => {
     const profile = RECORDING_PRESETS["default-research"];
     const recorded = { ...header("run-000001"), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) };

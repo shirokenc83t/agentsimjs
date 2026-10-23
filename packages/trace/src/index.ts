@@ -60,3 +60,15 @@ export {
   type MetricDef,
   type MetricSample,
 } from "./metrics.ts";
+export {
+  FILTER_LIMITS,
+  asciiLower,
+  matchesRecord,
+  matchesSample,
+  parseFilter,
+  payloadText,
+  type FilterAst,
+  type FilterError,
+  type FilterTerm,
+  type TimeRange,
+} from "./filter.ts";

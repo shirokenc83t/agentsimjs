@@ -27,6 +27,11 @@ export interface TraceQuery {
   readonly kinds?: readonly string[];
   /** Records whose payload `op` is this one (a post-filter on top of the others: pose samples are `observation` + `pose`). */
   readonly op?: string;
+  /**
+   * A filter of the log console's language (UI-SPEC section 5.2), as typed: the store parses it (a bad one is a bad request), compiles it to parameterized SQL, and
+   * ANDs it with the other fields. A filter with a `metric:` term selects samples, not records: it goes to the metrics query.
+   */
+  readonly filter?: string;
 }
 
 export interface TraceStore {
@@ -272,6 +277,8 @@ export interface MetricQuery {
   readonly toS?: number;
   /** Continues after this sample, in (source, name, tick) order: the cursor of a paged read. */
   readonly after?: { readonly source: string; readonly name: string; readonly tick: number };
+  /** A filter with a `metric:` term (the log console's language), ANDed with the other fields. */
+  readonly filter?: string;
   readonly limit: number;
 }
 

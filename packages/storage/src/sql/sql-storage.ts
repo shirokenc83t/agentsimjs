@@ -26,6 +26,7 @@ import { checkRunRecording } from "../recording.ts";
 import { checkRunDerived, checkRunReferences } from "../run-references.ts";
 import type { SqlDriver, SqlValue } from "./driver.ts";
 import { SqlBeliefFrameStore, SqlMetricStore, SqlSnapshotStore } from "./recording-stores.ts";
+import { parseQueryFilter } from "./filter-sql.ts";
 import { checkRecordFilter, compileSourceFilter } from "./source-filter.ts";
 import { buildTraceQuery, timeWindowToSeqRange, type SeqRange } from "./trace-query.ts";
 
@@ -150,6 +151,7 @@ class SqlTraceStore implements TraceStore {
       if (!r) {
         compileSourceFilter(q.source); // still reject a malformed filter
         checkRecordFilter(q);
+        if (q.filter !== undefined) parseQueryFilter(q.filter, "records");
         return [];
       }
       range = r;

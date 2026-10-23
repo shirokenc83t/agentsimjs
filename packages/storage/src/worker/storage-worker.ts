@@ -1,7 +1,8 @@
 import { err, type CodedError, type Result } from "@agentsim/core";
-import type { RecorderItem, RunHeader, RunStatus, TraceRecord } from "@agentsim/trace";
+import type { MetricSample, RecorderItem, RunHeader, RunStatus, TraceRecord } from "@agentsim/trace";
 import type { Database, SAHPoolUtil, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { openWasmSqlDriver, SecondConnectionError } from "../drivers/wasm-sql-driver.ts";
+import { LiveSubscriptions } from "../live-subscriptions.ts";
 import type { BeliefFrame, BeliefFrameQuery, CachedResponse, MetricQuery, SnapshotWrite, StoragePorts, StoredBlob, StoredMetricSample, StoredRunInput } from "../ports.ts";
 import type { ReplayHandlers, ReplayView, StorageExtensions } from "../replay.ts";
 import type { SqlDriver } from "../sql/driver.ts";
@@ -274,6 +275,13 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
   let flushDue = false;
   let draining = false;
+  /** The live subscriptions (ADR-0035 section 5): offered everything this worker stores, after it is stored; they push matches to the UI at most 10 times a second. */
+  const live = new LiveSubscriptions({
+    emit: (batch) => scope.postMessage({ type: "live", batch }),
+    now,
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+  });
 
   /** Set once storage can no longer serve requests (closed or failed to open); never cleared. */
   let terminal: { code: "closed" | "open_failed"; message: string } | undefined;
@@ -327,7 +335,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
   }
 
   /** A snapshot or belief frames of the run, stored in order with the batches around them; a refusal is reported to the recorder. */
-  async function storeRecorderItem(item: RecorderItem): Promise<void> {
+  async function storeRecorderItem(item: RecorderItem, stored?: { runId: string; samples: MetricSample[] }[]): Promise<void> {
     const e = engine;
     if (!e) return;
     const refuse = (code: string, message: string) => recorderPort?.postMessage({ type: "rejected", runId: item.runId, code, message });
@@ -339,6 +347,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
       } else if (item.type === "metrics") {
         const r = await e.storage.metrics.append(item.runId, item.samples);
         if (!r.ok) refuse(r.error.code, r.error.message);
+        else stored?.push({ runId: item.runId, samples: [...item.samples] });
       } else {
         const stored = await e.storage.snapshots.putBlobs(item.runId, item.blobs);
         if (!stored.ok) return refuse(stored.error.code, stored.error.message);
@@ -452,14 +461,18 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
     if (!e) return;
     const answers: { id: number; value: unknown }[] = [];
     const recorded: { batch: RecorderAppend["recorder"]; result: Result<void, CodedError> }[] = [];
+    // What the transaction stored, to offer to the live subscriptions once it has committed.
+    const storedRecords: TraceRecord[] = [];
+    const storedSamples: { runId: string; samples: MetricSample[] }[] = [];
     try {
       await e.batch(async () => {
         for (const req of run) {
           if (req.op === "recorder.item") {
-            await storeRecorderItem((req as RecorderSide).recorderItem);
+            await storeRecorderItem((req as RecorderSide).recorderItem, storedSamples);
             continue;
           }
           const result = await e.storage.trace.append(req.args[0] as TraceRecord[]);
+          if (result.ok) storedRecords.push(...(req.args[0] as TraceRecord[]));
           if ("recorder" in req) recorded.push({ batch: (req as RecorderAppend).recorder, result });
           else answers.push({ id: req.id, value: result });
         }
@@ -474,6 +487,9 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
       return;
     }
     for (const a of answers) respond({ type: "response", id: a.id, ok: true, value: a.value });
+    // The transaction committed: what it stored goes to the subscriptions (the recording is never sampled; only the display is).
+    live.offerRecords(storedRecords);
+    for (const s of storedSamples) live.offerSamples(s.runId, s.samples);
     // The transaction committed: the head moves as far as the batches before the first refusal.
     if (recorded.length > 0) reportCommit(recorded, recorderPort, (m) => scope.postMessage(m));
   }
@@ -487,6 +503,9 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
       let value: unknown;
       let transfer: Transferable[] | undefined;
       switch (req.op) {
+        case "live.subscribe": value = live.subscribe(String(a), String(b), String(req.args[2] ?? "")); break;
+        case "live.change": value = live.change(String(a), String(b ?? "")); break;
+        case "live.unsubscribe": value = live.unsubscribe(String(a)); break;
         case "trace.flush": value = await s.trace.flush(); break;
         case "trace.query": value = await s.trace.query(a as { runId: string; limit: number }); break;
         case "trace.count": value = await s.trace.count(String(a)); break;
@@ -587,6 +606,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
           break;
         }
         case "admin.close": {
+          live.dispose();
           e.close();
           release?.();
           respond({ type: "response", id: req.id, ok: true, value: undefined });

@@ -14,6 +14,7 @@ import type {
 } from "../ports.ts";
 import { checkBlobs, checkFrameQuery, checkFrames, checkMetricQuery, checkMetricSamples, checkSnapshot, framesKeepOrder, metricsKeepOrder } from "../recording.ts";
 import type { SqlDriver, SqlValue } from "./driver.ts";
+import { compileMetricFilter, parseQueryFilter } from "./filter-sql.ts";
 
 // Snapshots, blobs and belief frames over SQL (migration 0007; ADR-0035 addition of 2026-10-17, items 8 and 9).
 
@@ -212,9 +213,11 @@ export class SqlMetricStore implements MetricStore {
       where.push("(source, name, tick) > (?, ?, ?)");
       params.push(c.after.source, c.after.name, c.after.tick);
     }
-    params.push(c.limit);
+    const parsed = c.filter === undefined ? undefined : compileMetricFilter(parseQueryFilter(c.filter, "metrics"));
+    params.push(...(parsed?.params ?? []), c.limit);
+    // The filter's fragment is written over the alias `m`.
     return this.db
-      .all<MetricRow>(`SELECT source, name, tick, sim_time, value FROM metrics WHERE ${where.join(" AND ")} ORDER BY source, name, tick LIMIT ?`, params)
+      .all<MetricRow>(`SELECT source, name, tick, sim_time, value FROM metrics m WHERE ${where.join(" AND ")}${parsed?.sql ?? ""} ORDER BY source, name, tick LIMIT ?`, params)
       .map((r) => ({ source: r.source, name: r.name, tick: r.tick, simTime: r.sim_time, value: r.value }));
   }
 }

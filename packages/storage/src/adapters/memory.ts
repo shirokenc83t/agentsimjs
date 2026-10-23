@@ -1,5 +1,7 @@
 import { err, isValid, ok } from "@agentsim/core";
 import { firstNonMonotonicRecord, formatRunId, isValidTraceRecord, RunHeader, type RunStatus, type TraceRecord } from "@agentsim/trace";
+import { matchesRecord } from "@agentsim/trace";
+import { parseQueryFilter } from "../sql/filter-sql.ts";
 import { checkRecordFilter, checkSourceFilter, recordFilterMatches, sourceFilterMatches } from "../sql/source-filter.ts";
 import type { CachedResponse, DocumentSummary, RunSummary, StoragePorts, StoredDocument, TraceQuery } from "../ports.ts";
 import { checkRunRecording } from "../recording.ts";
@@ -129,13 +131,14 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
       async query(q: TraceQuery) {
         checkSourceFilter(q.source);
         checkRecordFilter(q);
+        const filter = q.filter === undefined ? undefined : parseQueryFilter(q.filter, "records");
         const after = q.afterSeq ?? -1;
         const limit = Math.max(0, Math.min(q.limit, 10_000));
         const from = q.simTime?.from ?? Number.NEGATIVE_INFINITY;
         const to = q.simTime?.to ?? Number.POSITIVE_INFINITY;
         const inWindow = (t: number) => t >= from && t <= to; // NaN bounds match nothing, like the SQL mapping
         return clone(
-          (records.get(q.runId) ?? []).filter((r) => r.seq > after && inWindow(r.simTime) && sourceFilterMatches(q.source, r.source) && recordFilterMatches(q, r)).slice(0, limit),
+          (records.get(q.runId) ?? []).filter((r) => r.seq > after && inWindow(r.simTime) && sourceFilterMatches(q.source, r.source) && recordFilterMatches(q, r) && (filter === undefined || matchesRecord(filter, r))).slice(0, limit),
         );
       },
       async count(runId) {

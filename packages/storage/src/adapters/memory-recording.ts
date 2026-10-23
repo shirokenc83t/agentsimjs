@@ -1,5 +1,7 @@
 import { contentHash128Bytes, err, ok, readSnapshot } from "@agentsim/core";
 import type { BeliefFrame, BeliefFrameStore, LoadedSnapshot, MetricStore, SizeEntry, SnapshotInfo, SnapshotStore, StoredBlob, StoredMetricSample } from "../ports.ts";
+import { matchesSample } from "@agentsim/trace";
+import { parseQueryFilter } from "../sql/filter-sql.ts";
 import { checkBlobs, checkFrameQuery, checkFrames, checkMetricQuery, checkMetricSamples, checkSnapshot, framesKeepOrder, metricsKeepOrder } from "../recording.ts";
 
 // Snapshots, blobs and belief frames in memory: the same rules as the SQL adapter (recording-stores.ts), the same contract suite.
@@ -141,8 +143,9 @@ export function memoryRecordingStores(runExists: (runId: string) => boolean): {
     },
     async query(q) {
       const c = checkMetricQuery(q);
+      const filter = c.filter === undefined ? undefined : parseQueryFilter(c.filter, "metrics");
       return (metrics.get(c.runId) ?? [])
-        .filter((s) => (c.source === undefined || s.source === c.source) && (c.name === undefined || s.name === c.name) && (c.fromS === undefined || s.simTime >= c.fromS) && (c.toS === undefined || s.simTime <= c.toS) && (c.after === undefined || after(s, c.after)))
+        .filter((s) => (filter === undefined || matchesSample(filter, s)) && (c.source === undefined || s.source === c.source) && (c.name === undefined || s.name === c.name) && (c.fromS === undefined || s.simTime >= c.fromS) && (c.toS === undefined || s.simTime <= c.toS) && (c.after === undefined || after(s, c.after)))
         .sort((a, b) => (a.source < b.source ? -1 : a.source > b.source ? 1 : a.name < b.name ? -1 : a.name > b.name ? 1 : a.tick - b.tick))
         .slice(0, c.limit)
         .map((s) => ({ ...s }));

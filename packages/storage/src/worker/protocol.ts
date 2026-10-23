@@ -1,4 +1,5 @@
 import Type, { type Static } from "typebox";
+import type { LiveBatch } from "../live-subscriptions.ts";
 
 /** Storage worker RPC (ADR-0010, ADR-0020). Requests are validated in the worker. */
 export const STORAGE_PROTOCOL_VERSION = 2;
@@ -37,6 +38,7 @@ export const OPS = [
   "snapshots.putBlobs", "snapshots.getBlob", "snapshots.write", "snapshots.list", "snapshots.read",
   "beliefFrames.append", "beliefFrames.query", "beliefFrames.keyframeAtOrBefore",
   "metrics.append", "metrics.query",
+  "live.subscribe", "live.change", "live.unsubscribe",
   "replay.beliefAt", "replay.world",
   "admin.info", "admin.compact", "admin.exportDb", "admin.exportRun", "admin.exportRunJsonl", "admin.importDb", "admin.importRun", "admin.close",
   "test.openSecondConnection", "test.setSimulatedQuota",
@@ -72,4 +74,10 @@ export interface StorageInfo {
   readonly persisted: boolean | null;
   readonly quotaThresholdBytes: number;
   readonly warning: string | null;
+}
+
+/** What the worker posts for a live subscription (ADR-0035 section 5): the records or samples that matched its filter since the last one, batched. */
+export interface LiveMessage {
+  readonly type: "live";
+  readonly batch: LiveBatch;
 }

@@ -1,9 +1,11 @@
-import type { CodedError, Result } from "@agentsim/core";
+import { err, type CodedError, type Result } from "@agentsim/core";
+import type { LiveBatch, LiveError } from "../live-subscriptions.ts";
 import type { StoragePorts } from "../ports.ts";
 import type { ReplayClient } from "../replay.ts";
 import type { RunFileErrorCode } from "../run-bundle.ts";
 import {
   STORAGE_PROTOCOL_VERSION,
+  type LiveMessage,
   type StorageInfo,
   type StorageInit,
   type StorageOp,
@@ -43,8 +45,23 @@ export interface StorageAdmin {
   close(): Promise<void>;
 }
 
+/**
+ * Live subscriptions (ADR-0035 section 5): a filter of the log console's language and a view. The storage worker evaluates the filter on what it stores and pushes the
+ * matches batched (at most 10 times a second, at most 2,000 items a batch; above that the display samples and the batch says how many matched). History is read
+ * with `ports.trace.query({ filter })` or `ports.metrics.query({ filter })`; a subscription carries only what is stored after it is made.
+ */
+export interface LiveClient {
+  /** Opens a subscription for a view on a run. `onBatch` is called for each pushed batch until `unsubscribe`. A bad filter is an error, and nothing is left open. */
+  subscribe(viewId: string, runId: string, filter: string, onBatch: (b: LiveBatch) => void): Promise<Result<void, LiveError>>;
+  /** Replaces the filter of an open view. */
+  change(viewId: string, filter: string): Promise<Result<void, LiveError>>;
+  /** Closes the view's subscription, in the worker and here: no batch is delivered after it. */
+  unsubscribe(viewId: string): Promise<void>;
+}
+
 export interface StorageClient {
   readonly ports: StoragePorts;
+  readonly live: LiveClient;
   /** Replay reads rebuilt in the storage worker: an agent's belief map at a tick, and the world a run was made in. */
   readonly replay: ReplayClient;
   readonly admin: StorageAdmin;
@@ -95,8 +112,14 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
   const listeners = new Set<(s: StorageStatus) => void>();
   const recordingListeners = new Set<(m: PersistedHeadMessage | QuotaMessage) => void>();
 
-  worker.addEventListener("message", (ev: MessageEvent<StorageResponse | StorageStatus | PersistedHeadMessage | QuotaMessage>) => {
+  const liveViews = new Map<string, (b: LiveBatch) => void>();
+
+  worker.addEventListener("message", (ev: MessageEvent<StorageResponse | StorageStatus | PersistedHeadMessage | QuotaMessage | LiveMessage>) => {
     const m = ev.data;
+    if (m.type === "live") {
+      liveViews.get(m.batch.viewId)?.(m.batch);
+      return;
+    }
     if (m.type === "quota" || m.type === "persisted") {
       for (const l of recordingListeners) l(m);
       return;
@@ -188,6 +211,23 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
     metrics: rpc("metrics", ["append", "query"]) as unknown as StoragePorts["metrics"],
   };
 
+  const live: LiveClient = {
+    async subscribe(viewId, runId, filter, onBatch) {
+      // A view has one subscription: a second is refused here, and must not disturb the first one's listener.
+      if (liveViews.has(viewId)) return err({ code: "duplicate_view" as const, message: `view ${viewId} already has a subscription` });
+      // Listening first: a batch cannot arrive before the listener is there.
+      liveViews.set(viewId, onBatch);
+      const r = await call<Result<void, LiveError>>("live.subscribe", [viewId, runId, filter]);
+      if (!r.ok) liveViews.delete(viewId);
+      return r;
+    },
+    change: (viewId, filter) => call("live.change", [viewId, filter]),
+    async unsubscribe(viewId) {
+      liveViews.delete(viewId);
+      await call("live.unsubscribe", [viewId]);
+    },
+  };
+
   const admin: StorageAdmin = {
     info: () => call("admin.info"),
     exportDb: () => call("admin.exportDb"),
@@ -217,6 +257,7 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
 
   return {
     ports,
+    live,
     replay: rpc("replay", ["beliefAt", "world"]) as unknown as ReplayClient,
     admin,
     status: () => current,
