@@ -234,10 +234,12 @@ export function rerunInMode(storage: StorageClient, sim: SimClient, run: LabRun,
 
 /**
  * Runs the same scenario version and run configuration again, headless (ADR-0029): as a new run, in lockstep (a headless run never takes realtime: a run
- * configuration that asks for it is run in lockstep, and the new run's header says so), always recorded with the chosen profile, until `untilS` sim seconds.
+ * configuration that asks for it is run in lockstep, and the new run's header says so), always recorded with the chosen profile, until `untilS` sim seconds. The commands
+ * the researcher gave the run being shown are applied again at their ticks (run inputs, as in a re-simulation): it is that run, executed again without the live view.
  */
-export function rerunHeadless(storage: StorageClient, sim: SimClient, run: LabRun, choice = takeHeadlessChoice(), runConfig: unknown = run.runConfig): Promise<LabRun> {
-  return startRun(storage, sim, run.scenario, run.loaded.scenarioVersion, withTimeMode(runConfig, "lockstep"), run.header.label, [], choice.recording, { untilS: choice.untilS });
+export async function rerunHeadless(storage: StorageClient, sim: SimClient, run: LabRun, choice = takeHeadlessChoice(), runConfig: unknown = run.runConfig): Promise<LabRun> {
+  const inputs = await storage.ports.runs.inputs(run.header.runId);
+  return startRun(storage, sim, run.scenario, run.loaded.scenarioVersion, withTimeMode(runConfig, "lockstep"), run.header.label, inputs, choice.recording, { untilS: choice.untilS });
 }
 
 /** Re-runs: the same scenario version and run configuration, as a new run (new ID, new header). */

@@ -2,7 +2,6 @@ import "../panels.css";
 import { useCallback, useId, useMemo } from "react";
 import { useSeries } from "../inspector/use-series.ts";
 import { useAppActions, useCurrentRun, usePolled, useServices } from "../../services.tsx";
-import { WORKSPACES } from "../../workspaces/presets.ts";
 import { HeadlessMonitorView, type Spark } from "./headless-monitor-view.tsx";
 import { useSampledStream, useStoredBytes } from "./use-monitor-data.ts";
 
@@ -31,16 +30,15 @@ export function HeadlessMonitorPanel() {
   const stream = useSampledStream(storage, mine === undefined ? undefined : runId, `hm-${base}-events`);
   const stored = useStoredBytes(storage, mine === undefined ? undefined : runId, tail);
   // One series per metric, each its own live subscription (a metric filter), tailing while the run is not done.
-  const tick = useSeries({ storage, runId: mine === undefined ? undefined : runId, filter: `metric:${SPARKS[0].name} source:world/sim`, tail, viewId: `hm-${base}-m0` });
-  const plan = useSeries({ storage, runId: mine === undefined ? undefined : runId, filter: `metric:${SPARKS[1].name} source:world/sim`, tail, viewId: `hm-${base}-m1` });
-  const backlog = useSeries({ storage, runId: mine === undefined ? undefined : runId, filter: `metric:${SPARKS[2].name} source:world/storage`, tail, viewId: `hm-${base}-m2` });
+  const tick = useSeries({ storage, runId: mine === undefined ? undefined : runId, filter: `metric:${SPARKS[0].name}`, tail, viewId: `hm-${base}-m0` });
+  const plan = useSeries({ storage, runId: mine === undefined ? undefined : runId, filter: `metric:${SPARKS[1].name}`, tail, viewId: `hm-${base}-m1` });
+  const backlog = useSeries({ storage, runId: mine === undefined ? undefined : runId, filter: `metric:${SPARKS[2].name}`, tail, viewId: `hm-${base}-m2` });
   const sparks: Spark[] = useMemo(
     () => [tick, plan, backlog].map((s, i) => ({ name: (SPARKS[i] as (typeof SPARKS)[number]).name, title: (SPARKS[i] as (typeof SPARKS)[number]).title, unit: (SPARKS[i] as (typeof SPARKS)[number]).unit, points: s.lines[0]?.points ?? [] })),
     [tick, plan, backlog],
   );
   const header = run?.header;
   const profile = header?.recordingProfile as { name?: string } | undefined;
-  const analysis = WORKSPACES.some((w) => (w.id as string) === "analysis");
   return (
     <HeadlessMonitorView
       progress={mine}
@@ -59,13 +57,11 @@ export function HeadlessMonitorPanel() {
           openReplay(runId);
           openWorkspace("debug");
         },
-        openAnalysis: analysis
-          ? () => {
-              if (runId === undefined) return;
-              openReplay(runId);
-              openWorkspace("analysis" as never);
-            }
-          : undefined,
+        openAnalysis: () => {
+          if (runId === undefined) return;
+          openReplay(runId);
+          openWorkspace("analysis");
+        },
       }}
     />
   );

@@ -261,6 +261,31 @@ test("render loop on the 1 km² reference world with the belief overlay", async 
   console.log(JSON.stringify({ belief1km: { sandboxMs, showMs, uploadFrames: uploading.length, steadyFrames: steady.length, steadyFramesWithBeliefChunks: streamed } }));
 });
 
+// F3b M4 (ADR-0029): what the 2D view costs with 20 agents running: the Scene's MAP 2D redraws at the panel rate (10 Hz) with every agent's executed path, its position and the
+// blocked cells of the world, on a canvas. Reported as `render.frameWork.map2d` (the wall ms of each draw; report only, no threshold).
+test("the Scene's 2D view with a 20-agent run", async ({ page }) => {
+  test.setTimeout(240_000);
+  await loadF2(page, "agents");
+  const ground = await page.locator('[data-testid^="explorer-row-ugv-"]').evaluateAll((els) => els.map((e) => (e.getAttribute("data-testid") ?? "").replace("explorer-row-", "")));
+  expect(ground.length).toBeGreaterThan(2);
+  for (const id of ground.slice(0, 6)) {
+    await page.getByTestId(`explorer-row-${id}`).click();
+    await runCommand(page, `Explore selected agent (${id})`);
+  }
+  await page.getByTestId("map-view-2d").click();
+  await expect(page.getByTestId("scene-2d")).toBeVisible();
+  await page.getByTestId("play").click();
+  await page.waitForTimeout(2500);
+  await page.evaluate(() => window.__agentsim && (window.__agentsim.map2dMs = []));
+  await page.waitForTimeout(8000);
+  const draws = await page.evaluate(() => window.__agentsim?.map2dMs?.slice() ?? []);
+  const agents = Number(await page.getByTestId("map2d-canvas").getAttribute("data-trajectories"));
+  expect(draws.length).toBeGreaterThan(30);
+  expect(agents, "the map draws every agent's path").toBeGreaterThanOrEqual(20);
+  recordResults("browser.json", { "render.frameWork.map2d": summarize(draws) });
+  console.log(JSON.stringify({ map2d: { draws: draws.length, agents } }));
+});
+
 // F3b M3 (ADR-0013, ADR-0035 section 5): frame time with the log console tailing a recorded 20-agent run in the Debug workspace, everything the run writes pushed to it by a live
 // subscription and the Timeline and the trace tree open beside it. The console is a list of at most a screenful of rows and a tail that appends and scrolls; this measures that it does
 // not cost the frame anything (budget 4 ms p95). Reported as `render.frameWork.logTail` (a threshold entry for it is Max's to add).

@@ -20,6 +20,13 @@ export function etaS(p: From<"simTimeS" | "simSecondsPerSecond" | "done" | "runn
   return Math.max(0, (p.untilS - p.simTimeS) / p.simSecondsPerSecond);
 }
 
+/** The speed over the whole run so far (sim seconds per wall second, ticks per wall second), for a run that is not running: its rates of the last window are 0 then. */
+export function averageRates(p: Pick<Progress, "simTimeS" | "tick" | "wallMs">, running: boolean, windowed: { readonly simSecondsPerSecond: number; readonly ticksPerSecond: number }): { readonly simSecondsPerSecond: number; readonly ticksPerSecond: number; readonly average: boolean } {
+  if (running) return { ...windowed, average: false };
+  const wallS = p.wallMs / 1000;
+  return wallS > 0 ? { simSecondsPerSecond: p.simTimeS / wallS, ticksPerSecond: p.tick / wallS, average: true } : { simSecondsPerSecond: 0, ticksPerSecond: 0, average: true };
+}
+
 /** `12.3 s`, `3 min 05 s`, `1 h 02 min`. */
 export function formatDuration(s: number): string {
   if (!Number.isFinite(s) || s < 0) return "—";

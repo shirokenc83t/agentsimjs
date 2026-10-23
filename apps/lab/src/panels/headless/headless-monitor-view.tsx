@@ -2,7 +2,7 @@ import "../panels.css";
 import { formatBytes, GLYPH, KIND_STYLE } from "@agentsim/ui";
 import type { TraceRecord } from "@agentsim/trace";
 import { summary } from "../debug/log-rows.ts";
-import { estimateVolume, etaS, formatDuration, fractionDone, grouped, snapshotMarks, sparkPoints, speedLabel, waitingLabel, type Progress } from "./monitor-model.ts";
+import { averageRates, estimateVolume, etaS, formatDuration, fractionDone, grouped, snapshotMarks, sparkPoints, speedLabel, waitingLabel, type Progress } from "./monitor-model.ts";
 
 /** One sparkline of the monitor: a metric of the run over its sim time. */
 export interface Spark {
@@ -53,6 +53,8 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
   const state = p.done ? "done" : !p.headless ? "live" : p.running ? "running" : "paused";
   const stoppedEarly = p.done && p.untilS !== undefined && p.simTimeS < p.untilS - 1e-6;
   const volume = estimateVolume(props.storedBytes, p.simTimeS, p.untilS);
+  // A run that is not running has no rate of the last window: it shows the average of the whole run so far, and says so.
+  const rate = averageRates(p, p.running, p);
   const endTick = p.untilS === undefined ? undefined : Math.round(p.untilS / props.dtS);
   return (
     <div className="panel hm" data-testid="headless-monitor" data-state={state}>
@@ -97,15 +99,15 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
 
       <section className="hm-grid" aria-label="Speed and cost">
         <div className="hm-cell">
-          <span className="lbl">SPEED</span>
+          <span className="lbl">SPEED{rate.average ? " · AVERAGE" : ""}</span>
           <b className="mono" data-testid="hm-speed">
-            {speedLabel(p.simSecondsPerSecond)}
+            {speedLabel(rate.simSecondsPerSecond)}
           </b>
         </div>
         <div className="hm-cell">
-          <span className="lbl">TICKS / S</span>
+          <span className="lbl">TICKS / S{rate.average ? " · AVERAGE" : ""}</span>
           <b className="mono" data-testid="hm-tps">
-            {p.ticksPerSecond > 0 ? grouped(p.ticksPerSecond) : "—"}
+            {rate.ticksPerSecond > 0 ? grouped(rate.ticksPerSecond) : "—"}
           </b>
         </div>
         <div className="hm-cell">

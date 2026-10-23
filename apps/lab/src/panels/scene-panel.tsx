@@ -7,6 +7,7 @@ import { identityOf, SceneView, shortLabel, useUiContext, type AgentDecor, type 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { attachRendererProbe } from "../probe.ts";
 import { usePolled, useSource } from "../services.tsx";
+import { Scene2dView } from "./scene-2d.tsx";
 import { actionLabel } from "./agent-views.ts";
 import { useAttention } from "./attention-store.ts";
 import { sandboxTarget, useSandboxTarget, useSandboxView } from "./sandbox-store.ts";
@@ -28,6 +29,8 @@ export function ScenePanel() {
   const [renderer, setRenderer] = useState<SceneRenderer | undefined>(undefined);
   const [mode, setMode] = useState<GridViewMode>("occupancy");
   const [overlay, setOverlay] = useState<MapOverlay>("truth");
+  // The map as the 3D view (perspective, the renderer) or from above (2D, the shared top-down map component).
+  const [view, setView] = useState<"3d" | "2d">("3d");
   const [showRays, setShowRays] = useState(false);
   const [showTopology, setShowTopology] = useState(false);
   const [showStages, setShowStages] = useState(false);
@@ -208,6 +211,15 @@ export function ScenePanel() {
       {snap.grid && (
         <>
           <div className="scene-toolbar" role="toolbar" aria-label="Scene controls" data-testid="scene-toolbar">
+            <ToggleButtonGroup size="small" exclusive value={view} onChange={(_e, v: "3d" | "2d" | null) => v && setView(v)} aria-label="Map view">
+              <ToggleButton value="2d" data-testid="map-view-2d" title="From above: where the agents are and have been">
+                MAP 2D
+              </ToggleButton>
+              <ToggleButton value="3d" data-testid="map-view-3d" title="The 3D scene">
+                3D
+              </ToggleButton>
+            </ToggleButtonGroup>
+            {view === "3d" && (<>
             <ToggleButtonGroup size="small" exclusive value={overlay} onChange={(_e, v: MapOverlay | null) => v && setOverlay(v)} aria-label="Map overlay">
               <ToggleButton value="truth" data-testid="overlay-truth" title="The ground-truth map">
                 truth
@@ -248,6 +260,7 @@ export function ScenePanel() {
                 ◎ explore
               </ToggleButton>
             </ToggleButtonGroup>
+            </>)}
             <ToggleButtonGroup size="small" exclusive value={labelMode} onChange={(_e, m: "short" | "full" | null) => m && setLabelMode(m)} aria-label="Labels">
               <ToggleButton value="short" data-testid="labels-short" title="Short labels: g07 for ugv-007">
                 # g07
@@ -256,7 +269,7 @@ export function ScenePanel() {
                 # ugv-007
               </ToggleButton>
             </ToggleButtonGroup>
-            <Button
+            {view === "3d" && (<Button
               size="small"
               variant={sendFor ? "contained" : "outlined"}
               color="inherit"
@@ -267,7 +280,7 @@ export function ScenePanel() {
               title={noCommands ?? "Send the selected agent to a point (G); Esc cancels"}
             >
               {sendFor ? `⇢ click a target for ${shortLabel(sendFor)} · Esc` : selectedAgent ? `⇢ send ${shortLabel(selectedAgent)} to… · G` : "⇢ send to… (select an agent)"}
-            </Button>
+            </Button>)}
           </div>
           {(noRays !== undefined || noTopology !== undefined || picking || sendFor !== undefined || ((showRays || showTopology) && !selectedAgent) || (overlay !== "truth" && (!selectedAgent || ideal)) || overlay === "difference" || (showExplore && !selectedAgent)) && (
             <div className="scene-hint" data-testid="scene-hint">
@@ -298,8 +311,13 @@ export function ScenePanel() {
           )}
         </>
       )}
-      <div className="scene-area">
+      <div className={`scene-area${view === "2d" ? " view-2d" : ""}`} data-view={view}>
         <SceneView interpolator={source.poses} onRenderer={onRenderer} />
+        {view === "2d" && (
+          <div className="scene-2d" data-testid="scene-2d">
+            <Scene2dView source={source} snap={snap} />
+          </div>
+        )}
         {hover && hoverAgent && (
           <div className="map-tooltip mono" style={{ left: hover.x + 14, top: hover.y + 14 }} role="tooltip" data-testid="map-tooltip">
             <div>

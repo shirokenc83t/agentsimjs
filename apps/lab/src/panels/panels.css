@@ -498,3 +498,40 @@
 .hm-rows { margin: 0; padding: 4px 8px; list-style: none; max-height: 220px; overflow: auto; background: var(--bg0); border: 1px solid var(--ln); font-size: var(--type-mono-size); }
 .hm-rows li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-acts { display: flex; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px solid var(--ln); }
+
+/* The Analysis workspace (ADR-0029): the filter bar, the chips, the map beside the timeline and the series. */
+.an { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.an-empty { margin: 0; padding: 12px 14px; max-width: 70ch; }
+.an-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 3px 10px; background: var(--bg0); border-bottom: 1px solid var(--ln); font-size: var(--type-mono-size); }
+.an-bar .ps { color: var(--ok); }
+.an-bar .log-filter { flex: 1 1 260px; min-width: 120px; height: 20px; padding: 0 6px; background: var(--bg1); color: var(--fg); border: 1px solid var(--ln2); font: inherit; border-radius: 0; }
+.an-bar .log-filter.err { border-color: var(--alm); background: var(--almbg); }
+.an-chips { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 3px 10px; background: var(--bg1); border-bottom: 1px solid var(--ln); }
+.an-chips .kt { flex: none; white-space: nowrap; }
+.an-chips .sep { flex: none; width: 1px; height: 14px; background: var(--ln2); }
+.an-export { display: inline-flex; gap: 4px; }
+.an-note { flex: none; margin: 0; padding: 2px 10px; font-size: var(--type-label-size); }
+.an-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr); }
+.an-map { min-width: 0; min-height: 0; position: relative; border-right: 1px solid var(--ln); }
+.an-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+.an-foot { flex: none; padding: 2px 10px; border-top: 1px solid var(--ln); font-size: var(--type-label-size); }
+.tdm { position: absolute; inset: 0; overflow: hidden; background: var(--bg0); }
+.tdm canvas { display: block; cursor: crosshair; }
+.tdm-tip { position: absolute; z-index: 3; pointer-events: none; padding: 2px 8px; background: var(--bg3); color: var(--fg); border: 1px solid var(--fg3); box-shadow: var(--float); font-size: var(--type-label-size); white-space: nowrap; }
+.atl { flex: none; border-bottom: 1px solid var(--ln); overflow: hidden; }
+.atl canvas { display: block; cursor: pointer; }
+.asv { padding: 4px 0; }
+.asv-empty { margin: 0; padding: 8px 10px; }
+.asv-chart { margin: 0; padding: 0 0 4px; }
+.asv-chart figcaption { padding: 0 10px; font-size: var(--type-label-size); }
+.asv-chart svg { display: block; width: 100%; background: var(--bg0); cursor: crosshair; }
+.asv-chart .axis { stroke: var(--ln2); stroke-width: 1; }
+.asv-chart .tick { fill: var(--fg3); font-size: var(--type-label-size); font-family: var(--font-mono); }
+.asv-chart .line { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.asv-chart .cursor { stroke: var(--ac); stroke-width: 1; vector-effect: non-scaling-stroke; }
+
+/* The Scene's 2D tab: the 3D view stays mounted (its state and its renderer are kept) but is not shown; the map sits over its place. */
+.scene-area.view-2d .scene-host { visibility: hidden; }
+.scene-2d { position: absolute; inset: 0; background: var(--bg0); }
+.tdm-agents { position: absolute; margin: 0; padding: 0; list-style: none; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.tdm-agents button:focus-visible { position: fixed; z-index: 4; clip-path: none; width: auto; height: auto; padding: 2px 8px; background: var(--bg3); color: var(--fg); border: 1px solid var(--ac); font: inherit; font-size: var(--type-label-size); }

@@ -1,7 +1,7 @@
 import type { PanelId } from "./registry.tsx";
 
 /** Workspaces available in F0 (UI-SPEC §3, §11). Others arrive with their phases. */
-export type WorkspaceId = "scene" | "debug" | "author" | "data" | "settings" | "experiments";
+export type WorkspaceId = "scene" | "debug" | "author" | "data" | "settings" | "experiments" | "analysis";
 
 export interface PresetPanel {
   readonly id: PanelId;
@@ -80,6 +80,8 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
   { id: "settings", title: "Settings", panels: [{ id: "settings" }] },
   // Experiments (UI-SPEC section 3): ships with only the headless run monitor; the batch runner and the results of F13 join it there.
   { id: "experiments", title: "Experiments", panels: [{ id: "headlessMonitor" }] },
+  // Analysis (ADR-0029, UI-SPEC section 3): recorded runs only, read from storage; v1 is one panel: the map, the event timeline with its brush, the series, the filters and the exports.
+  { id: "analysis", title: "Analysis", panels: [{ id: "analysisView" }] },
 ];
 
 /**

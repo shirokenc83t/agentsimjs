@@ -53,7 +53,7 @@ test("the run popover runs it headless for the length chosen, Stop ends it early
   await page.getByTestId("hm-play").click();
   await page.getByTestId("hm-stop").click();
   await expect(page.getByTestId("hm-state")).toContainText("stopped", { timeout: 30_000 });
-  await expect(page.getByTestId("hm-open-analysis")).toBeDisabled();
+  await expect(page.getByTestId("hm-open-analysis")).toBeEnabled(); // done, though stopped: what was recorded can be analysed
   await openWorkspace(page, "data");
   await page.getByRole("button", { name: "Refresh" }).click();
   await expect(page.getByTestId("run-row-run-000002")).toContainText("aborted");

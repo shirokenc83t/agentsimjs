@@ -20,6 +20,22 @@ async function exported(page: Page): Promise<{ count: number; last: number }> {
   return { count: lines.length, last: lines.length === 0 ? -1 : (JSON.parse(lines[lines.length - 1] as string) as { seq: number }).seq };
 }
 
+/**
+ * The list and the same filter read from storage hold the same records: count and last seq. The export reads up to the persisted head the page knows (a snapshot at 10 Hz), so a
+ * read made a moment too early holds fewer records than the tail has; both are read again until they agree.
+ */
+async function sameAsStorage(page: Page): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const [a, b] = [await listed(page), await exported(page)];
+        return a.count === b.count && a.last === b.last ? "same" : `list ${a.count} (last ${a.last}) vs storage ${b.count} (last ${b.last})`;
+      },
+      { timeout: 30_000, intervals: [300, 600, 1000, 2000] },
+    )
+    .toBe("same");
+}
+
 test("the console's live tail and the same filter read from storage hold the same records; the tail pauses when scrolled up and counts what comes", async ({ page }) => {
   test.setTimeout(240_000);
   await loadF2(page, "discovery");
@@ -39,8 +55,7 @@ test("the console's live tail and the same filter read from storage hold the sam
   await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 400", { timeout: 20_000 });
   await expect.poll(async () => (await listed(page)).count, { timeout: 15_000 }).toBeGreaterThan(before.count);
   // Once flushed, the tail is the SQL result of the same filter.
-  await expect.poll(async () => (await listed(page)).last, { timeout: 15_000 }).toBe((await exported(page)).last);
-  expect(await listed(page)).toEqual(await exported(page));
+  await sameAsStorage(page);
 
   // Scrolled up, the tail pauses: what arrives is counted and not shown; taking it gives the list the same records as storage.
   // (A list that does not scroll has no "up": wait until it does.)
@@ -57,8 +72,7 @@ test("the console's live tail and the same filter read from storage hold the sam
   await page.getByTestId("log-new").click();
   await expect(page.getByTestId("log-tail")).toHaveAttribute("data-state", "following");
   await expect.poll(async () => (await listed(page)).count, { timeout: 15_000 }).toBeGreaterThan(paused.count);
-  await expect.poll(async () => (await listed(page)).last, { timeout: 15_000 }).toBe((await exported(page)).last);
-  expect(await listed(page)).toEqual(await exported(page));
+  await sameAsStorage(page);
 
   // And the SQL console, which has no filter language, gives the same for the same question written in SQL (acceptance 7 as written: the tail against the SQL console's result).
   const tail = await listed(page);

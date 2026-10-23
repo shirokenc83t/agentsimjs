@@ -37,6 +37,8 @@ export interface LabProbe {
   dock?: () => { id: string; title: string; location: string; maximized: boolean; collapsed: boolean; active: boolean; height: number }[];
   /** The shared UI context's selection (read-only). */
   selection?: () => { kind: string; id: string } | undefined;
+  /** Wall ms of each draw of a top-down map (the Scene's 2D tab, the Analysis workspace), newest last; written by the map, cleared by the bench. */
+  map2dMs?: number[];
 }
 
 declare global {

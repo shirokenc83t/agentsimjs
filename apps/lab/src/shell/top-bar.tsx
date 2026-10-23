@@ -30,7 +30,7 @@ export interface TopBarProps {
 }
 
 /**
- * The top bar (UI-SPEC §2, ADR-0042 §5): a tmux-like row of 28 px. The brand, the numbered workspaces (keys 1–5), the layout with its reset, the run selector,
+ * The top bar (UI-SPEC §2, ADR-0042 §5): a tmux-like row of 28 px. The brand, the numbered workspaces (keys 1–7), the layout with its reset, the run selector,
  * the ◷ REPLAY segment while a recording is shown, and the palette. Plain token-styled elements: the shell is in the initial chunk.
  */
 export function TopBar(props: TopBarProps) {

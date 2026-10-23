@@ -32,6 +32,7 @@ function fakes() {
         allocateRunId: async () => "run-000001",
         create: async () => ({ ok: true }),
         appendInputs: async () => ({ ok: true }),
+        inputs: async () => [{ inputId: "inp-000001", tick: 5, agentId: "ugv-001", name: "explore", params: {} }],
         setStatus: async (runId: string, status: string) => {
           statuses.push([runId, status]);
           return { ok: true };
@@ -83,5 +84,7 @@ describe("starting a headless run", () => {
     expect(sent.runConfig.timeMode).toBeUndefined();
     expect(sent.headless).toEqual({ untilS: 45 });
     expect(sent.recording.mode).toBe("stored");
+    // The commands of the run being shown are applied again at their ticks: it is that run, executed again headless.
+    expect(f.loads[0]).toMatchObject({ inputs: [{ inputId: "inp-000001", tick: 5, agentId: "ugv-001", name: "explore" }] });
   });
 });

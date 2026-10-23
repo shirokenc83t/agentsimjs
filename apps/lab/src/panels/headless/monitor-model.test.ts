@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { estimateVolume, etaS, formatDuration, fractionDone, grouped, snapshotMarks, sparkPoints, speedLabel, waitingLabel } from "./monitor-model.ts";
+import { averageRates, estimateVolume, etaS, formatDuration, fractionDone, grouped, snapshotMarks, sparkPoints, speedLabel, waitingLabel } from "./monitor-model.ts";
 
 describe("the monitor numbers", () => {
   it("progress is the sim time over the end condition, exactly 1 only when the run is done there, and none without an end condition", () => {
@@ -31,6 +31,13 @@ describe("the monitor numbers", () => {
     expect(speedLabel(48)).toBe("×48 real time");
     expect(speedLabel(3.456)).toBe("×3.5 real time");
     expect(speedLabel(0)).toBe("—");
+  });
+
+  it("a run that is not running shows the average of the whole run, not the rates of a last window that are zero", () => {
+    const p = { simTimeS: 60, tick: 600, wallMs: 500 };
+    expect(averageRates(p, true, { simSecondsPerSecond: 7, ticksPerSecond: 70 })).toEqual({ simSecondsPerSecond: 7, ticksPerSecond: 70, average: false });
+    expect(averageRates(p, false, { simSecondsPerSecond: 0, ticksPerSecond: 0 })).toEqual({ simSecondsPerSecond: 120, ticksPerSecond: 1200, average: true });
+    expect(averageRates({ simTimeS: 0, tick: 0, wallMs: 0 }, false, { simSecondsPerSecond: 0, ticksPerSecond: 0 })).toEqual({ simSecondsPerSecond: 0, ticksPerSecond: 0, average: true });
   });
 
   it("says what the run waits for, in words", () => {
