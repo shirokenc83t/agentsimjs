@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test --project=e2e",
     "test:visual": "playwright test --project=visual",
-    "test:visual:update": "playwright test --project=visual --update-snapshots=all",
+    "test:visual:update": "playwright test --project=visual --update-snapshots=changed",
     "lint": "eslint . --max-warnings 0 --cache --cache-location node_modules/.cache/eslint/ && node tools/lint/no-literal-colours.mjs",
     "typecheck": "pnpm -r --if-present typecheck && tsc --noEmit -p tsconfig.bench.json",
     "format": "prettier --write .",
