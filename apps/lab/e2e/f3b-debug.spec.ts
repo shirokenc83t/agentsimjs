@@ -18,7 +18,7 @@ test("the log: prompt, kind toggles with tags, zebra rows and the key footer", a
   const prompt = page.getByRole("group", { name: "Filter" });
   await expect(prompt).toContainText("run-000001");
   await expect(prompt).toContainText("agent:");
-  await expect(prompt).toContainText("kind: all");
+  await expect(page.getByTestId("log-filter")).toHaveValue(""); // no term: every kind is shown
   const rows = page.locator('[data-testid^="event-row-"]');
   await expect.poll(() => rows.count(), { timeout: 15_000 }).toBeGreaterThan(4);
   // Rows alternate (zebra), and each has its kind's tag.
@@ -30,10 +30,10 @@ test("the log: prompt, kind toggles with tags, zebra rows and the key footer", a
   await expect(action).toHaveAttribute("aria-pressed", "true");
   await action.click();
   await expect(action).toHaveAttribute("aria-pressed", "false");
-  await expect(prompt).not.toContainText("kind: all");
+  await expect(page.getByTestId("log-filter")).toHaveValue(/^kind:(?!.*action)/); // the toggle wrote the other kinds into the filter
   await expect.poll(() => page.locator('[data-testid^="event-row-"][data-kind="action"]').count()).toBe(0);
   await action.click();
-  await expect(prompt).toContainText("kind: all");
+  await expect(page.getByTestId("log-filter")).toHaveValue("");
   await action.click({ modifiers: ["Shift"] });
   await expect.poll(async () => (await page.locator('[data-testid^="event-row-"]:not([data-kind="action"])').count())).toBe(0);
   await expect(page.getByTestId("event-kind-reflex")).toHaveAttribute("aria-pressed", "false");

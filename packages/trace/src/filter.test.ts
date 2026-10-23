@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesRecord, matchesSample, parseFilter, type FilterAst } from "./filter.ts";
+import { filterTokens, matchesRecord, matchesSample, parseFilter, type FilterAst } from "./filter.ts";
 import type { TraceRecord } from "./trace-record.ts";
 
 // The filter language (UI-SPEC section 5.2, ADR-0035 section 5): one parser and AST; the predicate is the live backend.
@@ -87,6 +87,29 @@ describe("parseFilter", () => {
     // Free text is the one open value: it is data, and matches as such.
     const a = ast(`text:"'; DROP TABLE trace_records; --"`);
     expect(a.terms[0]).toMatchObject({ key: "text", text: "'; DROP TABLE trace_records; --" });
+  });
+
+  it("says where a bad term is: the offset of the term in the text, for the console to point at it", () => {
+    const at = (text: string): unknown => {
+      const r = parseFilter(text);
+      return r.ok ? undefined : (r.error.details as { at: number }).at;
+    };
+    expect(at("kind:event agent:UAV")).toBe(11);
+    expect(at("kind:nonsense")).toBe(0);
+    expect(at('kind:event text:"unclosed')).toBe(16); // the quote left open
+    expect(at("  kind:event   t:abc")).toBe(15);
+    expect(at("metric:agent.soc kind:event")).toBe(17);
+    expect(at(Array.from({ length: 33 }, () => "kind:event").join(" "))).toBe(32 * 11);
+  });
+
+  it("lists the terms as typed with their offsets, for editing the text", () => {
+    expect(filterTokens('kind:event  -agent:uav-001 text:"a b" ')).toEqual([
+      { text: "kind:event", at: 0 },
+      { text: "-agent:uav-001", at: 12 },
+      { text: 'text:"a b"', at: 27 },
+    ]);
+    expect(filterTokens('text:"open')).toEqual([{ text: 'text:"open', at: 0 }]);
+    expect(filterTokens("")).toEqual([]);
   });
 
   it("reads a quoted text with escapes", () => {

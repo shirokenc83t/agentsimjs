@@ -66,9 +66,11 @@ export {
   matchesRecord,
   matchesSample,
   parseFilter,
+  filterTokens,
   payloadText,
   type FilterAst,
   type FilterError,
+  type FilterToken,
   type FilterTerm,
   type TimeRange,
 } from "./filter.ts";

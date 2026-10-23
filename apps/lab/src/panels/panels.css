@@ -56,6 +56,17 @@
 .event-row > span { overflow: hidden; text-overflow: ellipsis; }
 .event-row.zebra { background: color-mix(in srgb, var(--bg1) 60%, transparent); }
 .event-row.alm:not([aria-selected="true"]) { background: var(--almbg); }
+/* The prompt's input, the mistake under it, the tail's state (UI-SPEC section 5). */
+.prompt .log-filter { flex: 1 1 260px; min-width: 120px; height: 20px; padding: 0 6px; background: var(--bg1); color: var(--fg); border: 1px solid var(--ln2); font: inherit; border-radius: 0; }
+.prompt .log-filter:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -1px; }
+.prompt .log-filter.err { border-color: var(--alm); background: var(--almbg); }
+.log-error { flex: none; padding: 2px 10px 4px; background: var(--almbg); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); }
+.log-error .log-caret { margin: 2px 0 0; color: var(--alm); font-size: var(--type-label-size); white-space: pre; overflow: auto; }
+.log-tail { flex: none; display: flex; align-items: center; gap: 8px; padding: 2px 10px; background: var(--bg1); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); }
+.kinds .sep { flex: none; width: 1px; height: 14px; align-self: center; background: var(--ln2); }
+/* A row opened inline: the record's whole payload under the columns (UI-SPEC section 5.1). */
+.event-row.open { height: auto; align-items: start; row-gap: 2px; padding-bottom: 6px; overflow: visible; white-space: normal; }
+.event-row .log-payload { grid-column: 1 / -1; margin: 0; padding: 4px 8px; background: var(--bg0); border: 1px solid var(--ln); font-size: var(--type-label-size); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; cursor: text; }
 /* The filter as a prompt, the kind chips under it, the key footer under the log (Console, UI-SPEC section 6). */
 .prompt { flex: none; display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 10px; background: var(--bg0); border-bottom: 1px solid var(--ln); white-space: nowrap; overflow: hidden; }
 .prompt .ps { color: var(--ok); }

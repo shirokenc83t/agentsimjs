@@ -55,7 +55,8 @@ test("clicking an event moves the cursor: the belief overlay and the agent are w
   await expect.poll(() => rows.count(), { timeout: 15_000 }).toBeGreaterThan(2);
   // An action record late enough that the rover has seen something: scroll the (virtualized) list to a later stretch and take a row from it.
   await page.getByRole("listbox", { name: "Events" }).evaluate((el) => {
-    el.scrollTop = 4000;
+    // The console follows a live run to its end: this is a scroll up, to the middle of what is read.
+    el.scrollTop = el.scrollHeight * 0.4;
   });
   await expect.poll(async () => Number(((await rows.first().textContent()) ?? "").split(" s")[0]), { timeout: 10_000 }).toBeGreaterThanOrEqual(10);
   const candidates = await rows.evaluateAll((els) => els.map((el) => ({ testid: el.getAttribute("data-testid") ?? "", t: Number((el.textContent ?? "").split(" s")[0]) })));

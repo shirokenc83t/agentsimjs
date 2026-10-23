@@ -10,6 +10,7 @@ import { TRACE_KINDS, type TraceRecord } from "./trace-record.ts";
 // Space-separated terms, AND; commas are OR inside a term; a leading `-` negates a term. Every value is validated here against a closed vocabulary or a strict shape,
 // and the backends only ever receive the parsed form: a value never becomes SQL text.
 
+/** A filter that does not parse: why, and where (`details.at`, the character offset of the term that is wrong). */
 export type FilterError = CodedError<"invalid_filter">;
 
 export const FILTER_LIMITS = { maxChars: 1024, maxTerms: 32, maxValues: 32, maxTextChars: 200 } as const;
@@ -47,30 +48,44 @@ const METRIC_KEYS = new Set(["metric", "source", "t", "agent"]);
 
 const bad = (message: string): Result<never, FilterError> => err({ code: "invalid_filter", message });
 
-/** Splits on spaces outside double quotes. A quote opens only right after a colon, so `text:"battery low"` is one token. */
-function tokenize(text: string): Result<string[], FilterError> {
-  const out: string[] = [];
+/** A term of a filter as typed, and where it starts in the text. */
+export interface FilterToken {
+  readonly text: string;
+  readonly at: number;
+}
+
+/** Splits on spaces outside double quotes. A quote opens only right after a colon, so `text:"battery low"` is one token. `unclosedAt` is where a quote was left open. */
+function scan(text: string): { tokens: FilterToken[]; unclosedAt: number | undefined } {
+  const out: FilterToken[] = [];
   let cur = "";
-  let inQuote = false;
+  let curAt = 0;
+  let quoteAt: number | undefined;
   for (let i = 0; i < text.length; i++) {
     const c = text[i] as string;
-    if (inQuote) {
+    if (quoteAt !== undefined) {
       cur += c;
       if (c === "\\") {
         i++;
         if (i < text.length) cur += text[i];
-      } else if (c === '"') inQuote = false;
+      } else if (c === '"') quoteAt = undefined;
     } else if (c === '"' && cur.endsWith(":")) {
-      inQuote = true;
+      quoteAt = i;
       cur += c;
     } else if (/\s/.test(c)) {
-      if (cur !== "") out.push(cur);
+      if (cur !== "") out.push({ text: cur, at: curAt });
       cur = "";
-    } else cur += c;
+    } else {
+      if (cur === "") curAt = i;
+      cur += c;
+    }
   }
-  if (inQuote) return bad("a quote is not closed");
-  if (cur !== "") out.push(cur);
-  return ok(out);
+  if (cur !== "") out.push({ text: cur, at: curAt });
+  return { tokens: out, unclosedAt: quoteAt };
+}
+
+/** The terms of a filter as typed (for editing the text: toggles that add or remove a term); a quote left open is not an error here. */
+export function filterTokens(text: string): readonly FilterToken[] {
+  return scan(text).tokens;
 }
 
 function list(value: string, what: string): Result<string[], FilterError> {
@@ -199,20 +214,21 @@ function term(token: string): Result<FilterTerm, FilterError> {
 
 /** Parses a filter typed by the researcher. Untrusted input: every value is checked; a bad filter is an error, never a partial one. */
 export function parseFilter(text: string): Result<FilterAst, FilterError> {
-  if (typeof text !== "string" || text.length > FILTER_LIMITS.maxChars) return bad(`a filter is at most ${FILTER_LIMITS.maxChars} characters`);
-  const tokens = tokenize(text);
-  if (!tokens.ok) return tokens;
-  if (tokens.value.length > FILTER_LIMITS.maxTerms) return bad(`at most ${FILTER_LIMITS.maxTerms} terms`);
+  if (typeof text !== "string" || text.length > FILTER_LIMITS.maxChars) return err({ code: "invalid_filter", message: `a filter is at most ${FILTER_LIMITS.maxChars} characters`, details: { at: FILTER_LIMITS.maxChars } });
+  const scanned = scan(text);
+  if (scanned.unclosedAt !== undefined) return err({ code: "invalid_filter", message: "a quote is not closed", details: { at: scanned.unclosedAt } });
+  const tokens = scanned.tokens;
+  if (tokens.length > FILTER_LIMITS.maxTerms) return err({ code: "invalid_filter", message: `at most ${FILTER_LIMITS.maxTerms} terms`, details: { at: (tokens[FILTER_LIMITS.maxTerms] as FilterToken).at } });
   const terms: FilterTerm[] = [];
-  for (const token of tokens.value) {
-    const t = term(token);
-    if (!t.ok) return t;
+  for (const token of tokens) {
+    const t = term(token.text);
+    if (!t.ok) return err({ ...t.error, details: { at: token.at } });
     terms.push(t.value);
   }
   const target = terms.some((t) => t.key === "metric") ? "metrics" : "records";
   if (target === "metrics") {
-    const other = terms.find((t) => !METRIC_KEYS.has(t.key));
-    if (other) return bad(`${other.key}: does not apply to metric samples (they have a name, a source and a time)`);
+    const i = terms.findIndex((t) => !METRIC_KEYS.has(t.key));
+    if (i >= 0) return err({ code: "invalid_filter", message: `${(terms[i] as FilterTerm).key}: does not apply to metric samples (they have a name, a source and a time)`, details: { at: (tokens[i] as FilterToken).at } });
   }
   return ok({ target, terms });
 }
