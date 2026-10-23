@@ -219,6 +219,42 @@ for (const theme of THEMES) {
       await expect(page.getByTestId("shell-header")).toHaveScreenshot(`replay-toolbar-${theme}.png`, { mask: [page.locator(".telem")] });
     });
 
+    // F3b M3: the Data workspace (the storage panel with the SQL console under it), the command palette and the run popover. What depends on the database file, the browser's
+    // quota or the wall clock is masked.
+    test("Data: storage and the SQL console", async ({ page }) => {
+      test.setTimeout(90_000);
+      await step(page, 1);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 15_000 });
+      await openWorkspace(page, "data");
+      await page.getByRole("button", { name: "Refresh" }).click();
+      await expect(page.getByTestId("sql-console")).toBeVisible();
+      await page.getByTestId("sql-editor").fill("SELECT kind, count(*) AS n FROM trace_records GROUP BY kind ORDER BY kind");
+      await page.getByTestId("sql-run").click();
+      await expect(page.getByTestId("sql-status")).toContainText("rows", { timeout: 15_000 });
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      const mask = [page.getByTestId("storage-info"), page.locator(".size-bar"), page.getByTestId("sql-status"), page.getByTestId("sql-grid")];
+      await expect(page.getByTestId("workspace-data")).toHaveScreenshot(`data-workspace-${theme}.png`, { mask });
+    });
+
+    test("command palette", async ({ page }) => {
+      await page.keyboard.press("Control+k");
+      const palette = page.getByRole("dialog", { name: "Command palette" });
+      await expect(palette.locator(".group-head").first()).toBeVisible();
+      await palette.getByRole("textbox", { name: "Command" }).fill("open panel");
+      await expect(palette.getByRole("option").first()).toBeVisible();
+      await settle(page);
+      await expect(palette).toHaveScreenshot(`palette-${theme}.png`);
+    });
+
+    test("run popover", async ({ page }) => {
+      await page.getByTestId("run-label").click();
+      await expect(page.getByTestId("run-id")).toBeVisible();
+      await settle(page);
+      // The run's number and what it records so far change with the order the tests ran in.
+      await expect(page.getByRole("dialog", { name: "Run" })).toHaveScreenshot(`run-popover-${theme}.png`, { mask: [page.getByTestId("run-id")] });
+    });
+
     test("Settings", async ({ page }) => {
       await openWorkspace(page, "settings");
       await settle(page);
