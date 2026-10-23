@@ -1,101 +1,83 @@
-import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { loadF2, openWorkspace, runCommand, step } from "./helpers.ts";
+import { loadDemo, loadF2, openWorkspace, runCommand, sendTo, step } from "./helpers.ts";
 
-// F3b M3 (UI-SPEC section 4): the trace tree around a record picked in the log: its parents, what it was caused by, its children and effects. No component of the simulator writes
-// `parentId` or `causeIds` yet (the schema and the storage have them), so the run here is a real recording whose records are given the relations the action runtime will
-// state (a phase change is a child of its action's start and is caused by the phase change before it), exported and added to the database again as a run of its own.
+// F3b M3/M4 (UI-SPEC section 4): the trace tree around a record picked in the log: its parents, what it was caused by, its children and effects. The action runtime writes
+// `parentId` and `causeIds` for what exists today (the records of an action belong to its start; the event the world raises about an ended action is caused by its end), so the tree
+// shows real runs: nothing here edits a recording.
 
 const AGENT = "ugv-001";
 
-interface Line {
-  t?: string;
-  v?: { id: string; kind: string; parentId?: string; causeIds?: string[]; payload?: { op?: string; actionId?: string } };
-}
-
-/** A recording as a run file, with the relations an action's records have. */
-async function relatedRunFile(page: Page): Promise<Buffer> {
-  await openWorkspace(page, "data");
-  await page.getByRole("button", { name: "Refresh" }).click();
-  const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-jsonl-run-000001").click()]);
-  const lines = readFileSync(await download.path(), "utf8").split("\n").filter((l) => l !== "");
-  const parsed = lines.map((l) => JSON.parse(l) as Line);
-  const startOf = new Map<string, string>();
-  for (const l of parsed) {
-    const r = l.t === "record" ? l.v : undefined;
-    if (r?.kind === "action" && r.payload?.op === "start" && r.payload.actionId !== undefined) startOf.set(r.payload.actionId, r.id);
-  }
-  let related = 0;
-  const lastPhase = new Map<string, string>();
-  for (const l of parsed) {
-    const r = l.t === "record" ? l.v : undefined;
-    if (r?.kind !== "action" || r.payload?.op !== "phase" || r.payload.actionId === undefined) continue;
-    const start = startOf.get(r.payload.actionId);
-    if (start === undefined) continue;
-    r.parentId = start;
-    const before = lastPhase.get(r.payload.actionId);
-    if (before !== undefined) r.causeIds = [before];
-    lastPhase.set(r.payload.actionId, r.id);
-    related++;
-  }
-  expect(related, "the recording has phase changes of an action").toBeGreaterThan(4);
-  return Buffer.from(`${parsed.map((l) => JSON.stringify(l)).join("\n")}\n`);
-}
-
-test("the trace tree shows what a record was caused by and what came of it; a click on a node picks that record, and the log and the cursor follow", async ({ page }) => {
-  test.setTimeout(240_000);
+async function explored(page: Page): Promise<void> {
   await loadF2(page, "discovery");
   await page.getByTestId(`explorer-row-${AGENT}`).click();
   await runCommand(page, `Explore selected agent (${AGENT})`);
   await step(page, 3);
   await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 300", { timeout: 20_000 });
+}
 
-  // The related run is added to the database as a run of its own and opened for replay.
-  const file = await relatedRunFile(page);
-  await page.getByTestId("import-run-file").setInputFiles({ name: "related.jsonl", mimeType: "application/x-ndjson", buffer: file });
-  await expect(page.getByTestId("run-row-run-000002")).toBeVisible({ timeout: 30_000 });
-  await page.getByTestId("replay-run-000002").click();
-  await expect(page.getByTestId("replay-bar")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("workspace-debug")).toBeVisible();
+/** The log shows only what the filter selects, and its list is that filter's (not the previous one still on screen). */
+async function filtered(page: Page, text: string, kind: string): Promise<void> {
+  await page.getByTestId("log-filter").fill(text);
+  await expect.poll(async () => Number(await page.getByTestId("event-scroller").getAttribute("data-count")), { timeout: 15_000 }).toBeGreaterThan(0);
+  await expect(page.locator(`[data-testid^="event-row-"]:not([data-kind="${kind}"])`)).toHaveCount(0);
+  // The list of a run being recorded follows its tail: take it to the top, where the first records are.
+  await page.getByTestId("event-scroller").evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  await page.waitForTimeout(300); // a list that does not scroll (few rows) goes on following; one that does is paused here
+}
 
-  // The Trace is under the Log, in the Debug layout: both are in view.
-  await expect(page.getByTestId("trace-tree")).toBeVisible();
-  const empty = page.getByTestId("trace-tree-empty");
-  await expect(empty).toBeVisible();
-  // A phase change of an action: the log lists it; the tree shows the action's start as its parent and the phase change before it as its cause.
-  await page.getByTestId("log-filter").fill(`kind:action agent:${AGENT} text:phase`);
-  await expect.poll(async () => Number(await page.getByTestId("event-scroller").getAttribute("data-count")), { timeout: 15_000 }).toBeGreaterThan(4);
-  await expect(page.locator('[data-testid^="event-row-"]:not([data-kind="action"])')).toHaveCount(0);
-  const rows = page.locator('[data-testid^="event-row-"]');
-  await rows.nth(3).click();
-  await expect(empty).toHaveCount(0);
+test("the trace tree on a real run: the start of an action has the action's records as its children, and each of them has the start as its parent; a click on a node picks that record, and the log and the cursor follow", async ({ page }) => {
+  test.setTimeout(240_000);
+  await explored(page);
+  await openWorkspace(page, "debug");
+  await expect(page.getByTestId("trace-tree")).toBeVisible(); // under the Log
+  await expect(page.getByTestId("trace-tree-empty")).toBeVisible();
+
+  // The start of an action (the first record of the agent's actions): its children are what the action wrote while it ran.
+  await filtered(page, `kind:action agent:${AGENT}`, "action");
+  const first = page.locator('[data-testid^="event-row-"]').first();
+  await expect(first).toContainText("start");
+  await first.click();
   const selected = page.getByTestId("trace-tree-selected");
   await expect(selected).toBeVisible();
-  const phaseSeq = Number(await selected.getAttribute("data-seq"));
-  // The tree is of the record the log has selected, not of another (the row picked is the one the tree is drawn around).
-  const pickedRow = rows.nth(3);
-  await expect(pickedRow).toHaveAttribute("aria-selected", "true");
-  await expect(pickedRow).toHaveAttribute("data-testid", `event-row-${phaseSeq}`);
-  await page.waitForTimeout(1500);
-  await expect(pickedRow).toHaveAttribute("data-testid", `event-row-${phaseSeq}`);
-  await expect(selected).toHaveAttribute("data-seq", String(phaseSeq));
+  const startSeq = Number(await selected.getAttribute("data-seq"));
+  const child = page.getByTestId("tt-children").locator('[data-testid^="trace-node-"]').first();
+  await expect(child).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("tt-parents")).toContainText("none"); // a start has no parent
+
+  // One of the records of the action: the tree shows the start as its parent; a click on the parent picks the start, and the log and the cursor follow.
+  const childSeq = Number(await child.getAttribute("data-seq"));
+  await child.click();
+  await expect(selected).toHaveAttribute("data-seq", String(childSeq));
   await expect(page.getByTestId("tt-parents")).toContainText("start");
+  const parent = page.getByTestId("tt-parents").locator('[data-testid^="trace-node-"]').first();
+  await expect(parent).toHaveAttribute("data-seq", String(startSeq));
+  await parent.click();
+  await expect(selected).toHaveAttribute("data-seq", String(startSeq));
+  await expect(page.getByTestId("tt-children").locator(`[data-seq="${childSeq}"]`)).toBeVisible({ timeout: 15_000 });
+  const t = Number((await page.getByTestId("tt-record").textContent())?.match(/(\d+\.\d+) s/)?.[1] ?? "NaN");
+  await expect(page.getByTestId("replay-time")).toContainText(`${t.toFixed(1)} s /`, { timeout: 15_000 });
+  await expect(page.locator(`[data-testid="event-row-${startSeq}"][aria-selected="true"]`)).toBeVisible({ timeout: 10_000 });
+  // Another filter does not leave the log and the tree speaking of two records.
+  await page.getByTestId("log-filter").fill("kind:snapshot");
+  await expect(page.getByTestId("event-detail")).toContainText(`"seq": ${startSeq}`, { timeout: 10_000 });
+  await expect(selected).toHaveAttribute("data-seq", String(startSeq));
+});
+
+test("the event a mind is told about an ended action is caused by the action's end, which belongs to its start (the F1 demo, a command from the researcher)", async ({ page }) => {
+  test.setTimeout(240_000);
+  await loadDemo(page);
+  await sendTo(page, "ugv-001", 50, 10); // a command from the researcher: the rover drives there and the action ends
+  await step(page, 5);
+  await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 500", { timeout: 30_000 });
+  await openWorkspace(page, "debug");
+  await filtered(page, "kind:event text:actionCompleted", "event");
+  await page.locator('[data-testid^="event-row-"]').first().click();
   const cause = page.getByTestId("tt-causes").locator('[data-testid^="trace-node-"]').first();
-  await expect(cause).toContainText("phase");
-  const causeSeq = Number(await cause.getAttribute("data-seq"));
-  expect(causeSeq).toBeLessThan(phaseSeq);
-  // Another filter does not leave the log and the tree speaking of two records: the detail of the console is the record the tree shows, in the list or not.
-  await page.getByTestId("log-filter").fill(`kind:snapshot`);
-  await expect(page.getByTestId("event-detail")).toContainText(`"seq": ${phaseSeq}`, { timeout: 10_000 });
-  await expect(selected).toHaveAttribute("data-seq", String(phaseSeq));
-  await page.getByTestId("log-filter").fill(`kind:action agent:${AGENT} text:phase`);
-  await expect(page.locator(`[data-testid="event-row-${phaseSeq}"][aria-selected="true"]`)).toBeVisible({ timeout: 10_000 });
-  // A click on the cause picks it: the tree is drawn around it and shows the first record among its effects.
+  await expect(cause).toBeVisible({ timeout: 15_000 });
+  await expect(cause).toContainText("end");
   await cause.click();
-  await expect(selected).toHaveAttribute("data-seq", String(causeSeq));
-  await expect(page.getByTestId("tt-effects").locator(`[data-seq="${phaseSeq}"]`)).toBeVisible();
-  // The log follows the pick: its selected row is that record, and the shared cursor is at its moment.
-  await expect(page.locator(`[data-testid="event-row-${causeSeq}"][aria-selected="true"]`)).toBeVisible({ timeout: 10_000 });
-  const t = Number(((await page.getByTestId(`event-row-${causeSeq}`).textContent()) ?? "").split(" s")[0]);
-  await expect(page.getByTestId("replay-time")).toContainText(`${t.toFixed(1)} s /`);
+  await expect(page.getByTestId("tt-parents")).toContainText("start");
+  await expect(page.getByTestId("tt-effects")).toContainText("event"); // the event about it
 });

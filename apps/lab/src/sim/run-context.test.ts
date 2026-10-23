@@ -37,6 +37,17 @@ describe("syncRunContext", () => {
     expect(store.getState().simTime).toBe(12.5);
   });
 
+  it("a replay of a derived run starts its cursor at the start of its window, not before it; a replay of a whole run at 0", () => {
+    const store = createUiContextStore();
+    syncRunContext(store, { mode: "replay", runId: "run-000002", simTimeS: 18, replay: { startS: 9 } });
+    expect(store.getState()).toMatchObject({ runId: "run-000002", mode: "replay", simTime: 9 });
+    store.getState().setSimTime(12);
+    syncRunContext(store, { mode: "replay", runId: "run-000002", simTimeS: 18, replay: { startS: 9 } });
+    expect(store.getState().simTime).toBe(12); // then it is the user's
+    syncRunContext(store, { mode: "replay", runId: "run-000003", simTimeS: 30, replay: {} });
+    expect(store.getState().simTime).toBe(0);
+  });
+
   it("a switch from live to replay of the same run changes the mode and keeps the cursor where it was; a replay of another run starts afresh", () => {
     const store = createUiContextStore();
     syncRunContext(store, { mode: "live", runId: "run-000001", simTimeS: 8 });
