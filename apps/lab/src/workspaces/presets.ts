@@ -11,6 +11,8 @@ export interface PresetPanel {
   readonly initialWidth?: number;
   /** Initial height (px) for panels below another: the Timeline is as tall as its lanes, not half the window. */
   readonly initialHeight?: number;
+  /** A tab that does not take the focus of its group when the workspace is laid out: the panel the researcher came for stays in front, this one is a click away. */
+  readonly background?: boolean;
   /** Laid out after the other docked panels (its number in the workspace is still its place in the list): a panel below the Scene alone is made once the column beside it exists. */
   readonly late?: boolean;
   /**
@@ -63,6 +65,7 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
       { id: "timeline", position: { referencePanel: "scene", direction: "below" }, initialHeight: 190, late: true },
       { id: "eventList", position: { referencePanel: "scene", direction: "right" }, initialWidth: 500 },
       { id: "inspector", position: { referencePanel: "eventList", direction: "below" }, initialHeight: 230 },
+      { id: "traceTree", background: true },
       PERF_WINDOW,
     ],
   },
@@ -94,5 +97,5 @@ export const LAYOUT_NAMESPACE = "layout";
  * Saved layouts are keyed with this version: a preset that gains panels (F1 e4: Explorer, Inspector; F3a: the Debug workspace) starts
  * from the new preset instead of a saved layout that lacks them.
  */
-export const LAYOUT_VERSION = 7;
+export const LAYOUT_VERSION = 8;
 export const layoutKey = (workspace: WorkspaceId) => `${workspace}@${LAYOUT_VERSION}`;

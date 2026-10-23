@@ -145,12 +145,15 @@ export function addPresetPanel(api: DockviewApi, preset: WorkspacePreset, p: Pre
     return;
   }
   const referenced = p.position && api.getPanel(p.position.referencePanel);
+  const front = api.activePanel;
   api.addPanel({
     ...base,
     ...(referenced && p.position ? { position: { referencePanel: p.position.referencePanel, direction: p.position.direction } } : {}),
     ...(p.initialWidth === undefined ? {} : { initialWidth: p.initialWidth }),
     ...(p.initialHeight === undefined ? {} : { initialHeight: p.initialHeight }),
   });
+  // A background tab: the panel that was in front stays there.
+  if (p.background) front?.api.setActive();
 }
 
 /** Lays a preset out from nothing (the first time, and on reset). */

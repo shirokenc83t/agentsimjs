@@ -51,6 +51,15 @@ describe("UI context bus (ADR-0016)", () => {
     expect(store.getState().timeSelection).toBeUndefined();
   });
 
+  it("holds the record picked in the logs and the trace tree, and a new run clears it", () => {
+    const store = createUiContextStore();
+    expect(store.getState().selectedRecord).toBeUndefined();
+    store.getState().selectRecord({ runId: "run-000001", seq: 42 });
+    expect(store.getState().selectedRecord).toEqual({ runId: "run-000001", seq: 42 });
+    store.getState().setRun("run-000002");
+    expect(store.getState().selectedRecord).toBeUndefined();
+  });
+
   it("is read imperatively: the cursor is there at any time without a subscriber (the renderer never re-renders on it)", () => {
     const store = createUiContextStore();
     const seen = vi.fn();

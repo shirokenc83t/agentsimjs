@@ -88,8 +88,18 @@ export function EventListPanel() {
 
   const select = (r: TraceRecord) => {
     setSelected(r);
+    if (runId !== undefined) useUiContext.getState().selectRecord({ runId, seq: r.seq });
     jump(r.simTime, r.agentId);
   };
+  // A record picked elsewhere (the trace tree, a pane of the inspector) is the selected row here too, when the console has read it.
+  const picked = useUiContext((s) => s.selectedRecord);
+  useEffect(() => {
+    if (picked === undefined || picked.runId !== runId || selected?.seq === picked.seq) return;
+    const r = rows.find((x) => x.seq === picked.seq);
+    if (!r) return;
+    setSelected(r);
+    list.current?.scrollToSeq(r.seq);
+  }, [picked, runId, rows, selected?.seq]);
   const goToEnd = () => {
     flush();
     setAtEnd(true);

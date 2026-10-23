@@ -64,6 +64,18 @@
 .log-error .log-caret { margin: 2px 0 0; color: var(--alm); font-size: var(--type-label-size); white-space: pre; overflow: auto; }
 .log-tail { flex: none; display: flex; align-items: center; gap: 8px; padding: 2px 10px; background: var(--bg1); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); }
 .kinds .sep { flex: none; width: 1px; height: 14px; align-self: center; background: var(--ln2); }
+/* The trace tree (UI-SPEC section 4). */
+.trace-tree { overflow: auto; padding: 0; }
+.trace-tree .tt-empty { margin: 0; padding: 10px 12px; }
+.tt-section { border-bottom: 1px solid var(--ln); padding: 4px 0 6px; }
+.tt-section h4 { margin: 2px 12px 4px; font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: var(--type-label-tracking); text-transform: uppercase; color: var(--fg3); }
+.tt-none { margin: 0; padding: 0 12px; }
+.tt-node, .tt-more { appearance: none; display: block; width: 100%; text-align: left; font: inherit; font-size: var(--type-mono-size); color: var(--fg); background: transparent; border: 0; padding-top: 1px; padding-bottom: 1px; padding-right: 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tt-node:hover, .tt-more:hover { background: var(--bg3); }
+.tt-node:focus-visible, .tt-more:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
+.tt-node.sel { background: var(--acbg); outline: 1px solid var(--ac); outline-offset: -1px; font-weight: 600; }
+.tt-more { color: var(--fg2); }
+.tt-copy { color: var(--fg2); }
 /* A row opened inline: the record's whole payload under the columns (UI-SPEC section 5.1). */
 .event-row.open { height: auto; align-items: start; row-gap: 2px; padding-bottom: 6px; overflow: visible; white-space: normal; }
 .event-row .log-payload { grid-column: 1 / -1; margin: 0; padding: 4px 8px; background: var(--bg0); border: 1px solid var(--ln); font-size: var(--type-label-size); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; cursor: text; }
