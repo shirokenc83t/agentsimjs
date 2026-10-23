@@ -1,17 +1,18 @@
 import "../panels.css";
 import { KIND_STYLE, useUiContext } from "@agentsim/ui";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { usePolled, useSource } from "../../services.tsx";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
+import { useAppActions, usePolled, useSource } from "../../services.tsx";
 import { gapLabel } from "../../sim/gap-click.ts";
 import { collapseMarks, flagRole, glyphOf, isFailure, nearestMark, type Mark } from "./marks.ts";
-import { LABEL_PX, LANE_PX, laneAt, MERGE_PX, RULER_PX, rulerTicks } from "./timeline-geometry.ts";
+import { LABEL_PX, LANE_PX, laneAt, MERGE_PX, RULER_PX, rulerTicks, selectionFromDrag } from "./timeline-geometry.ts";
 import { useJump } from "./use-jump.ts";
 import { useRunMarks } from "./use-run-marks.ts";
 
 /**
  * The Timeline of the Debug workspace (UI-SPEC §6, ADR-0016): one lane per agent with the marks of what happened to it (actions, reflexes, injected
  * commands, degradations; the run's snapshots and checkpoints on a lane of their own), the cursor, and for a live run what is not saved yet, hatched.
- * A click on a mark moves the shared cursor to it (and selects its agent); a click elsewhere to that moment, through the gap rule. Drawn on a canvas,
+ * A click on a mark moves the shared cursor to it (and selects its agent); a click elsewhere to that moment, through the gap rule. A drag on the ruler selects a range
+ * of time (Esc clears it) that "Re-simulate this window" uses. Drawn on a canvas,
  * and the cursor is read imperatively: dragging does not re-render the panel.
  */
 export function TimelinePanel() {
@@ -24,11 +25,19 @@ export function TimelinePanel() {
   const marks = useRunMarks(snap.runId, headS);
   const lanes = useMemo(() => ["run", ...snap.entityIds], [snap.entityIds]);
   const jump = useJump(snap);
+  const { resimulateWindow } = useAppActions();
+  const startS = snap.replay?.startS ?? 0;
+  const selection = useUiContext((s) => s.timeSelection);
+  /** The drag in progress: where it began and where it is (px from the canvas's left edge), or none. */
+  const drag = useRef<{ from: number; to: number; moved: boolean } | undefined>(undefined);
+  const dragged = useRef(false);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(600);
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const height = RULER_PX + lanes.length * LANE_PX;
   const label = gapLabel(snap.persistedHeadTick ?? 0, snap.simHeadTick, dt);
+  const reflexes = marks.filter((m) => m.kind === "reflex").length;
+  const failures = marks.filter(isFailure).length;
 
   useEffect(() => {
     const el = canvas.current?.parentElement;
@@ -87,7 +96,7 @@ export function TimelinePanel() {
     // What is stored, and what is not yet (hatched).
     ctx.fillStyle = color("--acbg");
     ctx.globalAlpha = 0.35;
-    ctx.fillRect(LABEL_PX, RULER_PX, Math.max(0, x(headS) - LABEL_PX), height - RULER_PX);
+    ctx.fillRect(x(startS), RULER_PX, Math.max(0, x(headS) - x(startS)), height - RULER_PX);
     ctx.globalAlpha = 1;
     if (simHeadS > headS) {
       ctx.save();
@@ -124,6 +133,20 @@ export function TimelinePanel() {
       }
     }
     ctx.textAlign = "left";
+    // The selected range: a tint over the lanes and a band on the ruler with its ends (the one being dragged is read now, like the cursor).
+    const live = drag.current && drag.current.moved ? selectionFromDrag(drag.current.from, drag.current.to, width, scale) : useUiContext.getState().timeSelection;
+    if (live) {
+      const x0 = x(live.t0S);
+      const x1 = x(live.t1S);
+      ctx.fillStyle = color("--ac");
+      ctx.globalAlpha = 0.14;
+      ctx.fillRect(x0, RULER_PX, x1 - x0, height - RULER_PX);
+      ctx.globalAlpha = 0.45;
+      ctx.fillRect(x0, 0, x1 - x0, RULER_PX - 1);
+      ctx.globalAlpha = 1;
+      ctx.fillRect(Math.round(x0), 0, 1, height);
+      ctx.fillRect(Math.round(x1) - 1, 0, 1, height);
+    }
     // The cursor, read now (never a React value), with its label.
     const t = Math.min(useUiContext.getState().simTime, simHeadS);
     ctx.fillStyle = color("--ac");
@@ -134,19 +157,59 @@ export function TimelinePanel() {
     ctx.fillRect(lx, 1, w, RULER_PX - 3);
     ctx.fillStyle = color("--acfg");
     ctx.fillText(text, lx + 4, RULER_PX / 2 - 1);
-  }, [width, height, lanes, marks, scale, headS, simHeadS]);
+  }, [width, height, lanes, marks, scale, headS, simHeadS, startS]);
 
   useEffect(() => {
     draw();
     let last = useUiContext.getState().simTime;
+    let lastSel = useUiContext.getState().timeSelection;
     return useUiContext.subscribe((s) => {
-      if (s.simTime === last) return;
+      if (s.simTime === last && s.timeSelection === lastSel) return;
       last = s.simTime;
+      lastSel = s.timeSelection;
       requestAnimationFrame(draw);
     });
   }, [draw]);
 
+  const px = (e: PointerEvent<HTMLCanvasElement>) => e.clientX - e.currentTarget.getBoundingClientRect().left;
+  // A drag that begins on the ruler selects a range; a press that does not move is the click it always was.
+  const onPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    if (e.button !== 0 || e.clientY - box.top >= RULER_PX || px(e) < LABEL_PX) return;
+    drag.current = { from: px(e), to: px(e), moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.currentTarget.parentElement?.parentElement?.focus();
+  };
+  const onPointerMove = (e: PointerEvent<HTMLCanvasElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    d.to = px(e);
+    if (Math.abs(d.to - d.from) >= 3) d.moved = true;
+    if (d.moved) requestAnimationFrame(draw);
+  };
+  const onPointerUp = (e: PointerEvent<HTMLCanvasElement>) => {
+    const d = drag.current;
+    drag.current = undefined;
+    if (!d) return;
+    d.to = px(e);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    if (!d.moved) return; // a click: the click handler takes it
+    dragged.current = true; // the click that follows a drag is not a jump
+    useUiContext.getState().setTimeSelection(selectionFromDrag(d.from, d.to, width, scale));
+    requestAnimationFrame(draw);
+  };
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Escape" && useUiContext.getState().timeSelection !== undefined) {
+      e.stopPropagation();
+      useUiContext.getState().setTimeSelection(undefined);
+    }
+  };
+
   const onClick = (e: MouseEvent<HTMLCanvasElement>) => {
+    if (dragged.current) {
+      dragged.current = false;
+      return;
+    }
     const box = e.currentTarget.getBoundingClientRect();
     const px = e.clientX - box.left;
     const lane = laneAt(e.clientY - box.top, lanes.length);
@@ -157,12 +220,28 @@ export function TimelinePanel() {
   };
 
   return (
-    <div className="panel timeline" data-testid="timeline">
+    <div className="panel timeline" data-testid="timeline" tabIndex={-1} onKeyDown={onKeyDown}>
       <div className="timeline-head">
         <span className="muted">{marks.length} marks</span>
         <span data-testid="timeline-counts" className="mono">
-          <span className="warn">▲ {marks.filter((m) => m.kind === "reflex").length} reflex</span> · <span className="danger">✕ {marks.filter(isFailure).length} failure</span>
+          <span className={reflexes > 0 ? "warn" : "attn-zero"}>▲ {reflexes} reflex</span> · <span className={failures > 0 ? "danger" : "attn-zero"}>✕ {failures} failure</span>
         </span>
+        <span className="sp" />
+        {selection !== undefined && (
+          <span className="mono" data-testid="timeline-selection" title="Esc clears the selection">
+            selected {selection.t0S.toFixed(1)}–{selection.t1S.toFixed(1)} s
+          </span>
+        )}
+        <button
+          type="button"
+          className="btn"
+          disabled={!snap.runId}
+          onClick={resimulateWindow}
+          data-tip={selection !== undefined ? "Re-simulate the selected window into a derived run" : "Re-simulate the cursor with a few seconds either side into a derived run (drag on the ruler to choose the window)"}
+          data-testid="timeline-resim"
+        >
+          Re-simulate this window
+        </button>
         {label !== undefined && (
           <span className="warn" data-testid="timeline-gap">
             {label}
@@ -175,7 +254,7 @@ export function TimelinePanel() {
         )}
       </div>
       <div className="timeline-lanes">
-        <canvas ref={canvas} width={width} height={height} style={{ width, height }} onClick={onClick} data-testid="timeline-canvas" aria-label="Timeline: one lane per agent" />
+        <canvas ref={canvas} width={width} height={height} style={{ width, height }} onClick={onClick} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} data-testid="timeline-canvas" aria-label="Timeline: one lane per agent" />
       </div>
     </div>
   );

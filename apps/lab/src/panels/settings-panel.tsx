@@ -108,7 +108,7 @@ export function SettingsPanel() {
               <span className="rule" />
             </h4>
             <p className="prose">
-              No provider is configured: the agents here plan with algorithms, not with a language model. When providers arrive, each key is shown only as “<span className="keystate mono" data-testid="key-state-set">●●●● set</span>” or “<span className="keystate mono" data-testid="key-state-unset">○ not set</span>”, with Replace and Remove; the value is never rendered.
+              No provider is configured: the agents here plan with algorithms, not with a language model. When providers arrive, each key is shown only as <span className="keystate mono" data-testid="key-state-set">●●●● set</span> or <span className="keystate mono" data-testid="key-state-unset">○ not set</span>, with Replace and Remove; the value is never rendered.
             </p>
           </section>
 

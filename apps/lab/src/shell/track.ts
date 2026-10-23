@@ -9,9 +9,11 @@ export interface TrackLayout {
   readonly cursorPct: number;
 }
 
-export function trackLayout(a: { readonly headS: number; readonly simHeadS: number | undefined; readonly shownS: number; readonly dtS: number }): TrackLayout {
-  const scaleS = Math.max(a.simHeadS ?? 0, a.headS, a.dtS);
-  const pct = (s: number) => (s / scaleS) * 100;
+/** `startS` is where the track starts (a re-simulated window starts after 0): positions are measured from it. */
+export function trackLayout(a: { readonly headS: number; readonly simHeadS: number | undefined; readonly shownS: number; readonly dtS: number; readonly startS?: number }): TrackLayout {
+  const startS = a.startS ?? 0;
+  const scaleS = Math.max(a.simHeadS ?? 0, a.headS, startS + a.dtS);
+  const pct = (s: number) => (Math.max(0, s - startS) / (scaleS - startS)) * 100;
   const gapS = Math.max(0, (a.simHeadS ?? a.headS) - a.headS);
   return { scaleS, savedPct: pct(a.headS), gapLeftPct: pct(a.headS), gapWidthPct: pct(gapS), cursorPct: pct(a.shownS) };
 }

@@ -302,8 +302,8 @@ export function StorageBrowser(props: StorageBrowserProps) {
                 {props.onReplay && (
                   <button
                     className="btn"
-                    disabled={busy || r.recording !== "stored" || r.derived !== undefined}
-                    title={r.derived !== undefined ? "A re-simulated window: the panels open it in the next milestone (it holds the window, not the run's start)" : r.recording === "stored" ? "Replay this run from storage" : r.recording === "none" ? "This run was not recorded: there is nothing to replay" : "This run was stored before recording existed: there is nothing to replay"}
+                    disabled={busy || r.recording !== "stored"}
+                    title={r.recording === "stored" ? "Replay this run from storage" : r.recording === "none" ? "This run was not recorded: there is nothing to replay" : "This run was stored before recording existed: there is nothing to replay"}
                     onClick={() => props.onReplay?.(r.runId)}
                     aria-label={`Replay ${r.runId}`}
                     data-testid={`replay-${r.runId}`}

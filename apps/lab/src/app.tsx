@@ -45,7 +45,7 @@ export function App() {
   // A replay session: the run being shown from storage (the session itself, and what it says when it cannot open, are in its lazy chunk).
   const [replayRun, setReplayRun] = useState<string | undefined>(undefined);
   // What the last "Re-simulate window" said: its verdict, or why it could not be done. Dismissed by the researcher.
-  const [resimNote, setResimNote] = useState<{ kind: "info" | "warn" | "danger"; text: string } | null>(null);
+  const [resimNote, setResimNote] = useState<{ kind: "info" | "warn" | "danger"; text: string; open?: string } | null>(null);
 
   const startRun = useCallback(
     (start: () => Promise<LabRun>) => {
@@ -217,23 +217,24 @@ export function App() {
       ...(preset?.panels ?? []).map((p) => ({ id: `panel.open.${p.id}`, title: `Open panel: ${PANELS[p.id as PanelId].title}`, group: "Panel", run: () => dockRef.current && preset && openPanel(dockRef.current, preset, p.id) })),
     ];
   }, [preset]);
-  // Re-simulates a window around the cursor of the run the panels show into a derived run, stored with its verdict (ADR-0035 section 3). Opening a derived run in the panels, and
-  // the buttons of the log, the timeline and the inspector, are the next milestone: the panels' replay reads the run's configuration records, which a window does not hold.
+  // Re-simulates a window of the run the panels show into a derived run, stored with its verdict (ADR-0035 section 3): the Timeline's selection when there is one, else the
+  // cursor with a few seconds either side. The derived run opens in the panels from the notice (it carries the parent's configuration records, so replay can build it).
   const resimulateWindow = useCallback(async () => {
     const runId = view?.runId;
     if (!runId || storage.status().state !== "ready") return;
     setResimNote({ kind: "info", text: `Re-simulating a window of ${runId}…` });
     try {
       const c = await loadResimController();
-      const w = await c.suggestWindow(storage.ports, runId, useUiContext.getState().simTime);
+      const picked = useUiContext.getState().timeSelection;
+      const w = picked !== undefined ? ({ ok: true, value: picked } as const) : await c.suggestWindow(storage.ports, runId, useUiContext.getState().simTime);
       if (!w.ok) return setResimNote({ kind: "warn", text: `Cannot re-simulate a window of ${runId}: ${w.error.message}` });
       const r = await c.resimulateWindowToRun(storage.ports, runId, w.value);
       if (!r.ok) return setResimNote({ kind: "danger", text: `Could not re-simulate a window of ${runId}: ${r.error.message}` });
       const d = r.value.derived;
       setResimNote(
         d.status === "matches"
-          ? { kind: "info", text: `Window ${d.t0S}–${d.t1S} s of ${runId} re-simulated as ${r.value.runId}: it matches (${d.checkpointsChecked} checkpoints reproduced).` }
-          : { kind: "danger", text: `Window ${d.t0S}–${d.t1S} s of ${runId} re-simulated as ${r.value.runId}: DIVERGENT at tick ${d.divergence?.tick ?? "?"} (the state hash differs from the recorded one).` },
+          ? { kind: "info", text: `Window ${d.t0S}–${d.t1S} s of ${runId} re-simulated as ${r.value.runId}: it matches (${d.checkpointsChecked} checkpoints reproduced).`, open: r.value.runId }
+          : { kind: "danger", text: `Window ${d.t0S}–${d.t1S} s of ${runId} re-simulated as ${r.value.runId}: DIVERGENT at tick ${d.divergence?.tick ?? "?"} (the state hash differs from the recorded one).`, open: r.value.runId },
       );
     } catch (e) {
       setResimNote({ kind: "danger", text: `Could not re-simulate a window: ${e instanceof Error ? e.message : String(e)}` });
@@ -283,7 +284,7 @@ export function App() {
   );
 
   return (
-    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun }}>
+    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun, resimulateWindow: () => void resimulateWindow() }}>
       <CurrentRunProvider value={currentRun}>
       <div className="shell">
         <div data-testid="shell-header">
@@ -301,6 +302,7 @@ export function App() {
             runOpen={runAnchor !== null}
             onRunClick={setRunAnchor}
             replaying={view?.mode === "replay"}
+            derived={view?.replay?.derived}
             onPalette={() => setPaletteOpen(true)}
           >
             {runAnchor && (
@@ -360,6 +362,19 @@ export function App() {
           {resimNote && (
             <Banner kind={resimNote.kind} testId="resim-notice">
               {resimNote.text}{" "}
+              {resimNote.open !== undefined && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setReplayRun(resimNote.open);
+                    setResimNote(null);
+                  }}
+                  data-testid="resim-notice-open"
+                >
+                  Open derived run
+                </button>
+              )}{" "}
               <button type="button" className="btn" onClick={() => setResimNote(null)} data-testid="resim-notice-dismiss">
                 Dismiss
               </button>

@@ -195,7 +195,7 @@ describe("StorageBrowser", () => {
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
   });
 
-  it("marks a derived run with its parent and its verdict, and does not offer to replay it yet", async () => {
+  it("marks a derived run with its parent and its verdict", async () => {
     const { ports } = setup();
     await userEvent.click(await screen.findByTestId("create-sample-run"));
     await ports.runs.create({

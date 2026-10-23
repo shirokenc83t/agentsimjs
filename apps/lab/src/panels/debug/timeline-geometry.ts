@@ -20,6 +20,21 @@ export function rulerTicks(scaleS: number, trackPx: number, minGapPx = 64): { t:
   return out;
 }
 
+/**
+ * The range of time a drag on the ruler selects: both ends in px from the canvas's left edge, ordered, clamped to the track and measured in seconds against the span the
+ * track stands for. None when the two ends are the same moment.
+ */
+export function selectionFromDrag(fromPx: number, toPx: number, widthPx: number, scaleS: number): { t0S: number; t1S: number } | undefined {
+  const track = widthPx - LABEL_PX;
+  if (track <= 0 || scaleS <= 0) return undefined;
+  const at = (px: number) => Math.max(0, Math.min(scaleS, ((px - LABEL_PX) / track) * scaleS));
+  const a = at(fromPx);
+  const b = at(toPx);
+  const t0S = Math.round(Math.min(a, b) * 10) / 10;
+  const t1S = Math.round(Math.max(a, b) * 10) / 10;
+  return t1S > t0S ? { t0S, t1S } : undefined;
+}
+
 /** Where on a canvas of this lane count a y (px from its top) falls: the ruler (-1) or the lane. */
 export function laneAt(y: number, lanes: number): number {
   if (y < RULER_PX) return -1;

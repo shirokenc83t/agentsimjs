@@ -67,6 +67,37 @@ describe("a window re-simulated into a derived run in storage", () => {
     for (const c of copies) expect((c.payload as { copyOf: string }).copyOf).toMatch(/^run-000001#\d+$/);
   }, 180_000);
 
+  it("a window that starts after the start carries the parent's agent configuration records as copies, so replay can build the agents, whether it starts at the beginning or later", async () => {
+    const { ports } = await recordedParent(260);
+    const isConfig = (r: TraceRecord) => r.kind === "lifecycle" && (r.payload as { op?: string }).op === "config";
+    const parentConfigs = (await everything(ports, "run-000001")).filter(isConfig);
+    expect(parentConfigs.length).toBeGreaterThan(0);
+
+    const later = await resimulateWindowToRun(ports, "run-000001", { t0S: 15, t1S: 17 }, { runner: inlineRunner, nowWallMs: () => 5 });
+    if (!later.ok) throw new Error(later.error.message);
+    const configs = (await everything(ports, later.value.runId)).filter(isConfig);
+    expect(configs.map((c) => c.agentId)).toEqual(parentConfigs.map((c) => c.agentId));
+    for (const [i, c] of configs.entries()) {
+      const original = parentConfigs[i] as TraceRecord;
+      expect(c.seq).toBe(original.seq); // they come first, with the seqs they had
+      expect(c.runId).toBe(later.value.runId);
+      expect((c.payload as { copyOf?: string }).copyOf).toBe(original.id);
+      const { copyOf: _c, ...rest } = c.payload as Record<string, unknown>;
+      expect(rest).toEqual(original.payload);
+    }
+    expect(later.value.derived.copies).toBeGreaterThanOrEqual(parentConfigs.length);
+    // The reference walk still passes.
+    const mine = await everything(ports, later.value.runId);
+    expect(unresolvedReferences(mine)).toEqual({ spaces: new Set(), queries: new Set(), records: new Set() });
+
+    const fromStart = await resimulateWindowToRun(ports, "run-000001", { t0S: 0, t1S: 2 }, { runner: inlineRunner, nowWallMs: () => 6 });
+    if (!fromStart.ok) throw new Error(fromStart.error.message);
+    const own = (await everything(ports, fromStart.value.runId)).filter(isConfig);
+    // The window's recording starts after the world is loaded, so the configuration records are copies here too, never duplicated.
+    expect(own.length).toBe(parentConfigs.length);
+    expect(own.every((c) => (c.payload as { copyOf?: string }).copyOf !== undefined)).toBe(true);
+  }, 180_000);
+
   it("a window that cannot be reproduced is stored as divergent, with the tick and both hashes", async () => {
     const { ports } = await recordedParent(120, { storeInputs: false });
     const r = await resimulateWindowToRun(ports, "run-000001", { t0S: 0, t1S: 8 }, { runner: inlineRunner });

@@ -43,8 +43,10 @@ export interface AppActions {
   openWorkspace(id: WorkspaceId): void;
   /** Shows a recorded run from storage in the panels (nothing goes to the sim worker); `undefined` goes back to the live run. */
   openReplay(runId: string | undefined): void;
+  /** Re-simulates a window of the run shown into a derived run: the Timeline's selection when there is one, else the cursor with a few seconds either side. */
+  resimulateWindow(): void;
 }
-const AppActionsContext = createContext<AppActions>({ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {} });
+const AppActionsContext = createContext<AppActions>({ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {}, resimulateWindow: () => {} });
 export const AppActionsProvider = AppActionsContext.Provider;
 export const useAppActions = (): AppActions => useContext(AppActionsContext);
 

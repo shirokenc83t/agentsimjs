@@ -155,8 +155,10 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
   const track = useRef<HTMLDivElement>(null);
   const persistedTick = Math.round(head / dtS);
   const label = gapLabel(persistedTick, Math.round((simHead ?? head) / dtS), dtS);
-  const shown = Math.min(simTime, head);
-  const t = trackLayout({ headS: head, simHeadS: simHead, shownS: shown, dtS });
+  const startS = replay.startS ?? 0;
+  const shown = Math.max(startS, Math.min(simTime, head));
+  const derived = replay.derived;
+  const t = trackLayout({ headS: head, simHeadS: simHead, shownS: shown, dtS, startS });
 
   // Following the persisted head: the cursor goes to it now and every time it moves.
   useEffect(() => {
@@ -169,7 +171,7 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
   const onTrackClick = (e: MouseEvent) => {
     const box = track.current?.getBoundingClientRect();
     if (!box || box.width === 0) return;
-    const target = ((e.clientX - box.left) / box.width) * t.scaleS;
+    const target = startS + ((e.clientX - box.left) / box.width) * (t.scaleS - startS);
     const r = resolveGapClick(Math.round(target / dtS), persistedTick, Math.round((simHead ?? head) / dtS));
     setFollow(false);
     setNotice(r.notice);
@@ -185,6 +187,7 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
         <span className="hide-compact trunc" data-testid="replay-label">
           {GLYPH.replay} {live ? "Scrubbing" : "Replay of"} {view.runId} from storage (the live run is not touched)
         </span>
+        {derived !== undefined && <DerivedMark derived={derived} />}
         <span className="muted hide-compact hide-narrow" data-testid="replay-pose-rate">
           {replay.poseRate}
         </span>
@@ -222,7 +225,7 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
         <input
           type="range"
           className="cursor-input"
-          min={0}
+          min={startS}
           max={head}
           step={dtS}
           value={shown}
@@ -236,6 +239,16 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
         />
       </div>
     </div>
+  );
+}
+
+/** A derived run in the player: where it comes from, its window and whether its checkpoints were reproduced (ADR-0035 section 3). */
+function DerivedMark(props: { derived: NonNullable<NonNullable<RunSnapshot["replay"]>["derived"]> }) {
+  const d = props.derived;
+  return (
+    <span className="derived-mark mono" data-testid="player-derived" title={`A re-simulated window of ${d.parentRunId}: ${d.status === "matches" ? "every recorded checkpoint in it was reproduced" : `the first checkpoint that was not reproduced is at tick ${d.divergenceTick ?? "?"}`}`}>
+      ◇ of {d.parentRunId} · {d.t0S.toFixed(1)}–{d.t1S.toFixed(1)} s · {d.status === "matches" ? <span className="ok">✓ matches</span> : <span className="danger">{GLYPH.fail} divergent @{d.divergenceTick ?? "?"}</span>}
+    </span>
   );
 }
 

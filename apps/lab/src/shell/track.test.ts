@@ -15,6 +15,15 @@ describe("player track layout", () => {
     expect(t.cursorPct).toBe(75);
   });
 
+  it("a re-simulated window: the track starts at the window's start, so the cursor and the end are measured from it", () => {
+    const t = trackLayout({ headS: 19, simHeadS: undefined, shownS: 17, dtS: 0.1, startS: 15 });
+    expect(t.scaleS).toBe(19);
+    expect(t.savedPct).toBe(100);
+    expect(t.cursorPct).toBe(50);
+    expect(trackLayout({ headS: 19, simHeadS: undefined, shownS: 15, dtS: 0.1, startS: 15 }).cursorPct).toBe(0);
+    expect(trackLayout({ headS: 19, simHeadS: undefined, shownS: 3, dtS: 0.1, startS: 15 }).cursorPct).toBe(0); // before the window: its start
+  });
+
   it("never divides by zero: an empty run is one tick wide", () => {
     const t = trackLayout({ headS: 0, simHeadS: 0, shownS: 0, dtS: 0.1 });
     expect(t.scaleS).toBe(0.1);

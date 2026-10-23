@@ -3,7 +3,7 @@ import type { StoragePorts, StoredRunInput } from "@agentsim/storage";
 import { recordingProfileHash, RECORDING_PRESETS, type DerivedRun, type RecordingProfile, type RunHeader, type TraceRecord } from "@agentsim/trace";
 import { SCENARIO_DT_S } from "./sim-constants.ts";
 import { toWire, type ResimWorkerReply } from "./resim-wire.ts";
-import { completeReferences, MAX_WINDOW_S, type UnresolvedReferences } from "./resim-refs.ts";
+import { completeReferences, copiesOf, MAX_WINDOW_S, type UnresolvedReferences } from "./resim-refs.ts";
 import type { ResimError, ResimWindowRequest, ResimWindowResult } from "./resim-window.ts";
 
 // Re-simulating a window of a stored run into a derived run (ADR-0035 section 3 and its addition of 2026-10-17, item 10), the part that reads the parent from storage and writes
@@ -157,8 +157,18 @@ export async function resimulateWindowToRun(ports: StoragePorts, parentRunId: st
     // They come before the window's first record, or they would break the run's order.
     return found.filter((r) => r.seq < firstSeq);
   };
-  const completed = await completeReferences(parentRunId, runId, records, find);
-  const finalDerived: DerivedRun = { ...derived, copies: completed.copies.length };
+  // Replay builds the run's agents from their `config` records, which the parent wrote at its start: a window that starts later carries them as copies (a window that starts
+  // at the beginning wrote its own). They come first, with the seqs they had.
+  const have = new Set(records.filter(isConfigRecord).map((r) => r.agentId));
+  const parentConfigs = await ports.trace.query({ runId: parentRunId, kinds: ["lifecycle"], op: "config", limit: 4096 });
+  const configCopies = copiesOf(
+    parentRunId,
+    runId,
+    parentConfigs.filter((r) => !have.has(r.agentId) && r.seq < firstSeq),
+  );
+  const completed = await completeReferences(parentRunId, runId, [...configCopies, ...records], find);
+  const copies = [...configCopies, ...completed.copies].sort((a, b) => a.seq - b.seq);
+  const finalDerived: DerivedRun = { ...derived, copies: copies.length };
 
   const header: RunHeader = {
     runId,
@@ -200,7 +210,7 @@ export async function resimulateWindowToRun(ports: StoragePorts, parentRunId: st
       if (!f.ok) return fail(`${f.error.code}: ${f.error.message}`);
     }
   }
-  const all = [...completed.copies, ...records];
+  const all = [...copies, ...records];
   for (let i = 0; i < all.length; i += WRITE_CHUNK) {
     const a = await ports.trace.append(all.slice(i, i + WRITE_CHUNK));
     if (!a.ok) return fail(`${a.error.code}: ${a.error.message}`);
@@ -208,3 +218,6 @@ export async function resimulateWindowToRun(ports: StoragePorts, parentRunId: st
   await ports.trace.flush();
   return ok({ runId, derived: finalDerived });
 }
+
+/** An agent's configuration record (what replay builds the agents from). */
+const isConfigRecord = (r: TraceRecord): boolean => r.kind === "lifecycle" && (r.payload as { op?: unknown } | null)?.op === "config";

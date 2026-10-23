@@ -33,6 +33,24 @@ describe("UI context bus (ADR-0016)", () => {
     expect(store.getState()).toMatchObject({ runId: "run-000004", mode: "live", simTime: 0 });
   });
 
+  it("holds a time selection of the Timeline: ordered and forward, none when it is empty or not a number, and a new run clears it", () => {
+    const store = createUiContextStore();
+    expect(store.getState().timeSelection).toBeUndefined();
+    store.getState().setTimeSelection({ t0S: 12, t1S: 18.5 });
+    expect(store.getState().timeSelection).toEqual({ t0S: 12, t1S: 18.5 });
+    store.getState().setTimeSelection({ t0S: -4, t1S: 3 });
+    expect(store.getState().timeSelection).toEqual({ t0S: 0, t1S: 3 });
+    store.getState().setTimeSelection({ t0S: 5, t1S: 5 });
+    expect(store.getState().timeSelection).toBeUndefined();
+    store.getState().setTimeSelection({ t0S: 9, t1S: 4 });
+    expect(store.getState().timeSelection).toBeUndefined();
+    store.getState().setTimeSelection({ t0S: Number.NaN, t1S: 4 });
+    expect(store.getState().timeSelection).toBeUndefined();
+    store.getState().setTimeSelection({ t0S: 1, t1S: 2 });
+    store.getState().setRun("run-000009");
+    expect(store.getState().timeSelection).toBeUndefined();
+  });
+
   it("is read imperatively: the cursor is there at any time without a subscriber (the renderer never re-renders on it)", () => {
     const store = createUiContextStore();
     const seen = vi.fn();

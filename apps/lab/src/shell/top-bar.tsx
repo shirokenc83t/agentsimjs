@@ -1,5 +1,6 @@
 import { GLYPH, useUiContext } from "@agentsim/ui";
 import { useState, type ReactNode } from "react";
+import type { ReplayDerived } from "../sim/run-source.ts";
 import type { WorkspaceId } from "../workspaces/presets.ts";
 
 export interface TopBarProps {
@@ -19,6 +20,8 @@ export interface TopBarProps {
   readonly onRunClick: (anchor: HTMLElement) => void;
   /** The panels show a recording (the live run goes on behind it). */
   readonly replaying: boolean;
+  /** When the recording shown is a re-simulated window of another run: where it comes from and its verdict. */
+  readonly derived?: ReplayDerived | undefined;
   readonly onPalette: () => void;
   /** The run popover (anchored to the run selector), when open. */
   readonly children?: ReactNode;
@@ -64,7 +67,7 @@ export function TopBar(props: TopBarProps) {
         </button>
         {props.children}
       </div>
-      {props.replaying && <ReplaySegment />}
+      {props.replaying && <ReplaySegment derived={props.derived} />}
       <div className="seg r">
         <button type="button" className="tb tip-right" onClick={props.onPalette} aria-label="Command palette" data-tip="Command palette · ctrl+k">
           ctrl+k
@@ -75,11 +78,19 @@ export function TopBar(props: TopBarProps) {
 }
 
 /** The persistent state of replay (UI-SPEC §2): not the accent, a segment of its own with the moment shown; it re-renders with the cursor and nothing else. */
-function ReplaySegment() {
+function ReplaySegment(props: { derived: ReplayDerived | undefined }) {
   const at = useUiContext((s) => s.simTime);
+  const d = props.derived;
   return (
     <div className="seg r rpseg" role="status" data-testid="replay-segment">
-      {GLYPH.replay} REPLAY · viewing t {at.toFixed(1)} s<span className="k k-opt"> · live run keeps running {GLYPH.running}</span>
+      {GLYPH.replay} REPLAY · viewing t {at.toFixed(1)} s
+      {d !== undefined && (
+        <span data-testid="replay-derived">
+          {" "}· ◇ of {d.parentRunId} · {d.t0S.toFixed(1)}–{d.t1S.toFixed(1)} s ·{" "}
+          {d.status === "matches" ? <span className="ok">✓ matches</span> : <span className="danger">{GLYPH.fail} divergent @{d.divergenceTick ?? "?"}</span>}
+        </span>
+      )}
+      <span className="k k-opt"> · live run keeps running {GLYPH.running}</span>
     </div>
   );
 }

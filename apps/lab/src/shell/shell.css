@@ -17,6 +17,7 @@
 .tb.runsel { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
 .top .rpseg { overflow: hidden; text-overflow: ellipsis; }
 .rpseg { color: var(--fg); font-weight: 600; background: var(--bg3); border-left: 1px solid var(--fg2); }
+.rpseg .ok, .derived-mark .ok { color: var(--ok); }
 
 /* Row 2: the player. */
 .player { display: grid; grid-template-columns: auto 140px minmax(0, 1fr) auto; align-items: stretch; height: 56px; background: var(--bg2); border-bottom: 2px solid var(--ln2); }
