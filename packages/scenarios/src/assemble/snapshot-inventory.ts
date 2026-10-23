@@ -77,6 +77,9 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
   // ---- core: actions and body ---------------------------------------------------------------------------------------
   ActionRuntime: {
     ports: r(WIRING),
+    links: r("the linking trace the runtime writes through: wiring (its collision memory is read in the tick it is written)"),
+    startRecords: c("the trace record of each running action's start: the parent of what it writes (RuntimeSnapshot.active[].startRecord)"),
+    rejectedRecords: s("read by the world in the tick of the refusal: empty between ticks"),
     dtS: r("run configuration"),
     nextAction: c("action ID counter"),
     active: c("the running behaviour of each agent: info (an Active entry) and its state (GoToBehavior, ExploreBehavior, closures)"),
@@ -356,6 +359,8 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     trace: r(WIRING),
     beliefGrids: r(WIRING),
     completed: s("outcomes of completed queries are taken in the tick they complete: empty between ticks (snapshot() asserts it, with the service's outputs and lazy legs)"),
+    outcomeRecords: s("the trace record of a completed query, read with its outcome in the same tick: empty between ticks"),
+    restartRecords: s("the trace record of an interrupted query's restart, read with its legs in the same tick: empty between ticks"),
     configs: c("each agent's effective planning configuration: the snapshot keeps the ones setConfig changed"),
     initial: r("each agent's configuration at assembly: what `configs` is compared with"),
   },
@@ -392,6 +397,7 @@ export const NOT_STATE: Readonly<Record<string, string>> = {
   HpaQuery: "a search engine: rebuilt by replay",
   AbstractGraph: "an HPA* graph: derived from a view",
   ClusterDijkstra: "derived from an HPA* graph",
+  LinkingTrace: "the runtime's wrapper of its trace sink: it gives the records of a running action their parent; its only memory is the latest collision of an agent, read in the tick it is written",
   StrategyRunner: "a strategy's runner is pure: rebuilt by replay of the completed stages (StrategySnapshot)",
 };
 

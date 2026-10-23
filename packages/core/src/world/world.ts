@@ -356,7 +356,7 @@ export class World implements Steppable {
       const env = p.envelope as DecisionEnvelope;
       const d = env.decision;
       const slot = mindSlot(brain);
-      trace.emit({
+      const decisionId = trace.emit({
         source: `${agent.id}/${slot === "S1" ? "s1" : "s2"}`,
         simTime: simTimeS,
         kind: "thought",
@@ -377,9 +377,9 @@ export class World implements Steppable {
       // Timer bookkeeping comes before the decision's action, and may accompany an idle decision.
       if (env.timers && env.timers.length > 0) this.applyTimers(i, env.timers, tick, simTimeS);
       if (d.kind !== "action") continue;
-      const started = runtime.start(agent, d.name, d.params, { scope: "self", id: agent.id }, tick, simTimeS);
+      const started = runtime.start(agent, d.name, d.params, { scope: "self", id: agent.id }, tick, simTimeS, decisionId);
       // The brain hears about a rejection at once (at the end of this tick); a script moves on to its next step.
-      if (!started.ok) this.addEvent(i, { kind: "actionRejected", name: d.name, code: started.error.code }, tick, simTimeS);
+      if (!started.ok) this.addEvent(i, { kind: "actionRejected", name: d.name, code: started.error.code }, tick, simTimeS, runtime.takeRejectedRecord(agent.id));
     }
     // 3. Planning.
     planner.advance(tick);
@@ -460,6 +460,7 @@ export class World implements Steppable {
           : { kind: "actionFailed", actionId: e.actionId, name: e.name, status: e.status, code: e.code ?? "failed" },
         tick,
         simTimeS,
+        e.recordId,
       );
     }
     for (let i = 0; i < this.agents.length; i++) {
@@ -476,7 +477,7 @@ export class World implements Steppable {
   }
 
   /** Traces the event when it happens, whether or not the agent has a mind, and queues it for the mind if it has one. */
-  private addEvent(i: number, event: DecisionEvent, tick: number, simTimeS: number): void {
+  private addEvent(i: number, event: DecisionEvent, tick: number, simTimeS: number, cause?: string): void {
     const a = this.agents[i] as SimAgent;
     const brain = this.brainAt[i];
     const component =
@@ -487,6 +488,7 @@ export class World implements Steppable {
       kind: "event",
       agentId: a.id,
       detail: isControl(event.kind) ? "full" : "transitions",
+      ...(cause === undefined ? {} : { causeIds: [cause] }),
       payload: { op: "event", event },
     });
     if (brain) (this.inboxes[i] as Inbox).add(event, tick);
