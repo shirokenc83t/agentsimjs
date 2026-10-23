@@ -3,7 +3,7 @@ import "./dockview-theme.css";
 import type { StorageClient } from "@agentsim/storage";
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type DockviewTheme, type SerializedDockview } from "dockview-react";
 import { useUiContext } from "@agentsim/ui";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
 import { usePolled, useServices } from "../services.tsx";
 import { syncRunContext } from "../sim/run-context.ts";
 import { applyPreset, COLLAPSED_HEIGHT_PX, syncCollapsed } from "./dock-actions.ts";
@@ -24,7 +24,16 @@ const DOCK_THEME: DockviewTheme = { name: "agentsim", className: "dockview-theme
  * One dockview per workspace preset. Layouts are user data, saved through the storage ports
  * (ADR-0016) when storage is available; otherwise the preset is used.
  */
-export function WorkspaceHost(props: { preset: WorkspacePreset; storage: StorageClient; layoutEpoch: number; onApi?: (api: DockviewApi) => void }) {
+export function WorkspaceHost(props: {
+  preset: WorkspacePreset;
+  /** The preset the dock is laid out by now, when a layout that ships with the app is open (the window buttons dock a panel where this puts it); the workspace's own by default. */
+  activePreset?: WorkspacePreset;
+  /** False while a layout that ships with the app is open: the dock is not the researcher's working layout and is not saved as it. */
+  autosave?: MutableRefObject<boolean>;
+  storage: StorageClient;
+  layoutEpoch: number;
+  onApi?: (api: DockviewApi) => void;
+}) {
   const { preset, storage, layoutEpoch, onApi } = props;
   const api = useRef<DockviewApi | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -62,7 +71,7 @@ export function WorkspaceHost(props: { preset: WorkspacePreset; storage: Storage
       syncCollapsed(e.api);
       clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
-        if (storageReady() && api.current === e.api) void storage.ports.userData.set(LAYOUT_NAMESPACE, layoutKey(preset.id), e.api.toJSON());
+        if (storageReady() && api.current === e.api && props.autosave?.current !== false) void storage.ports.userData.set(LAYOUT_NAMESPACE, layoutKey(preset.id), e.api.toJSON());
       }, 500);
     });
   };
@@ -91,7 +100,7 @@ export function WorkspaceHost(props: { preset: WorkspacePreset; storage: Storage
   return (
     <div className="workspace-fill" data-testid={`workspace-${preset.id}`}>
       {source ? (
-        <PresetContext.Provider value={preset}>
+        <PresetContext.Provider value={props.activePreset ?? preset}>
           <DockviewReact theme={DOCK_THEME} components={DOCK_COMPONENTS} rightHeaderActionsComponent={WindowButtons} floatingGroupDragHandle="tabbar" onReady={onReady} />
         </PresetContext.Provider>
       ) : null}

@@ -5,9 +5,9 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { applyAppearance, loadAppearance } from "./config/appearance.ts";
 import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStorageStatus, useThemeSetting, type CurrentRun } from "./services.tsx";
 import type { PresetId } from "@agentsim/core";
-import { closePanel, dockPanel, floatPanel, focusNext, focusNumber, isFloating, openPanel, syncCollapsed, toggleCollapse, toggleMaximize } from "./workspaces/dock-actions.ts";
+import { applyPreset, closePanel, dockPanel, floatPanel, focusNext, focusNumber, isFloating, openPanel, syncCollapsed, toggleCollapse, toggleMaximize } from "./workspaces/dock-actions.ts";
 import { deleteNamedLayout, layoutName, listNamedLayouts, readNamedLayout, saveNamedLayout } from "./workspaces/layouts.ts";
-import { LAYOUT_NAMESPACE, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
+import { BUILTIN_LAYOUTS, DEBUG_LOGS_LAYOUT, LAYOUT_NAMESPACE, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
 import { PANELS, type PanelId } from "./workspaces/registry.tsx";
 import { LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadResimController, loadRunController } from "./workspaces/registry.tsx";
 import { Player } from "./shell/player.tsx";
@@ -38,6 +38,13 @@ export function App() {
   const presetRef = useRef<(typeof WORKSPACES)[number] | undefined>(undefined);
   const [layouts, setLayouts] = useState<string[]>([]);
   const [activeLayout, setActiveLayout] = useState<string | undefined>(undefined);
+  // A layout that ships with the app, when one is open (the Debug's "debug · logs"): the dock as it was is kept here to put it back, and the autosave of the working layout waits.
+  const [builtinActive, setBuiltinActive] = useState<string | undefined>(undefined);
+  const stash = useRef<unknown>(undefined);
+  const autosave = useRef(true);
+  const workspaceRef = useRef<WorkspaceId>("scene");
+  const builtinRef = useRef<string | undefined>(undefined);
+  const enterLogsRef = useRef<() => void>(() => {});
   const [run, setRun] = useState<LabRun | undefined>(undefined);
   const [runBusy, setRunBusy] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
@@ -112,7 +119,9 @@ export function App() {
       // Alt+number: the panel with that number in the open workspace (the number is in its tab).
       if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code) && dockRef.current && presetRef.current) {
         e.preventDefault();
-        focusNumber(dockRef.current, presetRef.current, Number(e.code.slice(5)));
+        // In the Debug the sixth is the Logs: it is a layout of its own, not a panel of the dock.
+        if (e.code === "Digit6" && workspaceRef.current === "debug" && builtinRef.current === undefined) enterLogsRef.current();
+        else focusNumber(dockRef.current, presetRef.current, Number(e.code.slice(5)));
         return;
       }
       const k = shellKey(e, e.target, WORKSPACES.length);
@@ -129,6 +138,9 @@ export function App() {
 
   const resetLayouts = useCallback(() => {
     if (storage.status().state === "ready") for (const w of WORKSPACES) void storage.ports.userData.delete(LAYOUT_NAMESPACE, layoutKey(w.id));
+    autosave.current = true;
+    stash.current = undefined;
+    setBuiltinActive(undefined);
     setActiveLayout(undefined);
     setLayoutEpoch((n) => n + 1);
   }, [storage]);
@@ -137,14 +149,53 @@ export function App() {
   const storageReady = status.state === "ready";
   useEffect(() => {
     setActiveLayout(undefined);
+    // Another workspace is a dock of its own: what a layout of the last one held is gone with it.
+    autosave.current = true;
+    stash.current = undefined;
+    setBuiltinActive(undefined);
     if (storageReady) void listNamedLayouts(storage, workspace).then(setLayouts, () => setLayouts([]));
     else setLayouts([]);
   }, [storage, storageReady, workspace]);
+  const builtins = BUILTIN_LAYOUTS[workspace] ?? [];
+  /** Opens a layout that ships with the app: the dock is kept as it is, and laid out again as the layout says. */
+  const enterBuiltin = useCallback(
+    (name: string) => {
+      const api = dockRef.current;
+      const b = (BUILTIN_LAYOUTS[workspace] ?? []).find((x) => x.name === name);
+      if (!api || !b || builtinRef.current !== undefined) return;
+      stash.current = api.toJSON();
+      if (storageReady) void storage.ports.userData.set(LAYOUT_NAMESPACE, layoutKey(workspace), stash.current);
+      autosave.current = false;
+      applyPreset(api, b.preset);
+      setBuiltinActive(name);
+      setActiveLayout(name);
+    },
+    [storage, storageReady, workspace],
+  );
+  /** Puts the dock back as it was before the layout that ships with the app was opened. */
+  const leaveBuiltin = useCallback(() => {
+    const api = dockRef.current;
+    if (!api || builtinRef.current === undefined) return;
+    autosave.current = true;
+    const kept = stash.current;
+    stash.current = undefined;
+    try {
+      if (kept === undefined) throw new Error("nothing kept");
+      api.fromJSON(kept as Parameters<DockviewApi["fromJSON"]>[0]);
+      syncCollapsed(api);
+    } catch {
+      const base = WORKSPACES.find((w) => w.id === workspaceRef.current);
+      if (base) applyPreset(api, base);
+    }
+    setBuiltinActive(undefined);
+    setActiveLayout(undefined);
+  }, []);
+  enterLogsRef.current = () => enterBuiltin(DEBUG_LOGS_LAYOUT);
   const saveLayout = useCallback(
     (raw: string) => {
       const name = layoutName(raw);
       const api = dockRef.current;
-      if (!name || !api || !storageReady) return;
+      if (!name || !api || !storageReady || builtins.some((b) => b.name === name) || builtinRef.current !== undefined) return;
       void saveNamedLayout(storage, workspace, name, api.toJSON())
         .then(() => listNamedLayouts(storage, workspace))
         .then((l) => {
@@ -152,11 +203,17 @@ export function App() {
           setActiveLayout(name);
         });
     },
-    [storage, storageReady, workspace],
+    [storage, storageReady, workspace, builtins],
   );
   const selectLayout = useCallback(
     (name: string | undefined) => {
       const api = dockRef.current;
+      if (name !== undefined && (BUILTIN_LAYOUTS[workspace] ?? []).some((b) => b.name === name)) return enterBuiltin(name);
+      if (builtinRef.current !== undefined) {
+        // From a layout that ships with the app to the working layout or a named one: the dock is put back first (the working layout), a named one then replaces it.
+        leaveBuiltin();
+        if (name === undefined) return;
+      }
       if (name === undefined || !api || !storageReady) {
         setActiveLayout(undefined);
         return;
@@ -172,10 +229,10 @@ export function App() {
         }
       });
     },
-    [storage, storageReady, workspace],
+    [storage, storageReady, workspace, enterBuiltin, leaveBuiltin],
   );
   const deleteLayout = useCallback(() => {
-    if (!activeLayout || !storageReady) return;
+    if (!activeLayout || !storageReady || builtinRef.current !== undefined) return;
     const name = activeLayout;
     void deleteNamedLayout(storage, workspace, name)
       .then(() => listNamedLayouts(storage, workspace))
@@ -198,8 +255,12 @@ export function App() {
     () => (paletteOpen && agentCommandsModule && source ? agentCommandsModule.agentPaletteCommands(source, !!run, startPreset, runBusy) : []),
     [paletteOpen, agentCommandsModule, source, run, startPreset, runBusy],
   );
-  const preset = WORKSPACES.find((w) => w.id === workspace) ?? WORKSPACES[0];
+  const basePreset = WORKSPACES.find((w) => w.id === workspace) ?? WORKSPACES[0];
+  // The preset the dock is laid out by now: the workspace's, or that of the layout that ships with the app which is open (its panels, its numbers).
+  const preset = (builtinActive === undefined ? undefined : builtins.find((b) => b.name === builtinActive)?.preset) ?? basePreset;
   presetRef.current = preset;
+  workspaceRef.current = workspace;
+  builtinRef.current = builtinActive;
   // Panel actions of the open workspace's dock, on the active panel (ADR-0042 §7): the window buttons' actions, from the palette.
   const panelCommands = useMemo<Command[]>(() => {
     const on = (f: (api: DockviewApi, panel: NonNullable<ReturnType<DockviewApi["getPanel"]>>) => void) => () => {
@@ -215,8 +276,11 @@ export function App() {
       { id: "panel.close", title: "Close the active panel", group: "Panel", run: on((_api, p) => closePanel(p)) },
       { id: "panel.next", title: "Focus the next panel", group: "Panel", run: () => dockRef.current && focusNext(dockRef.current) },
       ...(preset?.panels ?? []).map((p) => ({ id: `panel.open.${p.id}`, title: `Open panel: ${PANELS[p.id as PanelId].title}`, group: "Panel", run: () => dockRef.current && preset && openPanel(dockRef.current, preset, p.id) })),
+      // The Logs are a layout of the Debug, not a panel of its dock (UI-SPEC: "debug · logs"): one command to go there and one to come back.
+      ...(workspace === "debug" && builtinActive === undefined ? [{ id: "panel.open.logInspector", title: `Open panel: ${PANELS.logInspector.title}`, group: "Panel", keys: "Alt+6", run: () => enterBuiltin(DEBUG_LOGS_LAYOUT) }] : []),
+      ...(builtinActive !== undefined ? [{ id: "layout.back", title: "Back to debug", group: "Layout", run: leaveBuiltin }] : []),
     ];
-  }, [preset]);
+  }, [preset, workspace, builtinActive, enterBuiltin, leaveBuiltin]);
   // Re-simulates a window of the run the panels show into a derived run, stored with its verdict (ADR-0035 section 3): the Timeline's selection when there is one, else the
   // cursor with a few seconds either side. The derived run opens in the panels from the notice (it carries the parent's configuration records, so replay can build it).
   const resimulateWindow = useCallback(async () => {
@@ -284,7 +348,7 @@ export function App() {
   );
 
   return (
-    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun, resimulateWindow: () => void resimulateWindow() }}>
+    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun, resimulateWindow: () => void resimulateWindow(), backToDebug: leaveBuiltin }}>
       <CurrentRunProvider value={currentRun}>
       <div className="shell">
         <div data-testid="shell-header">
@@ -292,8 +356,9 @@ export function App() {
             workspaces={WORKSPACES}
             workspace={workspace}
             onWorkspace={setWorkspace}
-            layouts={layouts}
+            layouts={[...builtins.map((b) => b.name), ...layouts]}
             layoutActive={activeLayout}
+            layoutBuiltin={builtinActive !== undefined}
             onSelectLayout={selectLayout}
             onSaveLayout={saveLayout}
             onDeleteLayout={deleteLayout}
@@ -384,7 +449,7 @@ export function App() {
 
         {/* The row is reserved by the shell grid, so nothing shifts when the workspace chunk arrives. */}
         <div className="workspace">
-          <Suspense fallback={null}>{preset && <LazyWorkspaceHost key={preset.id} preset={preset} storage={storage} layoutEpoch={layoutEpoch} onApi={(api) => (dockRef.current = api)} />}</Suspense>
+          <Suspense fallback={null}>{basePreset && preset && <LazyWorkspaceHost key={basePreset.id} preset={basePreset} activePreset={preset} autosave={autosave} storage={storage} layoutEpoch={layoutEpoch} onApi={(api) => (dockRef.current = api)} />}</Suspense>
         </div>
 
         <StatusBar snap={snap} status={status} info={info} header={run?.header} replaying={view?.mode === "replay"} onOpenPerf={openPerformance} />

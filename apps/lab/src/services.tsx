@@ -45,8 +45,10 @@ export interface AppActions {
   openReplay(runId: string | undefined): void;
   /** Re-simulates a window of the run shown into a derived run: the Timeline's selection when there is one, else the cursor with a few seconds either side. */
   resimulateWindow(): void;
+  /** Leaves the Debug's "debug · logs" layout and puts the dock back as it was. */
+  backToDebug(): void;
 }
-const AppActionsContext = createContext<AppActions>({ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {}, resimulateWindow: () => {} });
+const AppActionsContext = createContext<AppActions>({ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {}, resimulateWindow: () => {}, backToDebug: () => {} });
 export const AppActionsProvider = AppActionsContext.Provider;
 export const useAppActions = (): AppActions => useContext(AppActionsContext);
 

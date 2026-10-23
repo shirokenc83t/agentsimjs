@@ -2,8 +2,10 @@ import "../panels.css";
 import { useUiContext } from "@agentsim/ui";
 import type { TraceRecord } from "@agentsim/trace";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { planGrid } from "./layout-plan.ts";
 import { loadInspectorLayout, storeInspectorLayout } from "../../config/inspector-layout.ts";
 import { useAppActions, usePolled, useServices, useSource } from "../../services.tsx";
+import { DerivedTag } from "../debug/derived-tag.tsx";
 import { useJump } from "../debug/use-jump.ts";
 import { LogPane, SeriesPane, TablePane, type PaneViewProps } from "./pane-views.tsx";
 import { addPane, DEFAULT_PANES, filterAfterViewChange, filterFitsView, FUTURE_VIEWS, MAX_PANES, metricFilterFor, paneFor, removePane, sourceFilter, sourceTree, updatePane, type PaneSpec, type PaneView } from "./panes.ts";
@@ -17,7 +19,7 @@ import { addPane, DEFAULT_PANES, filterAfterViewChange, filterFitsView, FUTURE_V
 export function MultiLogInspector() {
   const source = useSource();
   const { storage } = useServices();
-  const { resimulateWindow } = useAppActions();
+  const { resimulateWindow, backToDebug } = useAppActions();
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const dt = snap.run?.dtS ?? 0.1;
   const headS = (snap.persistedHeadTick ?? 0) * dt;
@@ -31,6 +33,20 @@ export function MultiLogInspector() {
   }, [canTail]);
   const tail = mode === "live" && canTail;
 
+  // The sources tree is a 200 px column that collapses to a rail; the panes take the rest, laid out in a grid when they fit at their minimum sizes and as tabs when they do not.
+  const [treeOpen, setTreeOpen] = useState(true);
+  const area = useRef<HTMLDivElement>(null);
+  const [areaSize, setAreaSize] = useState({ w: 1200, h: 600 });
+  useEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    const measure = () => setAreaSize({ w: Math.round(el.clientWidth), h: Math.round(el.clientHeight) });
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    return () => ro.disconnect();
+  }, []);
+  const [tab, setTab] = useState<string | undefined>(undefined);
   const [panes, setPanes] = useState<PaneSpec[]>([...DEFAULT_PANES]);
   const [restored, setRestored] = useState(false);
   const next = useRef(3);
@@ -63,11 +79,21 @@ export function MultiLogInspector() {
   };
   const toMoment = (tS: number) => jump(tS);
   const tree = sourceTree(snap.entityIds);
+  const plan = planGrid(
+    panes.map((p) => p.view),
+    areaSize.w,
+    areaSize.h,
+  );
+  const shownTab = panes.find((p) => p.id === tab) ?? panes[0];
 
   return (
     <div className="panel log-inspector" data-testid="log-inspector">
       <div className="li-bar mono">
+        <button type="button" className="kt" onClick={backToDebug} data-testid="inspector-back" data-tip="Back to the Debug layout (the dock as it was)">
+          ← Back to debug
+        </button>
         <span className="ps">{runId ?? "no run"}</span>
+        <DerivedTag derived={snap.replay?.derived} />
         <span role="group" aria-label="Live or Replay" className="segc" data-testid="inspector-mode">
           <label className={tail ? "on" : ""} data-tip={canTail ? "Tail the run as it is recorded" : "This run is not being recorded: there is nothing to tail"}>
             <input type="radio" name={`mode-${base}`} checked={tail} disabled={!canTail} onChange={() => setMode("live")} data-testid="inspector-live" />
@@ -109,8 +135,11 @@ export function MultiLogInspector() {
         </button>
       </div>
       <div className="li-main">
-        <nav className="li-tree mono" aria-label="Sources" data-testid="source-tree">
-          {tree.map((n) => (
+        <nav className={`li-tree mono${treeOpen ? "" : " rail"}`} aria-label="Sources" data-testid="source-tree" data-open={treeOpen}>
+          <button type="button" className="kt li-fold" onClick={() => setTreeOpen((o) => !o)} aria-expanded={treeOpen} aria-label={treeOpen ? "Collapse the sources" : "Expand the sources"} data-testid="source-tree-toggle" data-tip={treeOpen ? "Collapse the sources" : "Show the sources"}>
+            {treeOpen ? "◂ sources" : "▸"}
+          </button>
+          {treeOpen && tree.map((n) => (
             <div key={n.owner} className="li-owner">
               <div className="li-row">
                 <button type="button" className="tt-node li-name" onClick={() => add("log", sourceFilter(n.owner), n.owner)} data-testid={`source-${n.owner}`} data-tip={`A log of everything ${n.owner} writes`}>
@@ -128,17 +157,39 @@ export function MultiLogInspector() {
             </div>
           ))}
         </nav>
-        <div className="li-panes" data-testid="inspector-panes" data-mode={tail ? "live" : "replay"}>
-          {panes.length === 0 && <p className="muted li-empty">No panes: pick a source in the tree, or add one.</p>}
-          {panes.map((pane) => (
-            <Pane
-              key={pane.id}
-              pane={pane}
-              view={{ storage, runId, filter: pane.filter, headS, tail, viewId: `li-${base}-${pane.id}`, entityIds: snap.entityIds, onPick: pick, onMoment: toMoment }}
-              onChange={(change) => setPanes((cur) => updatePane(cur, pane.id, change))}
-              onClose={() => setPanes((cur) => removePane(cur, pane.id))}
-            />
-          ))}
+        <div className="li-area">
+          {plan.mode === "tabs" && panes.length > 1 && (
+            <div className="li-tabs" role="tablist" aria-label="Panes" data-testid="pane-tabs">
+              {panes.map((p) => (
+                <button key={p.id} type="button" role="tab" className={`kt${p.id === shownTab?.id ? " on" : ""}`} aria-selected={p.id === shownTab?.id} onClick={() => setTab(p.id)} data-testid={`pane-tab-${p.id}`}>
+                  {p.title}
+                </button>
+              ))}
+            </div>
+          )}
+          <div
+            ref={area}
+            className="li-panes"
+            data-testid="inspector-panes"
+            data-mode={tail ? "live" : "replay"}
+            data-layout={plan.mode}
+            style={plan.mode === "grid" ? { gridTemplateColumns: `repeat(${plan.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${plan.rows}, minmax(0, 1fr))` } : undefined}
+          >
+            {panes.length === 0 && <p className="muted li-empty">No panes: pick a source in the tree, or add one.</p>}
+            {panes.map((pane, i) => {
+              const hidden = plan.mode === "tabs" && pane.id !== shownTab?.id;
+              return (
+                <div key={pane.id} className="li-cell" hidden={hidden} style={plan.mode === "grid" && (plan.spans[i] ?? 1) > 1 ? { gridColumn: `span ${plan.spans[i]}` } : undefined}>
+                  <Pane
+                    pane={pane}
+                    view={{ storage, runId, filter: pane.filter, headS, tail, viewId: `li-${base}-${pane.id}`, entityIds: snap.entityIds, onPick: pick, onMoment: toMoment }}
+                    onChange={(change) => setPanes((cur) => updatePane(cur, pane.id, change))}
+                    onClose={() => setPanes((cur) => removePane(cur, pane.id))}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

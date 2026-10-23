@@ -6,6 +6,9 @@ import { loadF2, openWorkspace, runCommand, step, waitForStorageReady } from "./
 
 const AGENT = "ugv-001";
 
+// Tall enough for three panes in a grid (each keeps its minimum size; below that they are tabs, see f3b-m3-fixes).
+test.use({ viewport: { width: 1440, height: 1000 } });
+
 async function recorded(page: Page): Promise<void> {
   await loadF2(page, "discovery");
   await page.getByTestId(`explorer-row-${AGENT}`).click();

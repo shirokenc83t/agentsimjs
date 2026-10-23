@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LAYOUT_VERSION, panelNumber, tabTitle, WORKSPACES } from "./presets.ts";
+import { BUILTIN_LAYOUTS, DEBUG_LOGS_LAYOUT, DEBUG_LOGS_PRESET, LAYOUT_VERSION, panelNumber, tabTitle, WORKSPACES } from "./presets.ts";
 
 const preset = (id: string) => {
   const w = WORKSPACES.find((x) => x.id === id);
@@ -40,6 +40,22 @@ describe("workspace presets", () => {
     const t = preset("debug").panels.find((p) => p.id === "timeline");
     expect(t?.late).toBe(true);
     expect(t?.initialHeight).toBeLessThanOrEqual(240);
+  });
+
+  it("the Debug has the Trace under the Log, in a group of its own with the Inspector below it, and the Logs are not a panel of its dock", () => {
+    const d = preset("debug");
+    expect(d.panels.find((p) => p.id === "traceTree")?.position).toEqual({ referencePanel: "inspector", direction: "above" });
+    expect(d.panels.find((p) => p.id === "traceTree")?.background).toBeUndefined();
+    expect(d.panels.some((p) => p.id === "logInspector")).toBe(false);
+    expect(LAYOUT_VERSION).toBeGreaterThanOrEqual(11);
+  });
+
+  it("'debug · logs' ships with the Debug: the multi-log inspector fills the area with the Timeline below it and no Scene", () => {
+    expect(BUILTIN_LAYOUTS.debug?.map((b) => b.name)).toEqual([DEBUG_LOGS_LAYOUT]);
+    const ids = DEBUG_LOGS_PRESET.panels.map((p) => p.id);
+    expect(ids).toEqual(["logInspector", "timeline", "perf"]);
+    expect(panelNumber(DEBUG_LOGS_PRESET, "logInspector")).toBe(1);
+    expect(DEBUG_LOGS_PRESET.panels.find((p) => p.id === "timeline")?.position).toEqual({ referencePanel: "logInspector", direction: "below" });
   });
 
   it("saved layouts are versioned past the one without numbered tabs and the floating window", () => {

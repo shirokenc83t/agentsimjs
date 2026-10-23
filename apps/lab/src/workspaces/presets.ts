@@ -64,9 +64,9 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
       { id: "scene" },
       { id: "timeline", position: { referencePanel: "scene", direction: "below" }, initialHeight: 190, late: true },
       { id: "eventList", position: { referencePanel: "scene", direction: "right" }, initialWidth: 500 },
-      { id: "inspector", position: { referencePanel: "eventList", direction: "below" }, initialHeight: 230 },
-      { id: "traceTree", background: true },
-      { id: "logInspector", background: true },
+      { id: "inspector", position: { referencePanel: "eventList", direction: "below" }, initialHeight: 210 },
+      // The Trace explains the record picked in the Log, so it sits under the Log (about 65 / 35 of what the Inspector leaves) and not in the Inspector's group.
+      { id: "traceTree", position: { referencePanel: "inspector", direction: "above" }, initialHeight: 180 },
       PERF_WINDOW,
     ],
   },
@@ -79,6 +79,23 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
   { id: "data", title: "Data", panels: [{ id: "storage" }, { id: "sqlConsole", position: { referencePanel: "storage", direction: "below" }, initialHeight: 330 }] },
   { id: "settings", title: "Settings", panels: [{ id: "settings" }] },
 ];
+
+/**
+ * A named layout that ships with the app (ADR-0042 named layouts: the dock arranged for one job, not a workspace of its own): "debug · logs" is the Debug for reading logs. The
+ * multi-log inspector fills the area (its sources, its grid of one to four panes) with the shared Timeline across the bottom; the Scene is out. It is entered from the palette
+ * ("Open panel: Logs", `Alt+6` in the Debug) or the layout menu, and left with "Back to debug", which puts the dock back as it was.
+ */
+export const DEBUG_LOGS_LAYOUT = "debug \u00b7 logs";
+export const DEBUG_LOGS_PRESET: WorkspacePreset = {
+  id: "debug",
+  title: "Debug",
+  panels: [{ id: "logInspector" }, { id: "timeline", position: { referencePanel: "logInspector", direction: "below" }, initialHeight: 190, late: true }, PERF_WINDOW],
+};
+
+/** The layouts that ship with a workspace, by name. */
+export const BUILTIN_LAYOUTS: Readonly<Partial<Record<WorkspaceId, readonly { readonly name: string; readonly preset: WorkspacePreset }[]>>> = {
+  debug: [{ name: DEBUG_LOGS_LAYOUT, preset: DEBUG_LOGS_PRESET }],
+};
 
 /** The number of a docked panel in its workspace (1-based, the order of the preset): it is in the tab's name and `Alt+number` focuses it. Floating windows have none. */
 export function panelNumber(preset: WorkspacePreset, id: PanelId): number | undefined {
@@ -98,5 +115,5 @@ export const LAYOUT_NAMESPACE = "layout";
  * Saved layouts are keyed with this version: a preset that gains panels (F1 e4: Explorer, Inspector; F3a: the Debug workspace) starts
  * from the new preset instead of a saved layout that lacks them.
  */
-export const LAYOUT_VERSION = 10;
+export const LAYOUT_VERSION = 11;
 export const layoutKey = (workspace: WorkspaceId) => `${workspace}@${LAYOUT_VERSION}`;

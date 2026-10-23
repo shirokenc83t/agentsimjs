@@ -58,9 +58,8 @@ test("the trace tree shows what a record was caused by and what came of it; a cl
   await expect(page.getByTestId("replay-bar")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("workspace-debug")).toBeVisible();
 
-  // The Trace is a tab of the Inspector's group, behind it: one click (here, its palette command) brings it forward.
-  await expect(page.getByTestId("trace-tree")).toBeHidden();
-  await runCommand(page, "Open panel: Trace");
+  // The Trace is under the Log, in the Debug layout: both are in view.
+  await expect(page.getByTestId("trace-tree")).toBeVisible();
   const empty = page.getByTestId("trace-tree-empty");
   await expect(empty).toBeVisible();
   // A phase change of an action: the log lists it; the tree shows the action's start as its parent and the phase change before it as its cause.
@@ -73,11 +72,24 @@ test("the trace tree shows what a record was caused by and what came of it; a cl
   const selected = page.getByTestId("trace-tree-selected");
   await expect(selected).toBeVisible();
   const phaseSeq = Number(await selected.getAttribute("data-seq"));
+  // The tree is of the record the log has selected, not of another (the row picked is the one the tree is drawn around).
+  const pickedRow = rows.nth(3);
+  await expect(pickedRow).toHaveAttribute("aria-selected", "true");
+  await expect(pickedRow).toHaveAttribute("data-testid", `event-row-${phaseSeq}`);
+  await page.waitForTimeout(1500);
+  await expect(pickedRow).toHaveAttribute("data-testid", `event-row-${phaseSeq}`);
+  await expect(selected).toHaveAttribute("data-seq", String(phaseSeq));
   await expect(page.getByTestId("tt-parents")).toContainText("start");
   const cause = page.getByTestId("tt-causes").locator('[data-testid^="trace-node-"]').first();
   await expect(cause).toContainText("phase");
   const causeSeq = Number(await cause.getAttribute("data-seq"));
   expect(causeSeq).toBeLessThan(phaseSeq);
+  // Another filter does not leave the log and the tree speaking of two records: the detail of the console is the record the tree shows, in the list or not.
+  await page.getByTestId("log-filter").fill(`kind:snapshot`);
+  await expect(page.getByTestId("event-detail")).toContainText(`"seq": ${phaseSeq}`, { timeout: 10_000 });
+  await expect(selected).toHaveAttribute("data-seq", String(phaseSeq));
+  await page.getByTestId("log-filter").fill(`kind:action agent:${AGENT} text:phase`);
+  await expect(page.locator(`[data-testid="event-row-${phaseSeq}"][aria-selected="true"]`)).toBeVisible({ timeout: 10_000 });
   // A click on the cause picks it: the tree is drawn around it and shows the first record among its effects.
   await cause.click();
   await expect(selected).toHaveAttribute("data-seq", String(causeSeq));
