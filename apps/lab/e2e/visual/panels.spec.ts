@@ -233,7 +233,7 @@ for (const theme of THEMES) {
       await expect(page.getByTestId("sql-status")).toContainText("rows", { timeout: 15_000 });
       await page.locator("body").click({ position: { x: 1, y: 1 } });
       await settle(page);
-      const mask = [page.getByTestId("storage-info"), page.locator(".size-bar"), page.getByTestId("sql-status"), page.getByTestId("sql-grid")];
+      const mask = [page.getByTestId("storage-info"), page.locator(".size-bar"), page.locator('[data-testid^="run-row-"]'), page.getByTestId("sql-status"), page.getByTestId("sql-grid")];
       await expect(page.getByTestId("workspace-data")).toHaveScreenshot(`data-workspace-${theme}.png`, { mask });
     });
 
@@ -251,8 +251,8 @@ for (const theme of THEMES) {
       await page.getByTestId("run-label").click();
       await expect(page.getByTestId("run-id")).toBeVisible();
       await settle(page);
-      // The run's number and what it records so far change with the order the tests ran in.
-      await expect(page.getByRole("dialog", { name: "Run" })).toHaveScreenshot(`run-popover-${theme}.png`, { mask: [page.getByTestId("run-id")] });
+      // The run's number depends on the order the tests ran in, and the simulator's version carries the commit it was built from.
+      await expect(page.getByRole("dialog", { name: "Run" })).toHaveScreenshot(`run-popover-${theme}.png`, { mask: [page.getByTestId("run-id"), page.locator("dd", { hasText: /^\d+\.\d+\.\d+\+/ })] });
     });
 
     test("Settings", async ({ page }) => {
