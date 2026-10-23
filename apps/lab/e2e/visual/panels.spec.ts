@@ -251,8 +251,8 @@ for (const theme of THEMES) {
       await page.getByTestId("run-label").click();
       await expect(page.getByTestId("run-id")).toBeVisible();
       await settle(page);
-      // The run's number depends on the order the tests ran in, and the simulator's version carries the commit it was built from.
-      await expect(page.getByRole("dialog", { name: "Run" })).toHaveScreenshot(`run-popover-${theme}.png`, { mask: [page.getByTestId("run-id"), page.locator("dd", { hasText: /^\d+\.\d+\.\d+\+/ })] });
+      // The run's number depends on the order the tests ran in, the simulator's version carries the commit it was built from, and the planning prep is a wall-clock time.
+      await expect(page.getByRole("dialog", { name: "Run" })).toHaveScreenshot(`run-popover-${theme}.png`, { mask: [page.getByTestId("run-id"), page.locator("dd", { hasText: /^\d+\.\d+\.\d+\+/ }), page.locator("dd", { hasText: / ms$/ })] });
     });
 
     test("Settings", async ({ page }) => {
