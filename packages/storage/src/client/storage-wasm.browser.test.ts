@@ -339,22 +339,25 @@ describe("storage worker (browser)", () => {
       simEnd.postMessage({ type: "batch", batch: { runId: run, records: [rec(run, seq)], throughSeq: seq, tick: seq, simTimeS: seq * 0.1 } });
       seq++;
     }, 15);
-    await new Promise((r) => setTimeout(r, 300)); // the recorder is saving before the statement starts
+    // The recorder is saving before the statement starts: wait until it has stored a number of batches, not for a time (a slow runner takes longer for the same number).
+    await until(() => at.length - before >= 5, 15_000);
     const t0 = performance.now();
     const long = await c.sql.run("WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM x) SELECT count(*) FROM x", { maxRows: 10, timeoutMs: 5000 }).result;
     const took = performance.now() - t0;
-    await new Promise((r) => setTimeout(r, 300));
-    clearInterval(feeder);
     expect(long).toMatchObject({ ok: false, error: { code: "too_slow" } });
     expect(took).toBeLessThan(2000);
+    // After it, the recorder saves again: wait for a number of batches more (bounded), then stop feeding.
+    await until(() => at.filter((x) => x > t0 + took).length >= 5, 15_000);
+    clearInterval(feeder);
     await until(() => (fromStorage.at(-1)?.head?.throughSeq ?? 0) >= seq - 1, 5000);
     expect(fromStorage.filter((m) => m.type === "rejected")).toEqual([]);
     // The persisted head moved before the statement, and again after it, and the longest wait between two moves is about the step cap of the console, not the statement.
     const all = at.slice(before);
     const gaps = all.slice(1).map((x, i) => x - (all[i] as number));
-    expect(all.filter((x) => x < t0).length).toBeGreaterThan(3);
-    expect(all.filter((x) => x > t0 + took).length).toBeGreaterThan(3);
-    expect(Math.max(...gaps, 0)).toBeLessThan(1500);
+    expect(all.filter((x) => x < t0).length).toBeGreaterThanOrEqual(5);
+    expect(all.filter((x) => x > t0 + took).length).toBeGreaterThanOrEqual(5);
+    // The head moved before, and after: nothing in between was held longer than a step of the console (500 ms) and a slice, with a margin for a slow runner.
+    expect(Math.max(...gaps, 0)).toBeLessThan(500 + 20 + 700);
     expect(await c.ports.trace.count(run)).toBe(seq); // every batch is there
     simEnd.close();
   });
