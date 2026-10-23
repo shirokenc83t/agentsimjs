@@ -10,6 +10,8 @@ export interface TopBarProps {
   /** Named layouts of the open workspace, and the one in use (none: the autosaved working layout). */
   readonly layouts: readonly string[];
   readonly layoutActive: string | undefined;
+  /** The layout in use ships with the app: it cannot be saved over or deleted. */
+  readonly layoutBuiltin?: boolean;
   readonly onSelectLayout: (name: string | undefined) => void;
   readonly onSaveLayout: (name: string) => void;
   readonly onDeleteLayout: () => void;
@@ -77,20 +79,28 @@ export function TopBar(props: TopBarProps) {
   );
 }
 
-/** The persistent state of replay (UI-SPEC §2): not the accent, a segment of its own with the moment shown; it re-renders with the cursor and nothing else. */
+/**
+ * The persistent state of replay (UI-SPEC §2): not the accent, a segment of its own with the moment shown; it re-renders with the cursor and nothing else. A derived run is
+ * shown compactly (`◷ t 0.0 · ◇ 9.0–18.0 of run-000001 · ✓`, the whole text in the tooltip): the palette and the attention tile have priority and never leave the screen.
+ */
 function ReplaySegment(props: { derived: ReplayDerived | undefined }) {
   const at = useUiContext((s) => s.simTime);
   const d = props.derived;
+  if (d === undefined) {
+    return (
+      <div className="seg r rpseg" role="status" data-testid="replay-segment">
+        {GLYPH.replay} REPLAY · viewing t {at.toFixed(1)} s
+        <span className="k k-opt"> · live run keeps running {GLYPH.running}</span>
+      </div>
+    );
+  }
+  const verdict = d.status === "matches" ? "every recorded checkpoint in the window was reproduced" : `the first checkpoint that was not reproduced is at tick ${d.divergenceTick ?? "?"}`;
   return (
-    <div className="seg r rpseg" role="status" data-testid="replay-segment">
-      {GLYPH.replay} REPLAY · viewing t {at.toFixed(1)} s
-      {d !== undefined && (
-        <span data-testid="replay-derived">
-          {" "}· ◇ of {d.parentRunId} · {d.t0S.toFixed(1)}–{d.t1S.toFixed(1)} s ·{" "}
-          {d.status === "matches" ? <span className="ok">✓ matches</span> : <span className="danger">{GLYPH.fail} divergent @{d.divergenceTick ?? "?"}</span>}
-        </span>
-      )}
-      <span className="k k-opt"> · live run keeps running {GLYPH.running}</span>
+    <div className="seg r rpseg" role="status" data-testid="replay-segment" title={`REPLAY · viewing t ${at.toFixed(1)} s · a re-simulated window (${d.t0S.toFixed(1)}–${d.t1S.toFixed(1)} s) of ${d.parentRunId}: ${verdict} · the live run keeps running`}>
+      {GLYPH.replay} t {at.toFixed(1)}
+      <span data-testid="replay-derived">
+        {" "}· ◇ {d.t0S.toFixed(1)}–{d.t1S.toFixed(1)} of {d.parentRunId} · {d.status === "matches" ? <span className="ok">✓</span> : <span className="danger">{GLYPH.fail} @{d.divergenceTick ?? "?"}</span>}
+      </span>
     </div>
   );
 }
@@ -99,7 +109,7 @@ function ReplaySegment(props: { derived: ReplayDerived | undefined }) {
 function LayoutSegment(props: TopBarProps) {
   const [naming, setNaming] = useState(false);
   return (
-    <div className="seg r" data-testid="layout-segment">
+    <div className="seg r layout-seg" data-testid="layout-segment">
       <span className="k k-opt">layout</span>
       <select className="tb" aria-label="Layout" value={props.layoutActive ?? ""} onChange={(e) => props.onSelectLayout(e.target.value === "" ? undefined : e.target.value)} data-testid="layout-select">
         <option value="">autosaved</option>
@@ -126,11 +136,11 @@ function LayoutSegment(props: TopBarProps) {
           onBlur={() => setNaming(false)}
         />
       ) : (
-        <button type="button" className="tb" onClick={() => setNaming(true)} data-tip="Save the dock as a named layout" data-testid="layout-save">
+        <button type="button" className="tb" disabled={props.layoutBuiltin} onClick={() => setNaming(true)} data-tip={props.layoutBuiltin ? "This layout ships with the app" : "Save the dock as a named layout"} data-testid="layout-save">
           save
         </button>
       )}
-      {props.layoutActive !== undefined && (
+      {props.layoutActive !== undefined && !props.layoutBuiltin && (
         <button type="button" className="tb" onClick={props.onDeleteLayout} data-tip="Delete this named layout" data-testid="layout-delete">
           delete
         </button>

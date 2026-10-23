@@ -54,4 +54,5 @@ export {
   type ThemePreference,
 } from "./theme/theme-controller.ts";
 export { UiThemeProvider, muiTheme } from "./theme/mui.tsx";
+export { initTooltips } from "./theme/tooltips.ts";
 export { BOOT_SETTINGS, readBootSetting, writeBootSetting, type BootSetting } from "./boot-settings.ts";

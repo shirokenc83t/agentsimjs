@@ -43,7 +43,8 @@
 .scrub { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 14px; border-right: 1px solid var(--ln); min-width: 0; overflow: hidden; }
 .scrub .row { display: flex; align-items: center; gap: 10px; font-size: var(--type-label-size); color: var(--fg3); min-width: 0; margin: 0; flex-wrap: nowrap; overflow: hidden; }
 .scrub .row > * { flex: none; }
-.scrub .row > .trunc { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scrub .row > .derived-mark { flex: 0 1 auto; min-width: 8ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scrub .row > .trunc { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scrub .row .sp { flex: 1 1 0; }
 .player.compact .hide-compact { display: none; }
 .track { position: relative; height: 14px; background: var(--bg0); border: 1px solid var(--ln); }
@@ -83,6 +84,10 @@
 /* Below 1500 px the less important parts give way: the telemetry tiles beyond the first two, the pose rate, the optional labels of the top bar. */
 @media (max-width: 1500px) {
   .tile.opt, .hide-narrow, .top .k-opt { display: none; }
+}
+/* The top bar's own layout controls (they are palette commands too) give way before the replay segment and the palette key, which never leave the screen. */
+@media (max-width: 1240px) {
+  .top .layout-seg { display: none; }
 }
 
 /* Tooltips are nowrap pseudo-elements that count as overflow: near the right edge they would make the page scroll sideways. */

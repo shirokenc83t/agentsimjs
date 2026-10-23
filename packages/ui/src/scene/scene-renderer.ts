@@ -683,17 +683,28 @@ export class SceneRenderer {
       o.visible = !hidden.has(i);
     });
     // Labels that would cover each other (a UAV above a UGV at the base) are stacked, each moved down clear of the last, with a leader line to its marker.
-    const shown = points.filter((pt) => !hidden.has(pt.index));
+    // (A frame between one run and the next may have poses for entities whose labels are not made yet: those are left for the next frame.)
+    const shown = points.filter((pt) => !hidden.has(pt.index) && this.labelObjects[pt.index] !== undefined);
     const boxes = shown.map((pt) => {
       const el = (this.labelObjects[pt.index] as CSS2DObject).element;
       const lh = el.offsetHeight || 18;
-      return { index: pt.index, x: pt.x, y: pt.y + 0.4 * lh, w: el.offsetWidth || 60, h: lh, keep: pt.keep };
+      // The label's own box and what hangs out of it (the attention badge is taller than the text beside it): a label stacked below must clear the badge too.
+      const rect = el.getBoundingClientRect();
+      let bottom = rect.bottom;
+      let right = rect.right;
+      for (const child of Array.from(el.children)) {
+        if ((child as HTMLElement).hidden) continue;
+        const cr = child.getBoundingClientRect();
+        bottom = Math.max(bottom, cr.bottom);
+        right = Math.max(right, cr.right);
+      }
+      return { index: pt.index, x: pt.x, y: pt.y + 0.4 * lh, w: Math.max(el.offsetWidth || 60, right - rect.left), h: Math.max(lh, bottom - rect.top), keep: pt.keep };
     });
     const offsets = stackLabels(boxes);
     shown.forEach((pt, k) => {
       const o = this.labelObjects[pt.index] as CSS2DObject;
       const dy = offsets[k] ?? 0;
-      const lh = boxes[k]?.h ?? 18;
+      const lh = (this.labelObjects[pt.index] as CSS2DObject).element.offsetHeight || 18;
       o.center.set(0, 1.4 + dy / lh);
       o.element.classList.toggle("stacked", dy > 0);
       o.element.style.setProperty("--lead", dy > 0 ? `${dy + 0.4 * lh}px` : "0px");

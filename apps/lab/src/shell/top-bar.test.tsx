@@ -84,15 +84,17 @@ describe("TopBar", () => {
     expect(screen.getByRole("status")).toHaveTextContent("◷ REPLAY");
   });
 
-  it("says in the segment that the recording is a re-simulated window: its parent, its span and whether it matches or where it diverges", () => {
+  it("says in the segment, compactly, that the recording is a re-simulated window: its span, its parent and whether it matches; the whole text is in the tooltip", () => {
     bar({ replaying: true, derived: { parentRunId: "run-000001", t0S: 15, t1S: 19, status: "matches" } });
-    expect(screen.getByTestId("replay-derived")).toHaveTextContent("◇ of run-000001 · 15.0–19.0 s · ✓ matches");
-    expect(screen.getByRole("status")).toHaveTextContent("◷ REPLAY");
+    expect(screen.getByTestId("replay-derived")).toHaveTextContent("◇ 15.0–19.0 of run-000001 · ✓");
+    expect(screen.getByRole("status")).toHaveTextContent(/^◷ t 0\.0/);
+    expect(screen.getByRole("status")).toHaveAttribute("title", expect.stringContaining("REPLAY · viewing t 0.0 s · a re-simulated window (15.0–19.0 s) of run-000001: every recorded checkpoint in the window was reproduced"));
   });
 
-  it("a derived run that did not reproduce its checkpoints says ✕ divergent and the tick", () => {
+  it("a derived run that did not reproduce its checkpoints says ✕ and the tick, and the tooltip where it diverged", () => {
     bar({ replaying: true, derived: { parentRunId: "run-000001", t0S: 15, t1S: 19, status: "divergent", divergenceTick: 160 } });
-    expect(screen.getByTestId("replay-derived")).toHaveTextContent("✕ divergent @160");
+    expect(screen.getByTestId("replay-derived")).toHaveTextContent("✕ @160");
+    expect(screen.getByRole("status")).toHaveAttribute("title", expect.stringContaining("tick 160"));
   });
 
   it("a recording that is not derived has nothing of the kind", () => {

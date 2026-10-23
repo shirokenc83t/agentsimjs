@@ -40,7 +40,7 @@ button, select, input { font: inherit; color: inherit; }
 .btn.primary { border-color: var(--ac); }
 .field { background: var(--bg0); border: 1px solid var(--ln2); border-radius: var(--radius-control); padding: 3px 8px; }
 
-.shell { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+.shell { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr auto; height: 100%; }
 .workspace { min-height: 0; position: relative; }
 .workspace-fill { position: absolute; inset: 0; }
 
@@ -58,6 +58,10 @@ button, select, input { font: inherit; color: inherit; }
 table.grid { border-collapse: collapse; width: 100%; font-family: var(--font-mono); font-size: var(--type-mono-size); }
 table.grid th, table.grid td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--ln); }
 table.grid th { color: var(--fg2); font-weight: normal; }
+/* A run's id, label and status never wrap (they are cut with an ellipsis, the whole text in the tooltip); what a run holds wraps instead. */
+table.grid td.nw, table.grid th { white-space: nowrap; }
+table.grid .cut { display: inline-block; max-width: 28ch; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+table.grid td.holds { white-space: normal; overflow-wrap: anywhere; min-width: 16ch; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
 
 .scene-host { position: absolute; inset: 0; }
@@ -118,3 +122,6 @@ table.grid th { color: var(--fg2); font-weight: normal; }
 }
 [data-tip]:is(:hover, :focus-visible)::after { opacity: 1; visibility: visible; transition-delay: 400ms; }
 [data-tip].tip-right::after { left: auto; right: 0; }
+/* Above the control: for a control with its result below it (the SQL console's Run, with its message line). A control used (a click or a key) shows no tip until the pointer leaves it (tooltips.ts). */
+[data-tip].tip-up::after { top: auto; bottom: calc(100% + 4px); }
+[data-tip][data-tip-off]::after { display: none; }

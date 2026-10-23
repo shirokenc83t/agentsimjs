@@ -281,9 +281,11 @@ export function StorageBrowser(props: StorageBrowserProps) {
         <tbody>
           {runs.map((r) => (
             <tr key={r.runId} data-testid={`run-row-${r.runId}`}>
-              <td>{r.runId}</td>
-              <td>
-                {r.label}
+              <td className="nw" title={r.runId}>{r.runId}</td>
+              <td className="nw">
+                <span className="cut" title={r.label}>
+                  {r.label}
+                </span>
                 {r.derived && (
                   <span className="derived-mark" data-testid={`derived-${r.runId}`} title={`Re-simulated from ${r.derived.parentRunId}: ${r.derived.status === "matches" ? `every checkpoint reproduced (${r.derived.checkpointsChecked})` : `divergent at tick ${r.derived.divergence?.tick ?? "?"}`}`}>
                     {" "}
@@ -292,9 +294,9 @@ export function StorageBrowser(props: StorageBrowserProps) {
                   </span>
                 )}
               </td>
-              <td className={r.status === "completed" ? "st-ok" : r.status === "aborted" ? "st-warn" : "st-run"}>{r.status === "completed" ? "✓" : r.status === "aborted" ? "○" : "▶"} {r.status}</td>
-              <td>{r.recordCount}</td>
-              <td className="muted" data-testid={`run-size-${r.runId}`}>
+              <td className={`nw ${r.status === "completed" ? "st-ok" : r.status === "aborted" ? "st-warn" : "st-run"}`}>{r.status === "completed" ? "✓" : r.status === "aborted" ? "○" : "▶"} {r.status}</td>
+              <td className="nw">{r.recordCount}</td>
+              <td className="muted holds" data-testid={`run-size-${r.runId}`}>
                 {sizes[r.runId] && <SizeBar sizes={sizes[r.runId] as RunSizes} />}
                 {sizes[r.runId] ? holds(sizes[r.runId] as RunSizes) : "…"}
               </td>
