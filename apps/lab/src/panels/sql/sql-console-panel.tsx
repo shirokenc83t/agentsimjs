@@ -34,6 +34,9 @@ export function SqlConsolePanel() {
   const job = useRef<{ cancel(): Promise<void> } | undefined>(undefined);
   const editor = useRef<HTMLTextAreaElement>(null);
   const painted = useRef<HTMLPreElement>(null);
+  /** The pending close of the completion list after the editor lost focus (a moment, so a click on an item still lands): cleared when the panel goes. */
+  const closing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(closing.current), []);
   /** Where the caret goes after the text was replaced by a completion or an inserted name. */
   const caret = useRef<number | null>(null);
   useLayoutEffect(() => {
@@ -235,7 +238,10 @@ export function SqlConsolePanel() {
               onScroll={(e) => {
                 if (painted.current) painted.current.scrollTop = e.currentTarget.scrollTop;
               }}
-              onBlur={() => setTimeout(() => setOpen(undefined), 120)}
+              onBlur={() => {
+                clearTimeout(closing.current);
+                closing.current = setTimeout(() => setOpen(undefined), 120);
+              }}
               aria-label="SQL statement"
               data-testid="sql-editor"
             />
