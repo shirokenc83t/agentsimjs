@@ -131,8 +131,9 @@ test("N2: below about 640 px the log rows drop the source column and keep time, 
   await openWorkspace(page, "debug");
   const row = page.locator('[data-testid^="event-row-"]').first();
   await expect(row).toBeVisible();
+  // The dock is laid out from shares of its size: wait for the Log to have the width it ends with before reading what its container query did with the columns.
+  await expect.poll(async () => (await page.getByTestId("event-scroller").boundingBox())?.width ?? 9999).toBeLessThan(640);
   const cols = await row.evaluate((el) => Array.from(el.children).filter((c) => c.tagName === "SPAN").map((c) => ({ shown: getComputedStyle(c).display !== "none", w: (c as HTMLElement).offsetWidth })));
-  expect((await page.getByTestId("event-scroller").boundingBox())?.width).toBeLessThan(640);
   expect(cols[3]?.shown, "source").toBe(false);
   for (const i of [0, 1, 2, 4]) expect(cols[i]?.shown, `column ${i}`).toBe(true);
   expect(cols[4]?.w, "the summary has room").toBeGreaterThan(80);
