@@ -16,7 +16,8 @@ export interface AnalysisSeriesProps {
 const PAD = { l: 52, r: 8, t: 6, b: 16 };
 const ROW_H = 92;
 
-const fmt = (v: number): string => (Math.abs(v) >= 1000 || (Math.abs(v) < 0.01 && v !== 0) ? v.toExponential(1) : String(Math.round(v * 100) / 100));
+// Whole numbers from 1,000 up (an axis of 7.3e+3 at both ends says nothing); exponents only for the very small.
+const fmt = (v: number): string => (Math.abs(v) >= 1000 ? String(Math.round(v)) : Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(1) : String(Math.round(v * 100) / 100));
 
 /** Where a series comes from, in words (the review of an analysis starts with what a number is made of). */
 const sourceNote = (s: AnalysisSeries): string => (s.source === "metric" ? (s.name === "battery" ? "recorded metric agent.soc" : "recorded metric agent.speedMps") : "from the planner's compute records (no metric for it)");
