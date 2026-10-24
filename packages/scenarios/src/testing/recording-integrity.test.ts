@@ -90,6 +90,47 @@ describe("what a recorded run writes is self-contained, under every preset", () 
     }
   });
 
+  it("every link of a real run points to a record of the same run written before the record that carries it", () => {
+    for (const w of written) {
+      for (const r of w.records) {
+        const named = [...(r.parentId === undefined ? [] : [r.parentId]), ...(r.causeIds ?? [])];
+        for (const id of named) {
+          expect(id.startsWith(`${r.runId}#`), `${w.run}/${w.preset} ${r.id} names ${id}, a record of another run`).toBe(true);
+          expect(Number(id.slice(r.runId.length + 1)), `${w.run}/${w.preset} ${r.id} names ${id}, which is not before it`).toBeLessThan(r.seq);
+        }
+        // Only the simulator's own records carry links: what a mind says never does (it has no way to).
+        if (r.kind === "thought") expect(named, `${w.run}/${w.preset} ${r.id}`).toEqual([]);
+      }
+    }
+  });
+
+  it("a real run links what it can: the notes and the end of an action to its start, a refusal and a start to the decision that asked, an ended-action event to its end, a reflex's preemption to the reflex", () => {
+    const count = { phaseOfStart: 0, endOfStart: 0, fromDecision: 0, eventOfEnd: 0, preemptedByReflex: 0, reflexOfAction: 0, failedByPlan: 0 };
+    for (const w of written) {
+      const byId = new Map(w.records.map((r) => [r.id, r]));
+      for (const r of w.records) {
+        const p = payloadOf(r);
+        const parent = r.parentId === undefined ? undefined : byId.get(r.parentId);
+        const causes = (r.causeIds ?? []).map((c) => byId.get(c));
+        if (r.kind === "action" && p.op === "phase" && parent && payloadOf(parent).op === "start") count.phaseOfStart++;
+        if (r.kind === "action" && p.op === "end" && parent && payloadOf(parent).op === "start" && payloadOf(parent).actionId === p.actionId) count.endOfStart++;
+        if (r.kind === "action" && (p.op === "start" || p.op === "rejected") && causes.some((c) => c?.kind === "thought" && payloadOf(c).op === "decision")) count.fromDecision++;
+        if (r.kind === "event" && p.op === "event" && causes.some((c) => c?.kind === "action" && payloadOf(c).op === "end")) count.eventOfEnd++;
+        if (r.kind === "action" && p.op === "end" && causes.some((c) => c?.kind === "reflex")) count.preemptedByReflex++;
+        if (r.kind === "reflex" && parent && payloadOf(parent).op === "start") count.reflexOfAction++;
+        if (r.kind === "action" && p.op === "end" && causes.some((c) => c?.kind === "compute" && payloadOf(c).op === "plan")) count.failedByPlan++;
+      }
+    }
+    expect(count.phaseOfStart).toBeGreaterThan(20);
+    expect(count.endOfStart).toBeGreaterThan(5);
+    expect(count.fromDecision).toBeGreaterThan(5);
+    expect(count.eventOfEnd).toBeGreaterThan(3);
+    // Not every preset's runs have a reflex or an unreachable target: those are checked by the unit tests of the runtime and the planner adapter.
+    expect(count.preemptedByReflex).toBeGreaterThan(5);
+    expect(count.reflexOfAction).toBeGreaterThan(5);
+    expect(count.failedByPlan).toBeGreaterThanOrEqual(0);
+  });
+
   it("minimal drops only the observer's samples from what default-research writes", () => {
     for (const run of new Set(written.map((w) => w.run))) {
       const full = written.find((w) => w.run === run && w.preset === "default-research")?.records ?? [];

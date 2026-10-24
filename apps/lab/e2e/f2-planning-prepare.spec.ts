@@ -28,7 +28,7 @@ test("HPA* graphs are prepared before tick 0: progress in the status line, time 
   const first = await runId(page);
 
   // HPA* from the run configuration: the new run prepares its abstract graph (about 1.7 s locally).
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-algorithm").selectOption("hpa");
@@ -42,7 +42,8 @@ test("HPA* graphs are prepared before tick 0: progress in the status line, time 
 
   // The same run configuration in realtime (a new run, prepared again before tick 0).
   await openWorkspace(page, "scene");
-  await page.getByTestId("rerun-in-mode").click();
+  await page.getByTestId("rerun-menu").click();
+  await page.getByTestId("rerun-live-realtime").click();
   await expect(page.getByTestId("time-mode")).toHaveText("realtime", { timeout: 60_000 });
   await expect(page.getByTestId("status-preparing")).toHaveCount(0, { timeout: 60_000 });
   await referenceSettled(page);

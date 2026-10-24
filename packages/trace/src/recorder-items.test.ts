@@ -83,6 +83,18 @@ describe("RunRecorder: snapshots and frames", () => {
     expect(rec.waiting).toBe(true);
   });
 
+  it("hands metric samples over like any item: held for the header, in order, and weighed in the backlog (ADR-0035 section 4)", () => {
+    const { buf, rec, out } = setup();
+    const metrics: RecorderItem = { type: "metrics", runId: "run-000001", samples: [{ source: "world/sim", name: "sim.tickMs", tick: 1, simTime: 0.1, value: 1.5 }, { source: "uav-001/body", name: "agent.soc", tick: 1, simTime: 0.1, value: 0.9 }] };
+    emit(buf, 1, 1);
+    rec.enqueue(metrics);
+    rec.collect(1, 0.1);
+    expect(out).toEqual([]);
+    expect(rec.backlog.bytes).toBeGreaterThanOrEqual(2 * 64);
+    rec.headerStored();
+    expect(kinds(out)).toEqual(["metrics", "batch"]);
+  });
+
   it("refuses an item when the recorder has no channel for items: nothing is dropped silently", () => {
     const buf = new TraceBuffer("run-000001", () => 0, 1000);
     const rec = new RunRecorder({ buffer: buf, profile: RECORDING_PRESETS["default-research"], send: () => {} });

@@ -103,6 +103,24 @@ describe("PlanningServiceAdapter and lazy plans", () => {
     const restarts = l.trace.all().filter((r) => r.kind === "compute" && (r.payload as { op?: string }).op === "restart");
     expect(restarts).toHaveLength(1);
     expect(restarts[0]?.payload).toMatchObject({ queryId: sub.value, interrupted: true });
+    // The replan the runtime notes is caused by that record: the progress names it.
+    expect(p?.causeRecord).toBe(restarts[0]?.id);
     expect(l.trace.all().filter((r) => r.kind === "compute" && (r.payload as { op?: string }).op === "plan")).toEqual([]); // no outcome
+  });
+
+  it("a query taken whole carries the id of the planner's record of its outcome, once (what a failed action names as its cause)", () => {
+    const l = assemble(eager);
+    const to = farFree(l.grid, l.from);
+    const sub = l.run.planner.submit(l.agentId, { from: l.from, to }, 0);
+    if (!sub.ok) throw new Error("submit failed");
+    let r = l.run.planner.take(l.agentId, sub.value);
+    for (let t = 0; t < 3000 && !r; t++) {
+      l.run.planner.advance(t);
+      r = l.run.planner.take(l.agentId, sub.value);
+    }
+    expect(r).toBeDefined();
+    const plan = l.trace.all().find((x) => x.kind === "compute" && (x.payload as { op?: string; queryId?: string }).op === "plan" && (x.payload as { queryId?: string }).queryId === sub.value);
+    expect(plan).toBeDefined();
+    expect(r?.causeRecord).toBe(plan?.id);
   });
 });

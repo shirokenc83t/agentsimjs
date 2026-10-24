@@ -74,7 +74,7 @@ export function PlanQueryTable(props: { rows: readonly QueryRow[]; selected: str
                 role="option"
                 aria-selected={r.queryId === selected}
                 data-testid={`plan-query-row-${r.queryId}`}
-                className="query-row mono"
+                className="query-row selectable mono"
                 onClick={() => onSelect(r.queryId)}
                 style={{ position: "absolute", top: 0, left: 0, right: 0, height: v.size, transform: `translateY(${v.start}px)` }}
               >
@@ -85,7 +85,7 @@ export function PlanQueryTable(props: { rows: readonly QueryRow[]; selected: str
                 <span>tick {tickSpan(r.submittedTick, r.completedTick)}</span>
                 <span>{r.expansionsCharged === undefined ? "—" : `${r.expansionsCharged} exp`}</span>
                 <span title="restarts">{plainRestarts(r) > 0 ? `↻${plainRestarts(r)}` : ""}</span>
-                <span title="interruptions">{r.interruptions > 0 ? `⚡${r.interruptions}` : ""}</span>
+                <span title="interruptions">{r.interruptions > 0 ? `↯${r.interruptions}` : ""}</span>
               </div>
             );
           })}
@@ -126,7 +126,7 @@ export function QueryDetail({ row }: { row: QueryRow }) {
       )}
       {row.restarts.map((x, i) => (
         <div key={i} data-testid={`plan-query-restart-${i}`}>
-          {x.interrupted ? "⚡ interrupted" : "↻ restart"} · {x.reason} · {x.spent} exp spent @ {x.simTimeS.toFixed(1)} s
+          {x.interrupted ? "↯ interrupted" : "↻ restart"} · {x.reason} · {x.spent} exp spent @ {x.simTimeS.toFixed(1)} s
         </div>
       ))}
       {row.legs.map((l, i) => (

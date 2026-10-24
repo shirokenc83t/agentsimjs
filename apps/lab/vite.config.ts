@@ -20,7 +20,7 @@ const csp = (dev: boolean) =>
   ].join("; ");
 
 /**
- * Preloads the UI regular face (ADR-0032 §4): the only preloaded font, counted in the initial-chunk metric.
+ * Preloads the UI regular face (ADR-0042 §2: JetBrains Mono regular): the only preloaded font, counted in the initial-chunk metric.
  * The hashed file name is known only after bundling, so the link is injected into index.html at build time.
  */
 function preloadUiFont(): Plugin {
@@ -30,7 +30,7 @@ function preloadUiFont(): Plugin {
     transformIndexHtml: {
       order: "post",
       handler(_html, ctx) {
-        const font = Object.values(ctx.bundle ?? {}).find((a) => /ibm-plex-sans-latin-400-normal-[^/]*\.woff2$/.test(a.fileName));
+        const font = Object.values(ctx.bundle ?? {}).find((a) => /jetbrains-mono-latin-400-normal-[^/]*\.woff2$/.test(a.fileName));
         if (!font) throw new Error("UI regular font not found in the bundle");
         return [{ tag: "link", attrs: { rel: "preload", href: `/${font.fileName}`, as: "font", type: "font/woff2", crossorigin: "" }, injectTo: "head" }];
       },

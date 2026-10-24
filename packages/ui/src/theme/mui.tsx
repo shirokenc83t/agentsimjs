@@ -1,7 +1,7 @@
 import { createTheme, ThemeProvider, useColorScheme, type Shadows } from "@mui/material/styles";
 import { useEffect, type ReactNode } from "react";
 import { useTheme } from "./theme-controller.ts";
-import { COLORS, FONT, RADIUS_PX, TYPE, type ThemeName } from "./tokens.ts";
+import { COLORS, FONT, RADIUS_PX, TOOLTIP_DELAY_MS, TYPE, type ThemeName } from "./tokens.ts";
 
 function palette(t: ThemeName) {
   const c = COLORS[t];
@@ -21,7 +21,7 @@ function palette(t: ThemeName) {
 /**
  * The MUI theme, built only from tokens (ADR-0032 §3): CSS-variables mode so both themes share one
  * stylesheet and switch with the `data-theme` attribute; compact, flat (no elevation shadows), 3 px radius,
- * one accent, no ripple.
+ * one accent, no ripple, JetBrains Mono for all of it (ADR-0042 §2: Plex Sans is only for running prose, which is plain markup with `.prose`).
  */
 export const muiTheme = createTheme({
   cssVariables: { colorSchemeSelector: '[data-theme="%s"]' },
@@ -30,7 +30,7 @@ export const muiTheme = createTheme({
   shape: { borderRadius: RADIUS_PX.control },
   shadows: Array<string>(25).fill("none") as Shadows,
   typography: {
-    fontFamily: FONT.sans,
+    fontFamily: FONT.mono,
     fontSize: TYPE.body.size,
     button: { textTransform: "none", fontWeight: TYPE.title.weight },
   },
@@ -49,7 +49,10 @@ export const muiTheme = createTheme({
     MuiIconButton: { defaultProps: { size: "small" } },
     MuiTextField: { defaultProps: { size: "small" } },
     MuiSelect: { defaultProps: { size: "small" } },
-    MuiTooltip: { defaultProps: { disableInteractive: true } },
+    // Map objects, timeline marks and icon-only buttons explain themselves after 400 ms (ADR-0042 §6).
+    MuiTooltip: { defaultProps: { disableInteractive: true, enterDelay: TOOLTIP_DELAY_MS, enterNextDelay: TOOLTIP_DELAY_MS } },
+    // Hover is a neutral fill, not the accent (ADR-0042 §6); selection is the accent tint.
+    MuiMenuItem: { styleOverrides: { root: { "&:hover": { backgroundColor: "var(--bg3)" }, "&.Mui-selected": { backgroundColor: "var(--acbg)" }, "&.Mui-selected:hover": { backgroundColor: "var(--acbg)" } } } },
   },
 });
 

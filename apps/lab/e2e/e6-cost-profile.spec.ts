@@ -34,7 +34,7 @@ test("a terrain-weighted cost profile set in the run configuration moves the rov
   expect(crossesMarsh(direct), JSON.stringify(direct)).toBe(true);
   const firstRun = (await page.getByTestId("run-label").textContent()) ?? "";
 
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await expect(panel.getByTestId("rc-valid")).toBeVisible();
@@ -65,7 +65,7 @@ test("a terrain-weighted cost profile set in the run configuration moves the rov
 
 test("invalid run configurations show their stable codes and cannot be run", async ({ page }) => {
   await loadDemo(page);
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-per-tick").fill("0");

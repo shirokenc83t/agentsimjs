@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { recordRenderer, recordResults, summarize } from "../../tools/bench/measure.ts";
 import { isSoftwareRenderer, RENDERER_PROBE } from "../../tools/test/gpu.ts";
-import { openPanelTab, openWorkspace, runCommand, sendTo, waitForStorageReady } from "../../apps/lab/e2e/helpers.ts";
+import { loadF2, openPanelTab, openWorkspace, runCommand, sendTo, waitForStorageReady } from "../../apps/lab/e2e/helpers.ts";
 
 // Reference scene (F0): empty ground, lights, orbit camera, one interpolated dummy entity.
 // Thresholds in bench/thresholds.json; wall-clock frame intervals are reported only (ADR-0021).
@@ -85,7 +85,7 @@ test("render loop on the 1 km² reference world, agents moving and a path being 
   // The rover gets a slow onboard computer (500 expansions per tick, run configuration byAgent): its cross-map
   // A* (about 71k expansions) then spans about 140 ticks, so the measured window really runs while a path is
   // being planned. Set from the Run configuration panel, as a researcher would.
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-planning-scope").selectOption("byAgent.rover");
@@ -135,6 +135,34 @@ test("render loop on the 1 km² reference world, agents moving and a path being 
   );
 });
 
+// F3b (ADR-0042 section 8): frame time with the Overview window open on the 1 km² reference world, agents moving. The Overview is drawn from its own timer, from the
+// atlases the Scene holds, never inside the frame loop: this measures that it does not cost the frame anything (budget 4 ms p95, ADR-0013). Reported as
+// `render.frameWork.overview` (a threshold entry for it is Max's to add).
+test("render loop on the 1 km² reference world with the Overview window open", async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.goto("/?probe");
+  await waitForStorageReady(page);
+  await page.getByTestId("run-label").click();
+  await page.getByTestId("load-reference").click();
+  await expect(page.getByTestId("run-scenario")).toHaveText(/^f1-reference-1km v\d+$/, { timeout: 60_000 });
+  await page.keyboard.press("Escape");
+  await expect
+    .poll(() => page.evaluate(() => { const s = window.__agentsim?.scene?.stats(); return s !== undefined && s.pages > 0 && s.chunksPending === 0; }), { timeout: 180_000 })
+    .toBe(true);
+  await page.getByTestId("wb-collapse-overview").click();
+  await expect(page.getByTestId("overview-canvas")).toBeVisible();
+  await sendTo(page, "uav-001", 200, 250);
+  await sendTo(page, "ugv-001", 700, 700);
+  await page.getByTestId("play").click();
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => window.__agentsim && (window.__agentsim.frameLog.length = 0));
+  await page.waitForTimeout(5000);
+  const steady = await page.evaluate(() => window.__agentsim?.frameLog.slice() ?? []);
+  expect(steady.length).toBeGreaterThan(30);
+  recordResults("browser.json", { "render.frameWork.overview": summarize(steady.map(([, w]) => w)) });
+  console.log(JSON.stringify({ overviewOpen: { steadyFrames: steady.length } }));
+});
+
 // F2 M2e5 (ADR-0027, ADR-0013): frame time with the belief overlay on, on the 1 km² reference world, while agents move.
 // Two measurements. (1) Showing a whole known 1 km² map (the rover's prior: 1,024 belief chunks at the shared ≤ 16 uploads
 // per frame): time to show it and the frame work meanwhile, reported only, like the F1 atlas upload. (2) A steady window
@@ -155,7 +183,7 @@ test("render loop on the 1 km² reference world with the belief overlay", async 
 
   // The run's agents plan with an eager refine (HPA* coarse path, A* legs), so that a run's own planning queries carry stages for the
   // stages overlay (F2b M4): a new run of the same scenario.
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const rc = page.getByTestId("run-config-panel");
   await rc.getByTestId("rc-planner").selectOption("strategy");
@@ -231,4 +259,56 @@ test("render loop on the 1 km² reference world with the belief overlay", async 
     "render.beliefShowMs": summarize([showMs]),
   });
   console.log(JSON.stringify({ belief1km: { sandboxMs, showMs, uploadFrames: uploading.length, steadyFrames: steady.length, steadyFramesWithBeliefChunks: streamed } }));
+});
+
+// F3b M4 (ADR-0029): what the 2D view costs with 20 agents running: the Scene's MAP 2D redraws at the panel rate (10 Hz) with every agent's executed path, its position and the
+// blocked cells of the world, on a canvas. Reported as `render.frameWork.map2d` (the wall ms of each draw; report only, no threshold).
+test("the Scene's 2D view with a 20-agent run", async ({ page }) => {
+  test.setTimeout(240_000);
+  await loadF2(page, "agents");
+  const ground = await page.locator('[data-testid^="explorer-row-ugv-"]').evaluateAll((els) => els.map((e) => (e.getAttribute("data-testid") ?? "").replace("explorer-row-", "")));
+  expect(ground.length).toBeGreaterThan(2);
+  for (const id of ground.slice(0, 6)) {
+    await page.getByTestId(`explorer-row-${id}`).click();
+    await runCommand(page, `Explore selected agent (${id})`);
+  }
+  await page.getByTestId("map-view-2d").click();
+  await expect(page.getByTestId("scene-2d")).toBeVisible();
+  await page.getByTestId("play").click();
+  await page.waitForTimeout(2500);
+  await page.evaluate(() => window.__agentsim && (window.__agentsim.map2dMs = []));
+  await page.waitForTimeout(8000);
+  const draws = await page.evaluate(() => window.__agentsim?.map2dMs?.slice() ?? []);
+  const agents = Number(await page.getByTestId("map2d-canvas").getAttribute("data-trajectories"));
+  expect(draws.length).toBeGreaterThan(30);
+  expect(agents, "the map draws every agent's path").toBeGreaterThanOrEqual(20);
+  recordResults("browser.json", { "render.frameWork.map2d": summarize(draws) });
+  console.log(JSON.stringify({ map2d: { draws: draws.length, agents } }));
+});
+
+// F3b M3 (ADR-0013, ADR-0035 section 5): frame time with the log console tailing a recorded 20-agent run in the Debug workspace, everything the run writes pushed to it by a live
+// subscription and the Timeline and the trace tree open beside it. The console is a list of at most a screenful of rows and a tail that appends and scrolls; this measures that it does
+// not cost the frame anything (budget 4 ms p95). Reported as `render.frameWork.logTail` (a threshold entry for it is Max's to add).
+test("render loop with the log console tailing a 20-agent run", async ({ page }) => {
+  test.setTimeout(240_000);
+  await loadF2(page, "agents");
+  const ground = await page.locator('[data-testid^="explorer-row-ugv-"]').evaluateAll((els) => els.map((e) => (e.getAttribute("data-testid") ?? "").replace("explorer-row-", "")));
+  expect(ground.length).toBeGreaterThan(2);
+  for (const id of ground.slice(0, 6)) {
+    await page.getByTestId(`explorer-row-${id}`).click();
+    await runCommand(page, `Explore selected agent (${id})`);
+  }
+  await openWorkspace(page, "debug");
+  await page.getByTestId("log-filter").fill("-source:*/body");
+  await expect(page.getByTestId("log-tail")).toHaveAttribute("data-state", "following");
+  await page.getByTestId("play").click();
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => window.__agentsim && (window.__agentsim.frameLog.length = 0));
+  await page.waitForTimeout(6000);
+  const steady = await page.evaluate(() => window.__agentsim?.frameLog.slice() ?? []);
+  const rows = Number(await page.getByTestId("event-scroller").getAttribute("data-count"));
+  expect(steady.length).toBeGreaterThan(30);
+  expect(rows, "the console received what the run wrote").toBeGreaterThan(100);
+  recordResults("browser.json", { "render.frameWork.logTail": summarize(steady.map(([, w]) => w)) });
+  console.log(JSON.stringify({ logTail: { steadyFrames: steady.length, consoleRows: rows } }));
 });

@@ -40,7 +40,7 @@ export function MindViewSection(props: { source: RunSource; agentId: string; run
   return (
     <section className="inspector-section mind-view" data-testid="inspector-mind-view" aria-label="What the mind receives">
       <h4>
-        <span className="kind-tag mono">◇ MIND</span> What the mind receives (decision request)
+        <span className="kind-tag mono">◇ MIND</span> · <span className="sub">what the mind receives (decision request)</span>
       </h4>
       {!msg || !req ? (
         <p className="muted">Waiting for the worker…</p>
@@ -85,7 +85,7 @@ export function MindViewSection(props: { source: RunSource; agentId: string; run
                 ? "none"
                 : req.unavailable.map((u) => (
                     <div key={u.name} className="mono" data-testid={`mind-unavailable-${u.name}`}>
-                      ✗ {u.name} · {u.code}
+                      ✕ {u.name} · {u.code}
                       {u.requires ? ` (${u.requires})` : ""}
                     </div>
                   ))}

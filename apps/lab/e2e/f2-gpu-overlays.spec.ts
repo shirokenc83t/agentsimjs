@@ -21,7 +21,7 @@ const p95 = (xs: number[]) => {
  * queries then carry stages, and the stages overlay of the viewed agent draws the latest of them.
  */
 async function useRefineStrategy(page: Page) {
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-planner").selectOption("strategy");

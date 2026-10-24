@@ -159,6 +159,19 @@ export class BeliefVsTruth {
     }
   }
 
+  /**
+   * What every agent believes of one cell now (the researcher's Cell tab): free, occupied or unknown from its own map, or `ideal` for an agent whose map is the
+   * ground truth. A read of the maps: nothing changes.
+   */
+  beliefAt(i: number, j: number): { agentId: string; state: "unknown" | "free" | "occupied" | "ideal" }[] {
+    return this.order.map((agentId) => {
+      const t = this.trackers.get(agentId);
+      if (!t) return { agentId, state: "ideal" as const };
+      const s = t.belief.state(i, j);
+      return { agentId, state: s === BELIEF_FREE ? ("free" as const) : s === BELIEF_OCCUPIED ? ("occupied" as const) : ("unknown" as const) };
+    });
+  }
+
   /** Metrics for one agent at the current state. */
   report(agentId: string, tick: number, simTimeS: number): BeliefVsTruthReport {
     const entities = this.entityMetrics(agentId);

@@ -13,11 +13,14 @@ export interface RecordingSelection {
   readonly customJson: string;
   /** The opt-out for the next run only. */
   readonly optOut: boolean;
+  /** How long the next headless run runs, in sim seconds (its end condition). */
+  readonly headlessUntilS: number;
 }
 
 export const DEFAULT_RECORDING: RecordingChoice = { mode: "stored", profile: RECORDING_PRESETS[DEFAULT_RECORDING_PRESET] };
 
-const INITIAL: RecordingSelection = { preset: DEFAULT_RECORDING_PRESET, customJson: JSON.stringify(RECORDING_PRESETS[DEFAULT_RECORDING_PRESET], null, 2), optOut: false };
+export const DEFAULT_HEADLESS_UNTIL_S = 60;
+const INITIAL: RecordingSelection = { preset: DEFAULT_RECORDING_PRESET, customJson: JSON.stringify(RECORDING_PRESETS[DEFAULT_RECORDING_PRESET], null, 2), optOut: false, headlessUntilS: DEFAULT_HEADLESS_UNTIL_S };
 
 let selection: RecordingSelection = INITIAL;
 const listeners = new Set<() => void>();
@@ -46,6 +49,18 @@ export function profileOfSelection(s: RecordingSelection): { ok: true; profile: 
 /** Presets that write a lot (every pose at a high rate, everything at its fullest): a realtime run with one may fall behind its writer. */
 export function isHeavyProfile(p: RecordingProfile): boolean {
   return p.channels.poses.rateHz > 5 || p.channels.metrics.rateHz > 5 || p.channels.transitions.level === "full" && p.channels.sensors.level === "full";
+}
+
+/**
+ * How a headless run is recorded and for how long: the selection's profile, never the opt-out (a headless run is always recorded, ADR-0035), which stays set for the next
+ * live run; the end condition is the selection's duration. A custom profile that is not valid refuses the start with the reason.
+ */
+export function takeHeadlessChoice(): { readonly recording: RecordingChoice; readonly untilS: number } {
+  const s = selection;
+  const p = profileOfSelection(s);
+  if (!p.ok) throw new Error(`invalid_recording_profile: ${p.message}`);
+  const untilS = Number.isFinite(s.headlessUntilS) && s.headlessUntilS > 0 ? Math.min(86_400, s.headlessUntilS) : DEFAULT_HEADLESS_UNTIL_S;
+  return { recording: { mode: "stored", profile: p.profile }, untilS };
 }
 
 /**

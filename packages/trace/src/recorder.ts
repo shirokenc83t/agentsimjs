@@ -1,5 +1,6 @@
 import { channelOf } from "./channels.ts";
 import { filterRecord } from "./levels.ts";
+import type { MetricSample } from "./metrics.ts";
 import { redactSecrets } from "./redact.ts";
 import type { RecordingProfile } from "./recording-profile.ts";
 import type { TraceBuffer } from "./trace-buffer.ts";
@@ -60,11 +61,19 @@ export interface RecorderFramesItem {
   readonly blobs: readonly { readonly id: string; readonly bytes: Uint8Array }[];
 }
 
+/** Metric samples (ADR-0035 section 4), as the storage worker takes them: observer data, read from the run between ticks. */
+export interface RecorderMetricsItem {
+  readonly type: "metrics";
+  readonly runId: string;
+  readonly samples: readonly MetricSample[];
+}
+
 /** What a recorder hands over besides batches of records. Items go out in order with the batches, and before the batch that refers to them. */
-export type RecorderItem = RecorderSnapshotItem | RecorderFramesItem;
+export type RecorderItem = RecorderSnapshotItem | RecorderFramesItem | RecorderMetricsItem;
 
 /** The bytes an item weighs in the backlog. */
 export function itemBytes(i: RecorderItem): number {
+  if (i.type === "metrics") return i.samples.length * 64;
   return i.type === "snapshot"
     ? i.bytes.length + i.blobs.reduce((n, b) => n + b.bytes.length, 0)
     : i.blobs.reduce((n, b) => n + b.bytes.length, 0) + i.frames.reduce((n, f) => n + (f.data?.length ?? 0) + f.chunks.length * 4 + 64, 0);
@@ -128,6 +137,11 @@ export interface RunRecorderOptions {
   readonly sendItem?: (item: RecorderItem) => void;
   /** The marks of the backlog (default: `DEFAULT_FLOW_CONTROL`). */
   readonly flow?: FlowControl;
+  /**
+   * The first seq to gather (default 0): a recorder that starts in the middle of a run, as the one of a re-simulated window does, takes what the run emits from here and
+   * leaves what it emitted before.
+   */
+  readonly fromSeq?: number;
 }
 
 interface InFlight {
@@ -154,6 +168,8 @@ export class RunRecorder {
   private panel: TraceRecord[] = [];
   private inFlight: InFlight[] = [];
   private lastThroughSeq = -1;
+  /** Records kept by the profile and handed over (or held for the header), cumulative: what a progress view counts as written. */
+  private handedOver = 0;
   private sim: SimHead = { tick: 0, simTimeS: 0 };
   private persistedAt: PersistedHead | undefined;
 
@@ -163,6 +179,7 @@ export class RunRecorder {
     this.send = o.send;
     this.flow = o.flow ?? DEFAULT_FLOW_CONTROL;
     this.sendItem = o.sendItem;
+    this.cursor = o.fromSeq ?? 0;
     // From now on the cache forgets a record only once it is persisted.
     this.buffer.holdUnpersisted();
   }
@@ -178,6 +195,11 @@ export class RunRecorder {
 
   get persistedHead(): PersistedHead | undefined {
     return this.persistedAt;
+  }
+
+  /** Records kept by the profile and handed over (or held until the header is stored) since the run began. */
+  get recordsHandedOver(): number {
+    return this.handedOver;
   }
 
   /** Records handed over and not yet reported saved. */
@@ -245,6 +267,7 @@ export class RunRecorder {
         if (kept) {
           const safe = redactSecrets(kept);
           this.held.push(safe);
+          this.handedOver++;
           this.heldBytes += estimateRecordBytes(safe);
           // Pose samples are for scrubbing, not for reading: the Log's stream does not carry them (the Scene has its own poses).
           if (channelOf(safe) !== "poses") this.panel.push(safe);

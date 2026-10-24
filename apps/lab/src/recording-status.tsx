@@ -37,9 +37,9 @@ export function describeRecording(i: RecordingStatusInput): RecordingStatusText 
   const saved = i.persisted === undefined ? "not saved yet" : i.tick > i.persisted.tick ? `saved to tick ${i.persisted.tick} · head ${i.tick}` : `saved to tick ${i.persisted.tick}`;
   const waiting =
     i.state === "storage_quota"
-      ? "⏸ paused: the storage quota is near (delete or export runs to free space)"
+      ? "❚❚ paused: the storage quota is near (delete or export runs to free space)"
       : i.state === "storage_backpressure"
-        ? `⏸ waiting for storage (${i.backlogRecords} records not saved yet)`
+        ? `❚❚ waiting for storage (${i.backlogRecords} records not saved yet)`
         : undefined;
   return { recorded: true, label, saved, waiting };
 }
@@ -60,12 +60,12 @@ export function RecordingStatus({ header, snap }: { header: RunHeader; snap: Sim
   const t = describeRecording({ header, tick: snap.tick, persisted, state: recording.state, backlogRecords: recording.backlogRecords });
   return (
     <>
-      <span data-testid="status-recording" className={t.recorded ? "" : "warn"} title="How this run is recorded (ADR-0035): the recording profile and its hash, next to the run configuration's">
+      <span data-testid="status-recording" data-prio="7" className={`seg${t.recorded ? "" : " warn"}`} title="How this run is recorded (ADR-0035): the recording profile and its hash, next to the run configuration's">
         {t.label}
       </span>
-      {t.saved !== undefined && <span data-testid="status-recording-saved">{t.saved}</span>}
+      {t.saved !== undefined && <span className="seg" data-prio="6" data-testid="status-recording-saved">{t.saved}</span>}
       {t.waiting !== undefined && (
-        <span className="warn" data-testid="status-recording-state">
+        <span className="seg warn" data-prio="2" data-testid="status-recording-state">
           {t.waiting}
         </span>
       )}

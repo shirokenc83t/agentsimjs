@@ -13,9 +13,10 @@ test("arrow keys, Home and End move the selection of the event list and the curs
   await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 300", { timeout: 20_000 });
   await openWorkspace(page, "debug");
   await page.getByTestId("event-filter-agent").selectOption("ugv-001");
-  await page.getByTestId("event-filter-kind").selectOption("action");
+  await page.getByTestId("event-kind-action").click({ modifiers: ["Shift"] }); // that kind alone
   const rows = page.locator('[data-testid^="event-row-"]');
-  await expect.poll(() => rows.count(), { timeout: 15_000 }).toBeGreaterThan(3);
+  // Both filters are applied (the list starts again at each): only the rover's actions are listed, and there are several.
+  await expect.poll(async () => (await rows.count()) > 3 && (await page.locator('[data-testid^="event-row-"]:not([data-kind="action"])').count()) === 0 && (await page.locator('[data-testid^="event-row-"]:not([data-agent="ugv-001"])').count()) === 0, { timeout: 15_000 }).toBe(true);
 
   const list = page.getByRole("listbox", { name: "Events" });
   const selectedRow = list.locator('[role="option"][aria-selected="true"]');

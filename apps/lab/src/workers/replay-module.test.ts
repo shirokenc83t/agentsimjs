@@ -22,6 +22,8 @@ async function store(ports: StoragePorts, items: RecorderItem[], profile: Return
     if (item.type === "snapshot") {
       const r = await ports.snapshots.write(item.runId, { seq: item.seq, simTime: item.simTimeS, tick: item.tick, bytes: item.bytes, blobs: item.blobs });
       if (!r.ok && r.error.code !== "duplicate_snapshot") throw new Error(r.error.message);
+    } else if (item.type === "metrics") {
+      await ports.metrics.append(item.runId, item.samples);
     } else {
       await ports.snapshots.putBlobs(item.runId, item.blobs);
       const r = await ports.beliefFrames.append(item.runId, item.frames);
@@ -258,7 +260,7 @@ describe("replay module: chunk groups", () => {
     const t = setup(profile);
     t.explore(t.driver);
     t.step(130);
-    const ids = t.items.flatMap((i) => i.blobs.map((b) => b.id));
+    const ids = t.items.flatMap((i) => (i.type === "metrics" ? [] : i.blobs).map((b) => b.id));
     expect(new Set(ids).size, "no blob is handed over twice").toBe(ids.length);
     const snapshots = t.items.filter((i) => i.type === "snapshot");
     expect(snapshots.map((s) => s.tick)).toEqual([0, 60, 120]);

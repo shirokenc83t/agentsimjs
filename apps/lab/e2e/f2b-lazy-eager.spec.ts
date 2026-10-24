@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, openPanelTab, openWorkspace, sendTo, step } from "./helpers.ts";
+import { loadDemo, openPanelTab, openWorkspace, runCommand, sendTo, step } from "./helpers.ts";
 
 const astar = { kind: "algorithm", algorithm: "astar" };
 const hpa = { kind: "algorithm", algorithm: "hpa" };
@@ -7,7 +7,7 @@ const refine = (mode: "lazy" | "eager") => JSON.stringify({ schemaVersion: 0, id
 
 /** A new run with a refine strategy in `mode` on `unknown` maps and a slow planner (100 expansions per tick), so planning takes ticks. */
 async function runRefine(page: Page, mode: "lazy" | "eager") {
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-planner").selectOption("strategy");
@@ -54,6 +54,7 @@ test("a lazy refine hands out its first leg earlier than the eager one finishes 
   expect(lazyFirst).toBeLessThan(eagerDone);
 
   // The stages overlay follows the selected query: the coarse path dashed, the legs solid, a joint between them.
+  await runCommand(page, "Open panel: Legend"); // closed by `sendTo`, which clears the windows off the map
   await page.getByTestId("overlay-stages").click();
   await expect(page.getByTestId("stages-legend")).toContainText("coarse path of a refine");
   await expect.poll(async () => (await stages(page))?.legs ?? 0).toBeGreaterThan(0);
@@ -74,7 +75,7 @@ test("the stages overlay follows the query selected in the Inspector's table", a
   await page.getByTestId("explorer-row-ugv-001").click();
   await sendTo(page, "ugv-001", 60, 58);
   await step(page, 2);
-  await sendTo(page, "ugv-001", 20, 40);
+  await sendTo(page, "ugv-001", 35, 35); // on screen clear of the scene overlay
   await step(page, 2);
   const rows = page.getByTestId(/^plan-query-row-/);
   await expect(rows).toHaveCount(2);

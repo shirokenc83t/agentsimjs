@@ -33,10 +33,13 @@ async function signature(page: Page, runId: string) {
     out[`state@${t}`] = (await page.getByTestId("inspector-state").textContent()) ?? "";
   }
   await openWorkspace(page, "debug");
-  await page.getByTestId("event-filter-kind").selectOption("event");
+  await page.getByTestId("event-kind-event").click({ modifiers: ["Shift"] }); // that kind alone
   await expect.poll(() => page.locator('[data-testid^="event-row-"]').count(), { timeout: 15_000 }).toBeGreaterThan(2);
   const rows = page.locator('[data-testid^="event-row-"]');
-  out["events"] = (await rows.evaluateAll((els) => els.slice(0, 12).map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim()))).join(" | ");
+  // The list reloads while the live run goes on in the background: read it until a read finds the rows.
+  await expect
+    .poll(async () => (out["events"] = (await rows.evaluateAll((els) => els.slice(0, 12).map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim()))).join(" | ")), { timeout: 15_000 })
+    .not.toBe("");
   const checkpoint = rows.filter({ hasText: "checkpoint" }).first();
   await checkpoint.click();
   out["checkpoint"] = ((await page.getByTestId("event-detail").textContent()) ?? "").replace(/"id": "run-\d{6}#/g, '"id": "run-X#').replace(/"runId": "run-\d{6}"/g, '"runId": "run-X"');

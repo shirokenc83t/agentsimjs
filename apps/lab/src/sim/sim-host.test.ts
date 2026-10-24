@@ -398,6 +398,41 @@ describe("sim host: scenario runs (F1 e2, protocol v2)", () => {
     expect(d?.type === "researcherData" && d.map).toBeUndefined();
   });
 
+  it("`cellWatch` streams what every agent believes of one cell (the ideal ones as such), changes nothing in the run, and stops with null (observer data: worker → main only)", () => {
+    const unknown = () => ({ ...demo(), runConfig: { schemaVersion: 0, scenario: { id: "f1-demo", version: 1 }, beliefs: { default: { init: "unknown" } } } });
+    const run = (watch: boolean) => {
+      const h = harness();
+      h.send({ type: "init", protocolVersion: SIM_PROTOCOL_VERSION, tickRateHz: 10 });
+      h.send(unknown());
+      if (watch) h.send({ type: "cellWatch", cell: { i: 20, j: 20 } });
+      h.send({ type: "control", op: "step", count: 50 });
+      return h;
+    };
+    const watched = run(true);
+    const quiet = run(false);
+    const beliefs = watched.out.filter((m) => m.type === "cellBeliefs");
+    expect(beliefs.length).toBeGreaterThan(0);
+    expect(quiet.out.some((m) => m.type === "cellBeliefs")).toBe(false);
+    const last = beliefs.at(-1);
+    if (last?.type !== "cellBeliefs") throw new Error("no data");
+    expect([last.i, last.j]).toEqual([20, 20]);
+    expect(last.agents.map((a) => a.agentId).sort()).toEqual(["ugv-001", "ugv-002", "uav-001"].sort());
+    expect(last.agents.every((a) => a.state === "unknown" || a.state === "free" || a.state === "occupied")).toBe(true);
+    const hash = (h: ReturnType<typeof harness>) => h.out.filter((m) => m.type === "stats").at(-1);
+    expect(hash(watched)).toEqual(hash(quiet));
+    watched.send({ type: "cellWatch", cell: null });
+    const n = watched.out.filter((m) => m.type === "cellBeliefs").length;
+    watched.send({ type: "control", op: "step", count: 10 });
+    expect(watched.out.filter((m) => m.type === "cellBeliefs").length).toBe(n);
+    // Agents whose map is the truth are `ideal`.
+    const ideal = harness();
+    ideal.send({ type: "init", protocolVersion: SIM_PROTOCOL_VERSION, tickRateHz: 10 });
+    ideal.send(demo());
+    ideal.send({ type: "cellWatch", cell: { i: 5, j: 5 } });
+    const d = ideal.out.filter((m) => m.type === "cellBeliefs").at(-1);
+    expect(d?.type === "cellBeliefs" && d.agents.every((a) => a.state === "ideal")).toBe(true);
+  });
+
   it("`beliefWatch` streams the watched agent's belief chunks (dirty ones only, one byte per cell), nothing for an ideal agent, and changes nothing in the run, whatever the agent switching", () => {
     const unknown = () => ({ ...demo(), runConfig: { schemaVersion: 0, scenario: { id: "f1-demo", version: 1 }, beliefs: { default: { init: "unknown" } } } });
     const run = (script: (h: ReturnType<typeof harness>) => void) => {

@@ -4,32 +4,43 @@
    3:1); --ln for panel frames, dividers and other decorative lines (no contrast minimum). */
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
-body { background: var(--bg0); color: var(--fg); font: var(--type-body-size)/1.4 var(--font-sans); }
+/* JetBrains Mono for the whole chrome (ADR-0042 §2); `.prose` (IBM Plex Sans) is for running text only: help, dialog body, descriptions. */
+body { background: var(--bg0); color: var(--fg); font: var(--type-body-size)/1.4 var(--font-mono); font-variant-numeric: tabular-nums; }
+.prose { font-family: var(--font-prose); font-size: var(--type-prose-size); font-weight: var(--type-prose-weight); line-height: 1.5; }
+/* Titles and labels: uppercase, tracked (ADR-0042 §2). */
+.title { font-size: var(--type-title-size); font-weight: var(--type-title-weight); letter-spacing: var(--type-title-tracking); text-transform: uppercase; }
+.label { font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: var(--type-label-tracking); text-transform: uppercase; color: var(--fg2); }
+.clock { font-size: var(--type-clock-size); font-weight: var(--type-clock-weight); }
+.telemetry { font-size: var(--type-telemetry-size); font-weight: var(--type-telemetry-weight); }
 button, select, input { font: inherit; color: inherit; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 /* MUI inputs set their own font: the two-class selector wins, so `mono` inputs (numbers, JSON) stay monospace. */
 .MuiInputBase-input.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .muted { color: var(--fg2); }
+/* Interaction states, one set for every selectable thing (ADR-0042 §6): hover is a neutral fill and edge (never the accent), selection an accent tint with a
+   1 px accent outline (no coloured side bars), keyboard focus the 2 px accent outline. The three are told apart by fill, edge colour and width. */
 :focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: 1px; }
+.selectable { cursor: pointer; }
+.selectable:hover { background: var(--bg3); outline: 1px solid var(--fg3); outline-offset: -1px; }
+.selectable[aria-selected="true"], .selectable.selected { background: var(--acbg); outline: 1px solid var(--ac); outline-offset: -1px; }
+.selectable:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
+/* Floating windows, popovers and dialogs carry the one shadow; a modal dialog sits on the scrim. */
+.floating { box-shadow: var(--float); }
+.scrim { background: var(--scrim); }
+/* The dock (the area behind the panels) is the darkest level, with a dot grid; the hatch marks what is unknown. */
+.dock-area { background: var(--dock) var(--dock-pattern); }
+.hatched { background-image: var(--hatch-pattern); }
 
 .btn {
   background: var(--bg2); border: 1px solid var(--ln2); border-radius: var(--radius-control);
   padding: 3px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
 }
-.btn:hover { border-color: var(--ac); }
+.btn:hover { background: var(--bg3); border-color: var(--fg3); }
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 .btn.primary { border-color: var(--ac); }
 .field { background: var(--bg0); border: 1px solid var(--ln2); border-radius: var(--radius-control); padding: 3px 8px; }
 
-.shell { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
-.toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--bg1); border-bottom: 1px solid var(--ln); flex-wrap: wrap; }
-.toolbar .brand { font-weight: 600; margin-right: 8px; }
-.toolbar .spacer { flex: 1; }
-.tabs { display: inline-flex; gap: 2px; }
-.tabs .btn[aria-pressed="true"] { border-color: var(--ac); background: var(--acbg); }
-.statusline { display: flex; gap: 16px; padding: 3px 10px; background: var(--bg1); border-top: 1px solid var(--ln); font-family: var(--font-mono); font-size: var(--type-mono-size); color: var(--fg2); flex-wrap: wrap; }
-.statusline .warn { color: var(--warn); }
-.statusline .danger { color: var(--alm); }
+.shell { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr auto; height: 100%; }
 .workspace { min-height: 0; position: relative; }
 .workspace-fill { position: absolute; inset: 0; }
 
@@ -40,13 +51,17 @@ button, select, input { font: inherit; color: inherit; }
 .banner.info { background: var(--acbg); border-left-color: var(--ac); }
 
 .panel { height: 100%; overflow: auto; padding: 10px; }
-.panel h3 { margin: 0 0 8px; font-size: var(--type-title-size); font-weight: var(--type-title-weight); }
+.panel h3 { margin: 0 0 8px; font-size: var(--type-title-size); font-weight: var(--type-title-weight); letter-spacing: var(--type-title-tracking); text-transform: uppercase; }
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-family: var(--font-mono); font-size: var(--type-mono-size); }
 .kv dt { color: var(--fg2); }
 .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 table.grid { border-collapse: collapse; width: 100%; font-family: var(--font-mono); font-size: var(--type-mono-size); }
 table.grid th, table.grid td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--ln); }
 table.grid th { color: var(--fg2); font-weight: normal; }
+/* A run's id, label and status never wrap (they are cut with an ellipsis, the whole text in the tooltip); what a run holds wraps instead. */
+table.grid td.nw, table.grid th { white-space: nowrap; }
+table.grid .cut { display: inline-block; max-width: 28ch; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+table.grid td.holds { white-space: normal; overflow-wrap: anywhere; min-width: 16ch; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
 
 .scene-host { position: absolute; inset: 0; }
@@ -59,18 +74,54 @@ table.grid th { color: var(--fg2); font-weight: normal; }
 .hud .kv { font-size: 11px; }
 .hud label { display: flex; gap: 6px; align-items: center; margin-top: 4px; pointer-events: auto; width: max-content; }
 
-.palette-backdrop { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg0) 60%, transparent); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; z-index: var(--z-popover); }
-.palette { width: min(560px, calc(100vw - 32px)); background: var(--bg1); border: 1px solid var(--ln); border-radius: var(--radius-control); overflow: hidden; }
+.palette-backdrop { position: fixed; inset: 0; background: var(--scrim); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; z-index: var(--z-popover); }
+.palette { width: min(560px, calc(100vw - 32px)); background: var(--bg1); border: 1px solid var(--ln2); border-radius: var(--radius-control); overflow: hidden; box-shadow: var(--float); }
 .palette input { width: 100%; border: 0; border-bottom: 1px solid var(--ln); background: transparent; padding: 10px 12px; outline: none; }
 .palette ul { list-style: none; margin: 0; padding: 4px; max-height: 50vh; overflow: auto; }
-.palette li { padding: 6px 10px; border-radius: var(--radius-control); cursor: pointer; display: flex; justify-content: space-between; }
-.palette li[aria-selected="true"] { background: var(--acbg); }
-.palette .group { color: var(--fg2); font-size: 11px; }
+.palette li { padding: 6px 10px; border-radius: var(--radius-control); display: flex; justify-content: space-between; }
+.palette li.group-head { display: block; }
+.palette .group { color: var(--fg2); font-size: var(--type-label-size); }
+/* Storage browser: a band of gauges, labelled row actions, a stacked size bar per run, and the delete dialog floating over a scrim. */
+.gauges { display: flex; flex-wrap: wrap; gap: 0; margin: 0 0 8px; border: 1px solid var(--ln); background: var(--bg2); }
+.gauge { display: flex; flex-direction: column; gap: 2px; padding: 6px 12px; border-right: 1px solid var(--ln); min-width: 120px; }
+.gauge:last-child { border-right: 0; }
+.gauge .gl { color: var(--fg3); font-size: var(--type-label-size); letter-spacing: var(--type-label-tracking); }
+.gauge-meter { position: relative; width: 220px; height: 10px; background: var(--bg0); border: 1px solid var(--ln2); }
+.gauge-meter i { position: absolute; inset: 0 auto 0 0; background: var(--ac); }
+.gauge-meter b { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--warn); }
+.sbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.row-actions { white-space: nowrap; }
+.row-actions .btn { margin-right: 4px; }
+.size-bar { display: flex; height: 6px; width: 120px; margin: 0 0 3px; background: var(--bg0); border: 1px solid var(--ln); }
+.size-bar i { display: block; height: 100%; }
+.size-bar .k0 { background: var(--ac); }
+.size-bar .k1 { background: var(--run); }
+.size-bar .k2 { background: var(--warn); }
+.size-bar .k3 { background: var(--fg2); }
+.scrim:has(> .confirm) { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: var(--z-popover); }
+.confirm { width: min(440px, calc(100vw - 32px)); background: var(--bg1); border: 1px solid var(--ln2); box-shadow: var(--float); }
+.confirm-bar { padding: 6px 12px; background: var(--bg2); border-bottom: 1px solid var(--ln); font-size: var(--type-label-size); font-weight: 600; letter-spacing: var(--type-label-tracking); }
+.confirm .prose { margin: 12px; }
+.confirm .row { margin: 0; padding: 8px 12px 12px; }
+.btn.danger { border-color: var(--alm); color: var(--alm); }
+
+/* Grouped results: a heading per group, the letters the query matched marked (an underline and the full-strength colour, not the accent), the key at the right. */
+.palette .group-head { display: block; padding: 8px 10px 2px; color: var(--fg3); font-size: var(--type-label-size); letter-spacing: var(--type-label-tracking); text-transform: uppercase; }
+.palette mark { background: transparent; color: var(--fg); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.palette kbd { font: inherit; font-size: var(--type-label-size); color: var(--fg2); border: 1px solid var(--ln2); padding: 0 5px; }
 .danger { color: var(--alm); }
 .warn { color: var(--warn); }
 .ok { color: var(--ok); }
 
-/* Workspace tabs (MUI Tabs, compact) in the toolbar. */
-.workspace-tabs { min-height: 30px; }
-.workspace-tabs .MuiTab-root { min-height: 30px; padding: 4px 12px; color: var(--fg2); }
-.workspace-tabs .MuiTab-root.Mui-selected { color: var(--fg); }
+/* Tooltips of icon-only and compact controls, after 400 ms (ADR-0042 §6): `data-tip` on the control, shown on hover and on keyboard focus. */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip) / ""; position: absolute; top: calc(100% + 4px); left: 0; z-index: var(--z-popover); white-space: nowrap; pointer-events: none;
+  padding: 3px 8px; background: var(--bg3); color: var(--fg); border: 1px solid var(--fg3); font-size: var(--type-label-size); font-weight: 400;
+  box-shadow: var(--float); opacity: 0; visibility: hidden; transition: opacity 0s linear 0s, visibility 0s linear 0s;
+}
+[data-tip]:is(:hover, :focus-visible)::after { opacity: 1; visibility: visible; transition-delay: 400ms; }
+[data-tip].tip-right::after { left: auto; right: 0; }
+/* Above the control: for a control with its result below it (the SQL console's Run, with its message line). A control used (a click or a key) shows no tip until the pointer leaves it (tooltips.ts). */
+[data-tip].tip-up::after { top: auto; bottom: calc(100% + 4px); }
+[data-tip][data-tip-off]::after { display: none; }

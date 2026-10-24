@@ -426,8 +426,17 @@ export const fakeCapabilities: CapabilityPort = {
 
 export class CollectingTrace implements TraceSink {
   readonly records: Parameters<TraceSink["emit"]>[0][] = [];
-  emit(r: Parameters<TraceSink["emit"]>[0]): void {
+  /** The id each record was given, in the order written: `t#<index>`, which a record's `parentId` and `causeIds` name. */
+  emit(r: Parameters<TraceSink["emit"]>[0]): string {
     this.records.push(r);
+    return `t#${this.records.length - 1}`;
+  }
+  idOf(seq: number): string {
+    return `t#${seq}`;
+  }
+  /** The index in `records` of the record a link names. */
+  at(id: string | undefined): number | undefined {
+    return id === undefined ? undefined : Number(id.slice(2));
   }
   ops(op: string): unknown[] {
     return this.records.map((r) => r.payload as { op: string }).filter((p) => p.op === op);

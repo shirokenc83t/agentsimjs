@@ -68,6 +68,17 @@ describe("recording profile validation", () => {
     expect(accepts(mutate((p) => (p.checkpoints.extra = 1)))).toBe(false);
   });
 
+  it("lets the metrics channel be off (it is observer data, outside the tracing rule); the presets leave it on by not saying so, which is what keeps their hashes", () => {
+    for (const [name, p] of Object.entries(RECORDING_PRESETS)) expect(p.channels.metrics, name).not.toHaveProperty("level");
+    const off = mutate((p) => (p["channels"]["metrics"]["level"] = "off"));
+    expect(accepts(off)).toBe(true);
+    expect(accepts(mutate((p) => (p["channels"]["metrics"]["level"] = "on")))).toBe(true);
+    expect(accepts(mutate((p) => (p["channels"]["metrics"]["level"] = "sampled")))).toBe(false);
+    expect(recordingProfileHash(off as typeof RECORDING_PRESETS.minimal)).not.toBe(recordingProfileHash(RECORDING_PRESETS["default-research"]));
+    // The channels the tracing rule requires still have no off.
+    expect(accepts(mutate((p) => (p["channels"]["events"]["level"] = "off")))).toBe(false);
+  });
+
   it("does not let the required channels be switched off or lowered: events, transitions, compute, mind-io", () => {
     expect(accepts(mutate((p) => (p.channels.events.level = "off")))).toBe(false);
     expect(accepts(mutate((p) => delete p.channels.events))).toBe(false);

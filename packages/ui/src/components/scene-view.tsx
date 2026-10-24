@@ -50,7 +50,7 @@ export function SceneView(props: {
     <div className="scene-host" ref={host} data-testid="scene">
       {error && (
         <p className="panel danger" role="alert">
-          ✗ 3D view unavailable: {error}
+          ✕ 3D view unavailable: {error}
         </p>
       )}
       {props.children}

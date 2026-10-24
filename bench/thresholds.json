@@ -12,12 +12,35 @@
       "stat": "p95",
       "max": 4
     },
+    "headless.run20Exploring60s": {
+      "report": true,
+      "$comment": "F3b M4: wall time of a headless run of 20 exploring agents for 60 s of sim time, recorded (default research profile), in the sim host on real timers; the same checkpoints as the live run"
+    },
+    "headless.liveLockstepX4_20Exploring60s": {
+      "report": true,
+      "$comment": "F3b M4: the same run in a live lockstep view at the fastest speed the player offers (x4, 40 Hz); at x1 it takes the 60 s of the run"
+    },
     "sim.stateLatency": {
       "report": true,
       "$comment": "with rendering; not gated on software GL (ADR-0022)"
     },
     "render.frameInterval": {
       "report": true
+    },
+    "render.frameWork.overview": {
+      "stat": "p95",
+      "max": 4,
+      "$comment": "F3b: the render loop with the floating Overview open, 20 agents: frame work p95 within the same 4 ms as the Scene's"
+    },
+    "render.frameWork.logTail": {
+      "stat": "p95",
+      "max": 4,
+      "$comment": "F3b: the render loop with the log console tailing a 20-agent run (rows pushed by the live subscription): frame work p95 within 4 ms"
+    },
+    "render.frameWork.map2d": {
+      "stat": "p95",
+      "max": 4,
+      "$comment": "F3b: each draw of the Scene's 2D view (the Analysis map's component) with 20 agents and their paths: p95 within 4 ms"
     },
     "render.frameWork.reference": {
       "stat": "p95",

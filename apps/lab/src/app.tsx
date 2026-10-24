@@ -1,44 +1,63 @@
-import PauseIcon from "@mui/icons-material/Pause";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import SkipNextIcon from "@mui/icons-material/SkipNext";
-import Button from "@mui/material/Button";
-import IconButton from "@mui/material/IconButton";
-import NativeSelect from "@mui/material/NativeSelect";
-import Tab from "@mui/material/Tab";
-import Tabs from "@mui/material/Tabs";
-import Tooltip from "@mui/material/Tooltip";
-import { LATEST_SCHEMA_VERSION, type StorageInfo } from "@agentsim/storage";
-import { Banner, CommandPalette, downloadBytes, formatBytes, formatSimTime, type Command } from "@agentsim/ui";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import type { StorageInfo } from "@agentsim/storage";
+import type { DockviewApi } from "dockview-react";
+import { Banner, CommandPalette, downloadBytes, getThemeState, THEME_PREFERENCES, useUiContext, type Command } from "@agentsim/ui";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { applyAppearance, loadAppearance } from "./config/appearance.ts";
 import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStorageStatus, useThemeSetting, type CurrentRun } from "./services.tsx";
 import type { PresetId } from "@agentsim/core";
-import { LAYOUT_NAMESPACE, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
-import { LazyRecordingStatus, LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadRunController } from "./workspaces/registry.tsx";
+import { applyPreset, closePanel, dockPanel, floatPanel, focusNext, focusNumber, isFloating, openPanel, syncCollapsed, toggleCollapse, toggleMaximize } from "./workspaces/dock-actions.ts";
+import { deleteNamedLayout, layoutName, listNamedLayouts, readNamedLayout, saveNamedLayout } from "./workspaces/layouts.ts";
+import { BUILTIN_LAYOUTS, DEBUG_LOGS_LAYOUT, LAYOUT_NAMESPACE, LAYOUT_VARIANTS, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
+import { PANELS, type PanelId } from "./workspaces/registry.tsx";
+import { LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadResimController, loadRunController } from "./workspaces/registry.tsx";
+import { Player } from "./shell/player.tsx";
+import { shellKey } from "./shell/shortcuts.ts";
+import { StatusBar } from "./shell/status-bar.tsx";
+import { TopBar } from "./shell/top-bar.tsx";
+import "./shell/shell.css";
 import type { LabRun } from "./sim/run-controller.ts";
 
-const SPEEDS = [
-  { label: "×0.5", hz: 5 },
-  { label: "×1", hz: 10 },
-  { label: "×2", hz: 20 },
-  { label: "×4", hz: 40 },
-] as const;
-
-/** Lab shell (UI-SPEC §2): toolbar, banners, workspace, status line, command palette. */
+/** Lab shell (UI-SPEC §2): top bar, player, banners, workspace, status bar, command palette. */
 export function App() {
   const { sim, source, storage } = useServices();
   const status = useStorageStatus(storage);
   const setTheme = useThemeSetting(storage);
+  // The appearance preferences saved in user data, once storage is ready.
+  useEffect(() => {
+    if (status.state === "ready") void loadAppearance(storage.ports.userData).then(applyAppearance, () => {});
+  }, [status.state, storage]);
   const snap = usePolled(useCallback(() => sim.snapshot(), [sim]), 100);
+  // What the panels show (the live run, or a recording read from storage): the player is its time control.
+  const view = usePolled(useCallback(() => source?.snapshot(), [source]), 100);
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceId>("scene");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [layoutEpoch, setLayoutEpoch] = useState(0);
+  // The dock of the open workspace (it is built after first paint and again when the workspace changes) and its named layouts.
+  const dockRef = useRef<DockviewApi | null>(null);
+  const presetRef = useRef<(typeof WORKSPACES)[number] | undefined>(undefined);
+  const [layouts, setLayouts] = useState<string[]>([]);
+  const [activeLayout, setActiveLayout] = useState<string | undefined>(undefined);
+  // A layout that ships with the app, when one is open (the Debug's "debug · logs"): the dock as it was is kept here to put it back, and the autosave of the working layout waits.
+  const [builtinActive, setBuiltinActive] = useState<string | undefined>(undefined);
+  // The preset of the workspace that is on as its working layout ("debug · two columns"), when it is not the default one.
+  const [variant, setVariant] = useState<string | undefined>(undefined);
+  const stash = useRef<unknown>(undefined);
+  const autosave = useRef(true);
+  const workspaceRef = useRef<WorkspaceId>("scene");
+  const builtinRef = useRef<string | undefined>(undefined);
+  const enterLogsRef = useRef<() => void>(() => {});
+  const cycleLayoutRef = useRef<() => void>(() => {});
+  const rerunKeyRef = useRef<(how: "live-lockstep" | "headless") => void>(() => {});
+  const selectLayoutRef = useRef<(name: string | undefined) => void>(() => {});
   const [run, setRun] = useState<LabRun | undefined>(undefined);
   const [runBusy, setRunBusy] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [runAnchor, setRunAnchor] = useState<HTMLElement | null>(null);
   // A replay session: the run being shown from storage (the session itself, and what it says when it cannot open, are in its lazy chunk).
   const [replayRun, setReplayRun] = useState<string | undefined>(undefined);
+  // What the last "Re-simulate window" said: its verdict, or why it could not be done. Dismissed by the researcher.
+  const [resimNote, setResimNote] = useState<{ kind: "info" | "warn" | "danger"; text: string; open?: string } | null>(null);
 
   const startRun = useCallback(
     (start: () => Promise<LabRun>) => {
@@ -72,8 +91,27 @@ export function App() {
     [startRun, storage, sim, run],
   );
   const otherMode = snap.mode === "realtime" ? "lockstep" : "realtime";
+  rerunKeyRef.current = (how) => {
+    if (!run || runBusy || status.state !== "ready") return;
+    if (how === "headless") runHeadless();
+    else rerunInMode("lockstep");
+  };
   const runWithConfig = useCallback(
     (runConfig: unknown) => run && startRun(async () => (await loadRunController()).startRun(storage, sim, run.scenario, run.loaded.scenarioVersion, runConfig, run.header.label)),
+    [startRun, storage, sim, run],
+  );
+  // A headless run (ADR-0029) of the current run's scenario: lockstep, always recorded with the chosen profile, for the chosen duration. It starts playing, and the
+  // Experiments workspace (its monitor) is where it is followed: it posts no render state for the other panels to show.
+  const runHeadless = useCallback(
+    (runConfig?: unknown) => {
+      if (!run) return;
+      setWorkspace("experiments");
+      startRun(async () => {
+        const r = await (await loadRunController()).rerunHeadless(storage, sim, run, undefined, runConfig === undefined ? run.runConfig : runConfig);
+        sim.play();
+        return r;
+      });
+    },
     [startRun, storage, sim, run],
   );
   const startScenarioRun = useCallback(
@@ -81,9 +119,24 @@ export function App() {
       startRun(async () => (await loadRunController()).startRun(storage, sim, scenario, version, runConfig, label)),
     [startRun, storage, sim],
   );
+  // The commands the run shown has recorded: a headless run applies them again, and what it is called says so.
+  const [rerunCommands, setRerunCommands] = useState(0);
+  const shownRunId = run?.header.runId;
+  useEffect(() => {
+    setRerunCommands(0);
+    if (!shownRunId || status.state !== "ready") return;
+    let live = true;
+    const read = () => void storage.ports.runs.inputs(shownRunId).then((r) => live && setRerunCommands(r.length), () => {});
+    read();
+    const t = setInterval(read, 1500);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [shownRunId, status.state, storage]);
   const currentRun = useMemo<CurrentRun>(
-    () => ({ run, busy: runBusy || status.state !== "ready", error: runError, loadDemo, runWithConfig: (c) => void runWithConfig(c), startScenarioRun }),
-    [run, runBusy, status.state, runError, loadDemo, runWithConfig, startScenarioRun],
+    () => ({ run, busy: runBusy || status.state !== "ready", error: runError, rerunCommands, loadDemo, runWithConfig: (c) => void runWithConfig(c), runHeadlessWithConfig: (c) => runHeadless(c), startScenarioRun }),
+    [run, runBusy, status.state, runError, rerunCommands, loadDemo, runWithConfig, runHeadless, startScenarioRun],
   );
 
   // Refresh storage info at 0.5 Hz while ready (status line).
@@ -95,21 +148,193 @@ export function App() {
     return () => clearInterval(t);
   }, [status, storage]);
 
+  const setThemeRef = useRef(setTheme);
+  setThemeRef.current = setTheme;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Ctrl+Shift+L: dark and light, from anywhere (the theme control in the top bar has it in its tooltip).
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        setThemeRef.current(getThemeState().resolved === "dark" ? "light" : "dark");
+        return;
+      }
+      // Ctrl+R re-runs the run live in lockstep, Ctrl+Shift+R headless (the page is not reloaded by them): the player's Re-run menu has the keys in it.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        rerunKeyRef.current(e.shiftKey ? "headless" : "live-lockstep");
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
+        return;
       }
+      // Alt+L: the next layout that ships with the workspace (its presets), from anywhere.
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === "KeyL") {
+        e.preventDefault();
+        cycleLayoutRef.current();
+        return;
+      }
+      // Alt+number: the panel with that number in the open workspace (the number is in its tab).
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code) && dockRef.current && presetRef.current) {
+        e.preventDefault();
+        // In the Debug the sixth is the Logs: it is a layout of its own, not a panel of the dock.
+        if (e.code === "Digit6" && workspaceRef.current === "debug" && builtinRef.current === undefined) enterLogsRef.current();
+        else focusNumber(dockRef.current, presetRef.current, Number(e.code.slice(5)));
+        return;
+      }
+      const k = shellKey(e, e.target, WORKSPACES.length);
+      if (!k) return;
+      e.preventDefault();
+      if (k.kind === "workspace") setWorkspace((WORKSPACES[k.index] as (typeof WORKSPACES)[number]).id);
+      else if (k.kind === "step") sim.step();
+      else if (sim.snapshot().running) sim.pause();
+      else sim.play();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [sim]);
 
   const resetLayouts = useCallback(() => {
     if (storage.status().state === "ready") for (const w of WORKSPACES) void storage.ports.userData.delete(LAYOUT_NAMESPACE, layoutKey(w.id));
+    autosave.current = true;
+    stash.current = undefined;
+    setBuiltinActive(undefined);
+    setActiveLayout(undefined);
+    setVariant(undefined);
     setLayoutEpoch((n) => n + 1);
   }, [storage]);
+
+  /** Reset layout: the open workspace's dock is rebuilt from its preset (a floated or closed panel is back where the preset has it); the layouts of the others are left. */
+  const resetLayout = useCallback(() => {
+    const id = workspaceRef.current;
+    const done = storage.status().state === "ready" ? storage.ports.userData.delete(LAYOUT_NAMESPACE, layoutKey(id)).catch(() => {}) : Promise.resolve();
+    // The saved layout is gone before the dock is rebuilt: a dock that reads it back would restore what is being reset.
+    void done.then(() => {
+      autosave.current = true;
+      stash.current = undefined;
+      setBuiltinActive(undefined);
+      setActiveLayout(undefined);
+      setVariant(undefined);
+      setLayoutEpoch((n) => n + 1);
+    });
+  }, [storage]);
+
+  // Named layouts of the open workspace: listed when it opens (and once storage is ready), saved, loaded and deleted from the top bar.
+  const storageReady = status.state === "ready";
+  useEffect(() => {
+    setActiveLayout(undefined);
+    setVariant(undefined);
+    // Another workspace is a dock of its own: what a layout of the last one held is gone with it.
+    autosave.current = true;
+    stash.current = undefined;
+    setBuiltinActive(undefined);
+    if (storageReady) void listNamedLayouts(storage, workspace).then(setLayouts, () => setLayouts([]));
+    else setLayouts([]);
+  }, [storage, storageReady, workspace]);
+  const builtins = BUILTIN_LAYOUTS[workspace] ?? [];
+  /** Opens a layout that ships with the app: the dock is kept as it is, and laid out again as the layout says. */
+  const enterBuiltin = useCallback(
+    (name: string) => {
+      const api = dockRef.current;
+      const b = (BUILTIN_LAYOUTS[workspace] ?? []).find((x) => x.name === name);
+      if (!api || !b || builtinRef.current !== undefined) return;
+      stash.current = api.toJSON();
+      if (storageReady) void storage.ports.userData.set(LAYOUT_NAMESPACE, layoutKey(workspace), stash.current);
+      autosave.current = false;
+      applyPreset(api, b.preset);
+      setBuiltinActive(name);
+      setActiveLayout(name);
+    },
+    [storage, storageReady, workspace],
+  );
+  /** Puts the dock back as it was before the layout that ships with the app was opened. */
+  const leaveBuiltin = useCallback(() => {
+    const api = dockRef.current;
+    if (!api || builtinRef.current === undefined) return;
+    autosave.current = true;
+    const kept = stash.current;
+    stash.current = undefined;
+    try {
+      if (kept === undefined) throw new Error("nothing kept");
+      api.fromJSON(kept as Parameters<DockviewApi["fromJSON"]>[0]);
+      syncCollapsed(api);
+    } catch {
+      const base = WORKSPACES.find((w) => w.id === workspaceRef.current);
+      if (base) applyPreset(api, base);
+    }
+    setBuiltinActive(undefined);
+    setActiveLayout(undefined);
+  }, []);
+  enterLogsRef.current = () => enterBuiltin(DEBUG_LOGS_LAYOUT);
+  const cycleLayout = useCallback(() => {
+    const list = LAYOUT_VARIANTS[workspace] ?? [];
+    if (list.length === 0) return;
+    const at = list.findIndex((v) => v.name === (variant ?? list[0]?.name));
+    selectLayoutRef.current((list[(at + 1) % list.length] as { name: string }).name);
+  }, [workspace, variant]);
+  cycleLayoutRef.current = cycleLayout;
+  const saveLayout = useCallback(
+    (raw: string) => {
+      const name = layoutName(raw);
+      const api = dockRef.current;
+      if (!name || !api || !storageReady || builtins.some((b) => b.name === name) || (LAYOUT_VARIANTS[workspace] ?? []).some((v) => v.name === name) || builtinRef.current !== undefined) return;
+      void saveNamedLayout(storage, workspace, name, api.toJSON())
+        .then(() => listNamedLayouts(storage, workspace))
+        .then((l) => {
+          setLayouts(l);
+          setActiveLayout(name);
+        });
+    },
+    [storage, storageReady, workspace, builtins],
+  );
+  const selectLayout = useCallback(
+    (name: string | undefined) => {
+      const api = dockRef.current;
+      const chosen = name === undefined ? undefined : (LAYOUT_VARIANTS[workspace] ?? []).find((v) => v.name === name);
+      if (chosen !== undefined) {
+        // A preset of the workspace put on as its working layout: it is saved as the working layout like any other, and can be resized, saved under a name and reset.
+        if (builtinRef.current !== undefined) leaveBuiltin();
+        if (api) applyPreset(api, chosen.preset);
+        autosave.current = true;
+        setActiveLayout(undefined);
+        setVariant(chosen.name);
+        return;
+      }
+      if (name !== undefined && (BUILTIN_LAYOUTS[workspace] ?? []).some((b) => b.name === name)) return enterBuiltin(name);
+      if (builtinRef.current !== undefined) {
+        // From a layout that ships with the app to the working layout or a named one: the dock is put back first (the working layout), a named one then replaces it.
+        leaveBuiltin();
+        if (name === undefined) return;
+      }
+      if (name === undefined || !api || !storageReady) {
+        setActiveLayout(undefined);
+        return;
+      }
+      void readNamedLayout(storage, workspace, name).then((saved) => {
+        if (!saved || dockRef.current !== api) return;
+        try {
+          api.fromJSON(saved as Parameters<DockviewApi["fromJSON"]>[0]);
+          syncCollapsed(api);
+          setActiveLayout(name);
+        } catch {
+          // A layout that does not fit the panels any more is left as it is.
+        }
+      });
+    },
+    [storage, storageReady, workspace, enterBuiltin, leaveBuiltin],
+  );
+  selectLayoutRef.current = selectLayout;
+  const deleteLayout = useCallback(() => {
+    if (!activeLayout || !storageReady || builtinRef.current !== undefined) return;
+    const name = activeLayout;
+    void deleteNamedLayout(storage, workspace, name)
+      .then(() => listNamedLayouts(storage, workspace))
+      .then((l) => {
+        setLayouts(l);
+        setActiveLayout(undefined);
+      });
+  }, [storage, storageReady, workspace, activeLayout]);
 
   const ready = status.state === "ready";
   // Researcher commands on the selected agent come from a lazy module (nothing in the initial chunk), fetched when the
@@ -124,12 +349,64 @@ export function App() {
     () => (paletteOpen && agentCommandsModule && source ? agentCommandsModule.agentPaletteCommands(source, !!run, startPreset, runBusy) : []),
     [paletteOpen, agentCommandsModule, source, run, startPreset, runBusy],
   );
+  const basePreset = WORKSPACES.find((w) => w.id === workspace) ?? WORKSPACES[0];
+  // The preset the dock is laid out by now: the workspace's, or that of the layout that ships with the app which is open (its panels, its numbers).
+  const preset = (builtinActive === undefined ? undefined : builtins.find((b) => b.name === builtinActive)?.preset) ?? basePreset;
+  presetRef.current = preset;
+  workspaceRef.current = workspace;
+  builtinRef.current = builtinActive;
+  // Panel actions of the open workspace's dock, on the active panel (ADR-0042 §7): the window buttons' actions, from the palette.
+  const panelCommands = useMemo<Command[]>(() => {
+    const on = (f: (api: DockviewApi, panel: NonNullable<ReturnType<DockviewApi["getPanel"]>>) => void) => () => {
+      const api = dockRef.current;
+      const panel = api?.activePanel;
+      if (api && panel) f(api, panel);
+    };
+    return [
+      { id: "panel.float", title: "Float the active panel", group: "Panel", run: on((api, p) => (isFloating(p) ? undefined : floatPanel(api, p))) },
+      { id: "panel.dock", title: "Dock the active panel", group: "Panel", run: on((api, p) => void dockPanel(api, p, preset)) },
+      { id: "panel.maximize", title: "Maximize or restore the active panel", group: "Panel", run: on((api, p) => toggleMaximize(api, p)) },
+      { id: "panel.collapse", title: "Collapse or open the active floating window", group: "Panel", run: on((_api, p) => toggleCollapse(p.group)) },
+      { id: "panel.close", title: "Close the active panel", group: "Panel", run: on((_api, p) => closePanel(p)) },
+      { id: "panel.next", title: "Focus the next panel", group: "Panel", run: () => dockRef.current && focusNext(dockRef.current) },
+      ...(preset?.panels ?? []).map((p) => ({ id: `panel.open.${p.id}`, title: `Open panel: ${PANELS[p.id as PanelId].title}`, group: "Panel", run: () => dockRef.current && preset && openPanel(dockRef.current, preset, p.id) })),
+      // The Logs are a layout of the Debug, not a panel of its dock (UI-SPEC: "debug · logs"): one command to go there and one to come back.
+      ...(workspace === "debug" && builtinActive === undefined ? [{ id: "panel.open.logInspector", title: `Open panel: ${PANELS.logInspector.title}`, group: "Panel", keys: "Alt+6", run: () => enterBuiltin(DEBUG_LOGS_LAYOUT) }] : []),
+      ...(builtinActive !== undefined ? [{ id: "layout.back", title: "Back to debug", group: "Layout", run: leaveBuiltin }] : []),
+    ];
+  }, [preset, workspace, builtinActive, enterBuiltin, leaveBuiltin]);
+  // Re-simulates a window of the run the panels show into a derived run, stored with its verdict (ADR-0035 section 3): the Timeline's selection when there is one, else the
+  // cursor with a few seconds either side. The derived run opens in the panels from the notice (it carries the parent's configuration records, so replay can build it).
+  const resimulateWindow = useCallback(async () => {
+    const runId = view?.runId;
+    if (!runId || storage.status().state !== "ready") return;
+    setResimNote({ kind: "info", text: `Re-simulating a window of ${runId}…` });
+    try {
+      const c = await loadResimController();
+      const picked = useUiContext.getState().timeSelection;
+      const w = picked !== undefined ? ({ ok: true, value: picked } as const) : await c.suggestWindow(storage.ports, runId, useUiContext.getState().simTime);
+      if (!w.ok) return setResimNote({ kind: "warn", text: `Cannot re-simulate a window of ${runId}: ${w.error.message}` });
+      const r = await c.resimulateWindowToRun(storage.ports, runId, w.value);
+      if (!r.ok) return setResimNote({ kind: "danger", text: `Could not re-simulate a window of ${runId}: ${r.error.message}` });
+      const d = r.value.derived;
+      setResimNote(
+        d.status === "matches"
+          ? { kind: "info", text: `Window ${d.t0S}–${d.t1S} s of ${runId} re-simulated as ${r.value.runId}: it matches (${d.checkpointsChecked} checkpoints reproduced).`, open: r.value.runId }
+          : { kind: "danger", text: `Window ${d.t0S}–${d.t1S} s of ${runId} re-simulated as ${r.value.runId}: DIVERGENT at tick ${d.divergence?.tick ?? "?"} (the state hash differs from the recorded one).`, open: r.value.runId },
+      );
+    } catch (e) {
+      setResimNote({ kind: "danger", text: `Could not re-simulate a window: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }, [view?.runId, storage]);
+  // The Performance window is in the Scene and the Debug; elsewhere it opens from here (the status bar's frame segment, the palette).
+  const openPerformance = useCallback(() => {
+    if (dockRef.current && presetRef.current) openPanel(dockRef.current, presetRef.current, "perf");
+  }, []);
   const commands = useMemo<Command[]>(
     () => [
-      ...WORKSPACES.map((w) => ({ id: `ws.${w.id}`, title: `Switch to ${w.title} workspace`, group: "Workspace", run: () => setWorkspace(w.id) })),
-      { id: "sim.play", title: "Play", group: "Run", run: () => sim.play() },
-      { id: "sim.pause", title: "Pause", group: "Run", run: () => sim.pause() },
-      { id: "sim.step", title: "Step one tick", group: "Run", run: () => sim.step() },
+      ...WORKSPACES.map((w, i) => ({ id: `ws.${w.id}`, title: `Switch to ${w.title} workspace`, group: "Workspace", keys: String(i + 1), run: () => setWorkspace(w.id) })),
+      { id: "sim.toggle", title: "Play / pause", group: "Run", keys: "Space", run: () => (sim.snapshot().running ? sim.pause() : sim.play()) },
+      { id: "sim.step", title: "Step one tick", group: "Run", keys: ".", run: () => sim.step() },
       { id: "sim.step10", title: "Step 10 ticks", group: "Run", run: () => sim.step(10) },
       { id: "sim.step100", title: "Step 100 ticks", group: "Run", run: () => sim.step(100) },
       { id: "run.demo", title: "Load F1 demo scenario (new run)", group: "Run", disabled: !ready || runBusy, run: loadDemo },
@@ -141,8 +418,10 @@ export function App() {
         run: loadReference,
       },
       ...agentCommands,
-      { id: "run.config", title: "Open run configuration", group: "Run", run: () => setWorkspace("author") },
-      { id: "run.rerun", title: "Re-run (same scenario version and run configuration)", group: "Run", disabled: !ready || runBusy || !run, run: () => rerunCurrent() },
+      { id: "run.config", title: "Open run configuration", group: "Run", run: () => setWorkspace("configurations") },
+      { id: "run.resimWindow", title: "Re-simulate window…", group: "Run", disabled: !ready || !view?.runId, run: () => void resimulateWindow() },
+      { id: "run.headless", title: rerunCommands > 0 ? "Re-run headless" : "Run headless", keys: "Ctrl+Shift+R", group: "Run", disabled: !ready || runBusy || !run, run: () => runHeadless() },
+      { id: "run.rerun", title: "Re-run live · lockstep (same scenario, config, seed and commands)", group: "Run", keys: "Ctrl+R", disabled: !ready || runBusy || !run, run: () => rerunCurrent() },
       {
         id: "run.rerunMode",
         title: `Re-run in ${otherMode} (new run, time mode changed)`,
@@ -155,104 +434,89 @@ export function App() {
         run: () => void storage.admin.exportDb().then((b) => downloadBytes(b, "agentsim.sqlite")),
       },
       { id: "db.browser", title: "Open Storage browser", group: "Storage", run: () => setWorkspace("data") },
-      { id: "layout.reset", title: "Reset workspace layouts", group: "Layout", run: resetLayouts },
+      { id: "layout.reset", title: "Reset layout", group: "Layout", run: resetLayout },
+      ...(LAYOUT_VARIANTS[workspace] ?? []).map((v) => ({ id: `layout.variant.${v.name}`, title: `Layout: ${v.name}`, group: "Layout", run: () => selectLayout(v.name) })),
+      ...((LAYOUT_VARIANTS[workspace]?.length ?? 0) > 1 ? [{ id: "layout.next", title: "Layout: next", group: "Layout", keys: "Alt+L", run: cycleLayout }] : []),
+      { id: "layout.resetAll", title: "Reset all workspace layouts", group: "Layout", run: resetLayouts },
+      ...THEME_PREFERENCES.map((t) => ({ id: `theme.${t}`, title: `Theme: ${t}`, group: "Theme", run: () => setTheme(t) })),
+      { id: "theme.toggle", title: "Theme: toggle dark and light", group: "Theme", keys: "ctrl+shift+L", run: () => setTheme(getThemeState().resolved === "dark" ? "light" : "dark") },
+      { id: "panel.perf", title: "Open the Performance window", group: "Panel", run: openPerformance },
+      { id: "panel.open.traceGraph", title: "Open panel: Trace graph", group: "Panel", run: () => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, "traceGraph") },
+      ...panelCommands,
     ],
-    [ready, sim, storage, resetLayouts, loadDemo, loadReference, rerunCurrent, rerunInMode, otherMode, runBusy, run, agentCommands],
+    [ready, sim, storage, resetLayouts, resetLayout, workspace, selectLayout, cycleLayout, setTheme, openPerformance, resimulateWindow, view?.runId, loadDemo, loadReference, rerunCurrent, rerunInMode, runHeadless, rerunCommands, otherMode, runBusy, run, agentCommands, panelCommands],
   );
 
-  const preset = WORKSPACES.find((w) => w.id === workspace) ?? WORKSPACES[0];
-
   return (
-    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun }}>
+    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun, resimulateWindow: () => void resimulateWindow(), backToDebug: leaveBuiltin, openPanel: (id) => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, id) }}>
       <CurrentRunProvider value={currentRun}>
       <div className="shell">
-        <header className="toolbar" role="toolbar" aria-label="Run control">
-          <span className="brand">▣ AgentSimJS-NG</span>
-          <Button
-            variant="text"
-            color="inherit"
-            className="mono"
-            onClick={(e) => setRunAnchor(e.currentTarget)}
-            aria-haspopup="dialog"
-            aria-expanded={runAnchor !== null}
-            data-testid="run-label"
+        <div data-testid="shell-header">
+          <TopBar
+            workspaces={WORKSPACES}
+            workspace={workspace}
+            onWorkspace={setWorkspace}
+            layouts={[...(LAYOUT_VARIANTS[workspace] ?? []).map((v) => v.name), ...builtins.map((b) => b.name), ...layouts]}
+            layoutActive={activeLayout ?? variant}
+            layoutBuiltin={builtinActive !== undefined}
+            onSelectLayout={selectLayout}
+            onSaveLayout={saveLayout}
+            onDeleteLayout={deleteLayout}
+            onResetLayout={resetLayout}
+            runLabel={run ? `${run.header.runId} · ${run.header.scenarioId ?? "?"} v${run.header.scenarioVersion ?? "?"}` : "run: —"}
+            runOpen={runAnchor !== null}
+            onRunClick={setRunAnchor}
+            replaying={view?.mode === "replay"}
+            derived={view?.replay?.derived}
+            onPalette={() => setPaletteOpen(true)}
+            onTheme={setTheme}
           >
-            {run ? `${run.header.runId} · ${run.header.scenarioId ?? "?"} v${run.header.scenarioVersion ?? "?"}` : "run: —"}
-          </Button>
-          {runAnchor && (
-            <Suspense fallback={null}>
-              <LazyRunPopover
-                anchor={runAnchor}
-                onClose={() => setRunAnchor(null)}
-                run={run}
-                snap={snap}
-                busy={runBusy || !ready}
-                error={runError}
-                onLoadDemo={loadDemo}
-                onLoadReference={loadReference}
-                onRerun={() => rerunCurrent()}
-                listRuns={listRuns}
-                onResimulate={resimulate}
-              />
-            </Suspense>
-          )}
-          {snap.running ? (
-            <Tooltip title="Pause">
-              <IconButton onClick={() => sim.pause()} aria-label="Pause" data-testid="pause">
-                <PauseIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          ) : (
-            <Tooltip title="Play">
-              <IconButton onClick={() => sim.play()} aria-label="Play" data-testid="play">
-                <PlayArrowIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-          <Button variant="outlined" color="inherit" onClick={() => sim.step()} aria-label="Step one tick" data-testid="step" startIcon={<SkipNextIcon fontSize="small" />}>
-            step
-          </Button>
-          <span className="muted">mode</span>
-          {snap.run ? (
-            // A scenario run's time mode is part of the run (header, runConfigHash): read-only while it is loaded.
-            // Changing it starts a new run of the same scenario version (2026-10-09).
-            <>
-              <span className="mono" data-testid="time-mode" title="The time mode is part of the run. Re-run to change it.">
-                {snap.mode}
-              </span>
-              <Button
-                variant="text"
-                size="small"
-                onClick={() => !runBusy && run && rerunInMode(otherMode)}
-                aria-disabled={runBusy || !run}
-                data-testid="rerun-in-mode"
-              >
-                re-run in {otherMode}
-              </Button>
-            </>
-          ) : (
-            <NativeSelect value={snap.mode} inputProps={{ "aria-label": "Time mode" }} onChange={(e) => sim.setMode(e.target.value === "realtime" ? "realtime" : "lockstep")}>
-              <option value="lockstep">lockstep</option>
-              <option value="realtime">realtime</option>
-            </NativeSelect>
-          )}
-          <NativeSelect value={snap.tickRateHz} inputProps={{ "aria-label": "Speed" }} onChange={(e) => sim.setTickRate(Number(e.target.value))}>
-            {SPEEDS.map((s) => (
-              <option key={s.hz} value={s.hz}>{s.label}</option>
-            ))}
-          </NativeSelect>
-          <span className="spacer" />
-          <Tabs value={workspace} onChange={(_e, id: WorkspaceId) => setWorkspace(id)} aria-label="Workspaces" className="workspace-tabs">
-            {WORKSPACES.map((w) => (
-              <Tab key={w.id} value={w.id} label={w.title} data-testid={`tab-${w.id}`} />
-            ))}
-          </Tabs>
-          <Tooltip title="Command palette (Ctrl/Cmd+K)">
-            <Button variant="outlined" color="inherit" onClick={() => setPaletteOpen(true)} aria-label="Command palette">
-              ⌘K
-            </Button>
-          </Tooltip>
-        </header>
+            {runAnchor && (
+              <Suspense fallback={null}>
+                <LazyRunPopover
+                  anchor={runAnchor}
+                  onClose={() => setRunAnchor(null)}
+                  run={run}
+                  snap={snap}
+                  busy={runBusy || !ready}
+                  error={runError}
+                  onLoadDemo={loadDemo}
+                  onLoadReference={loadReference}
+                  onRerun={() => rerunCurrent()}
+                  rerunCommands={rerunCommands}
+                  onRunHeadless={() => {
+                    setRunAnchor(null);
+                    runHeadless();
+                  }}
+                  listRuns={listRuns}
+                  onResimulate={resimulate}
+                  onReplay={(runId) => {
+                    setReplayRun(runId);
+                    setRunAnchor(null);
+                  }}
+                />
+              </Suspense>
+            )}
+          </TopBar>
+          <Player
+            sim={sim}
+            snap={snap}
+            view={view}
+            compact={workspace === "configurations" || workspace === "data" || workspace === "settings"}
+            recorded={run?.header.recording === "stored"}
+            busy={runBusy}
+            onRerun={(how) => {
+              if (!run) return;
+              if (how === "headless") runHeadless();
+              else void rerunInMode(how === "live-realtime" ? "realtime" : "lockstep");
+            }}
+            onStartHeadless={() => runHeadless()}
+            rerunCommands={rerunCommands}
+            recordingLabel={run?.header.recording === "stored" ? ((run.header.recordingProfile as { name?: string } | undefined)?.name ?? "custom") : "not recorded"}
+            onScrubBack={setReplayRun}
+            onBackToLive={() => setReplayRun(undefined)}
+          />
+        </div>
 
         <div>
           {replayRun !== undefined && (
@@ -273,43 +537,35 @@ export function App() {
           {status.state === "failed" && (
             <Banner kind="danger" testId="storage-failed">Storage failed to open: {status.error}</Banner>
           )}
+          {resimNote && (
+            <Banner kind={resimNote.kind} testId="resim-notice">
+              {resimNote.text}{" "}
+              {resimNote.open !== undefined && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setReplayRun(resimNote.open);
+                    setResimNote(null);
+                  }}
+                  data-testid="resim-notice-open"
+                >
+                  Open derived run
+                </button>
+              )}{" "}
+              <button type="button" className="btn" onClick={() => setResimNote(null)} data-testid="resim-notice-dismiss">
+                Dismiss
+              </button>
+            </Banner>
+          )}
         </div>
 
         {/* The row is reserved by the shell grid, so nothing shifts when the workspace chunk arrives. */}
         <div className="workspace">
-          <Suspense fallback={null}>{preset && <LazyWorkspaceHost key={preset.id} preset={preset} storage={storage} layoutEpoch={layoutEpoch} />}</Suspense>
+          <Suspense fallback={null}>{basePreset && preset && <LazyWorkspaceHost key={basePreset.id} preset={basePreset} activePreset={preset} autosave={autosave} storage={storage} layoutEpoch={layoutEpoch} onApi={(api) => (dockRef.current = api)} />}</Suspense>
         </div>
 
-        <footer className="statusline" aria-label="Status" data-testid="statusline">
-          <span data-testid="status-simtime">sim {formatSimTime(snap.simTimeS)}</span>
-          <span data-testid="status-tick">tick {snap.tick}</span>
-          <span>{snap.entityIds.length} entities</span>
-          <span>{snap.running ? "▶ running" : "❚❚ paused"}</span>
-          <span data-testid="status-storage" className={status.state === "ready" && status.mode === "opfs-sahpool" ? "" : "warn"}>
-            db: {status.state === "ready" ? status.mode : status.state}
-          </span>
-          {info && (
-            <span data-testid="status-storage-size">
-              {formatBytes(info.dbFileBytes)} · {formatBytes(info.usageBytes)} / {formatBytes(info.quotaBytes)} · schema v{LATEST_SCHEMA_VERSION}
-            </span>
-          )}
-          {run && (
-            <Suspense fallback={null}>
-              <LazyRecordingStatus header={run.header} snap={snap} />
-            </Suspense>
-          )}
-          {snap.preparing && (
-            <span data-testid="status-preparing" title="Planning views and HPA* graphs are built before tick 0 (ADR-0024)">
-              ⧗ preparing planning graphs {snap.preparing.done}/{snap.preparing.total}
-            </span>
-          )}
-          {snap.degradations > 0 && (
-            <span className="warn" data-testid="status-degradations" title="Realtime tick skips; each one is traced (ADR-0013)">
-              ⚠ {snap.degradations} degradation{snap.degradations === 1 ? "" : "s"} (last: {snap.lastSkippedTicks} ticks skipped)
-            </span>
-          )}
-          {snap.error && <span className="danger">✗ {snap.error}</span>}
-        </footer>
+        <StatusBar snap={snap} status={status} info={info} header={run?.header} replaying={view?.mode === "replay"} onOpenPerf={openPerformance} />
 
         <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
       </div>

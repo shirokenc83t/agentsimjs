@@ -1,5 +1,6 @@
 import type { TraceQuery } from "../ports.ts";
 import type { SqlDriver, SqlValue } from "./driver.ts";
+import { compileRecordFilter, parseQueryFilter } from "./filter-sql.ts";
 import { checkRecordFilter, compileSourceFilter } from "./source-filter.ts";
 
 const MAX_LIMIT = 10_000;
@@ -57,11 +58,12 @@ export function buildTraceQuery(q: TraceQuery, range: SeqRange | undefined): { s
     more += " AND json_extract(t.payload, '$.op') = ?";
     params.push(q.op);
   }
-  params.push(...filter.params, Math.max(0, Math.min(q.limit, MAX_LIMIT)));
+  const parsed = q.filter === undefined ? undefined : compileRecordFilter(parseQueryFilter(q.filter, "records"), q.runId);
+  params.push(...filter.params, ...(parsed?.params ?? []), Math.max(0, Math.min(q.limit, MAX_LIMIT)));
   return {
     sql: `SELECT t.*, (SELECT json_group_array(cause_id) FROM (SELECT cause_id FROM trace_causes c
                      WHERE c.run_id = t.run_id AND c.record_id = t.id ORDER BY cause_id)) AS cause_ids_all
-          FROM trace_records t WHERE ${where}${more}${filter.sql} ORDER BY t.seq LIMIT ?`,
+          FROM trace_records t WHERE ${where}${more}${filter.sql}${parsed?.sql ?? ""} ORDER BY t.seq LIMIT ?`,
     params,
   };
 }

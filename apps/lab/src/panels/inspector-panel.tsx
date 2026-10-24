@@ -1,16 +1,18 @@
 import "./panels.css";
-import { STATUS_STRIDE, type SimLoadedMessage } from "@agentsim/core";
-import { agentColorIndex, STATE_GLYPH, useUiContext } from "@agentsim/ui";
+import { STATUS_STRIDE, type AgentFacts, type SimLoadedMessage } from "@agentsim/core";
+import { GLYPH, identityOf, shortLabel, STATE_GLYPH, useUiContext } from "@agentsim/ui";
 import Button from "@mui/material/Button";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePolled, useSource } from "../services.tsx";
 import type { RunFeature, RunSnapshot, RunSource } from "../sim/run-source.ts";
-import { AGENT_COMMANDS, agentExploreRadius, commandParams } from "../commands.ts";
-import { actionLabel, actionState, recoveryLabel, waypointsText, type AgentViews, type CommandView } from "./agent-views.ts";
+import { AGENT_COMMANDS, agentExploreRadius, agentFacts, commandButtonState, commandHint, commandParams, DONE_MS, refusalWords } from "../commands.ts";
+import { actionLabel, actionState, recoveryLabel, waypointsText, type AgentViews } from "./agent-views.ts";
 import { MindViewSection } from "./mind-view-section.tsx";
 import { PlanQueryTable, StrategyRow } from "./plan-query-table.tsx";
 import { querySelection, useQuerySelection } from "./query-selection.ts";
-import { ResearcherSection } from "./researcher-section.tsx";
+import { asResearcherCellBeliefs } from "./researcher-data.ts";
+import { RESEARCHER_BANNER, ResearcherSection } from "./researcher-section.tsx";
+import { useSimStream } from "./use-sim-stream.ts";
 import { useAgentViews } from "./use-agent-views.ts";
 import { usePlanQueries } from "./use-plan-queries.ts";
 import { StrategyTestSection } from "./strategy-test-section.tsx";
@@ -33,6 +35,18 @@ function Row(props: { k: string; children: ReactNode; testId?: string }) {
       <dt>{props.k}</dt>
       <dd data-testid={props.testId}>{props.children}</dd>
     </>
+  );
+}
+
+/** The charge as a bar of ten cells (block characters): the alarm colour at or under the critical level, the warning colour under a third. */
+function BatteryBar(props: { soc: number; critical: number | undefined }) {
+  const cells = Math.max(0, Math.min(10, Math.round(props.soc * 10)));
+  const tone = props.critical !== undefined && props.soc <= props.critical ? "st-alm" : props.soc < 0.33 ? "st-warn" : "st-ok";
+  return (
+    <span className={`bar mono ${tone}`} aria-hidden="true">
+      {"█".repeat(cells)}
+      <s>{"░".repeat(10 - cells)}</s>
+    </span>
   );
 }
 
@@ -82,8 +96,19 @@ function bodyRows(body: Record<string, unknown>): [string, string][] {
  * Researcher commands (ADR-0015 addition of 2026-10-12): world scope, recorded as run inputs. Every button is always
  * available: preconditions still apply, so a command the agent cannot run now is refused with its code, shown here.
  */
-function CommandsSection(props: { id: string; kind: string; body: Record<string, unknown>; source: RunSource; command: CommandView | undefined }) {
-  const { id, kind, body, source, command } = props;
+function CommandsSection(props: { id: string; kind: string; body: Record<string, unknown>; source: RunSource; views: AgentViews | undefined; facts: AgentFacts | undefined }) {
+  const { id, kind, body, source, facts } = props;
+  const command = props.views?.command;
+  const action = props.views?.action;
+  // "done" lasts a few seconds after the action succeeded (wall time: a paused run is looked at as long as it is); a refusal stays until the next click.
+  const [doneFor, setDoneFor] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (action?.status !== "succeeded" || action.actionId === doneFor) return;
+    setDoneFor(action.actionId);
+    const t = setTimeout(() => setDoneFor((cur) => (cur === action.actionId ? `${action.actionId}:over` : cur)), DONE_MS);
+    return () => clearTimeout(t);
+  }, [action?.status, action?.actionId, doneFor]);
+  const [ackedAtS, setAckedAtS] = useState<number | undefined>(undefined);
   const [altitude, setAltitude] = useState("");
   const parsed = Number(altitude);
   const altitudeM = altitude.trim() !== "" && Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
@@ -92,6 +117,7 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
   const parsedRadius = Number(radius);
   const radiusM = radius.trim() !== "" && Number.isFinite(parsedRadius) && parsedRadius > 0 ? parsedRadius : undefined;
   const configuredRadius = agentExploreRadius(source.snapshot().run, id);
+  const hints = AGENT_COMMANDS.flatMap((c) => commandHint(c.op, c.title, facts) ?? []);
   return (
     <Section title="Commands (researcher, world scope)" testId="inspector-commands">
       <Row k="send">
@@ -130,26 +156,53 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
         m
       </Row>
       <Row k="run">
-        {AGENT_COMMANDS.map((c) => (
-          <Button
-            key={c.op}
-            size="small"
-            variant="outlined"
-            color="inherit"
-            sx={{ marginRight: 0.5 }}
-            disabled={source.unavailable("commands") !== undefined}
-            title={source.unavailable("commands")}
-            onClick={() => source.command(id, c.op, commandParams(c.op, body, altitudeM, radiusM))}
-            data-testid={`command-${c.op}`}
-          >
-            {c.title}
-          </Button>
-        ))}
+        {/* A command the agent cannot be given now stays on the row, focusable (aria-disabled, so its tooltip and its hint are read), with its reason and the step to do first. */}
+        {AGENT_COMMANDS.map((c) => {
+          const hint = commandHint(c.op, c.title, facts);
+          const off = source.unavailable("commands");
+          const st = commandButtonState(c.op, { action, command, reflex: props.views?.reflex }, { doneVisible: action !== undefined && doneFor === action.actionId, refusalAcked: command !== undefined && ackedAtS === command.atS, kind: facts?.kind });
+          const label =
+            st.state === "running" ? `${GLYPH.running} ${c.title} · ${st.phase ?? "running"}` : st.state === "done" ? `${STATE_GLYPH.ok} ${c.title} · succeeded` : st.state === "refused" ? `${STATE_GLYPH.alm} ${c.title} · refused · ${st.words}` : st.state === "preempted" ? `${GLYPH.warn} ${c.title} · preempted${st.reflex ? ` · ${st.reflex}` : ""}` : c.title;
+          return (
+            <span key={c.op} className="act-grp">
+              <Button
+                size="small"
+                variant="outlined"
+                color="inherit"
+                sx={{ marginRight: 0.5 }}
+                className={[hint === undefined ? "" : "pre-off", st.state === "idle" ? "" : `act-${st.state}`].filter(Boolean).join(" ") || undefined}
+                disabled={off !== undefined}
+                aria-disabled={hint === undefined ? undefined : true}
+                aria-describedby={hint === undefined ? undefined : `command-hint-${id}`}
+                title={off ?? (hint === undefined ? undefined : hint)}
+                onClick={() => {
+                  if (hint !== undefined) return;
+                  setAckedAtS(command?.atS);
+                  source.command(id, c.op, commandParams(c.op, body, altitudeM, radiusM));
+                }}
+                data-testid={`command-${c.op}`}
+                data-state={st.state}
+              >
+                {label}
+              </Button>
+              {st.state === "running" && c.op !== "hold" && (
+                <Button size="small" variant="outlined" color="inherit" sx={{ marginRight: 0.5, minWidth: 0 }} aria-label={`Hold: stop ${c.title}`} title={`Hold: stop ${c.title.toLowerCase()}`} onClick={() => source.command(id, "hold", undefined)} data-testid={`command-hold-${c.op}`}>
+                  ■
+                </Button>
+              )}
+            </span>
+          );
+        })}
       </Row>
+      {hints.length > 0 && (
+        <p className="muted pre-hint" id={`command-hint-${id}`} data-testid="command-hint">
+          → {hints.join(" · ")}
+        </p>
+      )}
       <Row k="last command" testId="inspector-command-result">
         {command ? (
           <span className={`mono ${command.ok ? "st-ok" : "st-alm"}`}>
-            {command.ok ? STATE_GLYPH.ok : STATE_GLYPH.alm} {command.name} · {command.ok ? "accepted" : `refused · ${command.failure ?? "?"}`} @ {command.atS.toFixed(1)} s
+            {command.ok ? STATE_GLYPH.ok : STATE_GLYPH.alm} {command.name} · {command.ok ? "accepted" : `refused · ${refusalWords(command, facts?.kind)}`} @ {command.atS.toFixed(1)} s
           </span>
         ) : (
           "none yet"
@@ -181,10 +234,21 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
   const strategy = isStrategy(cfg.planning?.["strategy"]) ? cfg.planning["strategy"] : undefined;
   return (
     <div data-testid="inspector-agent">
-      <h3>
-        <span className="agent-swatch" style={{ backgroundColor: `var(--agent-${agentColorIndex(id)})` }} /> <span className="mono">{id}</span>{" "}
-        <span className="muted">{agent.key ?? ""} · {agent.kind.toUpperCase()}</span>
-      </h3>
+      {/* The ID card: who this is and what it is doing, before any block. */}
+      <div className="idcard" data-testid="inspector-idcard">
+        <h3>
+          <span className={`agent-swatch ${identityOf(index).style}`} style={{ ["--swatch" as string]: `var(--agent-${identityOf(index).colorIndex})` }} /> <span className="id mono">{id}</span>{" "}
+          <span className="muted">
+            {[agent.key, agent.kind.toUpperCase(), typeof body["drive"] === "string" ? body["drive"] : undefined].filter((x) => x !== undefined && x !== "").join(" · ")}
+          </span>
+        </h3>
+        <div className="mono" data-testid="inspector-idcard-state">
+          <span className={`st-${state}`}>
+            {STATE_GLYPH[state]} {actionLabel(action)}
+          </span>
+          {action && <span className="muted nowrap"> · since {action.startedAtS.toFixed(1)} s</span>}
+        </div>
+      </div>
       <Unavailable source={source} feature="mindView" title="What the mind receives">
         <MindViewSection source={source} agentId={id} runId={run.runId} />
       </Unavailable>
@@ -205,6 +269,12 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
         <Row k="battery" testId="inspector-battery">
           {st ? `${((st[o] ?? 0) * 100).toFixed(1)} %` : "—"}
           {battery?.criticalSoc !== undefined ? ` (critical ${(battery.criticalSoc * 100).toFixed(0)} %)` : ""}
+          {st && (
+            <>
+              {" "}
+              <BatteryBar soc={st[o] ?? 0} critical={battery?.criticalSoc} />
+            </>
+          )}
         </Row>
         <Row k="odometer">{st ? m(st[o + 2] ?? 0, 1) : "—"}</Row>
         {agent.kind === "uav" && <Row k="airborne">{st && (st[o + 3] ?? 0) > 0.5 ? "yes" : "no"}</Row>}
@@ -230,7 +300,7 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
           </Row>
         )}
       </Section>
-      <CommandsSection id={id} kind={agent.kind} body={body} source={source} command={v?.command} />
+      <CommandsSection id={id} kind={agent.kind} body={body} source={source} views={v} facts={agentFacts(run, snap.agentStatus, snap.entityIds, id)} />
       <Section title="Last plan" testId="inspector-plan">
         {v?.plan ? (
           <>
@@ -316,6 +386,47 @@ function clearanceM(source: RunSource, i: number, j: number, res: number, maxM: 
   return best;
 }
 
+/** What every agent believes of the cell, next to the truth: researcher data, live only. A belief that differs from the truth is flagged. */
+function CellBeliefs(props: { source: RunSource; runId: string; i: number; j: number; occupied: boolean; entityIds: readonly string[] }) {
+  const { source, runId, i, j, occupied, entityIds } = props;
+  useEffect(() => {
+    source.send({ type: "cellWatch", cell: { i, j } });
+    return () => source.send({ type: "cellWatch", cell: null });
+  }, [source, runId, i, j]);
+  const msg = useSimStream(source, "cellBeliefs", (m) => m.runId === runId && m.i === i && m.j === j, [runId, i, j]);
+  const data = msg ? asResearcherCellBeliefs(msg) : undefined;
+  return (
+    <section className="inspector-section researcher-view" data-testid="cell-beliefs">
+      <h4>
+        <span className="kind-tag mono">◆ RESEARCHER</span> What each agent believes
+      </h4>
+      <p className="researcher-banner" role="note" data-testid="cell-beliefs-banner">
+        ◆ {RESEARCHER_BANNER}
+      </p>
+      {data ? (
+        <dl className="kv">
+          {data.agents.map((a) => {
+            const index = entityIds.indexOf(a.agentId);
+            const wrong = (a.state === "free" && occupied) || (a.state === "occupied" && !occupied);
+            return (
+              <div key={a.agentId} className="belief-row" data-testid={`cell-belief-${a.agentId}`} data-state={a.state} data-wrong={wrong ? "true" : "false"} style={{ display: "contents" }}>
+                <dt>
+                  <span className={`agent-swatch ${identityOf(index).style}`} style={{ ["--swatch" as string]: `var(--agent-${identityOf(index).colorIndex})` }} /> {a.agentId} <span className="muted">{shortLabel(a.agentId)}</span>
+                </dt>
+                <dd className={wrong ? "st-warn" : undefined}>
+                  {a.state === "ideal" ? "◆ ideal: the truth" : a.state === "unknown" ? "? unknown" : wrong ? `▲ believes ${a.state}: actually ${occupied ? "blocked" : "free"}` : `✓ ${a.state}`}
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
+      ) : (
+        <p className="muted">Waiting for the worker…</p>
+      )}
+    </section>
+  );
+}
+
 function CellInspector(props: { id: string; snap: RunSnapshot; source: RunSource }) {
   const [si, sj] = props.id.split(",").map(Number);
   const i = si ?? 0;
@@ -335,8 +446,12 @@ function CellInspector(props: { id: string; snap: RunSnapshot; source: RunSource
   const clear = clearanceM(props.source, i, j, res, 5);
   return (
     <div data-testid="inspector-cell">
-      <h3 className="mono">cell {props.id}</h3>
-      <Section title="Cell">
+      <div className="idcard">
+        <h3 className="mono">
+          <span className="id">cell {props.id}</span>
+        </h3>
+      </div>
+      <Section title="Cell · truth ◆ researcher" testId="inspector-cell-truth">
         <Row k="centre">{`${m((i + 0.5) * res)}, ${m((j + 0.5) * res)}`}</Row>
         <Row k="occupancy" testId="inspector-cell-occupancy">
           <span className={occupied ? "st-alm" : "st-ok"}>{occupied ? `${STATE_GLYPH.alm} blocked` : `${STATE_GLYPH.ok} free`}</span>
@@ -348,6 +463,9 @@ function CellInspector(props: { id: string; snap: RunSnapshot; source: RunSource
         </Row>
         <Row k="clearance">{clear === undefined ? "> 5 m" : m(clear)}</Row>
       </Section>
+      <Unavailable source={props.source} feature="cellBeliefs" title="What each agent believes">
+        <CellBeliefs source={props.source} runId={props.snap.runId ?? ""} i={i} j={j} occupied={occupied} entityIds={props.snap.entityIds} />
+      </Unavailable>
     </div>
   );
 }
@@ -362,12 +480,56 @@ export function InspectorPanel() {
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const views = useAgentViews(source);
   const selection = useUiContext((s) => s.selection);
+  // The two tabs: the agent and the cell last selected. Selecting one shows its tab; either tab can be opened for the other one's last selection.
+  const [tab, setTab] = useState<"agent" | "cell">("agent");
+  // What each agent believes of a cell is read from the live run's maps, which a recording does not hold: in a replay the tab is off, and says why.
+  const cellOff = source.unavailable("cellBeliefs");
+  const [last, setLast] = useState<{ agent?: string | undefined; cell?: string | undefined; runId?: string | undefined }>({});
+  const runId = snap.runId;
+  useEffect(() => {
+    setLast((cur) => (cur.runId === runId ? cur : { runId }));
+  }, [runId]);
+  useEffect(() => {
+    if (selection?.kind === "agent") {
+      setLast((cur) => ({ ...cur, agent: selection.id }));
+      setTab("agent");
+    } else if (selection?.kind === "cell") {
+      setLast((cur) => ({ ...cur, cell: selection.id }));
+      if (!cellOff) setTab("cell");
+    }
+  }, [selection, cellOff]);
+  const agentId = selection?.kind === "agent" ? selection.id : last.agent;
+  const cellId = selection?.kind === "cell" ? selection.id : last.cell;
   let body: ReactNode = <p className="muted">Select an agent or a cell (Scene, Explorer).</p>;
   if (!snap.run) body = <p className="muted">No run loaded.</p>;
-  else if (selection?.kind === "agent") body = <AgentInspector id={selection.id} snap={snap} source={source} views={views} />;
-  else if (selection?.kind === "cell") body = <CellInspector id={selection.id} snap={snap} source={source} />;
+  else if (tab === "agent" && agentId) body = <AgentInspector id={agentId} snap={snap} source={source} views={views} />;
+  else if (tab === "cell" && cellOff !== undefined)
+    body = (
+      <p className="muted inspector-live-only" data-testid="inspector-cell-off">
+        CELL is live only: {cellOff}
+      </p>
+    );
+  else if (tab === "cell" && cellId && !cellOff) body = <CellInspector id={cellId} snap={snap} source={source} />;
+  else if (tab === "cell") body = <p className="muted">Click a cell in the Scene to see it here.</p>;
   return (
     <div className="panel inspector" data-testid="inspector">
+      <div className="inspector-tabs" role="tablist" aria-label="Inspector">
+        {(["agent", "cell"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            aria-disabled={t === "cell" && cellOff !== undefined ? true : undefined}
+            className={`itab${tab === t ? " on" : ""}${t === "cell" && cellOff !== undefined ? " off" : ""}`}
+            data-tip={t === "cell" && cellOff !== undefined ? `Live only: ${cellOff}` : undefined}
+            onClick={() => setTab(t)}
+            data-testid={`inspector-tab-${t}`}
+          >
+            {t === "agent" ? "AGENT" : "CELL"}
+          </button>
+        ))}
+      </div>
       {body}
     </div>
   );

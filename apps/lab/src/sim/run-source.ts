@@ -45,11 +45,25 @@ export interface RunSnapshot {
   /** In replay: what the UI tells about the recording (how poses were sampled) and where it ends. */
   readonly replay?: {
     readonly poseRate: string;
+    /** Where what can be shown starts: 0 for a run, the start of the window for a re-simulated one. */
+    readonly startS?: number;
+    /** A re-simulated window of another run (ADR-0035 section 3): where it comes from and whether its checkpoints were reproduced. */
+    readonly derived?: ReplayDerived;
     /** The end of what can be shown: the end of the recording, or the persisted head of a run that is still recording. */
     readonly headS: number;
     /** The live run being scrubbed (the sim is ahead of what is saved): the sim head in seconds; undefined for a recording that is only read. */
     readonly simHeadS?: number;
   };
+}
+
+/** What the panels tell of a derived run: its parent, its window and its verdict. */
+export interface ReplayDerived {
+  readonly parentRunId: string;
+  readonly t0S: number;
+  readonly t1S: number;
+  readonly status: "matches" | "divergent";
+  /** The tick of the first checkpoint that was not reproduced, when divergent. */
+  readonly divergenceTick?: number;
 }
 
 /** Figures of the Performance HUD; the sim ones are the live run's and read 0 in replay. */
@@ -71,7 +85,7 @@ export interface RecordQuery {
 }
 
 /** Features of the live run that have no recorded source; a source says why one is off, or undefined when it is on. */
-export type RunFeature = "commands" | "strategyTest" | "mindView" | "researcher" | "rays" | "topology";
+export type RunFeature = "commands" | "strategyTest" | "mindView" | "researcher" | "cellBeliefs" | "rays" | "topology";
 
 /** The live view cell of the loaded grid (cell inspector): the layers as last received. */
 export interface CellView {

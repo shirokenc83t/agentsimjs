@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { isSoftwareRenderer, RENDERER_PROBE, writeGpuRecord } from "../../../tools/test/gpu.ts";
+import { openPerf } from "./helpers.ts";
 import { DUMMY_POSE_FLOATS, writeDummyPoses } from "../src/sim/dummy-world.ts";
 
 /** Hardware-GPU run (`pnpm test:e2e:gpu`, ADR-0022): only there is the display-rate assertion gated. */
@@ -53,6 +54,7 @@ test("without interpolation every rendered position is a tick position", async (
   await page.goto("/?probe");
   await expect(page.getByTestId("scene-canvas")).toBeVisible();
   await setSpeed(page, 5);
+  await openPerf(page);
   await page.getByTestId("hud-interpolation").uncheck();
   const { frames, tick } = await sample(page, 3000);
   const xs = tickXs(tick + 2);
@@ -64,6 +66,7 @@ test("without interpolation every rendered position is a tick position", async (
 test("display rate: the scene renders well above the sim tick rate", async ({ page, browser }, testInfo) => {
   await page.goto("/?probe");
   await expect(page.getByTestId("scene-canvas")).toBeVisible();
+  await openPerf(page);
   await expect(page.getByTestId("hud-tick-rate")).toHaveText(/^(9|10|11)\.\d\/s \(target 10 Hz\)/, { timeout: 10_000 });
   const { frames } = await sample(page, 3000);
   const fps = fpsOf(frames);

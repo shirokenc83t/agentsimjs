@@ -42,6 +42,8 @@ export interface PlanResult {
   readonly expansionsCharged: number;
   readonly completedTick: number;
   readonly map: PlanMap;
+  /** The id of the trace record of this query's outcome (the `plan` record of the planner), when the planner traces. */
+  readonly causeRecord?: string;
 }
 
 /** A leg of a lazy `refine` strategy that is ready to drive (ADR-0037 fourth addition): metre waypoints, the first being the previous leg's last. */
@@ -67,6 +69,8 @@ export interface PlanProgress {
   readonly map: PlanMap;
   readonly expansionsCharged: number;
   readonly completedTick: number;
+  /** The id of the planner's trace record that explains this progress: the `restart` of an interrupted query, the `plan` of a finished one. */
+  readonly causeRecord?: string;
 }
 
 /** The per-agent planning service (ADR-0024, ADR-0028), advanced in the planning phase of each tick. */
@@ -216,9 +220,16 @@ export interface CapabilityPort {
   preconditions(name: string): readonly { readonly name: string; readonly vehicles?: readonly string[] }[];
 }
 
-/** Where the runtime's trace records go (ADR-0004, ADR-0031: source `<agent>/actions`). */
+/**
+ * Where the runtime's trace records go (ADR-0004, ADR-0031: source `<agent>/actions`). `emit` returns the id of the record it wrote, so that a later record can name it
+ * as its parent or its cause; `parentId` and `causeIds` are given only by trusted code (never by a mind) and name records of the same run written before.
+ */
 export interface TraceSink {
   emit(r: {
+    /** The record this one belongs to (an action's start for what happens during the action). */
+    readonly parentId?: string;
+    /** The records that made this one happen. */
+    readonly causeIds?: readonly string[];
     readonly source: string;
     readonly simTime: number;
     readonly kind: "action" | "reflex" | "thought" | "compute" | "injected" | "event" | "observation";
@@ -227,5 +238,10 @@ export interface TraceSink {
     readonly tier?: "S1" | "S2";
     readonly detail: "full" | "transitions";
     readonly payload: unknown;
-  }): void;
+  }): string;
+  /**
+   * The id a record of this run has at `seq`, when the sink knows its run: a snapshot restored into another run (a derived run continues the parent's sequence under its own
+   * run ID) names the action's start by the id it has in the run it is restored into.
+   */
+  idOf?(seq: number): string;
 }

@@ -36,7 +36,7 @@ function setup(over: Partial<CurrentRun> = {}) {
   const ports = createMemoryPorts();
   const storage = { ports, status: () => ({ state: "ready", mode: "memory-fallback" }), onStatus: () => () => {} } as unknown as StorageClient;
   const runWithConfig = vi.fn();
-  const current: CurrentRun = { run: labRun(), busy: false, error: null, loadDemo: vi.fn(), runWithConfig, startScenarioRun: vi.fn(), ...over };
+  const current: CurrentRun = { run: labRun(), busy: false, error: null, loadDemo: vi.fn(), runWithConfig, runHeadlessWithConfig: vi.fn(), startScenarioRun: vi.fn(), ...over };
   render(
     <ServicesProvider value={{ storage, sim: {} as SimClient, source: {} as RunSource, setReplaySource: () => {} }}>
       <CurrentRunProvider value={current}>
@@ -137,7 +137,7 @@ describe("RunConfigPanel (ADR-0028)", () => {
     await userEvent.paste(JSON.stringify({ ...runConfig, seed: 42, planning: { byKind: { ugv: { algorithm: "hpa" } } } }));
     await userEvent.click(screen.getByTestId("rc-json-apply"));
     expect(screen.queryByTestId("rc-json-error")).toBeNull();
-    expect(screen.getByTestId("rc-seed")).toHaveValue(42);
+    expect(screen.getByTestId("rc-seed")).toHaveValue("42");
     expect(screen.getByTestId("rc-effective-ugv-001")).toHaveTextContent("hpa");
   });
 
@@ -154,7 +154,7 @@ describe("RunConfigPanel (ADR-0028)", () => {
     await userEvent.selectOptions(screen.getByTestId("rc-preset-select"), "old-seed");
     await userEvent.click(screen.getByTestId("rc-preset-load"));
     await waitFor(() => expect(screen.getByTestId("rc-preset-msg")).toHaveTextContent("applied to v4"));
-    expect(screen.getByTestId("rc-seed")).toHaveValue(9);
+    expect(screen.getByTestId("rc-seed")).toHaveValue("9");
     expect(screen.getByTestId("rc-valid")).toBeInTheDocument();
   });
 });
@@ -291,5 +291,79 @@ describe("RunConfigPanel: the planner choice (ADR-0037, F2b M4)", () => {
     await userEvent.selectOptions(screen.getByTestId("rc-planner"), "algorithm");
     expect(screen.getByTestId("rc-algorithm")).toBeInTheDocument();
     expect(screen.getByTestId("rc-run-config-hash")).toHaveTextContent("(= current run)");
+  });
+
+  it("marks the field an error points at with its code, the section's status in its heading, and the lines of the JSON that changed", async () => {
+    setup();
+    // As the run: every field of the planning section is either inherited or set, its heading is clean, no line is marked.
+    expect(screen.getByTestId("rc-status-planning")).toHaveTextContent("✓");
+    expect(screen.getByTestId("rc-per-tick").closest(".rc-row")).toHaveAttribute("data-state", "inh");
+    await userEvent.type(screen.getByTestId("rc-per-tick"), "0");
+    const row = screen.getByTestId("rc-per-tick").closest(".rc-row");
+    expect(row).toHaveAttribute("data-state", "err");
+    expect(row).toHaveTextContent("budget_out_of_range");
+    expect(screen.getByTestId("rc-status-planning")).toHaveTextContent("✕ 1");
+    expect(screen.getByTestId("rc-status-drive")).toHaveTextContent("✓");
+    expect(screen.getByTestId("rc-run")).toHaveAttribute("aria-disabled", "true");
+    await userEvent.clear(screen.getByTestId("rc-per-tick"));
+    await userEvent.type(screen.getByTestId("rc-per-tick"), "500");
+    expect(screen.getByTestId("rc-per-tick").closest(".rc-row")).toHaveAttribute("data-state", "set");
+    expect(screen.getByTestId("rc-json").querySelectorAll(".rc-gutter .ln.ch").length).toBeGreaterThan(0);
+  });
+
+  it("numbers are typed with a dot whatever the browser's locale, and a decimal point typed last is not lost", async () => {
+    setup();
+    const radius = screen.getByTestId("rc-explore-radius");
+    await userEvent.type(radius, "12.5");
+    expect(radius).toHaveValue("12.5");
+    expect(radius).not.toHaveAttribute("type", "number");
+    expect(screen.getByTestId("rc-effective-explore-ugv-001")).toHaveTextContent("12.5 m");
+    await userEvent.clear(radius);
+    await userEvent.type(radius, "7,5");
+    expect(screen.getByTestId("rc-effective-explore-ugv-001")).toHaveTextContent("7.5 m");
+  });
+
+  it("the scope select names every level with its target and how many values are set there", async () => {
+    setup();
+    const scope = screen.getByTestId("rc-planning-scope");
+    expect(within(scope).getByRole("option", { name: "default (all agents)" })).toBeInTheDocument();
+    await userEvent.type(screen.getByTestId("rc-explore-radius"), "25");
+    await userEvent.type(screen.getByTestId("rc-window-margin"), "5");
+    expect(within(scope).getByRole("option", { name: "default (all agents) · 2 set" })).toBeInTheDocument();
+    expect(within(scope).getByRole("option", { name: 'agent "rover"' })).toBeInTheDocument();
+  });
+
+  it("the JSON view can be folded away and widened with the keyboard; its edits survive a fold", async () => {
+    setup();
+    const json = screen.getByTestId("rc-json-text");
+    await userEvent.type(json, " ");
+    await userEvent.click(screen.getByTestId("rc-json-toggle"));
+    expect(screen.getByLabelText("Text view", { selector: "aside" })).not.toBeVisible();
+    expect(screen.queryByTestId("rc-json-split")).toBeNull();
+    await userEvent.click(screen.getByTestId("rc-json-toggle"));
+    expect(screen.getByTestId("rc-json-text")).toBeVisible();
+    const split = screen.getByTestId("rc-json-split");
+    expect(split).toHaveAttribute("role", "separator");
+    split.focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(split).toHaveAttribute("aria-valuenow");
+    expect(screen.getByTestId("rc-json-apply")).toBeEnabled(); // the edit made before the fold is still there
+  });
+
+  it("has a jump row of the sections with their validation glyphs, and a section whose fields are all inherited folds to one line", async () => {
+    setup();
+    expect(screen.getByTestId("rc-jump-planning")).toHaveTextContent("PLANNING ✓");
+    await userEvent.type(screen.getByTestId("rc-per-tick"), "0");
+    expect(screen.getByTestId("rc-jump-planning")).toHaveTextContent("PLANNING ✕ 1");
+    expect(screen.getByTestId("rc-jump-drive")).toHaveTextContent("DRIVE ✓");
+    // Something set at this level: the section cannot be said to be all inherited, so it has no fold; the drive section is all inherited and has one.
+    expect(screen.queryByTestId("rc-fold-planning")).toBeNull();
+    const fold = screen.getByTestId("rc-fold-drive");
+    expect(fold).toHaveTextContent(/\d+ inherited/);
+    await userEvent.click(fold);
+    expect(screen.getByTestId("rc-fold-drive").closest("section")).toHaveClass("folded");
+    expect(screen.getByTestId("rc-fold-drive")).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(screen.getByTestId("rc-fold-drive"));
+    expect(screen.getByTestId("rc-fold-drive").closest("section")).not.toHaveClass("folded");
   });
 });

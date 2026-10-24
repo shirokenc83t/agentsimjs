@@ -17,6 +17,12 @@ import {
   plannerKind,
   strategyRefOf,
   parseInlineStrategy,
+  changedLines,
+  errorKey,
+  errorLine,
+  sectionOfError,
+  sectionOfPath,
+  sectionStatus,
 } from "./model.ts";
 
 const view = scenarioAgents(f1DemoScenario());
@@ -167,5 +173,43 @@ describe("planner choice in the form model (ADR-0037, ADR-0028 addition of 2026-
     expect(parseInlineStrategy("[1,2]")).toMatchObject({ ok: false, code: "invalid_json" });
     expect(parseInlineStrategy("null")).toMatchObject({ ok: false, code: "invalid_json" });
     expect(parseInlineStrategy("{}")).toMatchObject({ ok: true });
+  });
+
+  it("puts an error or a warning in the section its path points at", () => {
+    expect(sectionOfPath("/planning/byKind/ugv/totalBudget")).toBe("planning");
+    expect(sectionOfPath("/drive/default/maxYawRateRadps")).toBe("drive");
+    expect(sectionOfPath("/beliefs/default/init")).toBe("beliefs");
+    expect(sectionOfPath("/seed")).toBe("run");
+    expect(sectionOfPath("/timeMode")).toBe("run");
+    expect(sectionOfPath("/agents/rover")).toBe("planning");
+    expect(sectionOfPath(undefined)).toBeUndefined();
+    const s = sectionStatus({ path: "/planning/default/totalBudget" }, 2);
+    expect(s.planning).toEqual({ errors: 1, warnings: 2 });
+    expect(s.run).toEqual({ errors: 0, warnings: 0 });
+  });
+
+  it("marks the lines of the JSON that differ from the run's and the line an error points at", () => {
+    const a = JSON.stringify({ seed: 1, planning: { default: { totalBudget: 5 } } }, null, 2);
+    const b = JSON.stringify({ seed: 1, planning: { default: { totalBudget: -5 } } }, null, 2);
+    const changed = changedLines(a, b);
+    expect([...changed]).toEqual([5]);
+    expect(changedLines(a, a).size).toBe(0);
+    expect(errorLine(b, { path: "/planning/default/totalBudget" })).toBe(5);
+    expect(errorLine(b, { message: "totalBudget must be an integer in [1, 9]" })).toBe(5);
+    expect(errorLine(b, { path: "/nowhere" })).toBeUndefined();
+    expect(errorLine(b, undefined)).toBeUndefined();
+    expect(errorKey({ message: "onboardComputeExpansionsPerTick must be an integer" })).toBe(
+      "onboardComputeExpansionsPerTick",
+    );
+    expect(
+      errorKey({
+        path: "/agents/ugv-001",
+        message: "ugv-001 (rover): totalBudget must be an integer in [1, 9] (per-tick from default)",
+      }),
+    ).toBe("totalBudget");
+    expect(sectionOfError({ code: "budget_out_of_range", message: "totalBudget must be an integer" })).toBe(
+      "planning",
+    );
+    expect(sectionOfError({ code: "invalid_json", message: "x" })).toBeUndefined();
   });
 });

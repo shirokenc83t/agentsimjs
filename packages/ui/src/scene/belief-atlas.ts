@@ -28,14 +28,15 @@ const FRAGMENT = /* glsl */ `
 uniform sampler2D map;
 uniform sampler2D truthMap;
 uniform int mode;
-uniform vec3 cUnknown, cFree, cOccupied, cPhantom, cFalseFree;
+uniform vec3 cUnknown, cHatch, cFree, cOccupied, cPhantom, cFalseFree;
 varying vec2 vUv;
 varying vec2 vCell;
 void main() {
   float cls = floor(texture2D(map, vUv).r * 255.0 + 0.5);
   vec3 c;
   if (cls < 0.5) {
-    c = cUnknown;
+    // The area the agent knows nothing about: hatched, so that it is told from the known ground by pattern and not only by tone (ADR-0042 §3).
+    c = fract((vCell.x + vCell.y) * 0.5) < 0.16 ? cHatch : cUnknown;
   } else if (mode == 0) {
     c = cls < 1.5 ? cFree : cOccupied;
   } else {
@@ -102,6 +103,7 @@ export class BeliefAtlas {
           uvScale: { value: new Vector2(cov.w / P, cov.h / P) },
           pageCells: { value: P },
           cUnknown: { value: null },
+          cHatch: { value: null },
           cFree: { value: null },
           cOccupied: { value: null },
           cPhantom: { value: null },
@@ -175,7 +177,7 @@ export class BeliefAtlas {
   }
 
   applyTheme(t: SceneTokens): void {
-    const colors: Record<string, string> = { cUnknown: t.beliefUnknown, cFree: t.beliefFree, cOccupied: t.beliefOccupied, cPhantom: t.diffPhantom, cFalseFree: t.diffFalseFree };
+    const colors: Record<string, string> = { cUnknown: t.beliefUnknown, cHatch: t.beliefHatch, cFree: t.beliefFree, cOccupied: t.beliefOccupied, cPhantom: t.diffPhantom, cFalseFree: t.diffFalseFree };
     for (const p of this.pages) {
       for (const [name, hex] of Object.entries(colors)) {
         const u = p.mesh.material.uniforms[name];

@@ -19,6 +19,9 @@ export interface PlannerAdapterSnapshot {
  */
 export class PlanningServiceAdapter implements PlannerPort {
   private readonly completed = new Map<string, PlanOutcome>();
+  /** The trace record of each query's outcome and of each interrupted query's restart, by query ID: what a failure or a replan of the action names as its cause (until read). */
+  private readonly outcomeRecords = new Map<string, string>();
+  private readonly restartRecords = new Map<string, string>();
   private readonly configs = new Map<string, EffectiveAgentConfig>();
   /** Each agent's configuration at assembly: `setConfig` changes are what a snapshot keeps. */
   private readonly initial = new Map<string, EffectiveAgentConfig>();
@@ -124,7 +127,7 @@ export class PlanningServiceAdapter implements PlannerPort {
   /** Each restart of a query in progress, with its reason (ADR-0024 addition of 2026-10-09). */
   private traceRestart(r: PlanRestart): void {
     if (!this.trace) return;
-    this.trace.sink.emit({
+    const id = this.trace.sink.emit({
       source: `${r.agentId}/planner`,
       simTime: r.tick * this.trace.dtS,
       kind: "compute",
@@ -132,6 +135,8 @@ export class PlanningServiceAdapter implements PlannerPort {
       detail: "transitions",
       payload: { op: "restart", queryId: r.queryId, reason: r.reason, ...(r.chunks.length > 0 ? { chunks: r.chunks } : {}), spent: r.spent, ...(r.interrupted ? { interrupted: true } : {}) },
     });
+    // The record that explains an interrupted query's replan (the action's `replan` note names it as its cause).
+    if (r.interrupted) this.restartRecords.set(r.queryId, id);
   }
 
   /**
@@ -142,7 +147,7 @@ export class PlanningServiceAdapter implements PlannerPort {
   private traceOutcome(o: PlanOutcome, tick: number): void {
     if (!this.trace) return;
     const cfg = this.configs.get(o.agentId);
-    this.trace.sink.emit({
+    const id = this.trace.sink.emit({
       source: `${o.agentId}/planner`,
       simTime: tick * this.trace.dtS,
       kind: "compute",
@@ -166,6 +171,8 @@ export class PlanningServiceAdapter implements PlannerPort {
         ...(o.strategy ? { strategy: o.strategy } : {}),
       },
     });
+    // The record of this outcome: a failed action that planning ended names it as its cause.
+    this.outcomeRecords.set(o.queryId, id);
   }
 
   submit(agentId: string, q: PlanQuery, tick: number): Result<string, CodedError> {
@@ -190,7 +197,10 @@ export class PlanningServiceAdapter implements PlannerPort {
     // The plan's map is the live planning view it ran on (ADR-0024 addition of 2026-10-10): the agent's current
     // beliefs as of the last sync point, never ground truth. Version and clearance are read when checked.
     const space = o.space;
+    const causeRecord = this.outcomeRecords.get(queryId);
+    this.outcomeRecords.delete(queryId);
     return {
+      ...(causeRecord === undefined ? {} : { causeRecord }),
       status: o.status,
       waypoints: o.waypoints,
       expansionsCharged: o.expansionsCharged,
@@ -214,7 +224,13 @@ export class PlanningServiceAdapter implements PlannerPort {
     if (!p) return undefined;
     if (p.done) this.completed.delete(queryId);
     const space = p.map;
+    const causeRecord = p.interrupted ? this.restartRecords.get(queryId) : p.done ? this.outcomeRecords.get(queryId) : undefined;
+    if (p.done) {
+      this.outcomeRecords.delete(queryId);
+      this.restartRecords.delete(queryId);
+    }
     return {
+      ...(causeRecord === undefined ? {} : { causeRecord }),
       legs: p.legs,
       done: p.done,
       ...(p.status ? { status: p.status } : {}),
@@ -411,7 +427,20 @@ export const toolsSchemaCapabilities: CapabilityPort = {
 export class TraceBufferSink implements TraceSink {
   constructor(readonly buffer: TraceBuffer) {}
 
-  emit(r: Parameters<TraceSink["emit"]>[0]): void {
-    this.buffer.for(r.source).append({ simTime: r.simTime, kind: r.kind, agentId: r.agentId, ...(r.tier === undefined ? {} : { tier: r.tier }), detail: r.detail, payload: r.payload });
+  idOf(seq: number): string {
+    return `${this.buffer.runId}#${seq}`;
+  }
+
+  emit(r: Parameters<TraceSink["emit"]>[0]): string {
+    return this.buffer.for(r.source).append({
+      simTime: r.simTime,
+      kind: r.kind,
+      agentId: r.agentId,
+      ...(r.parentId === undefined ? {} : { parentId: r.parentId }),
+      ...(r.causeIds === undefined ? {} : { causeIds: [...r.causeIds] }),
+      ...(r.tier === undefined ? {} : { tier: r.tier }),
+      detail: r.detail,
+      payload: r.payload,
+    }).id;
   }
 }

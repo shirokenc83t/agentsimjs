@@ -17,15 +17,18 @@ const sceneStats = (page: Page) => page.evaluate(() => { const s = window.__agen
 // selects an agent or a cell through the shared UI context (ADR-0016).
 test("the demo grid is drawn from one atlas page, agents are labelled, and clicks select agents and cells", async ({ page }) => {
   await loadDemo(page);
-  await expect(page.getByTestId("scene-overlay")).toBeVisible();
+  await expect(page.getByTestId("scene-toolbar")).toBeVisible();
   // 128 × 128 cells, chunks of 32: 16 chunks on one page, all uploaded within the per-frame budget.
   await expect.poll(() => sceneStats(page)).toEqual({ pages: 1, chunksUploaded: 16, chunksPending: 0 });
 
-  for (const id of ["uav-001", "ugv-001", "ugv-002"]) await expect(page.locator(`.agent-label[data-agent="${id}"]`)).toContainText(id);
+  // Labels are short on the map (g01, a01); the whole ID is in the tooltip and the Explorer.
+  for (const [id, short] of [["uav-001", "a01"], ["ugv-001", "g01"], ["ugv-002", "g02"]] as const) await expect(page.locator(`.agent-label[data-agent="${id}"]`)).toContainText(short);
 
   await page.getByTestId("view-height").click();
+  await page.getByTestId("wb-collapse-legend").click(); // the legend is a window of its own
   await expect(page.getByText("occupied, unknown height")).toBeVisible();
   await page.getByTestId("view-occupancy").click();
+  await page.getByTestId("wb-collapse-legend").click(); // folded again: it sits inside the map, over ground points the clicks below use
 
   const rover = await page.evaluate(() => window.__agentsim?.scene?.screenOf("ugv-001"));
   expect(rover).toBeDefined();

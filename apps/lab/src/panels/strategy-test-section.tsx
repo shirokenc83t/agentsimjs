@@ -131,7 +131,7 @@ export function StrategyTestSection(props: { source: Pick<RunSource, "strategyTe
           <textarea className="mono" rows={8} value={inline} onChange={(e) => setInline(e.target.value)} spellCheck={false} aria-label="Strategy JSON" data-testid="st-json" style={{ width: "100%" }} />
           {parsed && !parsed.ok && (
             <p className="danger issue" role="alert" data-testid="st-json-error">
-              ✗ <span className="mono">{parsed.code}</span> {parsed.message}
+              ✕ <span className="mono">{parsed.code}</span> {parsed.message}
             </p>
           )}
         </>
@@ -158,7 +158,7 @@ export function StrategyTestSection(props: { source: Pick<RunSource, "strategyTe
       {picked.picking && <p className="muted">Click a target in the Scene (Esc cancels).</p>}
       {error && (
         <p className="danger issue" role="alert" data-testid="st-error">
-          ✗ <span className="mono">{error.code}</span> {error.message}
+          ✕ <span className="mono">{error.code}</span> {error.message}
           {error.path && <span className="muted mono"> at {error.path}</span>}
         </p>
       )}

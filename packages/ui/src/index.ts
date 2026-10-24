@@ -1,12 +1,13 @@
 export { StateInterpolator, DEFAULT_INTERPOLATOR_OPTIONS, type InterpolatorOptions, type PoseSource } from "./scene/interpolator.ts";
-export { SceneRenderer, type EditPointerPhase, type GridSpec, type ScenePick } from "./scene/scene-renderer.ts";
+export { SceneRenderer, type AgentDecor, type EditPointerPhase, type GridSpec, type MapPin, type ScenePick } from "./scene/scene-renderer.ts";
+export { identityOf, shortLabel, IDENTITY_COUNT, type Identity, type MarkerStyle } from "./theme/identity.ts";
 export { type StageLine } from "./scene/stages-overlay.ts";
 export { type ExplorationView } from "./scene/overlay-layers.ts";
 export { AtlasLayout, ChunkQueue, CHUNK_UPLOADS_PER_FRAME, type GridDims } from "./scene/atlas-layout.ts";
 export type { GridViewMode } from "./scene/grid-atlas.ts";
 export type { BeliefViewMode } from "./scene/belief-atlas.ts";
 export { RollingStats } from "./perf/rolling-stats.ts";
-export { createUiContextStore, useUiContext, type UiContextState, type RunViewMode, type Selection, type SelectionKind } from "./context/ui-context.ts";
+export { createUiContextStore, useUiContext, type UiContextState, type RunViewMode, type Selection, type SelectionKind, type TimeSelection, type RecordSelection } from "./context/ui-context.ts";
 export { formatBytes, formatSimTime, formatMs } from "./format.ts";
 export { CommandPalette, filterCommands, type Command } from "./components/command-palette.tsx";
 export { PerformanceHud, type HudStats } from "./components/performance-hud.tsx";
@@ -19,6 +20,7 @@ export {
   THEME_NAMES,
   KIND_STYLE,
   STATE_GLYPH,
+  GLYPH,
   FONT,
   TYPE,
   SPACE_PX,
@@ -27,6 +29,8 @@ export {
   Z,
   MOTION_MS,
   FOCUS_RING_PX,
+  TYPE_MIN_PX,
+  TOOLTIP_DELAY_MS,
   kindTable,
   sceneTokens,
   agentColorIndex,
@@ -50,4 +54,5 @@ export {
   type ThemePreference,
 } from "./theme/theme-controller.ts";
 export { UiThemeProvider, muiTheme } from "./theme/mui.tsx";
+export { initTooltips } from "./theme/tooltips.ts";
 export { BOOT_SETTINGS, readBootSetting, writeBootSetting, type BootSetting } from "./boot-settings.ts";

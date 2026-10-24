@@ -1,4 +1,4 @@
-import { COLORS, FOCUS_RING_PX, FONT, RADIUS_PX, ROW_PX, SPACE_PX, THEME_NAMES, TYPE, Z, type ColorTokens, type ThemeName } from "./tokens.ts";
+import { COLORS, DOCK_DOT_PX, FOCUS_RING_PX, FONT, HATCH_PITCH_PX, RADIUS_PX, ROW_PX, SPACE_PX, THEME_NAMES, TYPE, Z, type ColorTokens, type ThemeName } from "./tokens.ts";
 
 /** Custom properties of one theme's colours (`--bg0`, `--kind-violet`, `--agent-3`, …). */
 function colorVars(c: ColorTokens): string[] {
@@ -17,12 +17,17 @@ function sharedVars(): string[] {
   return [
     `--font-sans: ${FONT.sans};`,
     `--font-mono: ${FONT.mono};`,
-    ...Object.entries(TYPE).flatMap(([k, v]) => [`--type-${k}-size: ${v.size}px;`, `--type-${k}-weight: ${v.weight};`]),
+    // The prose face is for running text only (help, dialog body, descriptions); everything else is `--font-mono`.
+    `--font-prose: ${FONT.sans};`,
+    ...Object.entries(TYPE).flatMap(([k, v]) => [`--type-${k}-size: ${v.size}px;`, `--type-${k}-weight: ${v.weight};`, ...("letterSpacingEm" in v ? [`--type-${k}-tracking: ${v.letterSpacingEm}em;`] : [])]),
     ...Object.entries(SPACE_PX).map(([k, v]) => `--space-${k}: ${v}px;`),
     ...Object.entries(RADIUS_PX).map(([k, v]) => `--radius-${k}: ${v}px;`),
     ...Object.entries(ROW_PX).map(([k, v]) => `--row-${k}: ${v}px;`),
     ...Object.entries(Z).map(([k, v]) => `--z-${k}: ${v};`),
     `--focus-ring: ${FOCUS_RING_PX}px;`,
+    // Patterns built from the theme's own tokens: the dot grid of the dock (from `ln`) and the hatch of what the map does not know.
+    `--dock-pattern: radial-gradient(var(--ln) 1px, transparent 1px) 0 0 / ${DOCK_DOT_PX}px ${DOCK_DOT_PX}px;`,
+    `--hatch-pattern: repeating-linear-gradient(135deg, var(--hatch) 0 1px, transparent 1px ${HATCH_PITCH_PX}px);`,
   ];
 }
 

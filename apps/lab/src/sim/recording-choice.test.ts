@@ -1,10 +1,10 @@
 import { RECORDING_PRESETS, recordingProfileHash } from "@agentsim/trace";
 import { beforeEach, describe, expect, it } from "vitest";
-import { getRecordingSelection, isHeavyProfile, profileOfSelection, setRecordingSelection, takeRecordingChoice } from "./recording-choice.ts";
+import { DEFAULT_HEADLESS_UNTIL_S, getRecordingSelection, isHeavyProfile, profileOfSelection, setRecordingSelection, takeHeadlessChoice, takeRecordingChoice } from "./recording-choice.ts";
 
 // F3a M2: how the next run is recorded (ADR-0035 addition of 2026-10-17, item 6).
 
-beforeEach(() => setRecordingSelection({ preset: "default-research", optOut: false }));
+beforeEach(() => setRecordingSelection({ preset: "default-research", optOut: false, headlessUntilS: DEFAULT_HEADLESS_UNTIL_S }));
 
 describe("the recording choice at launch", () => {
   it("is recorded under default-research unless the researcher chose otherwise", () => {
@@ -36,5 +36,29 @@ describe("the recording choice at launch", () => {
     expect(isHeavyProfile(RECORDING_PRESETS["default-research"])).toBe(false);
     expect(isHeavyProfile(RECORDING_PRESETS.minimal)).toBe(false);
     expect(isHeavyProfile(RECORDING_PRESETS["debug-full"])).toBe(true);
+  });
+});
+
+describe("the choice of a headless run (ADR-0029, ADR-0035: always recorded)", () => {
+  it("takes the selection's profile and its duration, and never the opt-out: that stays set for the next live run", () => {
+    setRecordingSelection({ preset: "minimal", optOut: true, headlessUntilS: 120 });
+    const c = takeHeadlessChoice();
+    expect(c).toEqual({ recording: { mode: "stored", profile: RECORDING_PRESETS.minimal }, untilS: 120 });
+    expect(getRecordingSelection().optOut).toBe(true);
+    expect(takeRecordingChoice()).toEqual({ mode: "none" }); // the live run still opts out, once
+  });
+
+  it("keeps the duration sane: the default for a number that is not one, at most a day", () => {
+    setRecordingSelection({ headlessUntilS: Number.NaN });
+    expect(takeHeadlessChoice().untilS).toBe(DEFAULT_HEADLESS_UNTIL_S);
+    setRecordingSelection({ headlessUntilS: -5 });
+    expect(takeHeadlessChoice().untilS).toBe(DEFAULT_HEADLESS_UNTIL_S);
+    setRecordingSelection({ headlessUntilS: 1e9 });
+    expect(takeHeadlessChoice().untilS).toBe(86_400);
+  });
+
+  it("refuses a profile that is not one, saying why", () => {
+    setRecordingSelection({ preset: "custom", customJson: "{not json" });
+    expect(() => takeHeadlessChoice()).toThrow(/invalid_recording_profile/);
   });
 });

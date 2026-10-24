@@ -54,6 +54,11 @@ test("a recorded run opens in the panels from the Storage browser; the sim worke
   // The features that need the live run say so.
   await expect(page.getByTestId("inspector-off-mindView")).toContainText("Not available in replay");
   await expect(page.getByTestId("overlay-rays")).toBeDisabled();
+  // The Cell tab is off in a replay, with its reason, not hidden and not empty.
+  await expect(page.getByTestId("inspector-tab-cell")).toHaveAttribute("aria-disabled", "true");
+  await page.getByTestId("inspector-tab-cell").click({ force: true }); // aria-disabled, but it still explains itself (Playwright does not click what is aria-disabled)
+  await expect(page.getByTestId("inspector-cell-off")).toContainText("live only");
+  await page.getByTestId("inspector-tab-agent").click();
   // Moving the cursor and picking things went to storage, not to the sim worker.
   await setCursor(page, 3);
   await setCursor(page, 17.5);

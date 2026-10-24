@@ -29,6 +29,10 @@ export type {
   BeliefFrameQuery,
   BeliefFrameStore,
   BeliefFrameError,
+  StoredMetricSample,
+  MetricQuery,
+  MetricStore,
+  MetricError,
   BlobWriteError,
   SnapshotWriteError,
 } from "./ports.ts";
@@ -42,6 +46,8 @@ export {
   StorageError,
   DEFAULT_QUOTA_THRESHOLD_BYTES,
   type StorageClient,
+  type LiveClient,
+  type SqlClient,
   type StorageAdmin,
   type StorageClientOptions,
 } from "./client/storage-client.ts";
@@ -57,3 +63,5 @@ export { poseWindowQuery, type PoseWindow } from "./replay-queries.ts";
 export type { ReplayView, ReplayBelief, ReplayWorld, ReplayError, ReplayErrorCode, ReplayHandlers, ReplayClient, StorageExtensions } from "./replay.ts";
 export { BELIEF_MANIFEST_FORMAT_STORED } from "./sql/recording-integrity.ts";
 export { bundleFromJsonl, bundleProblem, bundleToJsonl, exportRunJsonl, importRunJsonl, readRunBundle, writeRunBundle, RUN_JSONL_FORMAT, RUN_JSONL_VERSION, MAX_RUN_FILE_BYTES, type RunBundle, type RunFileError, type RunFileErrorCode } from "./run-bundle.ts";
+export { LIVE_DEFAULTS, LiveSubscriptions, type LiveBatch, type LiveError, type LiveOptions } from "./live-subscriptions.ts";
+export { SQL_LIMITS, type SqlCell, type SqlError, type SqlErrorCode, type SqlResult, type SqlRunLimits, type SqlSchema } from "./sql-console.ts";

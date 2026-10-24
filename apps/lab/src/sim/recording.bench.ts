@@ -153,6 +153,43 @@ it("the recorder budget: what recording adds to a tick, 20 agents exploring, def
   expect(metric.p95).toBeLessThan(5); // a loose guard here; the budget itself is bench/thresholds.json's
 });
 
+// ---- 1c. the metrics channel: what sampling the registered series adds to a tick ---------------------------------------------------------------
+
+// ADR-0035 section 4: computing metrics runs after the tick's state hash, changes no state, and costs at most 0.5 ms per tick at p95 at the reference scenario (20 agents).
+// Measured directly: the recording's `sampleMetrics`, timed on its own each tick, under the default profile (1 Hz) and under debug-full (10 Hz, a sample every tick:
+// the worst case). Report only in bench/results (no entry in thresholds.json); above 0.5 ms at p95 is a stop, so it fails here.
+it("the metrics channel: what sampling the registered series adds to a tick, 20 agents exploring (report only, stop above 0.5 ms at p95)", () => {
+  const TICKS = 500;
+  const arm = (profile: RecordingProfile) => {
+    const w = loadWorld(WORLDS.twenty.doc(), WORLDS.twenty.cfg());
+    const recorder = new RunRecorder({ buffer: w.trace, profile, send: () => undefined, sendItem: () => undefined });
+    const recording = new RunRecording(w.recordingTarget(), recorder, profile);
+    const inner = recording as unknown as { sampleMetrics(): void };
+    const original = inner.sampleMetrics.bind(recording);
+    const costs: number[] = [];
+    inner.sampleMetrics = () => {
+      const t0 = performance.now();
+      original();
+      costs.push(performance.now() - t0);
+    };
+    w.setTickHook(() => recording.afterTick());
+    recording.start();
+    recorder.headerStored();
+    for (const id of w.entityIds) if (id.startsWith("ugv")) w.inject({ agentId: id, name: "explore", params: {} });
+    const scheduler = new Scheduler(w, w.dtS);
+    for (let i = 1; i <= TICKS; i++) {
+      scheduler.step();
+      if (i % 8 === 0) recorder.collect(w.tick, w.simTimeS);
+    }
+    return costs.slice(100); // the first 100 ticks are the warm-up of the world
+  };
+  arm(RECORDING_PRESETS["default-research"]); // warm up the JIT
+  const normal = summarize(arm(RECORDING_PRESETS["default-research"]));
+  const worst = summarize(arm(RECORDING_PRESETS["debug-full"]));
+  recordResults("node.json", { "metrics.perTick": normal, "metrics.perTick.debugFull": worst });
+  expect(worst.p95).toBeLessThan(0.5);
+});
+
 // ---- 2. the cost of the per-record byte estimate (JSON.stringify of each payload) ---------------------------------------------------------
 
 measure_("the per-record byte estimate: what JSON.stringify of each payload costs", () => {
@@ -210,7 +247,7 @@ function volumeOf(m: Measured): Volume {
       snapshots++;
       snapshotContainerBytes += i.bytes.length;
       snapshotBytes += i.bytes.length + i.blobs.reduce((n, b) => n + b.bytes.length, 0);
-    } else {
+    } else if (i.type === "frames") {
       keyframeBytes += i.blobs.reduce((n, b) => n + b.bytes.length, 0);
       for (const f of i.frames) {
         if (f.kind === "keyframe") keyframes++;
@@ -406,7 +443,7 @@ measure_("belief chunk groups of 4, 8 and 16 chunks per side: bytes of keyframes
   const profile = profileWith("default-research", (p) => ({ ...p, channels: { ...p.channels, beliefs: { level: "chunks", keyframeEveryS: 30 } }, checkpoints: { everyTicks: 100, snapshotEveryS: 60 } }));
   for (const G of [4, 8, 16]) {
     const m = runMeasured(loadWorld(WORLDS.twenty.doc(), WORLDS.twenty.cfg()), TICKS, profile, 8, G);
-    const blobs = m.items.flatMap((i) => i.blobs);
+    const blobs = m.items.flatMap((i) => (i.type === "metrics" ? [] : i.blobs));
     const blobBytes = blobs.reduce((n, b) => n + b.bytes.length, 0);
     const containers = m.items.filter((i): i is Extract<RecorderItem, { type: "snapshot" }> => i.type === "snapshot").reduce((n, s) => n + s.bytes.length, 0);
     const perAgentHour = (b: number) => (b / m.agents) * (3600 / m.simSeconds);

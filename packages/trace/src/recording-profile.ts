@@ -39,7 +39,8 @@ export const RecordingChannels = Type.Object(
       },
       strict,
     ),
-    metrics: Type.Object({ rateHz: RateHz }, strict),
+    /** Observer data, outside the tracing rule: it may be off (`level: "off"`). Absent means on, so the presets (which do not carry it) keep their hashes. */
+    metrics: Type.Object({ rateHz: RateHz, level: Type.Optional(Type.Union([Type.Literal("on"), Type.Literal("off")])) }, strict),
     health: Type.Object({ rateHz: RateHz }, strict),
     sensors: Type.Object({ level: Type.Union([Type.Literal("off"), Type.Literal("decimated"), Type.Literal("full")]) }, strict),
   },
