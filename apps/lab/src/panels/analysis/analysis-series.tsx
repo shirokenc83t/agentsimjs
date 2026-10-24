@@ -65,7 +65,10 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
           }
         // A fraction is on its natural axis, 0 to 1, whatever part of it the lines use; any other quantity on the range of its data.
         if (first.unit === "fraction") [lo, hi] = [0, 1];
-        else if (hi - lo < 1e-9) [lo, hi] = [lo - 0.5, hi + 0.5];
+        // One value (a single sample, or lines that never move): the axis is that value plus and minus one, and the value is written once, in the middle.
+        const flat = first.unit !== "fraction" && hi - lo < 1e-9;
+        const flatValue = lo;
+        if (flat) [lo, hi] = [lo - 1, hi + 1];
         const y = (v: number) => PAD.t + (1 - (v - lo) / (hi - lo)) * (ROW_H - PAD.t - PAD.b);
         const ends = lines.flatMap((l) => {
           const last = l.points[l.points.length - 1];
@@ -115,8 +118,14 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
             >
               <line className="axis" x1={PAD.l} y1={ROW_H - PAD.b} x2={w - PAD.r} y2={ROW_H - PAD.b} />
               <line className="axis" x1={PAD.l} y1={PAD.t} x2={PAD.l} y2={ROW_H - PAD.b} />
-              <text className="tick" x={4} y={PAD.t + 8}>{fmt(hi)}</text>
-              <text className="tick" x={4} y={ROW_H - PAD.b}>{fmt(lo)}</text>
+              {flat ? (
+                <text className="tick" x={4} y={(PAD.t + ROW_H - PAD.b) / 2 + 3} data-testid={`series-flat-${testName}`}>{fmt(flatValue)}</text>
+              ) : (
+                <>
+                  <text className="tick" x={4} y={PAD.t + 8}>{fmt(hi)}</text>
+                  <text className="tick" x={4} y={ROW_H - PAD.b}>{fmt(lo)}</text>
+                </>
+              )}
               <text className="tick" x={PAD.l} y={ROW_H - 3}>{t0.toFixed(1)} s</text>
               <text className="tick" x={w - PAD.r} y={ROW_H - 3} textAnchor="end">{t1.toFixed(1)} s</text>
               {lines.map((l) => {

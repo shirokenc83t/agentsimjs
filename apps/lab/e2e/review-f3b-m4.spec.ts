@@ -51,16 +51,18 @@ for (const theme of THEMES) {
 
     test("Analysis: trajectories with the brush and markers, the series, the exports", async ({ page }) => {
       test.setTimeout(300_000);
-      await loadF2(page, "discovery");
-      await page.getByTestId(`explorer-row-${AGENT}`).click();
-      await runCommand(page, `Explore selected agent (${AGENT})`);
-      await step(page, 1);
-      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 30_000 });
-      await runCommand(page, "Run headless");
+      // A rover sent to one place and then another: its actions start and end at different points of the path, so the events are along it.
+      await loadDemo(page);
+      await sendTo(page, AGENT, 50, 10);
+      await step(page, 3);
+      await sendTo(page, AGENT, 20, 40);
+      await step(page, 3);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 600", { timeout: 30_000 });
+      await runCommand(page, "Re-run headless");
       await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 120_000 });
       await page.getByTestId("hm-open-analysis").click();
       await expect(page.getByTestId("analysis")).toHaveAttribute("data-status", "ready", { timeout: 60_000 });
-      await expect.poll(async () => Number(await page.getByTestId("map2d-canvas").getAttribute("data-markers")), { timeout: 15_000 }).toBeGreaterThan(0);
+      await expect.poll(async () => Number(await page.getByTestId("map2d-canvas").getAttribute("data-markers")), { timeout: 15_000 }).toBeGreaterThan(3);
       await shot(page, "analysis-overview", theme);
 
       // A window brushed on the timeline: the filter's `t:` term, the markers of the window, the series cut to it.

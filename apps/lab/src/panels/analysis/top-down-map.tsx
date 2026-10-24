@@ -130,7 +130,33 @@ export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function
       t.points.forEach((p, i) => (i === 0 ? ctx.moveTo(tf.px(p.x), tf.py(p.y)) : ctx.lineTo(tf.px(p.x), tf.py(p.y))));
       ctx.stroke();
     }
-    // Events on the paths: a 4 px dot in the colour of the kind with a ring of the background, the flags 12 px on top of them, and a ring on the one picked.
+    ctx.font = `11px ${mono}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    // Where the agents are: the marker style of their identity (solid, outline, dashed), the short label beside it.
+    for (const a of model.positions) {
+      const id = identityOf(a.colorIndex);
+      const col = pal.agent[id.colorIndex % pal.agent.length] ?? pal.text;
+      const x = tf.px(a.x);
+      const y = tf.py(a.y);
+      ctx.beginPath();
+      ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+      if (id.style === "solid") {
+        ctx.fillStyle = col;
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 2;
+        ctx.setLineDash(id.style === "dashed" ? [2, 2] : []);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.fillStyle = pal.text;
+      ctx.textAlign = "left";
+      ctx.fillText(shortLabel(a.agentId), x + 8, y - 8);
+      ctx.textAlign = "center";
+    }
+    // Events on the paths, over the agents (an event at the place an agent now stands must not be hidden by it): a 4 px dot in the colour of the kind with a ring of the background, the flags 12 px on top of them, and a ring on the one picked.
     const sorted = [...drawn.filter((m) => m.role === undefined), ...drawn.filter((m) => m.role !== undefined)];
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -163,29 +189,6 @@ export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function
       }
     }
     ctx.font = `11px ${mono}`;
-    // Where the agents are: the marker style of their identity (solid, outline, dashed), the short label beside it.
-    for (const a of model.positions) {
-      const id = identityOf(a.colorIndex);
-      const col = pal.agent[id.colorIndex % pal.agent.length] ?? pal.text;
-      const x = tf.px(a.x);
-      const y = tf.py(a.y);
-      ctx.beginPath();
-      ctx.arc(x, y, 4.5, 0, Math.PI * 2);
-      if (id.style === "solid") {
-        ctx.fillStyle = col;
-        ctx.fill();
-      } else {
-        ctx.strokeStyle = col;
-        ctx.lineWidth = 2;
-        ctx.setLineDash(id.style === "dashed" ? [2, 2] : []);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-      ctx.fillStyle = pal.text;
-      ctx.textAlign = "left";
-      ctx.fillText(shortLabel(a.agentId), x + 8, y - 8);
-      ctx.textAlign = "center";
-    }
     // A scale bar (a round length of about 100 px) bottom left, and north top right: a map has both.
     const nice = niceLength(100 / tf.scale);
     const barPx = nice * tf.scale;

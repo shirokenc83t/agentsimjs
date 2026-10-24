@@ -154,6 +154,8 @@ describe("the Analysis workspace", () => {
     expect(screen.getByTestId("series-end-battery-ugv-001")).toBeInTheDocument();
     expect(within(screen.getByTestId("series-battery")).getAllByText("0")).not.toHaveLength(0); // the axis starts at 0, not at the lowest sample
     expect(within(screen.getByTestId("series-battery")).getAllByText("1")).not.toHaveLength(0);
+    // A chart with one value (the rover's one speed sample) writes it once, in the middle, not as two neighbouring end labels.
+    expect(screen.getByTestId("series-flat-speed")).toHaveTextContent("1.5");
     act(() => useUiContext.getState().select({ kind: "agent", id: "ugv-001" }));
     const lines = screen.getByTestId("series-battery").querySelectorAll("polyline.line");
     expect(lines.length).toBeGreaterThan(0);
