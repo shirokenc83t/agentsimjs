@@ -14,11 +14,11 @@
     },
     "headless.run20Exploring60s": {
       "report": true,
-      "$comment": "F3b M4 (T-075): wall time of a headless run of 20 exploring agents for 60 s of sim time, recorded (default research profile), in the sim host on real timers; the same checkpoints as the live run"
+      "$comment": "F3b M4: wall time of a headless run of 20 exploring agents for 60 s of sim time, recorded (default research profile), in the sim host on real timers; the same checkpoints as the live run"
     },
     "headless.liveLockstepX4_20Exploring60s": {
       "report": true,
-      "$comment": "F3b M4 (T-075): the same run in a live lockstep view at the fastest speed the player offers (x4, 40 Hz); at x1 it takes the 60 s of the run"
+      "$comment": "F3b M4: the same run in a live lockstep view at the fastest speed the player offers (x4, 40 Hz); at x1 it takes the 60 s of the run"
     },
     "sim.stateLatency": {
       "report": true,

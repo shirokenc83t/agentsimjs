@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { LABEL_PX } from "../src/panels/debug/timeline-geometry.ts";
 import { loadDemo, loadF2, openWorkspace, runCommand, sendTo, step } from "./helpers.ts";
 
-// F3b M4 review material (T-076): the screens the designer reviews, shot at 1440 x 900 in both themes. Not a test of anything: it is skipped unless AGENTSIM_REVIEW_DIR names
+// F3b M4 review material: the screens the designer reviews, shot at 1440 x 900 in both themes. Not a test of anything: it is skipped unless AGENTSIM_REVIEW_DIR names
 // the folder the images go to (`AGENTSIM_REVIEW_DIR=../agentsimjs-docs/docs/ui/review/f3b-m4 pnpm exec playwright test review-f3b-m4`).
 
 const DIR = process.env["AGENTSIM_REVIEW_DIR"];
