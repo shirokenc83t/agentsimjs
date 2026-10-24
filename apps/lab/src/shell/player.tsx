@@ -1,6 +1,7 @@
 import { formatSimTime, GLYPH, useUiContext } from "@agentsim/ui";
 import { Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
 import { useSource } from "../services.tsx";
+import { getRecordingSelection } from "../sim/recording-choice.ts";
 import { gapLabel, resolveGapClick } from "../sim/gap-click.ts";
 import type { RunSnapshot } from "../sim/run-source.ts";
 import type { SimClient, SimSnapshot } from "../sim/sim-client.ts";
@@ -14,6 +15,10 @@ export const SPEEDS = [
   { label: "×4", hz: 40 },
 ] as const;
 
+/** What the player's Re-run does: a new run of the same scenario version, configuration and seed, live in lockstep, live in realtime, or headless (U-010 section 4). */
+export type RerunChoice = "live-lockstep" | "live-realtime" | "headless";
+const RERUN_WORDS: Record<RerunChoice, string> = { "live-lockstep": "live · lockstep", "live-realtime": "live · realtime", headless: "headless" };
+
 export interface PlayerProps {
   readonly sim: SimClient;
   /** The live run, as the sim worker reports it. */
@@ -25,8 +30,12 @@ export interface PlayerProps {
   /** The run is recorded: the player offers to scrub it back and flags its marks. */
   readonly recorded: boolean;
   readonly busy: boolean;
-  /** Re-run in the other time mode (a scenario run's mode is part of the run). */
-  readonly onRerunInMode: (mode: "lockstep" | "realtime") => void;
+  /** Re-run the run shown: live in lockstep or in realtime (the time mode is part of a scenario run), or headless. */
+  readonly onRerun: (how: RerunChoice) => void;
+  /** Runs the run waiting at tick 0 headless (READY's second choice). */
+  readonly onStartHeadless: () => void;
+  /** The commands the run shown has recorded: a re-run applies them again. */
+  readonly rerunCommands: number;
   readonly onScrubBack: (runId: string) => void;
   readonly onBackToLive: () => void;
 }
@@ -66,10 +75,27 @@ function ClockValue(props: { replay: boolean; simTimeS: number }) {
 
 function Transport(props: PlayerProps & { replay: boolean }) {
   const { sim, snap, busy, replay, recorded, view } = props;
-  const otherMode = snap.mode === "realtime" ? "lockstep" : "realtime";
+  // READY (U-010 section 4): a run that was just selected or made waits at tick 0 and nothing runs until the researcher chooses: live or headless. Step and the keys still work
+  // (a way of going live, paused); what is replaced is the play button, which becomes the launch group.
+  const ready = !replay && snap.run !== undefined && snap.tick === 0 && !snap.running && snap.headless !== true && snap.progress === undefined && !busy;
   return (
     <div className="ply" role="toolbar" aria-label="Run control">
-      {snap.running ? (
+      {ready && snap.run ? (
+        <>
+          <span className="ready-start mono" data-testid="ready-start" role="group" aria-label={`Start ${snap.run.runId}`}>
+            START {snap.run.runId} ·
+            <button type="button" className="pb pri" onClick={() => sim.play()} aria-label="Start live" data-tip="Run it with the live view · Space" data-testid="play">
+              {GLYPH.running} Live
+            </button>
+            <button type="button" className="pb" onClick={props.onStartHeadless} data-tip="No live view, as fast as lockstep allows: the Experiments monitor follows it" data-testid="ready-headless">
+              ⇥ Headless
+            </button>
+          </span>
+          <span className="ready-sum muted mono" data-testid="ready-summary">
+            {snap.mode} · {snap.run.scenarioId} v{snap.run.scenarioVersion} · seed {snap.run.seed} · profile {profileLabel()}
+          </span>
+        </>
+      ) : snap.running ? (
         <button type="button" className="pb pri" onClick={() => sim.pause()} aria-label="Pause" data-tip="Pause · Space" data-testid="pause">
           {GLYPH.paused}
         </button>
@@ -89,15 +115,12 @@ function Transport(props: PlayerProps & { replay: boolean }) {
         ))}
       </select>
       {snap.run ? (
-        // A scenario run's time mode is part of the run (header, runConfigHash): read-only while it is loaded.
-        // Changing it starts a new run of the same scenario version (2026-10-09).
+        // A scenario run has its time mode as part of the run (header, runConfigHash): read-only while it is loaded. Changing it starts a new run of the same scenario version.
         <>
           <span className="pb sm static mono" data-testid="time-mode" title="The time mode is part of the run. Re-run to change it.">
             {snap.mode}
           </span>
-          <button type="button" className="pb sm" onClick={() => !busy && props.onRerunInMode(otherMode)} aria-disabled={busy} data-testid="rerun-in-mode">
-            re-run in {otherMode}
-          </button>
+          <RerunSplit busy={busy} runId={snap.run.runId} commands={props.rerunCommands} onRerun={props.onRerun} />
         </>
       ) : (
         <select className="pb sm" value={snap.mode} aria-label="Time mode" onChange={(e) => sim.setMode(e.target.value === "realtime" ? "realtime" : "lockstep")}>
@@ -295,5 +318,66 @@ function Telemetry(props: { snap: SimSnapshot; recorded: boolean }) {
         <span className={`v mono ${recorded ? "ok" : "muted"}`}>{recorded ? "● stored" : "○ none"}</span>
       </div>
     </div>
+  );
+}
+
+/** The recording profile named in the summary of a run waiting to start: the choice made for the next run, which the loaded run was started with. */
+function profileLabel(): string {
+  const sel = getRecordingSelection();
+  return sel.optOut ? "not recorded" : sel.preset === "custom" ? "custom" : String(sel.preset);
+}
+
+/**
+ * The split Re-run button (U-010 section 4): the label repeats the last choice and a click does it again; the caret opens the three ways (live in lockstep `Ctrl+R`, live in
+ * realtime, headless `Ctrl+Shift+R`) and says what they share: the scenario, the configuration, the seed and the commands of the run.
+ */
+function RerunSplit(props: { busy: boolean; runId: string; commands: number; onRerun: (how: RerunChoice) => void }) {
+  const [last, setLast] = useState<RerunChoice>("live-lockstep");
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+  const run = (how: RerunChoice) => {
+    if (props.busy) return;
+    setLast(how);
+    setOpen(false);
+    props.onRerun(how);
+  };
+  const items: readonly { how: RerunChoice; key?: string }[] = [{ how: "live-lockstep", key: "Ctrl+R" }, { how: "live-realtime" }, { how: "headless", key: "Ctrl+Shift+R" }];
+  return (
+    <span className="rerun-split" ref={box}>
+      <button type="button" className="pb sm" onClick={() => run(last)} aria-disabled={props.busy} data-testid="rerun" data-tip={`Run it again: ${RERUN_WORDS[last]}`}>
+        ⟲ Re-run{last === "live-lockstep" ? "" : ` · ${RERUN_WORDS[last]}`}
+      </button>
+      <button type="button" className="pb sm caret" aria-haspopup="menu" aria-expanded={open} aria-label="Re-run: choose how" onClick={() => setOpen((o) => !o)} data-testid="rerun-menu">
+        ▾
+      </button>
+      {open && (
+        <div className="rerun-pop" role="menu" aria-label="Re-run" data-testid="rerun-pop">
+          {items.map((it) => (
+            <button key={it.how} type="button" role="menuitem" className="tb" onClick={() => run(it.how)} data-testid={`rerun-${it.how}`}>
+              re-run {RERUN_WORDS[it.how]}
+              {it.key && <span className="k"> {it.key}</span>}
+            </button>
+          ))}
+          <p className="muted mono rerun-same" data-testid="rerun-same">
+            same scenario, config, seed and the {props.commands} command{props.commands === 1 ? "" : "s"} of {props.runId}
+          </p>
+        </div>
+      )}
+    </span>
   );
 }

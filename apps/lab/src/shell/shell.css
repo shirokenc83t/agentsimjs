@@ -103,3 +103,13 @@
 .top.nat .sp { flex: 0 0 0; }
 /* The layout select keeps one width whatever the layout is called: a long name is cut, never pushes the bar into folding. */
 .layout-seg select { max-width: 120px; text-overflow: ellipsis; }
+
+/* READY (U-010 section 4): the launch group takes the place of the play button until a run is started or stepped; the Re-run split button. */
+.ready-start { display: inline-flex; align-items: center; gap: 6px; padding-right: 4px; color: var(--fg2); white-space: nowrap; }
+.ready-start .pb.pri { background: var(--ac); color: var(--acfg); }
+.ready-sum { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; font-size: var(--type-label-size); }
+.rerun-split { position: relative; display: inline-flex; }
+.rerun-split .caret { padding: 0 6px; border-left: 0; }
+.rerun-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; display: flex; flex-direction: column; min-width: 260px; padding: 2px; background: var(--bg2); border: 1px solid var(--ln2); }
+.rerun-pop .tb { justify-content: flex-start; height: 26px; }
+.rerun-same { margin: 4px 8px 4px; font-size: var(--type-label-size); white-space: normal; }

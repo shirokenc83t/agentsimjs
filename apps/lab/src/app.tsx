@@ -48,6 +48,7 @@ export function App() {
   const builtinRef = useRef<string | undefined>(undefined);
   const enterLogsRef = useRef<() => void>(() => {});
   const cycleLayoutRef = useRef<() => void>(() => {});
+  const rerunKeyRef = useRef<(how: "live-lockstep" | "headless") => void>(() => {});
   const selectLayoutRef = useRef<(name: string | undefined) => void>(() => {});
   const [run, setRun] = useState<LabRun | undefined>(undefined);
   const [runBusy, setRunBusy] = useState(false);
@@ -90,6 +91,11 @@ export function App() {
     [startRun, storage, sim, run],
   );
   const otherMode = snap.mode === "realtime" ? "lockstep" : "realtime";
+  rerunKeyRef.current = (how) => {
+    if (!run || runBusy || status.state !== "ready") return;
+    if (how === "headless") runHeadless();
+    else rerunInMode("lockstep");
+  };
   const runWithConfig = useCallback(
     (runConfig: unknown) => run && startRun(async () => (await loadRunController()).startRun(storage, sim, run.scenario, run.loaded.scenarioVersion, runConfig, run.header.label)),
     [startRun, storage, sim, run],
@@ -150,6 +156,12 @@ export function App() {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "l") {
         e.preventDefault();
         setThemeRef.current(getThemeState().resolved === "dark" ? "light" : "dark");
+        return;
+      }
+      // Ctrl+R re-runs the run live in lockstep, Ctrl+Shift+R headless (the page is not reloaded by them): the player's Re-run menu has the keys in it.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        rerunKeyRef.current(e.shiftKey ? "headless" : "live-lockstep");
         return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
@@ -408,8 +420,8 @@ export function App() {
       ...agentCommands,
       { id: "run.config", title: "Open run configuration", group: "Run", run: () => setWorkspace("configurations") },
       { id: "run.resimWindow", title: "Re-simulate window…", group: "Run", disabled: !ready || !view?.runId, run: () => void resimulateWindow() },
-      { id: "run.headless", title: rerunCommands > 0 ? "Re-run headless" : "Run headless", group: "Run", disabled: !ready || runBusy || !run, run: () => runHeadless() },
-      { id: "run.rerun", title: "Re-run (same scenario version and run configuration)", group: "Run", disabled: !ready || runBusy || !run, run: () => rerunCurrent() },
+      { id: "run.headless", title: rerunCommands > 0 ? "Re-run headless" : "Run headless", keys: "Ctrl+Shift+R", group: "Run", disabled: !ready || runBusy || !run, run: () => runHeadless() },
+      { id: "run.rerun", title: "Re-run live · lockstep (same scenario, config, seed and commands)", group: "Run", keys: "Ctrl+R", disabled: !ready || runBusy || !run, run: () => rerunCurrent() },
       {
         id: "run.rerunMode",
         title: `Re-run in ${otherMode} (new run, time mode changed)`,
@@ -493,7 +505,13 @@ export function App() {
             compact={workspace === "configurations" || workspace === "data" || workspace === "settings"}
             recorded={run?.header.recording === "stored"}
             busy={runBusy}
-            onRerunInMode={(mode) => run && rerunInMode(mode)}
+            onRerun={(how) => {
+              if (!run) return;
+              if (how === "headless") runHeadless();
+              else void rerunInMode(how === "live-realtime" ? "realtime" : "lockstep");
+            }}
+            onStartHeadless={() => runHeadless()}
+            rerunCommands={rerunCommands}
             onScrubBack={setReplayRun}
             onBackToLive={() => setReplayRun(undefined)}
           />

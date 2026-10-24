@@ -16,14 +16,15 @@ async function header(page: Page) {
 // 2026-10-09: the time mode is part of the run (header, runConfigHash). While a run is loaded it is
 // read-only; changing it starts a new run of the same scenario version with the run configuration's timeMode
 // changed. (The worker also refuses a mid-run change: sim-host.test.ts.)
-test("the time mode is read-only during a run; 're-run in realtime' starts a new run with new hashes", async ({ page }) => {
+test("the time mode is read-only during a run; the Re-run menu's live realtime starts a new run with new hashes", async ({ page }) => {
   await loadDemo(page);
   await expect(page.getByRole("combobox", { name: "Time mode" })).toHaveCount(0);
   await expect(page.getByTestId("time-mode")).toHaveText("lockstep");
   const before = await header(page);
   expect(before.mode).toBe("lockstep");
 
-  await page.getByTestId("rerun-in-mode").click();
+  await page.getByTestId("rerun-menu").click();
+  await page.getByTestId("rerun-live-realtime").click();
   await expect(page.getByTestId("time-mode")).toHaveText("realtime");
   const after = await header(page);
   expect(after.runId).not.toBe(before.runId);
@@ -37,7 +38,8 @@ test("the time mode is read-only during a run; 're-run in realtime' starts a new
   await expect(page.getByTestId("status-tick")).toHaveText("tick 1");
 
   // And back: lockstep again gives the original run configuration hash (lockstep is the default, written by omission).
-  await page.getByTestId("rerun-in-mode").click();
+  await page.getByTestId("rerun-menu").click();
+  await page.getByTestId("rerun-live-lockstep").click();
   await expect(page.getByTestId("time-mode")).toHaveText("lockstep");
   const back = await header(page);
   expect(back.runConfigHash).toBe(before.runConfigHash);

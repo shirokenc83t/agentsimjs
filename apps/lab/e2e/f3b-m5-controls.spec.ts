@@ -68,3 +68,54 @@ test("when the top bar is too narrow the layout controls fold into one `layout �
   await expect(page.getByTestId("layout-fold")).toHaveCount(0);
   await expect(page.getByTestId("layout-select")).toBeVisible();
 });
+
+test("a run waits in READY at tick 0 with the choice live or headless; nothing runs until it is made; Live starts it, Step and the keys still work, Headless opens the monitor", async ({ page }) => {
+  test.setTimeout(120_000);
+  await loadDemo(page);
+  const ready = page.getByTestId("ready-start");
+  await expect(ready).toContainText("START run-000001");
+  await expect(page.getByTestId("ready-summary")).toContainText(/lockstep · f1-demo v\d+ · seed \d+ · profile default-research/);
+  await expect(page.getByTestId("status-tick")).toHaveText("tick 0");
+  await page.waitForTimeout(1200);
+  await expect(page.getByTestId("status-tick")).toHaveText("tick 0"); // nothing ran while it waited
+
+  // Step is a way of going live, paused: READY is over and the run is where the step took it.
+  await page.getByTestId("step").click();
+  await expect(page.getByTestId("status-tick")).toHaveText("tick 1");
+  await expect(ready).toHaveCount(0);
+
+  // A new run is READY again; Live starts it.
+  await page.keyboard.press("Control+r");
+  await expect(page.getByTestId("run-label")).toContainText("run-000002");
+  await expect(page.getByTestId("ready-start")).toContainText("START run-000002");
+  await page.getByTestId("play").click();
+  await expect(page.getByTestId("pause")).toBeVisible();
+  await expect(page.getByTestId("ready-start")).toHaveCount(0);
+  await page.getByTestId("pause").click();
+
+  // Headless from READY: the Experiments monitor follows the run.
+  await page.keyboard.press("Control+r");
+  await expect(page.getByTestId("ready-start")).toBeVisible();
+  await page.getByTestId("ready-headless").click();
+  await expect(page.getByTestId("workspace-experiments")).toBeVisible();
+  await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 60_000 });
+});
+
+test("the player's Re-run is one split button: the label repeats the last choice and the menu has live lockstep, live realtime and headless, with what they share", async ({ page }) => {
+  test.setTimeout(120_000);
+  await loadDemo(page);
+  await expect(page.getByTestId("rerun")).toHaveText(/Re-run$/);
+  await expect(page.getByTestId("rerun-in-mode")).toHaveCount(0);
+  await page.getByTestId("rerun-menu").click();
+  await expect(page.getByTestId("rerun-live-lockstep")).toContainText("Ctrl+R");
+  await expect(page.getByTestId("rerun-live-realtime")).toBeVisible();
+  await expect(page.getByTestId("rerun-headless")).toContainText("Ctrl+Shift+R");
+  await expect(page.getByTestId("rerun-same")).toContainText("same scenario, config, seed and the 0 commands of run-000001");
+  await page.getByTestId("rerun-live-realtime").click();
+  await expect(page.getByTestId("time-mode")).toHaveText("realtime");
+  await expect(page.getByTestId("rerun")).toContainText("Re-run · live · realtime"); // the label repeats the last choice
+  // Ctrl+Shift+R is the headless re-run.
+  await page.keyboard.press("Control+Shift+R");
+  await expect(page.getByTestId("workspace-experiments")).toBeVisible();
+  await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 60_000 });
+});
