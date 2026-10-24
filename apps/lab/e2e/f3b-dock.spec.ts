@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, openWorkspace, runCommand } from "./helpers.ts";
+import { layoutControls, loadDemo, openWorkspace, runCommand } from "./helpers.ts";
 
 // F3b: the dock chrome (ADR-0042 §1, §7). Panels are numbered in their tabs; each has window buttons (float or dock, maximize, close) and a collapse for floating
 // windows; all of it is also a palette command; the Performance window floats in every workspace, collapsed; a dock can be saved under a name and comes back.
@@ -135,19 +135,26 @@ test("a floating window's title bar is a grip, the title, a summary and three la
 
 test("a dock saved under a name comes back, and it stays after a reload", async ({ page }) => {
   test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1600, height: 900 }); // wide enough that the layout controls are in the bar, not folded (they grow with a name and a delete button)
   await loadDemo(page);
   await page.getByTestId("wb-float-explorer").click();
   await expect.poll(async () => (await panel(page, "explorer"))?.location).toBe("floating");
 
+  await layoutControls(page);
   await page.getByTestId("layout-save").click();
+  await layoutControls(page);
   await page.getByTestId("layout-name-input").fill("explorer floating");
+  await layoutControls(page);
   await page.getByTestId("layout-name-input").press("Enter");
+  await layoutControls(page);
   await expect(page.getByTestId("layout-select")).toHaveValue("explorer floating");
 
   // Change the dock, then load the saved one.
   await page.getByTestId("wb-dock-explorer").click();
   await expect.poll(async () => (await panel(page, "explorer"))?.location).toBe("grid");
+  await layoutControls(page);
   await page.getByTestId("layout-select").selectOption("");
+  await layoutControls(page);
   await page.getByTestId("layout-select").selectOption("explorer floating");
   await expect.poll(async () => (await panel(page, "explorer"))?.location).toBe("floating");
 
@@ -157,14 +164,20 @@ test("a dock saved under a name comes back, and it stays after a reload", async 
   await page.reload();
   await expect(page.getByTestId("workspace-scene")).toBeVisible();
   await expect.poll(async () => (await panel(page, "explorer"))?.location, { timeout: 15_000 }).toBe("floating");
+  await layoutControls(page);
   await expect(page.getByTestId("layout-select").locator("option")).toHaveText(["autosaved", "explorer floating"]);
 
   // Reset puts the preset back; the named layout is still there and can be deleted.
+  await layoutControls(page);
   await page.getByTestId("layout-reset").click();
   await expect.poll(async () => (await panel(page, "explorer"))?.location).toBe("grid");
+  await layoutControls(page);
   await page.getByTestId("layout-select").selectOption("explorer floating");
+  await layoutControls(page);
   await expect(page.getByTestId("layout-delete")).toBeVisible();
+  await layoutControls(page);
   await page.getByTestId("layout-delete").click();
+  await layoutControls(page);
   await expect(page.getByTestId("layout-select").locator("option")).toHaveText(["autosaved"]);
 });
 
@@ -183,6 +196,7 @@ test("a workspace's only panel can be floated, docked back with its button, clos
   // Floated again, Reset layout restores the preset; closed, it brings the panel back.
   await page.getByTestId("wb-float-headlessMonitor").click();
   await expect.poll(async () => (await panel(page, "headlessMonitor"))?.location).toBe("floating");
+  await layoutControls(page);
   await page.getByTestId("layout-reset").click();
   await expect.poll(async () => (await panel(page, "headlessMonitor"))?.location).toBe("grid");
   await page.getByTestId("wb-close-headlessMonitor").click();
@@ -196,7 +210,65 @@ test("a workspace's only panel can be floated, docked back with its button, clos
   await page.getByTestId("wb-float-storage").click();
   await expect.poll(async () => (await panel(page, "storage"))?.location).toBe("floating");
   await page.getByTestId("wb-close-sqlConsole").click();
+  await layoutControls(page);
   await page.getByTestId("layout-reset").click();
   await expect.poll(async () => (await panel(page, "storage"))?.location).toBe("grid");
   await expect.poll(async () => (await panel(page, "sqlConsole"))?.location).toBe("grid");
+});
+
+test("the Debug has two layouts that ship with it, 'debug · default' and 'debug · two columns': proportions, the layout menu, Alt+L, savable under a name, and Reset goes back to the default", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await loadDemo(page);
+  await openWorkspace(page, "debug");
+  // A panel may be remounted while the dock lays out: look again for a moment before saying it is not there.
+  const box = async (id: string) => {
+    for (let i = 0; i < 40; i++) {
+      const b = await page.getByTestId(id).boundingBox({ timeout: 1000 }).catch(() => null);
+      if (b) return b;
+      await page.waitForTimeout(100);
+    }
+    throw new Error(`no ${id}`);
+  };
+  const dock = async () => {
+    const b = await page.locator(".dv-dockview").first().boundingBox();
+    if (!b) throw new Error("no dock");
+    return b;
+  };
+  // The default: the right column is about 38 % of the dock, the Log above the Trace above the Inspector.
+  await expect.poll(async () => Math.abs((await box("event-list")).width / (await dock()).width - 0.38)).toBeLessThan(0.04);
+  const [log, trace, inspector] = [await box("event-list"), await box("trace-tree"), await box("inspector")];
+  expect(log.y).toBeLessThan(trace.y);
+  expect(trace.y).toBeLessThan(inspector.y);
+  expect(log.height).toBeGreaterThan(trace.height); // 46 % against 24 %
+
+  // Two columns: the Scene and the Timeline about 46 %, the Log full height (at least 420 px) next to them, the Trace over the Inspector in the last 26 %.
+  await layoutControls(page);
+  await expect(page.getByTestId("layout-select").locator("option")).toHaveText(["autosaved", "debug · default", "debug · two columns", "debug · logs"]);
+  await layoutControls(page);
+  await page.getByTestId("layout-select").selectOption("debug · two columns");
+  await expect.poll(async () => (await box("event-list")).width).toBeGreaterThanOrEqual(405); // the group is 420 px; its content is a little less
+  const two = { log: await box("event-list"), trace: await box("trace-tree"), inspector: await box("inspector"), d: await dock() };
+  expect(Math.abs(two.log.width / two.d.width - 0.28)).toBeLessThan(0.06);
+  expect(two.log.height).toBeGreaterThan(two.trace.height + two.inspector.height); // the Log is the whole height of its column
+  expect(two.trace.y).toBeLessThan(two.inspector.y);
+  expect(two.trace.x).toBeGreaterThan(two.log.x + two.log.width - 4);
+
+  // Alt+L goes to the next layout of the workspace; it wraps to the default, and the menu shows where it is.
+  await page.keyboard.press("Alt+L");
+  await layoutControls(page);
+  await expect(page.getByTestId("layout-select")).toHaveValue("debug · default");
+  await expect.poll(async () => Math.abs((await box("event-list")).width / (await dock()).width - 0.38)).toBeLessThan(0.04);
+  await runCommand(page, "Layout: debug · two columns");
+  await layoutControls(page);
+  await expect(page.getByTestId("layout-select")).toHaveValue("debug · two columns");
+
+  // It can be saved under a name (a layout that ships is not a named one), and Reset goes back to the workspace's own preset.
+  await layoutControls(page);
+  await expect(page.getByTestId("layout-save")).toBeEnabled();
+  await layoutControls(page);
+  await page.getByTestId("layout-reset").click();
+  await expect.poll(async () => Math.abs((await box("event-list")).width / (await dock()).width - 0.38)).toBeLessThan(0.04);
+  await layoutControls(page);
+  await expect(page.getByTestId("layout-select")).toHaveValue("");
 });

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, loadF2, openWorkspace, runCommand, step, waitForStorageReady } from "./helpers.ts";
+import { layoutControls, loadDemo, loadF2, openWorkspace, runCommand, step, waitForStorageReady } from "./helpers.ts";
 
 // F3b M3, fix round 1 (the designer's review of the observability panels): what the review found, each as a check that fails without the fix.
 
@@ -59,6 +59,7 @@ test("N1: the Logs are a layout of the Debug: the inspector fills the area with 
 
   await runCommand(page, "Open panel: Logs");
   await expect(page.getByTestId("log-inspector")).toBeVisible();
+  await layoutControls(page);
   await expect(page.getByTestId("layout-select")).toHaveValue("debug · logs");
   await expect(tabs.filter({ hasText: "SCENE" })).toHaveCount(0);
   await expect(page.getByTestId("timeline-canvas")).toBeVisible();
@@ -75,6 +76,7 @@ test("N1: the Logs are a layout of the Debug: the inspector fills the area with 
   // Back to debug: the dock as it was.
   await page.getByTestId("inspector-back").click();
   await expect(page.getByTestId("log-inspector")).toHaveCount(0);
+  await layoutControls(page);
   await expect(page.getByTestId("layout-select")).toHaveValue("");
   await expect.poll(async () => tabs.allTextContents()).toEqual(before);
   await expect(page.getByTestId("event-list")).toBeVisible();

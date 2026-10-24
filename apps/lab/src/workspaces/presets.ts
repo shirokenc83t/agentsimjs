@@ -11,6 +11,10 @@ export interface PresetPanel {
   readonly initialWidth?: number;
   /** Initial height (px) for panels below another: the Timeline is as tall as its lanes, not half the window. */
   readonly initialHeight?: number;
+  /** The same as a share of the dock (0 to 1), which wins when the dock has a size; `minWidthPx` keeps a column readable (the Log needs 420 px for its summary column). */
+  readonly initialWidthPct?: number;
+  readonly initialHeightPct?: number;
+  readonly minWidthPx?: number;
   /** A tab that does not take the focus of its group when the workspace is laid out: the panel the researcher came for stays in front, this one is a click away. */
   readonly background?: boolean;
   /** Laid out after the other docked panels (its number in the workspace is still its place in the list): a panel below the Scene alone is made once the column beside it exists. */
@@ -45,6 +49,18 @@ const OVERVIEW_WINDOW: PresetPanel = { id: "overview", floating: { width: 240, h
 const LEGEND_WINDOW: PresetPanel = { id: "legend", floating: { width: 340, height: 330, collapsed: true, host: "scene", stack: 1 } };
 
 /**
+ * The Debug as it opens (U-010 §3, "debug · default"): the Scene 62 % wide and 62 % high with the Timeline under it, and a right column of 38 % holding the Log (46 %), the Trace
+ * (24 %) and the Inspector (30 %). The Trace sits under the Log because it explains the record picked there. Panel numbers are the order of this list in every variant.
+ */
+const DEBUG_DEFAULT_PANELS: readonly PresetPanel[] = [
+  { id: "scene" },
+  { id: "timeline", position: { referencePanel: "scene", direction: "below" }, initialHeight: 190, initialHeightPct: 0.38, late: true },
+  { id: "eventList", position: { referencePanel: "scene", direction: "right" }, initialWidth: 500, initialWidthPct: 0.38 },
+  { id: "inspector", position: { referencePanel: "eventList", direction: "below" }, initialHeight: 210, initialHeightPct: 0.3 },
+  { id: "traceTree", position: { referencePanel: "inspector", direction: "above" }, initialHeight: 180, initialHeightPct: 0.24 },
+];
+
+/**
  * Scene workspace (UI-SPEC §3): The Scene in the middle, Explorer left, Inspector right. Timeline and the log
  * console join in F3.
  */
@@ -72,12 +88,7 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
     id: "debug",
     title: "Debug",
     panels: [
-      { id: "scene" },
-      { id: "timeline", position: { referencePanel: "scene", direction: "below" }, initialHeight: 190, late: true },
-      { id: "eventList", position: { referencePanel: "scene", direction: "right" }, initialWidth: 500 },
-      { id: "inspector", position: { referencePanel: "eventList", direction: "below" }, initialHeight: 210 },
-      // The Trace explains the record picked in the Log, so it sits under the Log (about 65 / 35 of what the Inspector leaves) and not in the Inspector's group.
-      { id: "traceTree", position: { referencePanel: "inspector", direction: "above" }, initialHeight: 180 },
+      ...DEBUG_DEFAULT_PANELS,
       PERF_WINDOW,
     ],
   },
@@ -99,6 +110,31 @@ export const DEBUG_LOGS_PRESET: WorkspacePreset = {
   id: "debug",
   title: "Debug",
   panels: [{ id: "logInspector" }, { id: "timeline", position: { referencePanel: "logInspector", direction: "below" }, initialHeight: 190, late: true }],
+};
+
+/**
+ * "debug · two columns" (U-010 §3): the Scene and the Timeline in a column of 46 %, the Log full height in a column of 28 % (at least 420 px), and the Trace (42 %) over the
+ * Inspector (58 %) in the last 26 %. A preset like the default: it becomes the working layout, which can be resized, saved under a name and reset.
+ */
+export const DEBUG_TWO_COLUMNS_PRESET: WorkspacePreset = {
+  id: "debug",
+  title: "Debug",
+  panels: [
+    { id: "scene" },
+    { id: "timeline", position: { referencePanel: "scene", direction: "below" }, initialHeight: 190, initialHeightPct: 0.38, late: true },
+    { id: "eventList", position: { referencePanel: "scene", direction: "right" }, initialWidth: 760, initialWidthPct: 0.54, minWidthPx: 420 },
+    { id: "inspector", position: { referencePanel: "eventList", direction: "right" }, initialWidth: 380, initialWidthPct: 0.26 },
+    { id: "traceTree", position: { referencePanel: "inspector", direction: "above" }, initialHeight: 320, initialHeightPct: 0.42 },
+    PERF_WINDOW,
+  ],
+};
+
+/** The presets of a workspace that can be put on as its working layout, by name (the first is the workspace's own). */
+export const LAYOUT_VARIANTS: Readonly<Partial<Record<WorkspaceId, readonly { readonly name: string; readonly preset: WorkspacePreset }[]>>> = {
+  debug: [
+    { name: "debug · default", preset: { id: "debug", title: "Debug", panels: [...DEBUG_DEFAULT_PANELS, PERF_WINDOW] } },
+    { name: "debug · two columns", preset: DEBUG_TWO_COLUMNS_PRESET },
+  ],
 };
 
 /** The layouts that ship with a workspace, by name. */

@@ -1,5 +1,5 @@
 import { GLYPH, useTheme, useUiContext, type ThemePreference } from "@agentsim/ui";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { ReplayDerived } from "../sim/run-source.ts";
 import type { WorkspaceId } from "../workspaces/presets.ts";
 
@@ -36,8 +36,39 @@ export interface TopBarProps {
  * the ◷ REPLAY segment while a recording is shown, and the palette. Plain token-styled elements: the shell is in the initial chunk.
  */
 export function TopBar(props: TopBarProps) {
+  // When the bar does not fit its row, the layout controls fold into one `layout ▾` button first (U-010 §8): the theme button and ctrl+k always stay. It is measured, not a
+  // width: what is in the bar (a derived replay's long segment, the name of the run) decides. It unfolds again when the room is back.
+  const bar = useRef<HTMLElement>(null);
+  const [folded, setFolded] = useState(false);
+  const needed = useRef(0);
+  useLayoutEffect(() => setFolded(false), [props.replaying, props.derived, props.runLabel, props.workspaces.length, props.layoutActive]);
+  useLayoutEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    // The room the content wants: every segment at its own width, none shrunk or clipped (tooltips hang outside the flow and are not counted).
+    const natural = (): number => {
+      el.classList.add("nat");
+      const w = Array.from(el.children).reduce((n, c) => n + (c as HTMLElement).offsetWidth, 0);
+      el.classList.remove("nat");
+      return w;
+    };
+    const fit = () => {
+      if (!folded) {
+        const want = natural();
+        if (want > el.clientWidth) {
+          needed.current = want;
+          setFolded(true);
+        }
+      } else if (el.clientWidth >= needed.current) setFolded(false);
+    };
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [folded, props.replaying, props.derived, props.runLabel, props.layoutActive]);
   return (
-    <header className="top" aria-label="Workspaces and run" data-testid="topbar">
+    <header className="top" aria-label="Workspaces and run" data-testid="topbar" ref={bar}>
       <div className="seg brand">▣ AgentSimJS-NG</div>
       <nav className="seg ws-nav" aria-label="Workspaces">
         {props.workspaces.map((w, i) => (
@@ -56,7 +87,7 @@ export function TopBar(props: TopBarProps) {
         ))}
       </nav>
       <div className="sp" />
-      <LayoutSegment {...props} />
+      {folded ? <LayoutMenu {...props} /> : <LayoutSegment {...props} />}
       <div className="seg r">
         <span className="k k-opt">run</span>
         <button
@@ -189,7 +220,7 @@ function ThemeMenu(props: { onTheme: (preference: ThemePreference) => void }) {
     <div className="theme-menu" ref={box}>
       <button
         type="button"
-        className="tb theme-btn glyph"
+        className="tb theme-btn glyph tip-right"
         aria-label={`Theme: ${theme.preference === "system" ? `system (${theme.resolved})` : theme.preference}`}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -218,6 +249,39 @@ function ThemeMenu(props: { onTheme: (preference: ThemePreference) => void }) {
               {it.label}
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The layout controls folded into one button: the same select, save, delete and reset, in a small menu under it. */
+function LayoutMenu(props: TopBarProps) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+  return (
+    <div className="seg r layout-fold" ref={box}>
+      <button type="button" className="tb tip-right" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} data-testid="layout-fold" data-tip={`Layout: ${props.layoutActive ?? "autosaved"}`}>
+        layout <span className="k">▾</span>
+      </button>
+      {open && (
+        <div className="layout-pop" role="menu" aria-label="Layout" data-testid="layout-menu">
+          <LayoutSegment {...props} />
         </div>
       )}
     </div>

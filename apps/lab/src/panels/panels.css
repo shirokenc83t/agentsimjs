@@ -592,3 +592,7 @@
 .tg-fields dd { margin: 0; overflow-wrap: anywhere; }
 .tg-json { margin: 0; padding: 6px 8px; overflow: auto; background: var(--bg0); border: 1px solid var(--ln); font-size: var(--type-mono-size); }
 .tg-keys { flex: none; margin: 0; padding: 2px 10px; border-top: 1px solid var(--ln); font-size: var(--type-label-size); }
+.layout-fold { position: relative; }
+.layout-pop { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; padding: 4px 6px; background: var(--bg2); border: 1px solid var(--ln2); }
+.layout-pop .layout-seg { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.layout-pop .layout-seg .k-opt { display: inline; }

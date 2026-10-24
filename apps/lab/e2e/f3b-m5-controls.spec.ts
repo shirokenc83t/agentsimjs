@@ -42,3 +42,29 @@ test("the theme button and Ctrl+Shift+L change the theme, and the map and the Ti
   await page.getByTestId("theme-light").click();
   await expect.poll(async () => luminance(await pixel(page, "timeline-canvas", 40, 25))).toBeGreaterThan(dark + 60);
 });
+
+test("when the top bar is too narrow the layout controls fold into one `layout ▾` first: the theme button and ctrl+k stay, and the menu has the same controls", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1000, height: 700 });
+  await loadDemo(page);
+  await expect(page.getByTestId("layout-fold")).toBeVisible();
+  await expect(page.getByTestId("layout-select")).toHaveCount(0);
+  await expect(page.getByTestId("theme-button")).toBeVisible();
+  await expect(page.getByLabel("Command palette").first()).toBeVisible();
+  const right = async (id: string) => {
+    const b = await page.getByTestId(id).boundingBox();
+    return (b?.x ?? 0) + (b?.width ?? 0);
+  };
+  expect(await right("theme-button")).toBeLessThanOrEqual(1000);
+  await page.getByTestId("layout-fold").click();
+  await expect(page.getByTestId("layout-menu")).toBeVisible();
+  await expect(page.getByTestId("layout-select")).toBeVisible();
+  await expect(page.getByTestId("layout-save")).toBeVisible();
+  await expect(page.getByTestId("layout-reset")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("layout-menu")).toHaveCount(0);
+  // With room again the controls are back in the bar.
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await expect(page.getByTestId("layout-fold")).toHaveCount(0);
+  await expect(page.getByTestId("layout-select")).toBeVisible();
+});

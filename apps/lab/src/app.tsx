@@ -7,7 +7,7 @@ import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStor
 import type { PresetId } from "@agentsim/core";
 import { applyPreset, closePanel, dockPanel, floatPanel, focusNext, focusNumber, isFloating, openPanel, syncCollapsed, toggleCollapse, toggleMaximize } from "./workspaces/dock-actions.ts";
 import { deleteNamedLayout, layoutName, listNamedLayouts, readNamedLayout, saveNamedLayout } from "./workspaces/layouts.ts";
-import { BUILTIN_LAYOUTS, DEBUG_LOGS_LAYOUT, LAYOUT_NAMESPACE, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
+import { BUILTIN_LAYOUTS, DEBUG_LOGS_LAYOUT, LAYOUT_NAMESPACE, LAYOUT_VARIANTS, layoutKey, WORKSPACES, type WorkspaceId } from "./workspaces/presets.ts";
 import { PANELS, type PanelId } from "./workspaces/registry.tsx";
 import { LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadResimController, loadRunController } from "./workspaces/registry.tsx";
 import { Player } from "./shell/player.tsx";
@@ -40,11 +40,15 @@ export function App() {
   const [activeLayout, setActiveLayout] = useState<string | undefined>(undefined);
   // A layout that ships with the app, when one is open (the Debug's "debug · logs"): the dock as it was is kept here to put it back, and the autosave of the working layout waits.
   const [builtinActive, setBuiltinActive] = useState<string | undefined>(undefined);
+  // The preset of the workspace that is on as its working layout ("debug · two columns"), when it is not the default one.
+  const [variant, setVariant] = useState<string | undefined>(undefined);
   const stash = useRef<unknown>(undefined);
   const autosave = useRef(true);
   const workspaceRef = useRef<WorkspaceId>("scene");
   const builtinRef = useRef<string | undefined>(undefined);
   const enterLogsRef = useRef<() => void>(() => {});
+  const cycleLayoutRef = useRef<() => void>(() => {});
+  const selectLayoutRef = useRef<(name: string | undefined) => void>(() => {});
   const [run, setRun] = useState<LabRun | undefined>(undefined);
   const [runBusy, setRunBusy] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
@@ -153,6 +157,12 @@ export function App() {
         setPaletteOpen((o) => !o);
         return;
       }
+      // Alt+L: the next layout that ships with the workspace (its presets), from anywhere.
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === "KeyL") {
+        e.preventDefault();
+        cycleLayoutRef.current();
+        return;
+      }
       // Alt+number: the panel with that number in the open workspace (the number is in its tab).
       if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code) && dockRef.current && presetRef.current) {
         e.preventDefault();
@@ -179,6 +189,7 @@ export function App() {
     stash.current = undefined;
     setBuiltinActive(undefined);
     setActiveLayout(undefined);
+    setVariant(undefined);
     setLayoutEpoch((n) => n + 1);
   }, [storage]);
 
@@ -192,6 +203,7 @@ export function App() {
       stash.current = undefined;
       setBuiltinActive(undefined);
       setActiveLayout(undefined);
+      setVariant(undefined);
       setLayoutEpoch((n) => n + 1);
     });
   }, [storage]);
@@ -200,6 +212,7 @@ export function App() {
   const storageReady = status.state === "ready";
   useEffect(() => {
     setActiveLayout(undefined);
+    setVariant(undefined);
     // Another workspace is a dock of its own: what a layout of the last one held is gone with it.
     autosave.current = true;
     stash.current = undefined;
@@ -242,11 +255,18 @@ export function App() {
     setActiveLayout(undefined);
   }, []);
   enterLogsRef.current = () => enterBuiltin(DEBUG_LOGS_LAYOUT);
+  const cycleLayout = useCallback(() => {
+    const list = LAYOUT_VARIANTS[workspace] ?? [];
+    if (list.length === 0) return;
+    const at = list.findIndex((v) => v.name === (variant ?? list[0]?.name));
+    selectLayoutRef.current((list[(at + 1) % list.length] as { name: string }).name);
+  }, [workspace, variant]);
+  cycleLayoutRef.current = cycleLayout;
   const saveLayout = useCallback(
     (raw: string) => {
       const name = layoutName(raw);
       const api = dockRef.current;
-      if (!name || !api || !storageReady || builtins.some((b) => b.name === name) || builtinRef.current !== undefined) return;
+      if (!name || !api || !storageReady || builtins.some((b) => b.name === name) || (LAYOUT_VARIANTS[workspace] ?? []).some((v) => v.name === name) || builtinRef.current !== undefined) return;
       void saveNamedLayout(storage, workspace, name, api.toJSON())
         .then(() => listNamedLayouts(storage, workspace))
         .then((l) => {
@@ -259,6 +279,16 @@ export function App() {
   const selectLayout = useCallback(
     (name: string | undefined) => {
       const api = dockRef.current;
+      const chosen = name === undefined ? undefined : (LAYOUT_VARIANTS[workspace] ?? []).find((v) => v.name === name);
+      if (chosen !== undefined) {
+        // A preset of the workspace put on as its working layout: it is saved as the working layout like any other, and can be resized, saved under a name and reset.
+        if (builtinRef.current !== undefined) leaveBuiltin();
+        if (api) applyPreset(api, chosen.preset);
+        autosave.current = true;
+        setActiveLayout(undefined);
+        setVariant(chosen.name);
+        return;
+      }
       if (name !== undefined && (BUILTIN_LAYOUTS[workspace] ?? []).some((b) => b.name === name)) return enterBuiltin(name);
       if (builtinRef.current !== undefined) {
         // From a layout that ships with the app to the working layout or a named one: the dock is put back first (the working layout), a named one then replaces it.
@@ -282,6 +312,7 @@ export function App() {
     },
     [storage, storageReady, workspace, enterBuiltin, leaveBuiltin],
   );
+  selectLayoutRef.current = selectLayout;
   const deleteLayout = useCallback(() => {
     if (!activeLayout || !storageReady || builtinRef.current !== undefined) return;
     const name = activeLayout;
@@ -392,6 +423,8 @@ export function App() {
       },
       { id: "db.browser", title: "Open Storage browser", group: "Storage", run: () => setWorkspace("data") },
       { id: "layout.reset", title: "Reset layout", group: "Layout", run: resetLayout },
+      ...(LAYOUT_VARIANTS[workspace] ?? []).map((v) => ({ id: `layout.variant.${v.name}`, title: `Layout: ${v.name}`, group: "Layout", run: () => selectLayout(v.name) })),
+      ...((LAYOUT_VARIANTS[workspace]?.length ?? 0) > 1 ? [{ id: "layout.next", title: "Layout: next", group: "Layout", keys: "Alt+L", run: cycleLayout }] : []),
       { id: "layout.resetAll", title: "Reset all workspace layouts", group: "Layout", run: resetLayouts },
       ...THEME_PREFERENCES.map((t) => ({ id: `theme.${t}`, title: `Theme: ${t}`, group: "Theme", run: () => setTheme(t) })),
       { id: "theme.toggle", title: "Theme: toggle dark and light", group: "Theme", keys: "ctrl+shift+L", run: () => setTheme(getThemeState().resolved === "dark" ? "light" : "dark") },
@@ -399,7 +432,7 @@ export function App() {
       { id: "panel.open.traceGraph", title: "Open panel: Trace graph", group: "Panel", run: () => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, "traceGraph") },
       ...panelCommands,
     ],
-    [ready, sim, storage, resetLayouts, resetLayout, setTheme, openPerformance, resimulateWindow, view?.runId, loadDemo, loadReference, rerunCurrent, rerunInMode, runHeadless, rerunCommands, otherMode, runBusy, run, agentCommands, panelCommands],
+    [ready, sim, storage, resetLayouts, resetLayout, workspace, selectLayout, cycleLayout, setTheme, openPerformance, resimulateWindow, view?.runId, loadDemo, loadReference, rerunCurrent, rerunInMode, runHeadless, rerunCommands, otherMode, runBusy, run, agentCommands, panelCommands],
   );
 
   return (
@@ -411,8 +444,8 @@ export function App() {
             workspaces={WORKSPACES}
             workspace={workspace}
             onWorkspace={setWorkspace}
-            layouts={[...builtins.map((b) => b.name), ...layouts]}
-            layoutActive={activeLayout}
+            layouts={[...(LAYOUT_VARIANTS[workspace] ?? []).map((v) => v.name), ...builtins.map((b) => b.name), ...layouts]}
+            layoutActive={activeLayout ?? variant}
             layoutBuiltin={builtinActive !== undefined}
             onSelectLayout={selectLayout}
             onSaveLayout={saveLayout}

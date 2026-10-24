@@ -156,11 +156,14 @@ export function addPresetPanel(api: DockviewApi, preset: WorkspacePreset, p: Pre
   }
   const referenced = p.position && api.getPanel(p.position.referencePanel);
   const front = api.activePanel;
+  // A size given as a share of the dock wins when the dock has a size; the width keeps its minimum.
+  const width = p.initialWidthPct !== undefined && api.width > 0 ? Math.max(p.minWidthPx ?? 0, Math.round(api.width * p.initialWidthPct)) : p.initialWidth;
+  const height = p.initialHeightPct !== undefined && api.height > 0 ? Math.round(api.height * p.initialHeightPct) : p.initialHeight;
   api.addPanel({
     ...base,
     ...(referenced && p.position ? { position: { referencePanel: p.position.referencePanel, direction: p.position.direction } } : {}),
-    ...(p.initialWidth === undefined ? {} : { initialWidth: p.initialWidth }),
-    ...(p.initialHeight === undefined ? {} : { initialHeight: p.initialHeight }),
+    ...(width === undefined ? {} : { initialWidth: width }),
+    ...(height === undefined ? {} : { initialHeight: height }),
   });
   // A background tab: the panel that was in front stays there.
   if (p.background) front?.api.setActive();
@@ -172,4 +175,9 @@ export function applyPreset(api: DockviewApi, preset: WorkspacePreset): void {
   // The floating windows come last (they sit inside the panels already laid out), and a `late` panel after the docked ones beside it.
   const order = [...preset.panels.filter((p) => !p.floating && !p.late), ...preset.panels.filter((p) => !p.floating && p.late), ...preset.panels.filter((p) => p.floating)];
   for (const p of order) addPresetPanel(api, preset, p);
+  // A column that must stay readable (the Log: 420 px for its summary column) is widened to its minimum once its neighbours are in place; they give the room.
+  for (const p of preset.panels) {
+    const panel = p.minWidthPx === undefined || p.floating ? undefined : api.getPanel(p.id);
+    if (panel && p.minWidthPx !== undefined && panel.group.width > 0 && panel.group.width < p.minWidthPx) panel.api.setSize({ width: p.minWidthPx });
+  }
 }

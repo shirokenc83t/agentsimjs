@@ -209,3 +209,9 @@ export async function setReplayCursor(page: Page, seconds: number) {
   await expect(page.getByTestId("replay-time")).toContainText(`${seconds.toFixed(1)} s /`);
 }
 
+
+/** The layout controls of the top bar: when the bar is too narrow for them they are folded into `layout ▾`; this opens that menu (and does nothing when they are in the bar). */
+export async function layoutControls(page: Page): Promise<void> {
+  const fold = page.getByTestId("layout-fold");
+  if ((await fold.count()) > 0 && (await page.getByTestId("layout-menu").count()) === 0) await fold.click();
+}

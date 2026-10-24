@@ -8,7 +8,7 @@
 .top .brand { background: var(--bg3); color: var(--fg); font-weight: 600; letter-spacing: 0.04em; }
 .top .k, .bot .k { color: var(--fg3); }
 .sp { flex: 1; }
-.ws { appearance: none; border: 0; background: transparent; color: var(--fg2); padding: 0 11px; height: 28px; cursor: pointer; font: inherit; }
+.ws { appearance: none; border: 0; background: transparent; color: var(--fg2); padding: 0 8px; height: 28px; cursor: pointer; font: inherit; }
 .ws b { color: var(--fg3); font-weight: 400; margin-right: 4px; }
 .ws:hover { color: var(--fg); background: var(--bg3); }
 .ws.on { background: var(--bg0); color: var(--fg); box-shadow: inset 0 2px 0 var(--ac); }
@@ -98,3 +98,8 @@
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 .bot .segbtn { appearance: none; font: inherit; color: inherit; background: transparent; border: 0; border-left: 1px solid var(--ln); cursor: pointer; }
 .bot .segbtn:hover { background: var(--bg3); color: var(--fg); }
+/* Measuring the bar: every segment at the width its content wants. */
+.top.nat .seg, .top.nat .ws-nav { flex-shrink: 0; }
+.top.nat .sp { flex: 0 0 0; }
+/* The layout select keeps one width whatever the layout is called: a long name is cut, never pushes the bar into folding. */
+.layout-seg select { max-width: 120px; text-overflow: ellipsis; }
