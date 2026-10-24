@@ -610,3 +610,10 @@
 .sql-res-head { flex: none; display: flex; align-items: center; gap: 6px; padding-right: 8px; background: var(--bg2); border-bottom: 1px solid var(--ln); }
 .sql-res-head .sql-status { flex: 1; min-width: 0; border-bottom: 0; background: transparent; }
 .sql-pinned { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+
+/* The run configuration without a rail (U-010 section 6): one column of at most 880 px with sticky section headers, a jump row of 30 px on top, all-inherited sections foldable. */
+.rc-form { position: relative; padding-top: 0; }
+.rc-jump { position: sticky; top: 0; z-index: 5; height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 14px; background: var(--bg0); border-bottom: 1px solid var(--ln); font-size: var(--type-mono-size); overflow: hidden; white-space: nowrap; }
+.rc-col { max-width: 880px; }
+.rc-form .fs > h4.sec { position: sticky; top: 30px; z-index: 4; margin: 0; padding: 4px 14px; background: var(--bg1); }
+.fs.folded > :not(h4) { display: none; }

@@ -140,6 +140,17 @@ function StatusGlyph(props: { status: SectionStatus | undefined }) {
   return <span className="st st-ok">✓</span>;
 }
 
+/** The jump row on top of the form: one chip a section, with its validation glyph. */
+const JUMPS = [
+  { id: "run", title: "RUN" },
+  { id: "planning", title: "PLANNING" },
+  { id: "drive", title: "DRIVE" },
+  { id: "beliefs", title: "BELIEFS" },
+  { id: "effective", title: "EFFECTIVE" },
+  { id: "presets", title: "PRESETS" },
+] as const;
+const JUMP_ROW_PX = 30;
+
 function RunConfigEditor(props: { loaded: Loaded }) {
   const { view, version, run } = props.loaded;
   const current = useCurrentRun();
@@ -151,6 +162,26 @@ function RunConfigEditor(props: { loaded: Loaded }) {
   const [jsonOpen, setJsonOpen] = useState(true);
   const [jsonW, setJsonW] = useState<number | undefined>(undefined);
   const body = useRef<HTMLDivElement>(null);
+  const form = useRef<HTMLDivElement>(null);
+  // A section whose fields are all inherited can fold to one line ("7 inherited"); the jump row on top goes to a section by scrolling the form, nothing else.
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const toggleFold = (id: string) => setFolded((s) => (s.has(id) ? new Set([...s].filter((x) => x !== id)) : new Set([...s, id])));
+  const [rowCounts, setRowCounts] = useState<Readonly<Record<string, number>>>({});
+  useEffect(() => {
+    const el = form.current;
+    if (!el) return;
+    const next: Record<string, number> = {};
+    for (const sec of Array.from(el.querySelectorAll<HTMLElement>("section.fs[data-section]"))) next[sec.dataset["section"] as string] = sec.querySelectorAll(".rc-row").length;
+    setRowCounts((cur) => (Object.keys(next).length === Object.keys(cur).length && Object.entries(next).every(([k, v]) => cur[k] === v) ? cur : next));
+  });
+  const jumpTo = (id: string) => {
+    const f = form.current;
+    const sec = f?.querySelector<HTMLElement>(`section.fs[data-section="${id}"]`);
+    if (!f || !sec) return;
+    // The form scrolls under its sticky rows (the jump row and the section header); the panel and the page do not move.
+    const top = sec.getBoundingClientRect().top - f.getBoundingClientRect().top + f.scrollTop - JUMP_ROW_PX;
+    f.scrollTo({ top: Math.max(0, top) });
+  };
   const clampW = (w: number) => Math.round(Math.max(220, Math.min((body.current?.clientWidth ?? 1200) - 320, w)));
   const dragSplit = (e: PointerEvent<HTMLDivElement>) => {
     if (e.buttons !== 1 || !body.current) return;
@@ -196,7 +227,15 @@ function RunConfigEditor(props: { loaded: Loaded }) {
     <div className="panel run-config rc" data-testid="run-config-panel">
       <div ref={body} className="rc-body" style={{ gridTemplateColumns: jsonOpen ? `minmax(0, 1fr) 6px ${jsonW === undefined ? "36%" : `${jsonW}px`}` : "minmax(0, 1fr)" }}>
         <FieldErrorProvider value={error}>
-          <div className="rc-form">
+          <div className="rc-form" ref={form}>
+            <nav className="rc-jump mono" aria-label="Sections of the run configuration" data-testid="rc-jump">
+              {JUMPS.map((j) => (
+                <button key={j.id} type="button" className="kt" onClick={() => jumpTo(j.id)} data-testid={`rc-jump-${j.id}`}>
+                  {j.title} {j.id === "effective" ? <span className="muted">{validation.ok ? validation.resolved.agents.length : ""}</span> : j.id === "presets" ? null : <StatusGlyph status={status[j.id]} />}
+                </button>
+              ))}
+            </nav>
+            <div className="rc-col">
             <p className="rc-meta mono">
               {draft.scenario.id} v{draft.scenario.version} · {changes === 0 ? "as the run" : `draft · ${changes} change${changes === 1 ? "" : "s"}`}
               <span className="sp" />
@@ -204,11 +243,16 @@ function RunConfigEditor(props: { loaded: Loaded }) {
                 {jsonOpen ? "▸ fold JSON" : "◂ JSON"}
               </button>
             </p>
-            <section className="fs" data-section="run">
+            <section className={`fs${folded.has("run") ? " folded" : ""}`} data-section="run">
               <h4 className="sec">
                 <b>1 · RUN</b>
                 <span className="rule" />
                 <span data-testid="rc-status-run"><StatusGlyph status={status.run} /></span>
+                {draft.seed === undefined && draft.timeMode === undefined && (rowCounts["run"] ?? 0) > 0 && (
+                  <button type="button" className="kt" aria-pressed={folded.has("run")} onClick={() => toggleFold("run")} data-testid="rc-fold-run">
+                    {folded.has("run") ? "▸" : "▾"} {rowCounts["run"]} inherited
+                  </button>
+                )}
               </h4>
               <NumberField
                 label="seed"
@@ -230,11 +274,16 @@ function RunConfigEditor(props: { loaded: Loaded }) {
               />
             </section>
 
-            <section className="fs" data-testid="rc-planning" data-section="planning">
+            <section className={`fs${folded.has("planning") ? " folded" : ""}`} data-testid="rc-planning" data-section="planning">
               <h4 className="sec">
                 <b>2 · PLANNING</b>
                 <span className="rule" />
                 <span data-testid="rc-status-planning"><StatusGlyph status={status.planning} /></span>
+                {countSet(getEntry(draft, "planning", pScope)) === 0 && (rowCounts["planning"] ?? 0) > 0 && (
+                  <button type="button" className="kt" aria-pressed={folded.has("planning")} onClick={() => toggleFold("planning")} data-testid="rc-fold-planning">
+                    {folded.has("planning") ? "▸" : "▾"} {rowCounts["planning"]} inherited
+                  </button>
+                )}
                 <ScopeSelect label="Planning level" value={planningScope} scopes={planningScopes(view)} onChange={setPlanningScope} testId="rc-planning-scope" setCount={(s) => countSet(getEntry(draft, "planning", s))} />
               </h4>
               <OptionField label="planner" sub="algorithm or strategy" value={kind === "inherit" ? undefined : kind} options={PLANNERS} inheritLabel="(inherit)" onChange={setPlanner} testId="rc-planner" />
@@ -268,11 +317,16 @@ function RunConfigEditor(props: { loaded: Loaded }) {
               {pEntry?.costProfile !== undefined && <CostProfileForm value={pEntry.costProfile} onChange={(c) => setP(withField(pEntry, "costProfile", c))} testId="rc-profile" />}
             </section>
 
-            <section className="fs" data-testid="rc-drive" data-section="drive">
+            <section className={`fs${folded.has("drive") ? " folded" : ""}`} data-testid="rc-drive" data-section="drive">
               <h4 className="sec">
                 <b>3 · GROUND DRIVE</b>
                 <span className="rule" />
                 <span data-testid="rc-status-drive"><StatusGlyph status={status.drive} /></span>
+                {countSet(getEntry(draft, "drive", dScope)) === 0 && (rowCounts["drive"] ?? 0) > 0 && (
+                  <button type="button" className="kt" aria-pressed={folded.has("drive")} onClick={() => toggleFold("drive")} data-testid="rc-fold-drive">
+                    {folded.has("drive") ? "▸" : "▾"} {rowCounts["drive"]} inherited
+                  </button>
+                )}
                 <ScopeSelect label="Drive level" value={driveScope} scopes={driveScopes(view)} onChange={setDriveScope} testId="rc-drive-scope" setCount={(s) => countSet(getEntry(draft, "drive", s))} />
               </h4>
               <OptionField label="drive" value={dEntry?.drive} options={DRIVES} onChange={(v) => setD(withField(dEntry, "drive", v))} testId="rc-drive" fieldKey="drive" />
@@ -291,11 +345,16 @@ function RunConfigEditor(props: { loaded: Loaded }) {
               <NumberField label="max steering rate" unit="rad/s" value={dEntry?.maxSteeringRateRadps} onChange={(v) => setD(withField(dEntry, "maxSteeringRateRadps", v))} testId="rc-steering-rate" fieldKey="maxSteeringRateRadps" />
             </section>
 
-            <section className="fs" data-testid="rc-beliefs" data-section="beliefs">
+            <section className={`fs${folded.has("beliefs") ? " folded" : ""}`} data-testid="rc-beliefs" data-section="beliefs">
               <h4 className="sec">
                 <b>4 · BELIEFS</b>
                 <span className="rule" />
                 <span data-testid="rc-status-beliefs"><StatusGlyph status={status.beliefs} /></span>
+                {countSet(getEntry(draft, "beliefs", bScope)) === 0 && (rowCounts["beliefs"] ?? 0) > 0 && (
+                  <button type="button" className="kt" aria-pressed={folded.has("beliefs")} onClick={() => toggleFold("beliefs")} data-testid="rc-fold-beliefs">
+                    {folded.has("beliefs") ? "▸" : "▾"} {rowCounts["beliefs"]} inherited
+                  </button>
+                )}
                 <ScopeSelect label="Beliefs level" value={beliefsScope} scopes={planningScopes(view)} onChange={setBeliefsScope} testId="rc-beliefs-scope" setCount={(s) => countSet(getEntry(draft, "beliefs", s))} />
               </h4>
               <OptionField
@@ -315,6 +374,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
 
             {validation.ok && <EffectiveTable agents={validation.resolved.agents} />}
             <Presets draft={draft} scenario={draft.scenario} onLoad={setDraft} />
+            </div>
           </div>
         </FieldErrorProvider>
 

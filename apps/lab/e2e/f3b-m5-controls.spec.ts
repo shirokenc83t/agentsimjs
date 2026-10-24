@@ -119,3 +119,28 @@ test("the player's Re-run is one split button: the label repeats the last choice
   await expect(page.getByTestId("workspace-experiments")).toBeVisible();
   await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 60_000 });
 });
+
+test("the run configuration is one column with a jump row that scrolls the form only: the panel, the jump row and the page stay where they are", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await loadDemo(page);
+  await openWorkspace(page, "configurations");
+  await page.getByRole("tab", { name: /Run configuration/ }).click();
+  const panel = page.getByTestId("run-config-panel");
+  await expect(panel).toBeVisible();
+  await expect(page.getByTestId("rc-nav-planning")).toHaveCount(0); // the rail is gone
+  const col = await page.locator(".rc-col").boundingBox();
+  expect(col?.width ?? 9999).toBeLessThanOrEqual(880);
+  const before = await panel.boundingBox();
+  const jumpBefore = await page.getByTestId("rc-jump").boundingBox();
+  await page.getByTestId("rc-jump-beliefs").click();
+  // The form scrolled as far as it could to put the Beliefs header under the jump row (a short form cannot scroll further); nothing else moved.
+  const box = (await page.locator('section.fs[data-section="beliefs"] > h4').boundingBox()) ?? { y: 0, height: 0 };
+  expect(box.y).toBeGreaterThanOrEqual((jumpBefore?.y ?? 0) + (jumpBefore?.height ?? 0) - 1);
+  expect(box.y + box.height).toBeLessThanOrEqual((before?.y ?? 0) + (before?.height ?? 0));
+  expect(await panel.boundingBox()).toEqual(before);
+  expect(await page.getByTestId("rc-jump").boundingBox()).toEqual(jumpBefore);
+  expect(await page.evaluate(() => window.scrollY + document.documentElement.scrollTop)).toBe(0);
+  // The section header stays under the jump row while its fields scroll.
+  await expect(page.getByTestId("rc-status-beliefs")).toBeVisible();
+});
