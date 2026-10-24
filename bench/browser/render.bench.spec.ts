@@ -85,7 +85,7 @@ test("render loop on the 1 km² reference world, agents moving and a path being 
   // The rover gets a slow onboard computer (500 expansions per tick, run configuration byAgent): its cross-map
   // A* (about 71k expansions) then spans about 140 ticks, so the measured window really runs while a path is
   // being planned. Set from the Run configuration panel, as a researcher would.
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-planning-scope").selectOption("byAgent.rover");
@@ -183,7 +183,7 @@ test("render loop on the 1 km² reference world with the belief overlay", async 
 
   // The run's agents plan with an eager refine (HPA* coarse path, A* legs), so that a run's own planning queries carry stages for the
   // stages overlay (F2b M4): a new run of the same scenario.
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const rc = page.getByTestId("run-config-panel");
   await rc.getByTestId("rc-planner").selectOption("strategy");
