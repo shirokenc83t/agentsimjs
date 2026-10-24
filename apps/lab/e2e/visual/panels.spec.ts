@@ -246,18 +246,23 @@ for (const theme of THEMES) {
       await expect(page.getByTestId("hm-volume")).toContainText(/stored \d/, { timeout: 15_000 });
       await page.locator("body").click({ position: { x: 1, y: 1 } });
       await settle(page);
-      const mask = ["hm-wall", "hm-eta", "hm-snapshots", "hm-speed", "hm-tps", "hm-tickcost", "hm-written", "hm-volume", "hm-writer", "hm-stream"].map((id) => page.getByTestId(id));
+      const mask = ["hm-wall", "hm-eta", "hm-snapshots", "hm-speed", "hm-tps", "hm-tickcost", "hm-written", "hm-volume", "hm-writer", "hm-stream", "hm-stream-note"].map((id) => page.getByTestId(id));
       mask.push(page.locator(".hm-spark"), page.locator(".hm-bar"));
       await expect(page.getByTestId("workspace-experiments")).toHaveScreenshot(`headless-monitor-${theme}.png`, { mask });
     });
 
     test("Analysis: trajectories, the timeline and the series of a headless run", async ({ page }) => {
       test.setTimeout(120_000);
+      // The rover is sent somewhere first: a headless run re-applies what the run shown had been told, so the recording has a path and its events.
+      await sendTo(page, "ugv-001", 50, 10);
+      await step(page, 1);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 15_000 });
       await runCommand(page, "Run headless");
       await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 60_000 });
       await page.getByTestId("hm-open-analysis").click();
       await expect(page.getByTestId("analysis")).toHaveAttribute("data-status", "ready", { timeout: 60_000 });
       await expect.poll(async () => Number(await page.getByTestId("map2d-canvas").getAttribute("data-trajectories")), { timeout: 15_000 }).toBeGreaterThanOrEqual(1);
+      await expect.poll(async () => Number(await page.getByTestId("map2d-canvas").getAttribute("data-markers")), { timeout: 15_000 }).toBeGreaterThan(0);
       await page.locator("body").click({ position: { x: 1, y: 1 } });
       await page.mouse.move(2, 2);
       await settle(page);
