@@ -123,13 +123,11 @@ for (const theme of THEMES) {
       await page.getByTestId("event-scroller").evaluate((el) => {
         el.scrollTop = 0;
       });
-      await expect(async () => {
-        await page.getByTestId("event-scroller").evaluate((el) => {
-          el.scrollTop = 0;
-        });
-        await expect(page.locator('[data-testid^="event-row-"]').first()).toContainText("start", { timeout: 1000 });
-      }).toPass({ timeout: 15_000 });
-      await page.locator('[data-testid^="event-row-"]').first().click();
+      // The start of the first action: found by what it says, wherever the list is scrolled to when the click lands.
+      await page.getByTestId("event-scroller").evaluate((el) => {
+        el.scrollTop = 0;
+      });
+      await page.locator('[data-testid^="event-row-"]').filter({ hasText: "start" }).first().click();
       await expect(page.getByTestId("trace-tree-selected")).toBeVisible();
       await expect(page.getByTestId("tt-children").locator('[data-testid^="trace-node-"]').first()).toBeVisible();
       await shot(page, "trace-tree-in-layout", theme);
