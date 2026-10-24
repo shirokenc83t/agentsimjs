@@ -10,7 +10,7 @@ const panel = async (page: Page, id: string) => (await dock(page)).find((p) => p
 
 test("panels are numbered in their tabs and every window button works by mouse", async ({ page }) => {
   await loadDemo(page);
-  for (const name of ["[1] Scene 3D", "[2] Explorer", "[3] Inspector"]) await expect(page.getByRole("tab", { name })).toBeVisible();
+  for (const name of ["[1] Scene", "[2] Explorer", "[3] Inspector"]) await expect(page.getByRole("tab", { name })).toBeVisible();
 
   await page.getByTestId("wb-float-explorer").click();
   await expect.poll(async () => (await panel(page, "explorer"))?.location).toBe("floating");
@@ -52,7 +52,7 @@ test("every panel action is a palette command, and Alt+number focuses a panel", 
 
   await runCommand(page, "Close the active panel");
   await expect.poll(async () => (await panel(page, "scene")) === undefined).toBe(true);
-  await runCommand(page, "Open panel: Scene 3D");
+  await runCommand(page, "Open panel: Scene");
   await expect.poll(async () => (await panel(page, "scene"))?.location).toBe("grid");
 });
 

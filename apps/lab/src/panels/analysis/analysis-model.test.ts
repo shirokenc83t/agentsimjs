@@ -1,6 +1,6 @@
 import { parseFilter, type TraceRecord } from "@agentsim/trace";
 import { describe, expect, it } from "vitest";
-import { agentsShown, boundsOf, buildMapSvg, computeSeriesOf, csvOfSeries, filterRecords, jsonlOfRecords, mapTransform, markersOf, metricSeriesOf, pointsInWindow, poseOfRecord, positionAt, seriesInWindow, trajectoriesOf, windowOfFilter, type MapModel, type MapPalette } from "./analysis-model.ts";
+import { agentsShown, boundsOf, buildMapSvg, computeSeriesOf, csvOfSeries, filterRecords, jsonlOfRecords, mapTransform, markersOf, metricSeriesOf, pointsInWindow, poseOfRecord, positionAt, seriesInWindow, stackedLabelYs, thinMarkers, trajectoriesOf, valueAtTime, windowOfFilter, type MapModel, type MapPalette } from "./analysis-model.ts";
 
 const pose = (seq: number, agentId: string, t: number, x: number, y: number, extra: Record<string, unknown> = {}): TraceRecord =>
   ({ id: `run-000001#${seq}`, runId: "run-000001", seq, simTime: t, wallTime: 1, agentId, source: `${agentId}/body`, kind: "observation", payload: { op: "pose", x, y, z: 0, speedMps: 1, soc: 0.9, ...extra } }) as TraceRecord;
@@ -175,5 +175,49 @@ describe("exports", () => {
     expect(t.px(100)).toBe(212);
     expect(t.py(0)).toBe(112);
     expect(t.py(50)).toBe(12);
+  });
+});
+
+describe("the markers drawn on a dense map", () => {
+  const mk = (seq: number, x: number, y: number, role?: "alarm" | "warning", kind = "action") => ({ seq, t: seq, agentId: "ugv-001", kind, glyph: role === "alarm" ? "✕" : role === "warning" ? "▲" : "▪", role, x, y, label: `m${seq}` });
+  const id = (v: number) => v;
+
+  it("are all kept while the plain ones are few, and above the limit thinned per pixel bin and kind, the flags never", () => {
+    const few = Array.from({ length: 50 }, (_, i) => mk(i, i * 0.1, 0));
+    expect(thinMarkers(few, id, id, 400)).toBe(few);
+    // 1,000 plain marks on the same two pixels (one kind) and 5 flags among them.
+    const dense = [...Array.from({ length: 1000 }, (_, i) => mk(i, (i % 2) * 8, 0)), mk(2000, 0, 0, "alarm"), mk(2001, 0, 0, "alarm"), mk(2002, 3, 0, "warning"), mk(2003, 3, 0, "warning"), mk(2004, 4, 0, "warning")];
+    const out = thinMarkers(dense, id, id, 400);
+    expect(out.filter((m) => m.role !== undefined)).toHaveLength(5); // never thinned
+    expect(out.filter((m) => m.role === undefined)).toHaveLength(2); // one per bin of 6 px and kind
+    // Another kind in the same bin is another mark.
+    const two = [...Array.from({ length: 500 }, (_, i) => mk(i, 0, 0)), mk(900, 0, 0, undefined, "reflex")];
+    expect(thinMarkers(two, id, id, 400).map((m) => m.kind).sort()).toEqual(["action", "reflex"]);
+  });
+});
+
+describe("the labels at the right end of a chart", () => {
+  it("are where the lines end when they are apart, stacked at least a gap apart where lines end together, and never leave the chart", () => {
+    expect(stackedLabelYs([10, 40, 70], 11, 5, 90)).toEqual([10, 40, 70]);
+    const together = stackedLabelYs([30, 30, 30], 11, 5, 90);
+    expect(together).toEqual([30, 41, 52]);
+    // Order of the input is kept in the output.
+    expect(stackedLabelYs([50, 20, 50], 11, 5, 90)).toEqual([50, 20, 61]);
+    // At the bottom edge the pile moves up instead of leaving.
+    const bottom = stackedLabelYs([88, 88, 88], 11, 5, 90);
+    expect(Math.max(...bottom)).toBeLessThanOrEqual(90);
+    expect([...bottom].sort((a, b) => a - b).map((v, i, a) => (i === 0 ? 11 : v - (a[i - 1] as number))).every((d) => d >= 11)).toBe(true);
+    expect(stackedLabelYs([], 11, 5, 90)).toEqual([]);
+  });
+});
+
+describe("the value of a series at a moment", () => {
+  it("is the last sample at or before it, the first before them all, and none for no samples", () => {
+    const pts = [{ t: 1, v: 10 }, { t: 5, v: 20 }, { t: 9, v: 30 }];
+    expect(valueAtTime(pts, 0)).toBe(10);
+    expect(valueAtTime(pts, 5)).toBe(20);
+    expect(valueAtTime(pts, 8.9)).toBe(20);
+    expect(valueAtTime(pts, 100)).toBe(30);
+    expect(valueAtTime([], 3)).toBeUndefined();
   });
 });

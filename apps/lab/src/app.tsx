@@ -109,9 +109,24 @@ export function App() {
       startRun(async () => (await loadRunController()).startRun(storage, sim, scenario, version, runConfig, label)),
     [startRun, storage, sim],
   );
+  // The commands the run shown has recorded: a headless run applies them again, and what it is called says so.
+  const [rerunCommands, setRerunCommands] = useState(0);
+  const shownRunId = run?.header.runId;
+  useEffect(() => {
+    setRerunCommands(0);
+    if (!shownRunId || status.state !== "ready") return;
+    let live = true;
+    const read = () => void storage.ports.runs.inputs(shownRunId).then((r) => live && setRerunCommands(r.length), () => {});
+    read();
+    const t = setInterval(read, 1500);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [shownRunId, status.state, storage]);
   const currentRun = useMemo<CurrentRun>(
-    () => ({ run, busy: runBusy || status.state !== "ready", error: runError, loadDemo, runWithConfig: (c) => void runWithConfig(c), runHeadlessWithConfig: (c) => runHeadless(c), startScenarioRun }),
-    [run, runBusy, status.state, runError, loadDemo, runWithConfig, runHeadless, startScenarioRun],
+    () => ({ run, busy: runBusy || status.state !== "ready", error: runError, rerunCommands, loadDemo, runWithConfig: (c) => void runWithConfig(c), runHeadlessWithConfig: (c) => runHeadless(c), startScenarioRun }),
+    [run, runBusy, status.state, runError, rerunCommands, loadDemo, runWithConfig, runHeadless, startScenarioRun],
   );
 
   // Refresh storage info at 0.5 Hz while ready (status line).
@@ -340,7 +355,7 @@ export function App() {
       ...agentCommands,
       { id: "run.config", title: "Open run configuration", group: "Run", run: () => setWorkspace("author") },
       { id: "run.resimWindow", title: "Re-simulate window…", group: "Run", disabled: !ready || !view?.runId, run: () => void resimulateWindow() },
-      { id: "run.headless", title: "Run headless", group: "Run", disabled: !ready || runBusy || !run, run: () => runHeadless() },
+      { id: "run.headless", title: rerunCommands > 0 ? "Re-run headless" : "Run headless", group: "Run", disabled: !ready || runBusy || !run, run: () => runHeadless() },
       { id: "run.rerun", title: "Re-run (same scenario version and run configuration)", group: "Run", disabled: !ready || runBusy || !run, run: () => rerunCurrent() },
       {
         id: "run.rerunMode",
@@ -359,7 +374,7 @@ export function App() {
       { id: "panel.perf", title: "Open the Performance window", group: "Panel", run: openPerformance },
       ...panelCommands,
     ],
-    [ready, sim, storage, resetLayouts, setTheme, openPerformance, resimulateWindow, view?.runId, loadDemo, loadReference, rerunCurrent, rerunInMode, runHeadless, otherMode, runBusy, run, agentCommands, panelCommands],
+    [ready, sim, storage, resetLayouts, setTheme, openPerformance, resimulateWindow, view?.runId, loadDemo, loadReference, rerunCurrent, rerunInMode, runHeadless, rerunCommands, otherMode, runBusy, run, agentCommands, panelCommands],
   );
 
   return (
@@ -397,6 +412,7 @@ export function App() {
                   onLoadDemo={loadDemo}
                   onLoadReference={loadReference}
                   onRerun={() => rerunCurrent()}
+                  rerunCommands={rerunCommands}
                   onRunHeadless={() => {
                     setRunAnchor(null);
                     runHeadless();

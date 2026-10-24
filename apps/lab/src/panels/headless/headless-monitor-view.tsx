@@ -27,6 +27,12 @@ export interface MonitorViewProps {
   readonly actions: { pause(): void; play(): void; stop(): void; openDebug(): void; openAnalysis: (() => void) | undefined };
 }
 
+/** How a finished run ended, in words: its end condition reached, or stopped before it (or with none). */
+function endCondition(p: Progress, stoppedEarly: boolean): string {
+  if (p.untilS === undefined) return "stopped (the run had no end condition)";
+  return stoppedEarly ? `before its end condition (sim time ${formatDuration(p.untilS)})` : `end condition: sim time ${formatDuration(p.untilS)} reached`;
+}
+
 const writerWords: Record<"ok" | "storage_backpressure" | "storage_quota", string> = {
   ok: "writing, keeping up",
   storage_backpressure: "behind: the run waits for it (wall time only)",
@@ -56,6 +62,9 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
   // A run that is not running has no rate of the last window: it shows the average of the whole run so far, and says so.
   const rate = averageRates(p, p.running, p);
   const endTick = p.untilS === undefined ? undefined : Math.round(p.untilS / props.dtS);
+  // What the writer has left once the run is over: its own count while it reports one, else the last progress message's.
+  const left = p.done ? p.backlogRecords : (props.writer?.backlogRecords ?? p.backlogRecords);
+  const flushed = p.done && left === 0;
   return (
     <div className="panel hm" data-testid="headless-monitor" data-state={state}>
       <header className="hm-head mono">
@@ -116,12 +125,21 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
             {p.tickTimeMeanMs.toFixed(2)} <small>ms mean · {p.tickTimeP95Ms.toFixed(2)} p95</small>
           </b>
         </div>
-        <div className="hm-cell wide">
-          <span className="lbl">WAITING FOR</span>
-          <b data-testid="hm-waiting" data-waiting={p.running ? p.waiting : "none"}>
-            {waitingLabel(p.waiting, p.running, p.done)}
-          </b>
-        </div>
+        {p.done ? (
+          <div className="hm-cell wide">
+            <span className="lbl">{stoppedEarly ? "STOPPED" : "ENDED"}</span>
+            <b data-testid="hm-ended" data-stopped={stoppedEarly}>
+              {stoppedEarly ? "▲ stopped" : "✓ ended"} · tick {grouped(p.tick)} · {endCondition(p, stoppedEarly)}
+            </b>
+          </div>
+        ) : (
+          <div className="hm-cell wide">
+            <span className="lbl">WAITING FOR</span>
+            <b data-testid="hm-waiting" data-waiting={p.running ? p.waiting : "none"}>
+              {waitingLabel(p.waiting, p.running, p.done)}
+            </b>
+          </div>
+        )}
       </section>
 
       <section className="hm-sec" aria-label="Recording">
@@ -140,13 +158,26 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
             {volume === undefined ? "" : ` · ≈ ${formatBytes(volume.perSimHourBytes)} per sim hour${volume.atEndBytes === undefined ? "" : ` · ≈ ${formatBytes(volume.atEndBytes)} at its end`}`}
           </span>
         </div>
-        <div className="hm-line mono" data-testid="hm-writer" data-state={props.writer?.state ?? "ok"}>
-          <span className={props.writer && props.writer.state !== "ok" ? "warn" : ""}>
-            {props.writer && props.writer.state !== "ok" ? "▲ " : ""}writer: {writerWords[props.writer?.state ?? "ok"]}
-          </span>
-          <span className="muted">
-            backlog {grouped(p.backlogRecords)} records · {formatBytes(p.backlogBytes)}
-          </span>
+        <div className="hm-line mono" data-testid="hm-writer" data-state={props.writer?.state ?? "ok"} data-flushed={flushed}>
+          {p.done ? (
+            // A finished run's writer is not "writing, keeping up": it is flushing what is left, or it has stored everything.
+            flushed ? (
+              <span>✓ flushed · all {grouped(p.recordsHandedOver)} records stored</span>
+            ) : (
+              <span className={props.writer && props.writer.state !== "ok" ? "warn" : ""}>
+                {props.writer && props.writer.state !== "ok" ? "▲ " : ""}flushing · {grouped(left)} record{left === 1 ? "" : "s"} left
+              </span>
+            )
+          ) : (
+            <>
+              <span className={props.writer && props.writer.state !== "ok" ? "warn" : ""}>
+                {props.writer && props.writer.state !== "ok" ? "▲ " : ""}writer: {writerWords[props.writer?.state ?? "ok"]}
+              </span>
+              <span className="muted">
+                backlog {grouped(p.backlogRecords)} records · {formatBytes(p.backlogBytes)}
+              </span>
+            </>
+          )}
         </div>
       </section>
 
@@ -160,8 +191,8 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
             const last = s.points[s.points.length - 1];
             return (
               <figure key={s.name} className="hm-spark" data-testid={`hm-spark-${s.name}`} data-points={s.points.length}>
-                <svg viewBox="0 0 160 28" width="160" height="28" role="img" aria-label={`${s.title} over the run`}>
-                  <polyline points={sparkPoints(s.points, 160, 28)} />
+                <svg viewBox="0 0 160 48" preserveAspectRatio="none" width="100%" height="48" role="img" aria-label={`${s.title} over the run`}>
+                  <polyline points={sparkPoints(s.points, 160, 48)} />
                 </svg>
                 <figcaption className="mono">
                   {s.title} <span className="muted">{last === undefined ? "no samples yet" : `${Math.round(last.v * 100) / 100} ${s.unit}`}</span>
@@ -182,7 +213,7 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
           {props.stream.sampled ? "; the recording is not sampled" : ""}. Pose samples are left out.
         </p>
         <ul className="hm-rows mono" data-testid="hm-stream">
-          {props.stream.rows.slice(-30).map((r) => {
+          {props.stream.rows.slice(-80).map((r) => {
             const style = KIND_STYLE[r.kind as keyof typeof KIND_STYLE];
             return (
               <li key={r.seq} data-seq={r.seq}>

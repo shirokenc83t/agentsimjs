@@ -47,6 +47,7 @@ export function AnalysisPanel() {
   const [text, setText] = useState("");
   const map = useRef<TopDownMapHandle>(null);
   const [note, setNote] = useState<string | undefined>(undefined);
+  const [showMarkers, setShowMarkers] = useState(true);
 
   const parsed = useMemo(() => parseFilter(text), [text]);
   const error = !parsed.ok ? parsed.error.message : parsed.value.target === "metrics" ? "a metric: filter selects samples; this view takes record filters (agent, kind, t, group, text…)" : undefined;
@@ -179,10 +180,10 @@ export function AnalysisPanel() {
           aria-label="Analysis filter"
           aria-invalid={error !== undefined}
           data-testid="an-filter"
-          placeholder="agent:ugv-001 kind:action,reflex t:9..18"
+          placeholder="e.g. agent:ugv-001 kind:action,reflex t:9..18"
         />
         <span className="muted" data-testid="an-count">
-          {data.status === "loading" ? `reading… ${data.counts.poses}` : `${shown.length}/${allAgents.length} agents · ${events.length} events`}
+          {data.status === "loading" ? `reading… ${data.counts.poses}` : `${text.trim() === "" ? "no filter · " : ""}${shown.length}/${allAgents.length} agents · ${events.length} events`}
         </span>
         <button type="button" className="kt tip-right" onClick={data.reload} data-testid="an-reload" data-tip="Read the run again (it may have grown)">
           ⟳
@@ -213,6 +214,10 @@ export function AnalysisPanel() {
             {k}
           </button>
         ))}
+        <span className="sep" aria-hidden="true" />
+        <button type="button" className={`kt${showMarkers ? "" : " off"}`} aria-pressed={showMarkers} data-testid="an-markers" data-tip="The events drawn on the paths: dots by kind, flags for failures and reflexes" onClick={() => setShowMarkers((v) => !v)}>
+          markers
+        </button>
         {win && (
           <button type="button" className="kt" onClick={() => setFilter(withTermValues(text, "t", undefined))} data-testid="an-clear-window" data-tip="Show the whole run again">
             window {Number.isFinite(win.t0) ? win.t0.toFixed(1) : "…"}–{Number.isFinite(win.t1) ? win.t1.toFixed(1) : "…"} s ✕
@@ -241,7 +246,7 @@ export function AnalysisPanel() {
       )}
       <div className="an-main">
         <div className="an-map">
-          <TopDownMap ref={map} model={model} selectedAgent={selected?.kind === "agent" ? selected.id : undefined} selectedSeq={picked?.runId === runId ? picked.seq : undefined} onPick={onPick} label={`Top-down map of ${runId}: trajectories and events`} />
+          <TopDownMap ref={map} model={model} markers={showMarkers} selectedAgent={selected?.kind === "agent" ? selected.id : undefined} selectedSeq={picked?.runId === runId ? picked.seq : undefined} onPick={onPick} label={`Top-down map of ${runId}: trajectories and events`} />
         </div>
         <div className="an-side">
           <AnalysisTimeline
@@ -256,11 +261,11 @@ export function AnalysisPanel() {
               jump(t, agentId);
             }}
           />
-          <AnalysisSeriesView series={series} indexOf={indexOf} span={span} cursorS={cursor} onSeek={(t, agentId) => jump(t, agentId)} />
+          <AnalysisSeriesView series={series} indexOf={indexOf} span={span} cursorS={cursor} selectedAgent={selected?.kind === "agent" ? selected.id : undefined} onSeek={(t, agentId) => jump(t, agentId)} />
         </div>
       </div>
       <div className="an-foot mono muted" data-testid="an-foot">
-        {note ?? `${data.counts.poses.toLocaleString("en")} pose samples · poses are samples (ADR-0029), the line between two is straight`}
+        {note ?? `${data.counts.poses.toLocaleString("en")} pose samples · a pose is a sample of the recording, not a continuous track: the line between two samples is straight`}
       </div>
     </div>
   );

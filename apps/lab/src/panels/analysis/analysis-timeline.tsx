@@ -1,7 +1,7 @@
 import "../panels.css";
 import { KIND_STYLE } from "@agentsim/ui";
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
-import { BIN_PX, binMarks, describeAt, flagRole, glyphOf, type Mark } from "../debug/marks.ts";
+import { BIN_PX, binMarks, describeAt, flagRole, GLYPH_PX, glyphOf, type Mark } from "../debug/marks.ts";
 import { LABEL_PX, LANE_PX, RULER_PX, rulerTicks, selectionFromDrag } from "../debug/timeline-geometry.ts";
 
 export interface AnalysisTimelineProps {
@@ -87,13 +87,16 @@ export function AnalysisTimeline(props: AnalysisTimelineProps) {
         ctx.globalAlpha = 1;
         continue;
       }
-      ctx.textAlign = "center";
-      const cx = LABEL_PX + (b.mode === "count" ? b.x0 + 8 : b.px);
-      ctx.fillText(glyphOf(b.shown), cx, cy);
-      if (b.mode === "count") {
+      if (b.mode === "count" && b.label) {
+        // The label is laid out to fit the bin: the glyph and the count, or the count alone, centred in it.
+        ctx.textAlign = "center";
+        if (b.label.glyph) ctx.fillText(glyphOf(b.shown), LABEL_PX + b.label.x + GLYPH_PX / 2, cy);
         ctx.fillStyle = color("--fg2");
         ctx.textAlign = "left";
-        ctx.fillText(`×${b.count}`, cx + 7, cy);
+        ctx.fillText(b.label.text, LABEL_PX + b.label.x + (b.label.glyph ? GLYPH_PX + 2 : 0), cy);
+      } else {
+        ctx.textAlign = "center";
+        ctx.fillText(glyphOf(b.shown), LABEL_PX + b.gx, cy);
       }
       ctx.textAlign = "left";
     }
@@ -103,7 +106,7 @@ export function AnalysisTimeline(props: AnalysisTimelineProps) {
       ctx.fillStyle = role === "alarm" ? color("--alm") : color("--warn");
       ctx.fillRect(Math.round(cx) - 1, RULER_PX + f.lane * LANE_PX, 2, LANE_PX - 1);
       ctx.textAlign = "center";
-      ctx.fillText(glyphOf(f.mark), cx + 6, RULER_PX + f.lane * LANE_PX + LANE_PX / 2);
+      ctx.fillText(glyphOf(f.mark), LABEL_PX + f.gx, RULER_PX + f.lane * LANE_PX + LANE_PX / 2);
       ctx.textAlign = "left";
     }
     const live = drag.current?.moved ? selectionFromDrag(drag.current.from, drag.current.to, width, scale) : props.window === undefined ? undefined : { t0S: props.window.t0, t1S: props.window.t1 };

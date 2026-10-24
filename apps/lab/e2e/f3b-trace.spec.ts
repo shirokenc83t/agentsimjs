@@ -7,6 +7,12 @@ import { loadDemo, loadF2, openWorkspace, runCommand, sendTo, step } from "./hel
 
 const AGENT = "ugv-001";
 
+/** The docked tree lists one part at a time behind its toggles: open the part to look at. */
+async function part(page: Page, name: "parents" | "causes" | "children" | "effects"): Promise<void> {
+  await page.getByTestId(`tt-tab-${name}`).click();
+  await expect(page.getByTestId(`tt-${name}`)).toBeVisible();
+}
+
 async function explored(page: Page): Promise<void> {
   await loadF2(page, "discovery");
   await page.getByTestId(`explorer-row-${AGENT}`).click();
@@ -44,12 +50,15 @@ test("the trace tree on a real run: the start of an action has the action's reco
   const startSeq = Number(await selected.getAttribute("data-seq"));
   const child = page.getByTestId("tt-children").locator('[data-testid^="trace-node-"]').first();
   await expect(child).toBeVisible({ timeout: 15_000 });
+  await part(page, "parents");
   await expect(page.getByTestId("tt-parents")).toContainText("none"); // a start has no parent
+  await part(page, "children");
 
   // One of the records of the action: the tree shows the start as its parent; a click on the parent picks the start, and the log and the cursor follow.
   const childSeq = Number(await child.getAttribute("data-seq"));
   await child.click();
   await expect(selected).toHaveAttribute("data-seq", String(childSeq));
+  await part(page, "parents");
   await expect(page.getByTestId("tt-parents")).toContainText("start");
   const parent = page.getByTestId("tt-parents").locator('[data-testid^="trace-node-"]').first();
   await expect(parent).toHaveAttribute("data-seq", String(startSeq));
@@ -74,10 +83,13 @@ test("the event a mind is told about an ended action is caused by the action's e
   await openWorkspace(page, "debug");
   await filtered(page, "kind:event text:actionCompleted", "event");
   await page.locator('[data-testid^="event-row-"]').first().click();
+  await part(page, "causes");
   const cause = page.getByTestId("tt-causes").locator('[data-testid^="trace-node-"]').first();
   await expect(cause).toBeVisible({ timeout: 15_000 });
   await expect(cause).toContainText("end");
   await cause.click();
+  await part(page, "parents");
   await expect(page.getByTestId("tt-parents")).toContainText("start");
+  await part(page, "effects");
   await expect(page.getByTestId("tt-effects")).toContainText("event"); // the event about it
 });

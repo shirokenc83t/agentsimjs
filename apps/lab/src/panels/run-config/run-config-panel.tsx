@@ -36,6 +36,7 @@ import {
   type Scope,
   type SectionStatus,
 } from "./model.ts";
+import { headlessButton, headlessTip } from "../../sim/headless-names.ts";
 import { StrategyPicker } from "./strategy-picker.tsx";
 
 const ALGORITHMS = ["dijkstra", "astar", "hpa", "weighted-astar"] as const;
@@ -398,9 +399,9 @@ function RunConfigEditor(props: { loaded: Loaded }) {
           onClick={() => validation.ok && !current.busy && current.runHeadlessWithConfig(validation.resolved.document)}
           aria-disabled={!validation.ok || current.busy}
           data-testid="rc-run-headless"
-          data-tip="No live view, as fast as lockstep allows, always recorded (the recording profile and the length are in the run popover)"
+          data-tip={`${headlessTip(current.rerunCommands ?? 0, current.run?.header.runId)} (the recording profile and the length are in the run popover)`}
         >
-          Run headless
+          {headlessButton(current.rerunCommands ?? 0)}
         </button>
         <button type="button" className="btn" onClick={() => setDraft(props.loaded.initial)} data-testid="rc-revert">
           Revert to the current run

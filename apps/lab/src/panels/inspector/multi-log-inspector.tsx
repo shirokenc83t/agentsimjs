@@ -235,7 +235,7 @@ function Pane(props: { pane: PaneSpec; view: PaneViewProps; onChange: (change: P
           aria-label="Pane filter"
           aria-invalid={!fits}
           data-testid={`pane-filter-${pane.id}`}
-          placeholder={pane.view === "series" ? "metric:agent.soc source:uav-001/body" : "kind:action agent:uav-001"}
+          placeholder={pane.view === "series" ? "e.g. metric:agent.soc source:uav-001/body" : "e.g. kind:action agent:uav-001"}
         />
         <button type="button" className="kt" onClick={props.onClose} aria-label={`Close ${pane.title}`} data-testid={`pane-close-${pane.id}`}>
           ✕

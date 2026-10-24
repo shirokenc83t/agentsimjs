@@ -1,5 +1,6 @@
 import { RECORDING_PRESETS, type RecordingPresetName } from "@agentsim/trace";
 import { useSyncExternalStore } from "react";
+import { headlessButton, headlessTip } from "./sim/headless-names.ts";
 import { getRecordingSelection, isHeavyProfile, profileOfSelection, setRecordingSelection, subscribeRecordingSelection } from "./sim/recording-choice.ts";
 
 /**
@@ -7,7 +8,7 @@ import { getRecordingSelection, isHeavyProfile, profileOfSelection, setRecording
  * and "Don't record this run", the researcher's explicit opt-out for the next run only (never a default). Warns before a realtime run with a
  * heavy profile: a slow writer can make a realtime run fall behind, and each such wait is a traced degradation.
  */
-export function RecordingControls({ realtime, onRunHeadless, headlessDisabled }: { realtime: boolean; onRunHeadless?: () => void; headlessDisabled?: boolean }) {
+export function RecordingControls({ realtime, onRunHeadless, headlessDisabled, headlessCommands = 0, headlessOf }: { realtime: boolean; onRunHeadless?: () => void; headlessDisabled?: boolean; headlessCommands?: number; headlessOf?: string | undefined }) {
   const sel = useSyncExternalStore(subscribeRecordingSelection, getRecordingSelection);
   const parsed = profileOfSelection(sel);
   const heavy = parsed.ok && isHeavyProfile(parsed.profile);
@@ -77,8 +78,8 @@ export function RecordingControls({ realtime, onRunHeadless, headlessDisabled }:
             />
             <span className="muted">sim s</span>
           </label>
-          <button type="button" className="btn" disabled={headlessDisabled || !parsed.ok} onClick={onRunHeadless} data-testid="run-headless-popover" data-tip="No live view, as fast as lockstep allows, in lockstep: always recorded with this profile">
-            Run headless
+          <button type="button" className="btn" disabled={headlessDisabled || !parsed.ok} onClick={onRunHeadless} data-testid="run-headless-popover" data-tip={`${headlessTip(headlessCommands, headlessOf)} (with this profile)`}>
+            {headlessButton(headlessCommands)}
           </button>
         </div>
       )}

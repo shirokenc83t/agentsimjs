@@ -2,6 +2,7 @@ import type { PresetId, SimLoadedMessage } from "@agentsim/core";
 import { F1_DEMO_ID, F1_REFERENCE_WORLD_ID, F2_DISCOVERY_ID, F2_PRIOR_REFERENCE_ID, F2_TWENTY_AGENTS_ID, f1DemoRunConfig, f1ReferenceWorldRunConfig, f2PriorRunConfig, f2RunConfig } from "@agentsim/scenarios";
 import type { StorageClient, StoredRunInput } from "@agentsim/storage";
 import { recordingProfileHash, TRACE_SCHEMA_VERSION, type RunHeader } from "@agentsim/trace";
+import { baseLabel, rerunLabel } from "./headless-names.ts";
 import { DEFAULT_RECORDING, takeHeadlessChoice, takeRecordingChoice, type RecordingChoice } from "./recording-choice.ts";
 import type { SimClient } from "./sim-client.ts";
 import { SIMULATOR_VERSION } from "./simulator-version.ts";
@@ -239,7 +240,8 @@ export function rerunInMode(storage: StorageClient, sim: SimClient, run: LabRun,
  */
 export async function rerunHeadless(storage: StorageClient, sim: SimClient, run: LabRun, choice = takeHeadlessChoice(), runConfig: unknown = run.runConfig): Promise<LabRun> {
   const inputs = await storage.ports.runs.inputs(run.header.runId);
-  return startRun(storage, sim, run.scenario, run.loaded.scenarioVersion, withTimeMode(runConfig, "lockstep"), run.header.label, inputs, choice.recording, { untilS: choice.untilS });
+  const label = inputs.length === 0 ? baseLabel(run.header.label) : rerunLabel(run.header.label, run.header.runId, inputs.length);
+  return startRun(storage, sim, run.scenario, run.loaded.scenarioVersion, withTimeMode(runConfig, "lockstep"), label, inputs, choice.recording, { untilS: choice.untilS });
 }
 
 /** Re-runs: the same scenario version and run configuration, as a new run (new ID, new header). */

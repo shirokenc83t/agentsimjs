@@ -148,6 +148,8 @@
 .tt-section { border-bottom: 1px solid var(--ln); padding: 4px 0 6px; }
 .tt-section h4 { margin: 2px 12px 4px; font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: var(--type-label-tracking); text-transform: uppercase; color: var(--fg3); }
 .tt-none { margin: 0; padding: 0 12px; }
+.tt-head { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px; border-bottom: 1px solid var(--ln); font-size: var(--type-mono-size); }
+.tt-head .kt.on { background: var(--acbg); color: var(--fg); }
 .tt-node, .tt-more { appearance: none; display: block; width: 100%; text-align: left; font: inherit; font-size: var(--type-mono-size); color: var(--fg); background: transparent; border: 0; padding-top: 1px; padding-bottom: 1px; padding-right: 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tt-node:hover, .tt-more:hover { background: var(--bg3); }
 .tt-node:focus-visible, .tt-more:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
@@ -461,7 +463,7 @@
 .recording-controls .prose { margin: 0 0 6px; font-size: var(--type-label-size); }
 .run-info .stored-runs li { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
 .run-info .stored-runs li .btn { height: 22px; }
-.itab[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.itab[aria-disabled="true"] { opacity: 0.5; cursor: help; }
 .inspector-live-only { margin: 4px 12px; font-size: var(--type-label-size); }
 .se-brush.folded { width: 150px; }
 .se-brush-body[hidden] { display: none; }
@@ -489,13 +491,14 @@
 .hm-cell small { font-size: var(--type-label-size); color: var(--fg3); font-weight: 400; }
 .hm-cell .lbl { color: var(--fg3); font-size: var(--type-label-size); letter-spacing: 0.06em; }
 .hm-cell.wide b { font-size: var(--type-mono-size); font-weight: 400; }
-.hm-sparks { display: flex; flex-wrap: wrap; gap: 8px 22px; }
-.hm-spark { margin: 0; }
+.hm-sparks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 22px; }
+.hm-spark { margin: 0; min-width: 0; }
 .hm-spark svg { display: block; background: var(--bg0); border: 1px solid var(--ln); }
 .hm-spark polyline { fill: none; stroke: var(--run); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .hm-spark figcaption { font-size: var(--type-label-size); margin-top: 2px; }
 .hm-note { margin: 2px 0 4px; font-size: var(--type-label-size); }
-.hm-rows { margin: 0; padding: 4px 8px; list-style: none; max-height: 220px; overflow: auto; background: var(--bg0); border: 1px solid var(--ln); font-size: var(--type-mono-size); }
+.hm-stream { flex: 1 1 auto; min-height: 140px; display: flex; flex-direction: column; }
+.hm-rows { flex: 1 1 auto; margin: 0; padding: 4px 8px; list-style: none; min-height: 100px; overflow: auto; background: var(--bg0); border: 1px solid var(--ln); font-size: var(--type-mono-size); }
 .hm-rows li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-acts { display: flex; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px solid var(--ln); }
 
@@ -528,6 +531,10 @@
 .asv-chart .axis { stroke: var(--ln2); stroke-width: 1; }
 .asv-chart .tick { fill: var(--fg3); font-size: var(--type-label-size); font-family: var(--font-mono); }
 .asv-chart .line { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.asv-chart .line.sel { stroke-width: 2.5; }
+.asv-chart .line.dim, .asv-chart .end.dim { opacity: 0.35; }
+.asv-chart .hover { stroke: var(--fg3); stroke-width: 1; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
+.asv-read { color: var(--fg2); }
 .asv-chart .cursor { stroke: var(--ac); stroke-width: 1; vector-effect: non-scaling-stroke; }
 
 /* The Scene's 2D tab: the 3D view stays mounted (its state and its renderer are kept) but is not shown; the map sits over its place. */

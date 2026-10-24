@@ -147,4 +147,24 @@ describe("the headless run monitor", () => {
     expect(screen.getByTestId("hm-eta")).toHaveTextContent("no end condition");
     expect(screen.getByTestId("hm-progress")).not.toHaveAttribute("aria-valuenow");
   });
+
+  it("a finished run says how it ended (not what it waits for) and its writer flushes then has stored everything", () => {
+    view({ writer: { state: "ok", backlogRecords: 1874 } }, progress({ running: false, done: true, tick: 3000, simTimeS: 300, backlogRecords: 1874 }));
+    expect(screen.queryByTestId("hm-waiting")).toBeNull();
+    expect(screen.getByTestId("hm-ended")).toHaveTextContent("✓ ended · tick 3 000 · end condition: sim time 5 min 00 s reached");
+    expect(screen.getByTestId("hm-writer")).toHaveTextContent("flushing · 1 874 records left");
+    expect(screen.getByTestId("hm-writer")).not.toHaveTextContent("keeping up");
+    expect(screen.getByTestId("hm-writer")).toHaveAttribute("data-flushed", "false");
+  });
+
+  it("a finished run whose writer has nothing left is flushed: all the records it handed over are stored", () => {
+    view({ writer: { state: "ok", backlogRecords: 0 } }, progress({ running: false, done: true, tick: 3000, simTimeS: 300, backlogRecords: 0 }));
+    expect(screen.getByTestId("hm-writer")).toHaveTextContent("✓ flushed · all 5 400 records stored");
+    expect(screen.getByTestId("hm-writer")).toHaveAttribute("data-flushed", "true");
+  });
+
+  it("a run stopped before its end condition says so, and one that never had one says it was stopped", () => {
+    view({}, progress({ running: false, done: true, tick: 1200, simTimeS: 120 }));
+    expect(screen.getByTestId("hm-ended")).toHaveTextContent("▲ stopped · tick 1 200 · before its end condition (sim time 5 min 00 s)");
+  });
 });

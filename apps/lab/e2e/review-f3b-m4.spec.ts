@@ -80,6 +80,13 @@ for (const theme of THEMES) {
       // The series further down, and the export buttons with the JSONL one explained.
       await page.getByTestId("series-battery").scrollIntoViewIfNeeded();
       await shot(page, "analysis-series", theme);
+      // The hover readout of a chart: every agent's value at that moment.
+      const chart = page.getByTestId("series-battery").locator("svg");
+      const cb = await chart.boundingBox();
+      if (cb) await page.mouse.move(cb.x + cb.width * 0.5, cb.y + cb.height * 0.5);
+      await expect(page.getByTestId("series-read-battery")).toBeVisible();
+      await shot(page, "analysis-series-hover", theme);
+      await page.mouse.move(2, 2);
       await page.getByTestId("an-export-jsonl").scrollIntoViewIfNeeded();
       await page.getByTestId("an-export-jsonl").hover();
       await page.waitForTimeout(700);

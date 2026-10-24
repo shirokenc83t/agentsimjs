@@ -215,6 +215,7 @@ export function EventListPanel() {
       </span>
     ) : (
       <span className="muted" data-testid="event-count">
+        {text.trim() === "" ? "no filter · " : ""}
         {rows.length}
         {more ? "+" : ""} records
       </span>
@@ -240,7 +241,7 @@ export function EventListPanel() {
           }}
           spellCheck={false}
           autoComplete="off"
-          placeholder='agent:uav-001 kind:action t:>20 text:"battery low" source:*/planner'
+          placeholder='e.g. agent:uav-001 kind:action t:>20 text:"battery low" source:*/planner'
           aria-label="Filter"
           aria-invalid={!state.ok}
           data-testid="log-filter"

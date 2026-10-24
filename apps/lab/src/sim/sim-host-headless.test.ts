@@ -127,6 +127,22 @@ describe("headless runs: what they refuse", () => {
   });
 });
 
+describe("headless runs: the writer after the end", () => {
+  it("a finished run goes on reporting the writer's backlog as it is acknowledged, the last time at once, so its monitor can say flushed", () => {
+    const h = started(headlessLoad(demo(stored()), 30));
+    h.send({ type: "control", op: "play" });
+    h.advance(50);
+    const done = progress(h).at(-1);
+    expect(done).toMatchObject({ done: true });
+    expect(done?.backlogRecords).toBeGreaterThan(0); // nothing acknowledged yet
+    const before = progress(h).length;
+    for (const b of h.batches()) ack(h, b);
+    const after = progress(h).slice(before);
+    expect(after.length).toBeGreaterThan(0);
+    expect(progress(h).at(-1)).toMatchObject({ done: true, backlogRecords: 0, backlogBytes: 0 });
+  });
+});
+
 describe("headless runs: the same simulation", () => {
   // The state hash at every checkpoint, headless against the same scenario version, run configuration and seed in a live lockstep view (ADR-0029 equivalence).
   for (const [name, load] of [["the F1 demo", demo], ["F2 discovery (unknown maps)", discovery]] as const) {

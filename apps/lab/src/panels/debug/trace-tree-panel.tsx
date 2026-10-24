@@ -22,6 +22,18 @@ export function TraceTreePanel() {
   const [tree, setTree] = useState<TraceTree | undefined | null>(null);
   const [limits, setLimits] = useState<ReadonlyMap<string, number>>(new Map());
   const generation = useRef(0);
+  // A small window (docked under the Log) lists one part at a time behind a row of toggles; a big one (maximized) lists them all.
+  const box = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(true);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => setCompact(el.clientHeight < 420);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    return () => ro.disconnect();
+  }, []);
   const runId = snap.runId;
   const seq = picked !== undefined && picked.runId === runId ? picked.seq : undefined;
 
@@ -46,7 +58,7 @@ export function TraceTreePanel() {
   };
 
   return (
-    <div className="panel trace-tree" data-testid="trace-tree">
+    <div ref={box} className="panel trace-tree" data-testid="trace-tree" data-compact={compact}>
       {seq === undefined ? (
         <p className="muted tt-empty" data-testid="trace-tree-empty">
           Pick a record in the log to see what it came from and what came of it.
@@ -58,7 +70,7 @@ export function TraceTreePanel() {
           Record #{seq} is not in this run (yet).
         </p>
       ) : (
-        <TreeView tree={tree} open={open} more={more} />
+        <TreeView tree={tree} compact={compact} open={open} more={more} />
       )}
     </div>
   );
@@ -111,20 +123,51 @@ function Nodes(props: { nodes: readonly TreeNode[]; depth: number; keyOf: (n: Tr
   );
 }
 
-function TreeView(props: { tree: TraceTree; open: (r: TraceRecord) => void; more: (key: string, shown: number) => void }) {
-  const { tree, open, more } = props;
-  const section = (title: string, glyph: string, testId: string, body: React.ReactNode, count: number) => (
-    <section className="tt-section" data-testid={testId}>
-      <h4>
-        {glyph} {title} <span className="muted">· {count}</span>
-      </h4>
-      {count === 0 ? <p className="muted tt-none">none</p> : body}
-    </section>
-  );
+type Part = "parents" | "causes" | "children" | "effects";
+
+/** The part a compact view opens with: the first that is not empty after the record (children, then effects), else before it (causes, then parents). */
+export function firstPart(c: Record<Part, number>): Part {
+  return (["children", "effects", "causes", "parents"] as const).find((k) => c[k] > 0) ?? "children";
+}
+
+function TreeView(props: { tree: TraceTree; compact: boolean; open: (r: TraceRecord) => void; more: (key: string, shown: number) => void }) {
+  const { tree, open, more, compact } = props;
+  const counts: Record<Part, number> = { parents: tree.ancestors.length, causes: tree.causes.length, children: tree.children.length, effects: tree.effects.length };
+  const [chosen, setChosen] = useState<{ seq: number; part: Part } | undefined>(undefined);
+  const active: Part = chosen !== undefined && chosen.seq === tree.selected.record.seq ? chosen.part : firstPart(counts);
+  const root = useRef<HTMLDivElement>(null);
+  const pick = (part: Part) => {
+    setChosen({ seq: tree.selected.record.seq, part });
+    // Where every part is listed, a toggle takes its part into view; in a small window it opens the part.
+    if (!compact) root.current?.querySelector(`[data-testid="tt-${part === "parents" ? "parents" : part === "causes" ? "causes" : part}"]`)?.scrollIntoView?.({ block: "nearest" });
+  };
+  const head: { part: Part; glyph: string; label: string }[] = [
+    { part: "parents", glyph: "↑", label: "parents" },
+    { part: "causes", glyph: "←", label: "causes" },
+    { part: "children", glyph: "↓", label: "children" },
+    { part: "effects", glyph: "→", label: "effects" },
+  ];
+  const section = (part: Part, title: string, glyph: string, testId: string, body: React.ReactNode, count: number) =>
+    compact && active !== part ? null : (
+      <section className="tt-section" data-testid={testId}>
+        <h4>
+          {glyph} {title} <span className="muted">· {count}</span>
+        </h4>
+        {count === 0 ? <p className="muted tt-none">none</p> : body}
+      </section>
+    );
   const base = { open, more, moreOf: (n: TreeNode) => n.more, keyOf: (n: TreeNode) => String(n.record.seq) };
   return (
-    <>
+    <div ref={root} className="tt-body">
+      <div className="tt-head mono" role="group" aria-label="Parts of the tree" data-testid="tt-head">
+        {head.map((h) => (
+          <button key={h.part} type="button" className={`kt${compact && active === h.part ? " on" : ""}`} aria-pressed={compact ? active === h.part : undefined} onClick={() => pick(h.part)} data-testid={`tt-tab-${h.part}`}>
+            {h.glyph} {h.label} <span className="muted">{counts[h.part]}</span>
+          </button>
+        ))}
+      </div>
       {section(
+        "parents",
         "parents",
         "↑",
         "tt-parents",
@@ -141,6 +184,7 @@ function TreeView(props: { tree: TraceTree; open: (r: TraceRecord) => void; more
         tree.ancestors.length,
       )}
       {section(
+        "causes",
         "caused by",
         "←",
         "tt-causes",
@@ -160,6 +204,7 @@ function TreeView(props: { tree: TraceTree; open: (r: TraceRecord) => void; more
       </section>
       {section(
         "children",
+        "children",
         "↓",
         "tt-children",
         <>
@@ -174,6 +219,7 @@ function TreeView(props: { tree: TraceTree; open: (r: TraceRecord) => void; more
       )}
       {section(
         "effects",
+        "effects",
         "→",
         "tt-effects",
         <>
@@ -186,6 +232,6 @@ function TreeView(props: { tree: TraceTree; open: (r: TraceRecord) => void; more
         </>,
         tree.effects.length,
       )}
-    </>
+    </div>
   );
 }

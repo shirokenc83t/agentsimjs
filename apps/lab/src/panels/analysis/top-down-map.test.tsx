@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mapTransform, type MapModel } from "./analysis-model.ts";
-import { TopDownMap } from "./top-down-map.tsx";
+import { niceLength, TopDownMap } from "./top-down-map.tsx";
 
 // What a click or a hover on the map picks: an event first, then an agent, then a sample of a trajectory; nothing where there is nothing.
 
@@ -72,5 +72,23 @@ describe("TopDownMap picks", () => {
     const c = screen.getByRole("img", { name: "Top-down map of run-000001" });
     expect(c).toHaveAttribute("data-markers", "1");
     expect(c).toHaveAttribute("data-trajectories", "1");
+  });
+});
+
+describe("TopDownMap markers and scale", () => {
+  it("a marker that is not drawn (the chip is off) is not picked either", () => {
+    const onPick = vi.fn();
+    render(<TopDownMap model={model} markers={false} onPick={onPick} label="map" />);
+    fireEvent.click(screen.getByTestId("map2d-canvas"), at(50, 10));
+    expect(onPick.mock.calls.at(-1)?.[0]).not.toHaveProperty("seq"); // the line under it is picked: a moment, not the record
+  });
+
+  it("the scale bar is a round length: 1, 2 or 5 times a power of ten, at most the length asked for", () => {
+    expect(niceLength(137)).toBe(100);
+    expect(niceLength(250)).toBe(200);
+    expect(niceLength(740)).toBe(500);
+    expect(niceLength(9.9)).toBe(5);
+    expect(niceLength(0.34)).toBe(0.2);
+    expect(niceLength(0)).toBe(1);
   });
 });

@@ -282,7 +282,7 @@ export function ScenePanel() {
               {sendFor ? `⇢ click a target for ${shortLabel(sendFor)} · Esc` : selectedAgent ? `⇢ send ${shortLabel(selectedAgent)} to… · G` : "⇢ send to… (select an agent)"}
             </Button>)}
           </div>
-          {(noRays !== undefined || noTopology !== undefined || picking || sendFor !== undefined || ((showRays || showTopology) && !selectedAgent) || (overlay !== "truth" && (!selectedAgent || ideal)) || overlay === "difference" || (showExplore && !selectedAgent)) && (
+          {view === "3d" && (noRays !== undefined || noTopology !== undefined || picking || sendFor !== undefined || ((showRays || showTopology) && !selectedAgent) || (overlay !== "truth" && (!selectedAgent || ideal)) || overlay === "difference" || (showExplore && !selectedAgent)) && (
             <div className="scene-hint" data-testid="scene-hint">
               {(noRays !== undefined || noTopology !== undefined) && (
                 <span className="muted" data-testid="overlay-off-reason">

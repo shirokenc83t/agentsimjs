@@ -498,6 +498,8 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
       reported = state;
       postRecordingState();
     }
+    // A finished headless run has no loop left to report the writer's backlog going down: each acknowledgement does, the last one at once.
+    if (headlessDone) postProgress(recorder !== undefined && recorder.backlog.records === 0);
     releaseGate();
   };
 

@@ -464,6 +464,12 @@ export function InspectorPanel() {
   let body: ReactNode = <p className="muted">Select an agent or a cell (Scene, Explorer).</p>;
   if (!snap.run) body = <p className="muted">No run loaded.</p>;
   else if (tab === "agent" && agentId) body = <AgentInspector id={agentId} snap={snap} source={source} views={views} />;
+  else if (tab === "cell" && cellOff !== undefined)
+    body = (
+      <p className="muted inspector-live-only" data-testid="inspector-cell-off">
+        CELL is live only: {cellOff}
+      </p>
+    );
   else if (tab === "cell" && cellId && !cellOff) body = <CellInspector id={cellId} snap={snap} source={source} />;
   else if (tab === "cell") body = <p className="muted">Click a cell in the Scene to see it here.</p>;
   return (
@@ -474,22 +480,17 @@ export function InspectorPanel() {
             key={t}
             type="button"
             role="tab"
-            aria-selected={tab === t && !(t === "cell" && cellOff)}
+            aria-selected={tab === t}
             aria-disabled={t === "cell" && cellOff !== undefined ? true : undefined}
-            className={`itab${tab === t && !(t === "cell" && cellOff) ? " on" : ""}`}
+            className={`itab${tab === t ? " on" : ""}${t === "cell" && cellOff !== undefined ? " off" : ""}`}
             data-tip={t === "cell" && cellOff !== undefined ? `Live only: ${cellOff}` : undefined}
-            onClick={() => (t === "cell" && cellOff !== undefined ? undefined : setTab(t))}
+            onClick={() => setTab(t)}
             data-testid={`inspector-tab-${t}`}
           >
             {t === "agent" ? "AGENT" : "CELL"}
           </button>
         ))}
       </div>
-      {cellOff !== undefined && (
-        <p className="muted inspector-live-only" data-testid="inspector-cell-off">
-          CELL is live only: {cellOff}
-        </p>
-      )}
       {body}
     </div>
   );

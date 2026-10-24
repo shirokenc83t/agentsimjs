@@ -40,7 +40,7 @@ const OVERVIEW_WINDOW: PresetPanel = { id: "overview", floating: { width: 240, h
 const LEGEND_WINDOW: PresetPanel = { id: "legend", floating: { width: 340, height: 330, collapsed: true, host: "scene", stack: 1 } };
 
 /**
- * Scene workspace (UI-SPEC §3): Scene 3D in the middle, Explorer left, Inspector right. Timeline and the log
+ * Scene workspace (UI-SPEC §3): The Scene in the middle, Explorer left, Inspector right. Timeline and the log
  * console join in F3.
  */
 export const WORKSPACES: readonly WorkspacePreset[] = [

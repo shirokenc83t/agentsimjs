@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { AppActionsProvider, ServicesProvider } from "../../services.tsx";
 import type { RunSnapshot, RunSource } from "../../sim/run-source.ts";
 import type { SimClient } from "../../sim/sim-client.ts";
-import { TraceTreePanel } from "./trace-tree-panel.tsx";
+import { firstPart, TraceTreePanel } from "./trace-tree-panel.tsx";
 
 // The trace tree panel (UI-SPEC section 4): what it says before a record is picked, the sections around one, the mark on a copy, and what a click does.
 
@@ -39,21 +39,33 @@ describe("TraceTreePanel", () => {
     expect(screen.getByTestId("trace-tree-empty")).toHaveTextContent("Pick a record in the log");
   });
 
-  it("draws the parents, the causes, the record, its children and its effects", async () => {
+  it("draws the parents, the causes, the record, its children and its effects, one part at a time behind the toggles of a small window", async () => {
     await setup([rec(0), rec(1, { parentId: ref(0) }), rec(2, { causeIds: [ref(1)] }), rec(3, { parentId: ref(2), causeIds: [ref(1)] }), rec(4, { parentId: ref(3) }), rec(5, { causeIds: [ref(3)] })]);
     act(() => useUiContext.getState().selectRecord({ runId: RUN, seq: 3 }));
     await waitFor(() => expect(screen.getByTestId("trace-tree-selected")).toHaveAttribute("data-seq", "3"));
-    expect(screen.getByTestId("tt-parents")).toHaveTextContent("#2");
-    expect(screen.getByTestId("tt-causes")).toHaveTextContent("#1");
+    const user = userEvent.setup();
+    // The header counts every part; the part opened first is the first that is not empty after the record (its children).
+    expect(screen.getByTestId("tt-head")).toHaveTextContent("↑ parents 1← causes 1↓ children 1→ effects 1");
     expect(screen.getByTestId("tt-children")).toHaveTextContent("#4");
-    expect(screen.getByTestId("tt-effects")).toHaveTextContent("#5");
+    expect(screen.queryByTestId("tt-parents")).toBeNull();
+    for (const [tab, id, text] of [["parents", "tt-parents", "#2"], ["causes", "tt-causes", "#1"], ["effects", "tt-effects", "#5"], ["children", "tt-children", "#4"]] as const) {
+      await user.click(screen.getByTestId(`tt-tab-${tab}`));
+      expect(screen.getByTestId(id)).toHaveTextContent(text);
+      expect(screen.getByTestId(`tt-tab-${tab}`)).toHaveAttribute("aria-pressed", "true");
+    }
   });
 
-  it("says none for a direction with nothing in it", async () => {
-    await setup([rec(0)]);
-    act(() => useUiContext.getState().selectRecord({ runId: RUN, seq: 0 }));
+  it("opens on the first part that is not empty after the record, else before it, and says none for an empty part", async () => {
+    await setup([rec(0), rec(1, { parentId: ref(0) })]);
+    act(() => useUiContext.getState().selectRecord({ runId: RUN, seq: 1 }));
     await waitFor(() => expect(screen.getByTestId("trace-tree-selected")).toBeInTheDocument());
-    for (const id of ["tt-parents", "tt-causes", "tt-children", "tt-effects"]) expect(screen.getByTestId(id)).toHaveTextContent("none");
+    expect(screen.getByTestId("tt-parents")).toHaveTextContent("#0"); // nothing after it: the parents
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("tt-tab-effects"));
+    expect(screen.getByTestId("tt-effects")).toHaveTextContent("none");
+    expect(firstPart({ parents: 0, causes: 0, children: 0, effects: 0 })).toBe("children");
+    expect(firstPart({ parents: 2, causes: 1, children: 0, effects: 3 })).toBe("effects");
+    expect(firstPart({ parents: 2, causes: 1, children: 0, effects: 0 })).toBe("causes");
   });
 
   it("marks a record a derived run copied from its parent, with the ID it had there", async () => {

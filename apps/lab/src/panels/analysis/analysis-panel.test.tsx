@@ -1,7 +1,7 @@
 import { createMemoryPorts, type StorageClient } from "@agentsim/storage";
 import type { TraceRecord } from "@agentsim/trace";
 import { useUiContext } from "@agentsim/ui";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppActionsProvider, ServicesProvider } from "../../services.tsx";
@@ -127,5 +127,37 @@ describe("the Analysis workspace", () => {
     const user = userEvent.setup();
     await user.click(screen.getByTestId("map2d-agent-uav-001"));
     expect(useUiContext.getState().selection).toEqual({ kind: "agent", id: "uav-001" });
+  });
+
+  it("says no filter while the prompt is empty, and its example is an example", async () => {
+    await setup();
+    const user = userEvent.setup();
+    expect(screen.getByTestId("an-count")).toHaveTextContent("no filter · 2/2 agents");
+    expect(screen.getByTestId("an-filter")).toHaveAttribute("placeholder", expect.stringMatching(/^e\.g\. /));
+    await user.type(screen.getByTestId("an-filter"), "agent:ugv-001");
+    expect(screen.getByTestId("an-count")).not.toHaveTextContent("no filter");
+  });
+
+  it("the markers chip is on by default and turns the events on the paths off and on", async () => {
+    await setup();
+    const user = userEvent.setup();
+    expect(screen.getByTestId("an-markers")).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByTestId("an-markers"));
+    expect(screen.getByTestId("an-markers")).toHaveAttribute("aria-pressed", "false");
+    expect(canvas()).toHaveAttribute("data-trajectories", "2"); // the paths stay
+    await user.click(screen.getByTestId("an-markers"));
+    expect(screen.getByTestId("an-markers")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("the series label where each line ends (stacked where they end together), put the battery on a 0 to 1 axis, and dim the lines of the agents that are not selected", async () => {
+    await setup();
+    expect(screen.getByTestId("series-end-battery-ugv-001")).toBeInTheDocument();
+    expect(within(screen.getByTestId("series-battery")).getAllByText("0")).not.toHaveLength(0); // the axis starts at 0, not at the lowest sample
+    expect(within(screen.getByTestId("series-battery")).getAllByText("1")).not.toHaveLength(0);
+    act(() => useUiContext.getState().select({ kind: "agent", id: "ugv-001" }));
+    const lines = screen.getByTestId("series-battery").querySelectorAll("polyline.line");
+    expect(lines.length).toBeGreaterThan(0);
+    for (const l of lines) expect(l.classList.contains("sel")).toBe(l.getAttribute("data-agent") === "ugv-001");
+    act(() => useUiContext.getState().select(undefined));
   });
 });

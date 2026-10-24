@@ -61,7 +61,7 @@ export const PANELS: Record<PanelId, { readonly title: string; readonly componen
   perf: { title: "Performance", component: PerfPanel },
   overview: { title: "Overview", component: OverviewPanel },
   legend: { title: "Legend", component: LegendPanel },
-  scene: { title: "Scene 3D", component: ScenePanel },
+  scene: { title: "Scene", component: ScenePanel },
   explorer: { title: "Explorer", component: ExplorerPanel },
   inspector: { title: "Inspector", component: InspectorPanel },
   timeline: { title: "Timeline", component: TimelinePanel },

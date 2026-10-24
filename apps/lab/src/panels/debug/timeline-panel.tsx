@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { useAppActions, usePolled, useSource } from "../../services.tsx";
 import { gapLabel } from "../../sim/gap-click.ts";
 import { DerivedTag } from "./derived-tag.tsx";
-import { BIN_PX, binMarks, describeAt, flagRole, glyphOf, isFailure, nearestMark, type Mark } from "./marks.ts";
+import { BIN_PX, binMarks, describeAt, flagRole, GLYPH_PX, glyphOf, isFailure, nearestMark, type Mark } from "./marks.ts";
 import { LABEL_PX, LANE_PX, laneAt, RULER_PX, rulerTicks, selectionFromDrag } from "./timeline-geometry.ts";
 import { useJump } from "./use-jump.ts";
 import { useRunMarks } from "./use-run-marks.ts";
@@ -129,13 +129,16 @@ export function TimelinePanel() {
         ctx.globalAlpha = 1;
         continue;
       }
-      ctx.textAlign = "center";
-      const cx = LABEL_PX + (b.mode === "count" ? b.x0 + 8 : b.px);
-      ctx.fillText(glyphOf(m), cx, cy);
-      if (b.mode === "count") {
+      if (b.mode === "count" && b.label) {
+        // The label is laid out to fit the bin: the glyph and the count, or the count alone, centred in it.
+        ctx.textAlign = "center";
+        if (b.label.glyph) ctx.fillText(glyphOf(m), LABEL_PX + b.label.x + GLYPH_PX / 2, cy);
         ctx.fillStyle = color("--fg2");
         ctx.textAlign = "left";
-        ctx.fillText(`×${b.count}`, cx + 7, cy);
+        ctx.fillText(b.label.text, LABEL_PX + b.label.x + (b.label.glyph ? GLYPH_PX + 2 : 0), cy);
+      } else {
+        ctx.textAlign = "center";
+        ctx.fillText(glyphOf(m), LABEL_PX + b.gx, cy);
       }
     }
     for (const f of binned.flags) {
@@ -145,7 +148,7 @@ export function TimelinePanel() {
       ctx.fillStyle = role === "alarm" ? color("--alm") : color("--warn");
       ctx.fillRect(Math.round(cx) - 1, RULER_PX + f.lane * LANE_PX, 2, LANE_PX - 1);
       ctx.textAlign = "center";
-      ctx.fillText(glyphOf(m), cx + 6, RULER_PX + f.lane * LANE_PX + LANE_PX / 2);
+      ctx.fillText(glyphOf(m), LABEL_PX + f.gx, RULER_PX + f.lane * LANE_PX + LANE_PX / 2);
     }
     ctx.textAlign = "left";
     // The selected range: a tint over the lanes and a band on the ruler with its ends (the one being dragged is read now, like the cursor).

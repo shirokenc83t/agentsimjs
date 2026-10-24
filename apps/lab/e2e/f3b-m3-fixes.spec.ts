@@ -53,14 +53,14 @@ test("N1: the Logs are a layout of the Debug: the inspector fills the area with 
   await explored(page);
   await openWorkspace(page, "debug");
   const tabs = page.locator(".dv-tab");
-  await expect(tabs.filter({ hasText: "SCENE 3D" })).toHaveCount(1);
+  await expect(tabs.filter({ hasText: "SCENE" })).toHaveCount(1);
   await expect(page.getByTestId("log-inspector")).toHaveCount(0); // not a tab of the dock any more
   const before = await tabs.allTextContents();
 
   await runCommand(page, "Open panel: Logs");
   await expect(page.getByTestId("log-inspector")).toBeVisible();
   await expect(page.getByTestId("layout-select")).toHaveValue("debug · logs");
-  await expect(tabs.filter({ hasText: "SCENE 3D" })).toHaveCount(0);
+  await expect(tabs.filter({ hasText: "SCENE" })).toHaveCount(0);
   await expect(page.getByTestId("timeline-canvas")).toBeVisible();
   // The sources are a 200 px column, collapsible to a rail; the panes take the rest in a grid.
   const tree = page.getByTestId("source-tree");

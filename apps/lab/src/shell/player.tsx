@@ -123,7 +123,7 @@ function LiveScrub(props: { snap: SimSnapshot; view: RunSnapshot | undefined; dt
     <div className="scrub">
       <div className="row">
         <span className="live" data-testid="player-state">
-          ● LIVE
+          {snap.headless ? `${GLYPH.running} HEADLESS` : "● LIVE"}
         </span>
         <span data-testid="player-tick">tick {snap.tick}</span>
       </div>
@@ -261,7 +261,15 @@ function Telemetry(props: { snap: SimSnapshot; recorded: boolean }) {
       <div className="tile">
         <span className="lbl">RATE</span>
         <span className="v mono">
-          {snap.ticksPerSecond.toFixed(1)} <small>/{snap.tickRateHz} Hz</small>
+          {snap.headless ? (
+            <>
+              {Math.round(snap.ticksPerSecond).toLocaleString("en")} <small>ticks/s</small>
+            </>
+          ) : (
+            <>
+              {snap.ticksPerSecond.toFixed(1)} <small>/{snap.tickRateHz} Hz</small>
+            </>
+          )}
         </span>
       </div>
       <div className="tile">

@@ -1,7 +1,7 @@
 import "../panels.css";
-import { identityOf, shortLabel } from "@agentsim/ui";
+import { identityOf, KIND_STYLE, shortLabel } from "@agentsim/ui";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { mapTransform, type MapMarker, type MapModel, type MapPalette } from "./analysis-model.ts";
+import { mapTransform, thinMarkers, type MapMarker, type MapModel, type MapPalette } from "./analysis-model.ts";
 
 /** What a click on the map picks: an event (its record), a moment on an agent's trajectory, or nothing. */
 export interface MapPick {
@@ -25,9 +25,19 @@ export interface TopDownMapProps {
   readonly selectedSeq?: number | undefined;
   readonly onPick?: ((p: MapPick) => void) | undefined;
   readonly label: string;
+  /** Whether the events are drawn on the paths (the Analysis workspace's markers chip); on by default. */
+  readonly markers?: boolean;
 }
 
 const PICK_PX = 9;
+
+/** The largest 1, 2 or 5 x 10^k at most `m` (a round length for a scale bar). */
+export function niceLength(m: number): number {
+  if (!(m > 0)) return 1;
+  const p = 10 ** Math.floor(Math.log10(m));
+  for (const f of [5, 2, 1]) if (f * p <= m) return f * p;
+  return p;
+}
 
 /** System colours, for a page that has no theme loaded (a test): the tokens are the colours. */
 const FALLBACK: MapPalette = { background: "Canvas", obstacle: "GrayText", text: "CanvasText", alarm: "CanvasText", warning: "CanvasText", agent: ["CanvasText"] };
@@ -38,7 +48,9 @@ function readPalette(el: Element): MapPalette {
   const c = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
   const agent: string[] = [];
   for (let i = 0; i < 8; i++) agent.push(c(`--agent-${i}`, "currentColor"));
-  return { background: c("--bg0", FALLBACK.background), obstacle: c("--ln2", FALLBACK.obstacle), text: c("--fg", FALLBACK.text), alarm: c("--alm", FALLBACK.alarm), warning: c("--warn", FALLBACK.warning), agent };
+  const kind: Record<string, string> = {};
+  for (const s of Object.values(KIND_STYLE)) kind[s.family] ??= c(`--kind-${s.family}`, "currentColor");
+  return { background: c("--bg0", FALLBACK.background), obstacle: c("--ln2", FALLBACK.obstacle), text: c("--fg", FALLBACK.text), alarm: c("--alm", FALLBACK.alarm), warning: c("--warn", FALLBACK.warning), agent, kind };
 }
 
 /**
@@ -63,6 +75,8 @@ export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function
   }, []);
 
   const tf = useMemo(() => mapTransform(model, size.w, size.h), [model, size]);
+  // The events drawn: the flags always, the plain ones thinned when they are many (and none when the chip is off).
+  const drawn = useMemo<readonly MapMarker[]>(() => (props.markers === false ? [] : thinMarkers(model.markers, tf.px, tf.py)), [model.markers, tf, props.markers]);
 
   // The blocked cells as one small image, scaled up without smoothing (a cell is a cell).
   const base = useMemo(() => {
@@ -80,6 +94,7 @@ export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function
     if (!c || !ctx) return;
     const started = performance.now();
     const pal = readPalette(c);
+    const mono = getComputedStyle(c).getPropertyValue("--font-mono").trim() || "monospace";
     ctx.clearRect(0, 0, size.w, size.h);
     ctx.fillStyle = pal.background;
     ctx.fillRect(0, 0, size.w, size.h);
@@ -115,15 +130,30 @@ export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function
       t.points.forEach((p, i) => (i === 0 ? ctx.moveTo(tf.px(p.x), tf.py(p.y)) : ctx.lineTo(tf.px(p.x), tf.py(p.y))));
       ctx.stroke();
     }
-    // Events: a glyph at the place, a ring on the one picked.
-    ctx.font = `11px ${getComputedStyle(c).getPropertyValue("--font-mono").trim() || "monospace"}`;
+    // Events on the paths: a 4 px dot in the colour of the kind with a ring of the background, the flags 12 px on top of them, and a ring on the one picked.
+    const sorted = [...drawn.filter((m) => m.role === undefined), ...drawn.filter((m) => m.role !== undefined)];
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    for (const m of model.markers) {
+    for (const m of sorted) {
       const x = tf.px(m.x);
       const y = tf.py(m.y);
-      ctx.fillStyle = m.role === "alarm" ? pal.alarm : m.role === "warning" ? pal.warning : pal.text;
-      ctx.fillText(m.glyph, x, y);
+      if (m.role === undefined) {
+        ctx.fillStyle = pal.background;
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = pal.kind?.[KIND_STYLE[m.kind as keyof typeof KIND_STYLE]?.family ?? "slate"] ?? pal.text;
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.font = `bold 12px ${mono}`;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = pal.background;
+        ctx.strokeText(m.glyph, x, y);
+        ctx.fillStyle = m.role === "alarm" ? pal.alarm : pal.warning;
+        ctx.fillText(m.glyph, x, y);
+      }
       if (m.seq === props.selectedSeq) {
         ctx.strokeStyle = pal.text;
         ctx.lineWidth = 1.5;
@@ -132,6 +162,7 @@ export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function
         ctx.stroke();
       }
     }
+    ctx.font = `11px ${mono}`;
     // Where the agents are: the marker style of their identity (solid, outline, dashed), the short label beside it.
     for (const a of model.positions) {
       const id = identityOf(a.colorIndex);
@@ -155,6 +186,34 @@ export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function
       ctx.fillText(shortLabel(a.agentId), x + 8, y - 8);
       ctx.textAlign = "center";
     }
+    // A scale bar (a round length of about 100 px) bottom left, and north top right: a map has both.
+    const nice = niceLength(100 / tf.scale);
+    const barPx = nice * tf.scale;
+    const bx = tf.px(0) + 6;
+    const by = tf.py(0) - 8;
+    ctx.font = `11px ${mono}`;
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = pal.text;
+    ctx.fillStyle = pal.text;
+    ctx.beginPath();
+    ctx.moveTo(bx, by - 4);
+    ctx.lineTo(bx, by);
+    ctx.lineTo(bx + barPx, by);
+    ctx.lineTo(bx + barPx, by - 4);
+    ctx.stroke();
+    ctx.textAlign = "left";
+    ctx.fillText(nice >= 1000 ? `${nice / 1000} km` : `${nice} m`, bx + 2, by - 10);
+    ctx.textAlign = "center";
+    const nx = tf.px(model.widthM) - 14;
+    const ny = tf.py(model.heightM) + 26;
+    ctx.beginPath();
+    ctx.moveTo(nx, ny);
+    ctx.lineTo(nx, ny - 14);
+    ctx.moveTo(nx - 3, ny - 10);
+    ctx.lineTo(nx, ny - 15);
+    ctx.lineTo(nx + 3, ny - 10);
+    ctx.stroke();
+    ctx.fillText("N", nx, ny + 7);
     // The probe of the benches: how long a draw took (with the page's probe on, nothing otherwise).
     const probe = window.__agentsim;
     if (probe) {
@@ -162,7 +221,7 @@ export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function
       list.push(performance.now() - started);
       if (list.length > 2000) list.splice(0, list.length - 2000);
     }
-  }, [model, size, tf, base, props.selectedAgent, props.selectedSeq]);
+  }, [model, size, tf, base, drawn, props.selectedAgent, props.selectedSeq]);
 
   useEffect(() => {
     draw();
@@ -189,14 +248,14 @@ export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function
         if (d <= PICK_PX && (!best || d < best.d)) best = { d, pick, text };
       };
       for (const a of model.positions) consider(Math.hypot(tf.px(a.x) - x, tf.py(a.y) - y) - 3, { agentId: a.agentId }, a.agentId);
-      for (const m of model.markers as readonly MapMarker[]) consider(Math.hypot(tf.px(m.x) - x, tf.py(m.y) - y) - 2, { seq: m.seq, t: m.t, agentId: m.agentId }, m.label);
+      for (const m of drawn) consider(Math.hypot(tf.px(m.x) - x, tf.py(m.y) - y) - 2, { seq: m.seq, t: m.t, agentId: m.agentId }, m.label);
       if (!best) {
         for (const t of model.trajectories)
           for (const p of t.points) if (p.t !== undefined) consider(Math.hypot(tf.px(p.x) - x, tf.py(p.y) - y), { t: p.t, agentId: t.agentId }, `${t.agentId} at ${p.t.toFixed(1)} s`);
       }
       return best;
     },
-    [model, tf],
+    [model, tf, drawn],
   );
 
   return (

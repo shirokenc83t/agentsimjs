@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loadDemo, openPanelTab, openWorkspace, runCommand } from "./helpers.ts";
+import { loadDemo, openPanelTab, openWorkspace, runCommand, sendTo, step } from "./helpers.ts";
 
 // Headless runs (ADR-0029, ADR-0035 section 7): started from the palette, the player, the run popover and Author, followed in the Experiments workspace by a monitor that
 // progresses from the worker's own report, ended by its end condition or by Stop, and then opened for replay. A headless run shows nothing live and is always recorded.
@@ -72,4 +72,26 @@ test("the run popover and Author start it too, and Author runs the configuration
   await expect(page.getByTestId("workspace-experiments")).toBeVisible();
   await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 60_000 });
   await expect(page.locator("header.top").getByTestId("run-label")).toContainText("run-000003");
+});
+
+test("a headless run of a run that was given commands says it is a re-run: on the button, in the monitor and in Storage; the finished monitor says how it ended and that the writer has flushed", async ({ page }) => {
+  test.setTimeout(180_000);
+  await loadDemo(page);
+  await sendTo(page, "ugv-001", 50, 10);
+  await step(page, 1);
+  await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 30_000 });
+  await page.getByTestId("run-label").click();
+  // The run has a command: the button and its tip say that the command is applied again.
+  await expect(page.getByTestId("run-headless-popover")).toHaveText("Re-run headless", { timeout: 10_000 });
+  await expect(page.getByTestId("run-headless-popover")).toHaveAttribute("data-tip", /the 1 command of run-000001/);
+  await page.getByTestId("run-headless-popover").click();
+  await expect(page.getByTestId("headless-monitor")).toContainText("run-000001 · 1 command re-applied");
+  await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 60_000 });
+  // A finished run says how it ended, not what it waits for, and its writer is flushing or has flushed.
+  await expect(page.getByTestId("hm-ended")).toContainText("✓ ended · tick 600 · end condition: sim time 1 min 00 s reached");
+  await expect(page.getByTestId("hm-waiting")).toHaveCount(0);
+  await expect(page.getByTestId("hm-writer")).toContainText("✓ flushed · all", { timeout: 20_000 });
+  await openWorkspace(page, "data");
+  await page.getByRole("button", { name: "Refresh" }).click();
+  await expect(page.getByTestId("run-row-run-000002")).toContainText("re-run of run-000001 · 1 command re-applied");
 });

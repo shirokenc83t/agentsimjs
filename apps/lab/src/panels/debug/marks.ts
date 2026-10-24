@@ -64,14 +64,36 @@ export const MARK_LEGEND: readonly { readonly glyph: string; readonly name: stri
   { glyph: "◇", name: "snapshot", kind: "snapshot" },
 ];
 
-/** The width (px) of a bin of the Timeline: a count label (`▪×19`) fits in one. */
+/** The width (px) of a bin of the Timeline. What is drawn in a bin is laid out to fit it (see `countLabel`): nothing a bin draws reaches into the next one. */
 export const BIN_PX = 32;
+/** The widths the lanes are drawn with (px): a character of the mono label, a glyph, the gap between them and the room kept at each side of a bin. */
+export const CHAR_PX = 6.8;
+export const GLYPH_PX = 7;
+const GAP_PX = 2;
+const PAD_PX = 2;
+
+/**
+ * How the count of a bin is written so that it fits the bin: the glyph and `×N` where both fit, `×N` alone where only that fits, a compact `1.2k` for thousands, and nothing
+ * (the bin becomes a density bar, its count in the tooltip) where no text fits. `widthPx` is what the label takes; it never exceeds the bin less its padding.
+ */
+export function countLabel(count: number, binPx = BIN_PX): { readonly text: string; readonly glyph: boolean; readonly widthPx: number } | undefined {
+  const room = binPx - 2 * PAD_PX;
+  const texts = [`×${count}`, count >= 1000 ? `${count < 10_000 ? (count / 1000).toFixed(1) : Math.round(count / 1000)}k` : ""].filter((t) => t !== "");
+  for (const text of texts) {
+    const w = text.length * CHAR_PX;
+    if (GLYPH_PX + GAP_PX + w <= room) return { text, glyph: true, widthPx: GLYPH_PX + GAP_PX + w };
+    if (w <= room) return { text, glyph: false, widthPx: w };
+  }
+  return undefined;
+}
 
 /** A flag (a failure, a reflex, a refused start) at its place on its lane: it is drawn on its own, never folded into a count. */
 export interface FlagMark {
   readonly lane: number;
   /** Position along the track (px). */
   readonly px: number;
+  /** The centre of its glyph (px): beside its bar, moved right where the flag before it on the lane has the place, so no two flags overlap. */
+  readonly gx: number;
   readonly mark: Mark;
 }
 
@@ -82,6 +104,10 @@ export interface MarkBin {
   readonly x0: number;
   /** Where its glyph goes: the first mark's position (px). */
   readonly px: number;
+  /** The centre of a lone glyph (px): its place, kept inside the bin so that glyphs of two bins never touch. */
+  readonly gx: number;
+  /** A count bin's label and the left edge of what it draws (px), centred in the bin. Undefined for the other modes. */
+  readonly label?: { readonly text: string; readonly glyph: boolean; readonly widthPx: number; readonly x: number };
   readonly count: number;
   /** The mark whose glyph stands for the bin: the first, or for a bin of several the one of the majority kind. */
   readonly shown: Mark;
@@ -110,7 +136,9 @@ export function binMarks(marks: readonly Mark[], lanes: readonly string[], scale
     const lane = laneIndex(lanes, m);
     const px = scaleS > 0 ? (m.t / scaleS) * trackPx : 0;
     if (flagRole(m) !== undefined) {
-      flags.push({ lane, px, mark: m });
+      // Flags are never folded: each is drawn where it is, its glyph beside its bar, moved right only as far as the flag before it needs.
+      const before = flags.filter((f) => f.lane === lane).at(-1);
+      flags.push({ lane, px, gx: Math.max(px + 6, before === undefined ? -Infinity : before.gx + GLYPH_PX + 1), mark: m });
       continue;
     }
     const bin = Math.floor(px / binPx);
@@ -127,16 +155,25 @@ export function binMarks(marks: readonly Mark[], lanes: readonly string[], scale
     const kinds = [...byKind.entries()].map(([kind, count]) => ({ kind, count })).sort((a, b) => b.count - a.count || (a.kind < b.kind ? -1 : 1));
     const majority = kinds[0]?.kind;
     const x0 = g.bin * binPx;
-    const crowded = g.items.length > 1 && flags.some((f) => f.lane === g.lane && f.px >= x0 - 8 && f.px <= x0 + binPx + 8);
+    const one = g.items.length === 1;
+    const gx = Math.max(x0 + 4, Math.min(x0 + binPx - 4, g.px));
+    // A flag in or next to a count's bin, or on top of a lone glyph (its bar and its glyph take the room), puts a density bar there instead.
+    // (A flag takes from its bar to the far side of its glyph, which may have been moved right to clear the flag before it.)
+    const crowded = one
+      ? flags.some((f) => f.lane === g.lane && f.px - 1 < gx + GLYPH_PX / 2 + 1 && f.gx + GLYPH_PX / 2 > gx - GLYPH_PX / 2 - 1)
+      : flags.some((f) => f.lane === g.lane && f.px - 1 < x0 + binPx + 2 && f.gx + GLYPH_PX / 2 > x0 - 2);
+    const label = one ? undefined : countLabel(g.items.length, binPx);
     maxCount = Math.max(maxCount, g.items.length);
     bins.push({
       lane: g.lane,
       x0,
       px: g.px,
+      gx,
       count: g.items.length,
       shown: g.items.find((m) => m.kind === majority) ?? (g.items[0] as Mark),
       kinds,
-      mode: g.items.length === 1 ? "glyph" : crowded ? "bar" : "count",
+      mode: crowded || (!one && label === undefined) ? "bar" : one ? "glyph" : "count",
+      ...(label === undefined || crowded ? {} : { label: { ...label, x: x0 + (binPx - label.widthPx) / 2 } }),
     });
   }
   return { flags, bins, maxCount };

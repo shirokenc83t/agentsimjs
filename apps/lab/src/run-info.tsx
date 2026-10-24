@@ -71,6 +71,8 @@ export interface RunPopoverProps {
   onRerun: () => void;
   /** Runs the scenario again headless, with the recording choice above and the duration chosen there. */
   onRunHeadless: () => void;
+  /** The commands the run shown has recorded: the headless button says "re-run" when a headless run applies them again. */
+  rerunCommands: number;
   /** Stored runs that can be re-simulated (newest first), with their recorded input counts. */
   listRuns: () => Promise<{ runId: string; label: string; inputs: number }[]>;
   onResimulate: (runId: string) => void;
@@ -150,7 +152,7 @@ export function RunPopover(props: RunPopoverProps) {
         ) : (
           <p className="muted">No scenario loaded: the F0 placeholder world is running.</p>
         )}
-        <RecordingControls realtime={snap.mode === "realtime"} onRunHeadless={() => !busy && run && props.onRunHeadless()} headlessDisabled={busy || !run} />
+        <RecordingControls realtime={snap.mode === "realtime"} onRunHeadless={() => !busy && run && props.onRunHeadless()} headlessDisabled={busy || !run} headlessCommands={props.rerunCommands} headlessOf={run?.header.runId} />
         <div className="row">
           {/* Busy buttons stay focusable (aria-disabled, clicks ignored): disabling them would drop focus out of
               the popover, and Escape would no longer close it. */}

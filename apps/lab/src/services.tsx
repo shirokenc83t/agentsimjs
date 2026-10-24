@@ -57,6 +57,8 @@ export interface CurrentRun {
   readonly run: LabRun | undefined;
   readonly busy: boolean;
   readonly error: string | null;
+  /** How many commands the run shown has recorded: a headless run applies them again (the buttons say "re-run" when there are some). */
+  readonly rerunCommands?: number;
   loadDemo(): void;
   /** A new run of the current run's scenario version with another run configuration (new ID, new header). */
   runWithConfig(runConfig: unknown): void;
@@ -69,6 +71,7 @@ const CurrentRunContext = createContext<CurrentRun>({
   run: undefined,
   busy: false,
   error: null,
+  rerunCommands: 0,
   loadDemo: () => {},
   runWithConfig: () => {},
   runHeadlessWithConfig: () => {},

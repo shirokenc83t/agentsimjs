@@ -171,6 +171,56 @@ export function markersOf(records: readonly TraceRecord[], trajectories: Readonl
   return out;
 }
 
+/** Plain markers in view beyond which they are thinned (the flags never are). */
+export const PLAIN_MARKER_LIMIT = 400;
+
+/**
+ * The markers to draw: the flags (X, triangle) always, and the plain ones as they are when there are few; above `limit` the plain ones are thinned per pixel bin and kind (the
+ * first of each bin stays), so a dense run is a texture and not a blot, and no flag is ever lost under it.
+ */
+export function thinMarkers(markers: readonly MapMarker[], px: (x: number) => number, py: (y: number) => number, limit = PLAIN_MARKER_LIMIT, binPx = 6): readonly MapMarker[] {
+  let plain = 0;
+  for (const m of markers) if (m.role === undefined) plain++;
+  if (plain <= limit) return markers;
+  const seen = new Set<string>();
+  return markers.filter((m) => {
+    if (m.role !== undefined) return true;
+    const key = `${m.kind}|${Math.floor(px(m.x) / binPx)}|${Math.floor(py(m.y) / binPx)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Where the labels at the right end of a chart go: each wants the y of the end of its line, and where lines end together the labels are stacked at least `gap` px apart
+ * (never the data: only the text moves), kept inside [min, max]. Returns the y of each label, in the order given.
+ */
+export function stackedLabelYs(wanted: readonly number[], gap: number, min: number, max: number): number[] {
+  const order = wanted.map((y, i) => ({ y, i })).sort((a, b) => a.y - b.y || a.i - b.i);
+  const ys: number[] = [];
+  for (const o of order) ys.push(Math.max(min, ys.length === 0 ? o.y : Math.max(o.y, (ys[ys.length - 1] as number) + gap)));
+  // Pushed past the bottom: move the pile back up from the end.
+  for (let k = ys.length - 1; k >= 0; k--) {
+    const limit = k === ys.length - 1 ? max : (ys[k + 1] as number) - gap;
+    if ((ys[k] as number) > limit) ys[k] = limit;
+  }
+  const out: number[] = new Array(wanted.length).fill(0);
+  order.forEach((o, k) => (out[o.i] = ys[k] as number));
+  return out;
+}
+
+/** The value a series has at `t`: that of the last sample at or before it (a sample holds until the next), or the first when `t` is before them all. */
+export function valueAtTime(points: readonly SeriesPoint[], t: number): number | undefined {
+  if (points.length === 0) return undefined;
+  let v = (points[0] as SeriesPoint).v;
+  for (const p of points) {
+    if (p.t > t) break;
+    v = p.v;
+  }
+  return v;
+}
+
 // ---- series -----------------------------------------------------------------------------------------------------------------------------------------------
 
 export interface SeriesPoint {
@@ -289,6 +339,8 @@ export interface MapPalette {
   readonly alarm: string;
   readonly warning: string;
   readonly agent: readonly string[];
+  /** The colour of each kind family (slate, violet, ...) as a value: the plain markers of the map are drawn in it. */
+  readonly kind?: Readonly<Record<string, string>>;
 }
 
 /** The map as a standalone SVG document (well-formed XML): obstacles, trajectories, positions and events; every marker has its text as a title. */
