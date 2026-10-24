@@ -27,6 +27,21 @@
     "render.frameInterval": {
       "report": true
     },
+    "render.frameWork.overview": {
+      "stat": "p95",
+      "max": 4,
+      "$comment": "F3b: the render loop with the floating Overview open, 20 agents: frame work p95 within the same 4 ms as the Scene's"
+    },
+    "render.frameWork.logTail": {
+      "stat": "p95",
+      "max": 4,
+      "$comment": "F3b: the render loop with the log console tailing a 20-agent run (rows pushed by the live subscription): frame work p95 within 4 ms"
+    },
+    "render.frameWork.map2d": {
+      "stat": "p95",
+      "max": 4,
+      "$comment": "F3b: each draw of the Scene's 2D view (the Analysis map's component) with 20 agents and their paths: p95 within 4 ms"
+    },
     "render.frameWork.reference": {
       "stat": "p95",
       "max": 4,
