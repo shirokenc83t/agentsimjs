@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, loadF2, openPanelTab, openWorkspace, sceneSettled, sendTo, step } from "../helpers.ts";
+import { loadDemo, loadF2, openPanelTab, openWorkspace, runCommand, sceneSettled, sendTo, step } from "../helpers.ts";
 
 /**
  * Visual regression (ADR-0032 §9): a fixed set of panels in both themes, from the deterministic F1 demo at
@@ -235,6 +235,33 @@ for (const theme of THEMES) {
       await settle(page);
       const mask = [page.getByTestId("storage-info"), page.locator(".size-bar"), page.locator('[data-testid^="run-row-"]'), page.getByTestId("sql-status"), page.getByTestId("sql-grid")];
       await expect(page.getByTestId("workspace-data")).toHaveScreenshot(`data-workspace-${theme}.png`, { mask });
+    });
+
+    // F3b M4: the headless monitor of a finished run and the Analysis workspace of the same run (a headless run of the F1 demo, 60 sim seconds). The monitor's numbers are the
+    // machine's (wall time, speed, rates, bytes written, what the writer had left, the sampled stream): masked; the Analysis shows the deterministic recording.
+    test("Experiments: the headless monitor of a finished run", async ({ page }) => {
+      test.setTimeout(120_000);
+      await runCommand(page, "Run headless");
+      await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 60_000 });
+      await expect(page.getByTestId("hm-volume")).toContainText(/stored \d/, { timeout: 15_000 });
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      const mask = ["hm-wall", "hm-eta", "hm-snapshots", "hm-speed", "hm-tps", "hm-tickcost", "hm-written", "hm-volume", "hm-writer", "hm-stream"].map((id) => page.getByTestId(id));
+      mask.push(page.locator(".hm-spark"), page.locator(".hm-bar"));
+      await expect(page.getByTestId("workspace-experiments")).toHaveScreenshot(`headless-monitor-${theme}.png`, { mask });
+    });
+
+    test("Analysis: trajectories, the timeline and the series of a headless run", async ({ page }) => {
+      test.setTimeout(120_000);
+      await runCommand(page, "Run headless");
+      await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 60_000 });
+      await page.getByTestId("hm-open-analysis").click();
+      await expect(page.getByTestId("analysis")).toHaveAttribute("data-status", "ready", { timeout: 60_000 });
+      await expect.poll(async () => Number(await page.getByTestId("map2d-canvas").getAttribute("data-trajectories")), { timeout: 15_000 }).toBeGreaterThanOrEqual(1);
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await page.mouse.move(2, 2);
+      await settle(page);
+      await expect(page.getByTestId("workspace-analysis")).toHaveScreenshot(`analysis-${theme}.png`);
     });
 
     test("command palette", async ({ page }) => {

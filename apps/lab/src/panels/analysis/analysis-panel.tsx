@@ -184,7 +184,7 @@ export function AnalysisPanel() {
         <span className="muted" data-testid="an-count">
           {data.status === "loading" ? `reading… ${data.counts.poses}` : `${shown.length}/${allAgents.length} agents · ${events.length} events`}
         </span>
-        <button type="button" className="kt" onClick={data.reload} data-testid="an-reload" data-tip="Read the run again (it may have grown)">
+        <button type="button" className="kt tip-right" onClick={data.reload} data-testid="an-reload" data-tip="Read the run again (it may have grown)">
           ⟳
         </button>
       </div>
@@ -229,7 +229,7 @@ export function AnalysisPanel() {
           <button type="button" className="kt" onClick={exportCsv} disabled={series.length === 0} data-testid="an-export-csv">
             series CSV
           </button>
-          <button type="button" className="kt" onClick={() => void exportJsonl()} disabled={error !== undefined} data-testid="an-export-jsonl" data-tip="The trace records the filter selects (pose samples left out unless the filter names a source)">
+          <button type="button" className="kt tip-right" onClick={() => void exportJsonl()} disabled={error !== undefined} data-testid="an-export-jsonl" data-tip="The trace records the filter selects (pose samples left out unless the filter names a source)">
             trace JSONL
           </button>
         </span>
