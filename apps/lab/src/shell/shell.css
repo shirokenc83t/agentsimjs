@@ -113,3 +113,5 @@
 .rerun-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; display: flex; flex-direction: column; min-width: 260px; padding: 2px; background: var(--bg2); border: 1px solid var(--ln2); }
 .rerun-pop .tb { justify-content: flex-start; height: 26px; }
 .rerun-same { margin: 4px 8px 4px; font-size: var(--type-label-size); white-space: normal; }
+.ready-start .pb { width: auto; min-width: 0; padding: 0 10px; white-space: nowrap; }
+.player.compact .ready-sum { display: none; }

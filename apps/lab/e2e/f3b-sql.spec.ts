@@ -106,3 +106,40 @@ test("a long statement is stopped while the live run goes on being saved: the re
   const later = await savedTick();
   await expect.poll(savedTick, { timeout: 15_000 }).toBeGreaterThan(later);
 });
+
+test("Data opens with the Storage about 30 % and the SQL console 70 %; the editor takes a quarter of the console and the border moves; the results can fill the panel (Esc returns) or be pinned in a window that keeps them", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await loadDemo(page);
+  await openWorkspace(page, "data");
+  const h = async (id: string) => (await page.getByTestId(id).boundingBox())?.height ?? 0;
+  const dockH = async () => (await page.locator(".dv-dockview").first().boundingBox())?.height ?? 1;
+  await expect.poll(async () => (await h("sql-console")) / (await dockH())).toBeGreaterThan(0.55); // the console is most of the height (70 % less its tab bar)
+  // The editor part is a quarter of what is under the console's bar; dragging the border and the arrow keys move it.
+  const top = async () => (await page.locator(".sql-top").boundingBox())?.height ?? 0;
+  const results = async () => (await page.getByTestId("sql-results").boundingBox())?.height ?? 0;
+  expect(await results()).toBeGreaterThan(2 * (await top()));
+  const before = await top();
+  await page.getByTestId("sql-sash").focus();
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(top).toBeGreaterThan(before);
+
+  await runSql(page, "SELECT run_id, label FROM runs");
+  await expect(page.getByTestId("sql-status").first()).toContainText("row", { timeout: 15_000 });
+  // Maximize: the results fill the panel, the editor is gone, Esc brings it back.
+  await page.getByTestId("sql-maximize").click();
+  await expect(page.getByTestId("sql-editor")).toBeHidden();
+  await expect(page.getByTestId("sql-grid")).toBeVisible();
+  await page.getByTestId("sql-grid").focus();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("sql-editor")).toBeVisible();
+
+  // The window keeps the result pinned while the next statement is written and run.
+  await page.getByTestId("sql-window").click();
+  await expect(page.getByTestId("sql-pinned")).toBeVisible();
+  await expect(page.getByTestId("sql-pinned-status")).toContainText("SELECT run_id, label FROM runs");
+  await runSql(page, "SELECT 1 AS one");
+  await expect(page.getByTestId("sql-status").first()).toContainText("1 row", { timeout: 15_000 });
+  await expect(page.getByTestId("sql-pinned-status")).toContainText("SELECT run_id, label FROM runs");
+  await expect(page.getByTestId("sql-pinned").getByTestId("sql-grid")).toBeVisible();
+});

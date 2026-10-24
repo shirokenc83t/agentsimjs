@@ -12,6 +12,7 @@ const RunConfigPanel = lazy(() => import("../panels/run-config/run-config-panel.
 const TimelinePanel = lazy(() => import("../panels/debug/timeline-panel.tsx").then((m) => ({ default: m.TimelinePanel })));
 const EventListPanel = lazy(() => import("../panels/debug/event-list-panel.tsx").then((m) => ({ default: m.EventListPanel })));
 const LogInspectorPanel = lazy(() => import("../panels/inspector/multi-log-inspector.tsx").then((m) => ({ default: m.MultiLogInspector })));
+const SqlResultWindow = lazy(() => import("../panels/sql/sql-result-window.tsx").then((m) => ({ default: m.SqlResultWindow })));
 const SqlConsolePanel = lazy(() => import("../panels/sql/sql-console-panel.tsx").then((m) => ({ default: m.SqlConsolePanel })));
 const TraceGraphPanel = lazy(() => import("../panels/debug/trace-graph-panel.tsx").then((m) => ({ default: m.TraceGraphPanel })));
 const TraceTreePanel = lazy(() => import("../panels/debug/trace-tree-panel.tsx").then((m) => ({ default: m.TraceTreePanel })));
@@ -56,7 +57,7 @@ export const LazyPlayerMarks = lazy(() => import("../shell/player-marks.tsx").th
 /** The run header popover, loaded on first open (the toolbar keeps only the run label). */
 export const LazyRunPopover = lazy(() => import("../run-info.tsx").then((m) => ({ default: m.RunPopover })));
 
-export type PanelId = "overview" | "legend" | "perf" | "scene" | "explorer" | "inspector" | "timeline" | "eventList" | "traceTree" | "traceGraph" | "sqlConsole" | "logInspector" | "headlessMonitor" | "analysisView" | "runConfig" | "scenarioEditor" | "storage" | "settings";
+export type PanelId = "overview" | "legend" | "perf" | "scene" | "explorer" | "inspector" | "timeline" | "eventList" | "traceTree" | "traceGraph" | "sqlConsole" | "sqlResult" | "logInspector" | "headlessMonitor" | "analysisView" | "runConfig" | "scenarioEditor" | "storage" | "settings";
 
 export const PANELS: Record<PanelId, { readonly title: string; readonly component: ComponentType }> = {
   perf: { title: "Performance", component: PerfPanel },
@@ -76,6 +77,7 @@ export const PANELS: Record<PanelId, { readonly title: string; readonly componen
   scenarioEditor: { title: "Scenario editor", component: ScenarioEditorPanel },
   storage: { title: "Storage", component: StoragePanel },
   sqlConsole: { title: "SQL", component: SqlConsolePanel },
+  sqlResult: { title: "SQL results", component: SqlResultWindow },
   settings: { title: "Settings", component: SettingsPanel },
 };
 

@@ -44,6 +44,8 @@ export const PERF_WINDOW: PresetPanel = { id: "perf", floating: { width: 300, he
  * the Debug.
  */
 export const TRACE_GRAPH_WINDOW: PresetPanel = { id: "traceGraph", floating: { width: 1360, height: 840, collapsed: false } };
+/** The SQL results pinned in a window (U-010 section 5): opened from the console, in no preset. */
+export const SQL_RESULT_WINDOW: PresetPanel = { id: "sqlResult", floating: { width: 760, height: 420, collapsed: false } };
 /** The windows of the Scene (ADR-0042 section 8): the Legend above the Performance window at the bottom right of the map and the Overview at its bottom left (open together they do not touch); all start collapsed. */
 const OVERVIEW_WINDOW: PresetPanel = { id: "overview", floating: { width: 240, height: 200, collapsed: true, host: "scene", stack: 1, side: "left" } };
 const LEGEND_WINDOW: PresetPanel = { id: "legend", floating: { width: 340, height: 330, collapsed: true, host: "scene", stack: 1 } };
@@ -92,7 +94,8 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
       PERF_WINDOW,
     ],
   },
-  { id: "data", title: "Data", panels: [{ id: "storage" }, { id: "sqlConsole", position: { referencePanel: "storage", direction: "below" }, initialHeight: 330 }] },
+  // Data (U-010 section 5): the Storage a third of the height, the SQL console the rest.
+  { id: "data", title: "Data", panels: [{ id: "storage" }, { id: "sqlConsole", position: { referencePanel: "storage", direction: "below" }, initialHeight: 330, initialHeightPct: 0.7 }] },
   { id: "settings", title: "Settings", panels: [{ id: "settings" }] },
   // Experiments (UI-SPEC section 3): ships with only the headless run monitor; the batch runner and the results of F13 join it there.
   { id: "experiments", title: "Experiments", panels: [{ id: "headlessMonitor" }] },

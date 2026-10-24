@@ -4,11 +4,12 @@ import { SQL_LIMITS, type SqlError, type SqlResult, type SqlSchema } from "@agen
 import { downloadBytes, ROW_PX } from "@agentsim/ui";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { loadSnippets, storeSnippets, withoutSnippet, withSnippet, type SqlSnippet } from "../../config/sql-snippets.ts";
-import { useServices } from "../../services.tsx";
+import { useAppActions, useServices } from "../../services.tsx";
 import { complete, type Completion } from "./sql-complete.ts";
 import { toCsv, toJsonl } from "./sql-export.ts";
 import { cellText, columnWidths } from "./sql-grid.ts";
 import { highlightSql } from "./sql-highlight.ts";
+import { pinSqlResult } from "./sql-pinned.ts";
 
 const EXAMPLE = "SELECT kind, count(*) AS n FROM trace_records GROUP BY kind ORDER BY n DESC";
 
@@ -31,6 +32,12 @@ export function SqlConsolePanel() {
   const [open, setOpen] = useState<(Completion & { index: number }) | undefined>(undefined);
   const [snippets, setSnippets] = useState<SqlSnippet[]>([]);
   const [naming, setNaming] = useState(false);
+  // The editor and the results share the panel (U-010 section 5): the editor a quarter of it by default, the border dragged or moved with the arrows; the results can fill the
+  // panel (Esc returns) or be pinned in a window of their own that keeps them while the next statement is written.
+  const [splitPct, setSplitPct] = useState(25);
+  const [maximized, setMaximized] = useState(false);
+  const body = useRef<HTMLDivElement>(null);
+  const { openPanel } = useAppActions();
   const job = useRef<{ cancel(): Promise<void> } | undefined>(undefined);
   const editor = useRef<HTMLTextAreaElement>(null);
   const painted = useRef<HTMLPreElement>(null);
@@ -199,81 +206,132 @@ export function SqlConsolePanel() {
           schema
         </button>
       </div>
-      <div className="sql-main">
-        {showSchema && schema && (
-          <div className="sql-schema mono" data-testid="sql-schema">
-            {schema.tables.map((t) => (
-              <div key={t.name} className="sql-table">
-                <button type="button" className="tt-node" disabled={!t.readable} onClick={() => insertName(t.name)} title={t.readable ? `insert ${t.name}` : "not readable in the console"}>
-                  {t.name}
-                  {t.readable ? "" : "  (not readable here)"}
-                </button>
-                {t.columns.map((c) => (
-                  <button key={c.name} type="button" className="tt-node sql-col" onClick={() => insertName(c.name)}>
-                    {c.name} <span className="muted">{c.type.toLowerCase()}</span>
+      <div className="sql-split-host" ref={body} data-maximized={maximized}>
+        <div className="sql-top" style={maximized ? { display: "none" } : { flex: `0 0 ${splitPct}%` }}>
+        <div className="sql-main">
+          {showSchema && schema && (
+            <div className="sql-schema mono" data-testid="sql-schema">
+              {schema.tables.map((t) => (
+                <div key={t.name} className="sql-table">
+                  <button type="button" className="tt-node" disabled={!t.readable} onClick={() => insertName(t.name)} title={t.readable ? `insert ${t.name}` : "not readable in the console"}>
+                    {t.name}
+                    {t.readable ? "" : "  (not readable here)"}
                   </button>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="sql-editor-wrap">
-          <div className="sql-stack">
-            {/* The colours are drawn behind the text area, whose own text is transparent: the caret, the selection and the keys stay the browser's. */}
-            <pre ref={painted} className="sql-hl mono" aria-hidden="true" data-testid="sql-highlight">
-              {highlightSql(sql).map((t, i) => (
-                <span key={i} className={t.kind === "plain" ? undefined : `sq-${t.kind}`}>
-                  {t.text}
-                </span>
+                  {t.columns.map((c) => (
+                    <button key={c.name} type="button" className="tt-node sql-col" onClick={() => insertName(c.name)}>
+                      {c.name} <span className="muted">{c.type.toLowerCase()}</span>
+                    </button>
+                  ))}
+                </div>
               ))}
-              {"\n"}
-            </pre>
-            <textarea
-              ref={editor}
-              className="sql-editor mono"
-              value={sql}
-              spellCheck={false}
-              onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
-              onKeyDown={onKeyDown}
-              onScroll={(e) => {
-                if (painted.current) painted.current.scrollTop = e.currentTarget.scrollTop;
-              }}
-              onBlur={() => {
-                clearTimeout(closing.current);
-                closing.current = setTimeout(() => setOpen(undefined), 120);
-              }}
-              aria-label="SQL statement"
-              data-testid="sql-editor"
-            />
-          </div>
-          {open && (
-            <ul className="sql-complete mono" role="listbox" aria-label="Completions" data-testid="sql-complete">
-              {open.items.map((item, i) => (
-                <li key={item} role="option" aria-selected={i === open.index} className={i === open.index ? "on" : ""} data-testid="sql-complete-item" onMouseDown={(e) => (e.preventDefault(), accept(item))}>
-                  {item}
-                </li>
-              ))}
-            </ul>
+            </div>
           )}
-          <div className="sql-actions">
-            <button type="button" className="btn pri tip-up" disabled={running || sql.trim() === ""} onClick={() => void run()} data-testid="sql-run" data-tip="Run · Ctrl+Enter">
-              Run
-            </button>
-            <button type="button" className="btn" disabled={!running} onClick={cancel} data-testid="sql-cancel">
-              Cancel
-            </button>
-            <span className="sp" />
-            <button type="button" className="btn" disabled={!result} onClick={() => download("csv")} data-testid="sql-export-csv">
-              export CSV
-            </button>
-            <button type="button" className="btn" disabled={!result} onClick={() => download("jsonl")} data-testid="sql-export-jsonl">
-              export JSONL
-            </button>
+          <div className="sql-editor-wrap">
+            <div className="sql-stack">
+              {/* The colours are drawn behind the text area, whose own text is transparent: the caret, the selection and the keys stay the browser's. */}
+              <pre ref={painted} className="sql-hl mono" aria-hidden="true" data-testid="sql-highlight">
+                {highlightSql(sql).map((t, i) => (
+                  <span key={i} className={t.kind === "plain" ? undefined : `sq-${t.kind}`}>
+                    {t.text}
+                  </span>
+                ))}
+                {"\n"}
+              </pre>
+              <textarea
+                ref={editor}
+                className="sql-editor mono"
+                value={sql}
+                spellCheck={false}
+                onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
+                onKeyDown={onKeyDown}
+                onScroll={(e) => {
+                  if (painted.current) painted.current.scrollTop = e.currentTarget.scrollTop;
+                }}
+                onBlur={() => {
+                  clearTimeout(closing.current);
+                  closing.current = setTimeout(() => setOpen(undefined), 120);
+                }}
+                aria-label="SQL statement"
+                data-testid="sql-editor"
+              />
+            </div>
+            {open && (
+              <ul className="sql-complete mono" role="listbox" aria-label="Completions" data-testid="sql-complete">
+                {open.items.map((item, i) => (
+                  <li key={item} role="option" aria-selected={i === open.index} className={i === open.index ? "on" : ""} data-testid="sql-complete-item" onMouseDown={(e) => (e.preventDefault(), accept(item))}>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="sql-actions">
+              <button type="button" className="btn pri tip-up" disabled={running || sql.trim() === ""} onClick={() => void run()} data-testid="sql-run" data-tip="Run · Ctrl+Enter">
+                Run
+              </button>
+              <button type="button" className="btn" disabled={!running} onClick={cancel} data-testid="sql-cancel">
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
+        </div>
+        {!maximized && (
+          <div
+            className="sql-sash"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Editor and results: drag or use the arrow keys"
+            aria-valuenow={splitPct}
+            aria-valuemin={10}
+            aria-valuemax={80}
+            tabIndex={0}
+            data-testid="sql-sash"
+            onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
+            onPointerMove={(e) => {
+              if (e.buttons !== 1 || !body.current) return;
+              const box = body.current.getBoundingClientRect();
+              setSplitPct(Math.round(Math.max(10, Math.min(80, ((e.clientY - box.top) / box.height) * 100))));
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowUp") setSplitPct((v) => Math.max(10, v - 5));
+              else if (e.key === "ArrowDown") setSplitPct((v) => Math.min(80, v + 5));
+              else return;
+              e.preventDefault();
+            }}
+          />
+        )}
+        <div className="sql-results" data-testid="sql-results" onKeyDown={(e) => e.key === "Escape" && maximized && (e.stopPropagation(), setMaximized(false))}>
+          <div className="sql-res-head">
+            <Status running={running} outcome={outcome} limit={maxRows} />
+            <span className="sp" />
+            <button type="button" className="kt" disabled={!result} onClick={() => download("csv")} data-testid="sql-export-csv">
+              CSV
+            </button>
+            <button type="button" className="kt" disabled={!result} onClick={() => download("jsonl")} data-testid="sql-export-jsonl">
+              JSONL
+            </button>
+            <button type="button" className="kt" aria-pressed={maximized} onClick={() => setMaximized((m) => !m)} aria-label={maximized ? "Restore the editor (Esc)" : "Maximize the results"} data-tip={maximized ? "Back to the editor and the results · Esc" : "The results fill the panel"} data-testid="sql-maximize">
+              □
+            </button>
+            <button
+              type="button"
+              className="kt tip-right"
+              disabled={!result}
+              onClick={() => {
+                if (!result) return;
+                pinSqlResult(result, sql);
+                openPanel("sqlResult");
+              }}
+              aria-label="Open the results in a window"
+              data-tip="A window with these results that stays while you write the next statement"
+              data-testid="sql-window"
+            >
+              ⧉
+            </button>
+          </div>
+          {result && <Grid result={result} />}
+        </div>
       </div>
-      <Status running={running} outcome={outcome} limit={maxRows} />
-      {result && <Grid result={result} />}
     </div>
   );
 }
@@ -311,7 +369,7 @@ function Status(props: { running: boolean; outcome: Outcome; limit: string }) {
   );
 }
 
-function Grid(props: { result: SqlResult }) {
+export function Grid(props: { result: SqlResult }) {
   const { columns, rows } = props.result;
   const scroller = useRef<HTMLDivElement>(null);
   const virtual = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => ROW_PX.compact, overscan: 12 });
