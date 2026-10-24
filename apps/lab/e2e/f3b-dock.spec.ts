@@ -95,7 +95,7 @@ test("the floating windows sit inside the Scene's map, collapsed to their title;
   // Debug has the Performance window inside its map; Author, Data and Settings have none until it is opened.
   await openWorkspace(page, "debug");
   await expect.poll(async () => (await panel(page, "perf"))?.location).toBe("floating");
-  for (const id of ["author", "data", "settings"] as const) {
+  for (const id of ["configurations", "data", "settings"] as const) {
     await openWorkspace(page, id);
     await expect.poll(async () => (await panel(page, "perf")) === undefined, { message: `${id}: no Performance window` }).toBe(true);
   }
@@ -166,4 +166,37 @@ test("a dock saved under a name comes back, and it stays after a reload", async 
   await expect(page.getByTestId("layout-delete")).toBeVisible();
   await page.getByTestId("layout-delete").click();
   await expect(page.getByTestId("layout-select").locator("option")).toHaveText(["autosaved"]);
+});
+
+test("a workspace's only panel can be floated, docked back with its button, closed and brought back by Reset layout; Reset layout restores the preset of Experiments and of Data", async ({ page }) => {
+  test.setTimeout(120_000);
+  await loadDemo(page);
+  await openWorkspace(page, "experiments");
+  await expect.poll(async () => (await panel(page, "headlessMonitor"))?.location).toBe("grid");
+
+  // Floated, the grid is empty: the dock button still puts the monitor back where the preset has it.
+  await page.getByTestId("wb-float-headlessMonitor").click();
+  await expect.poll(async () => (await panel(page, "headlessMonitor"))?.location).toBe("floating");
+  await page.getByTestId("wb-dock-headlessMonitor").click();
+  await expect.poll(async () => (await panel(page, "headlessMonitor"))?.location).toBe("grid");
+
+  // Floated again, Reset layout restores the preset; closed, it brings the panel back.
+  await page.getByTestId("wb-float-headlessMonitor").click();
+  await expect.poll(async () => (await panel(page, "headlessMonitor"))?.location).toBe("floating");
+  await page.getByTestId("layout-reset").click();
+  await expect.poll(async () => (await panel(page, "headlessMonitor"))?.location).toBe("grid");
+  await page.getByTestId("wb-close-headlessMonitor").click();
+  await expect.poll(async () => (await panel(page, "headlessMonitor")) === undefined).toBe(true);
+  await runCommand(page, "Reset layout");
+  await expect.poll(async () => (await panel(page, "headlessMonitor"))?.location).toBe("grid");
+  await expect(page.getByTestId("headless-monitor")).toBeVisible();
+
+  // Another workspace: Data, with its two panels; one floated and one closed, Reset layout puts both back in the grid.
+  await openWorkspace(page, "data");
+  await page.getByTestId("wb-float-storage").click();
+  await expect.poll(async () => (await panel(page, "storage"))?.location).toBe("floating");
+  await page.getByTestId("wb-close-sqlConsole").click();
+  await page.getByTestId("layout-reset").click();
+  await expect.poll(async () => (await panel(page, "storage"))?.location).toBe("grid");
+  await expect.poll(async () => (await panel(page, "sqlConsole"))?.location).toBe("grid");
 });

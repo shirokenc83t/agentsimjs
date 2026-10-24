@@ -20,7 +20,7 @@ export interface PlayerProps {
   readonly snap: SimSnapshot;
   /** What the panels show: the live run, or a recording read from storage (the player is then the replay control, with its cursor). */
   readonly view: RunSnapshot | undefined;
-  /** The one-row form of the Author, Data and Settings workspaces. */
+  /** The one-row form of the Configurations, Data and Settings workspaces. */
   readonly compact: boolean;
   /** The run is recorded: the player offers to scrub it back and flags its marks. */
   readonly recorded: boolean;

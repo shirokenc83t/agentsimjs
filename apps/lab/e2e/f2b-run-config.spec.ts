@@ -6,7 +6,7 @@ const hpa = { kind: "algorithm", algorithm: "hpa" };
 const inline = (root: unknown) => JSON.stringify({ schemaVersion: 0, id: "mine", version: 1, origin: "human", root });
 
 async function openRunConfig(page: Page) {
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await expect(panel.getByTestId("rc-valid")).toBeVisible();

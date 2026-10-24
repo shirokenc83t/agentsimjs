@@ -3,7 +3,7 @@ import { loadDemo, openPanelTab, openWorkspace, step } from "./helpers.ts";
 
 /** A new run of the demo whose agents plan on `unknown` belief maps (the F1 demo's own agents are `ideal`). */
 async function runWithUnknownMaps(page: Page) {
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-beliefs-init").selectOption("unknown");

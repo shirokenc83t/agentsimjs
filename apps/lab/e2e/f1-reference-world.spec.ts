@@ -22,7 +22,7 @@ test("HPA* set from the run configuration plans a cross-map path on the 1 km² w
   const firstRun = (await page.getByTestId("run-id").textContent()) ?? "";
   await page.keyboard.press("Escape");
 
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-algorithm").selectOption("hpa");

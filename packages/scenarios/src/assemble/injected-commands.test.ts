@@ -31,7 +31,7 @@ describe("researcher commands: the closed set (ADR-0015 addition of 2026-10-12)"
     await runLockstep(run.world, run.scheduler, 3);
     run.world.inject({ agentId: "uav-001", name: "goTo", params: { xM: 20, yM: 20, altitudeM: 20 } });
     await runLockstep(run.world, run.scheduler, 3);
-    expect(injected(run, "uav-001")).toEqual([expect.objectContaining({ name: "goTo", ok: false, failure: "precondition_failed" })]);
+    expect(injected(run, "uav-001")).toEqual([expect.objectContaining({ name: "goTo", ok: false, failure: "precondition_failed", requires: "airborne", message: expect.stringContaining("airborne") })]); // the record says which precondition, for the words shown to the researcher
     // After a takeoff the same command is accepted.
     run.world.inject({ agentId: "uav-001", name: "takeoff", params: { altitudeM: 20 } });
     await runLockstep(run.world, run.scheduler, 200);

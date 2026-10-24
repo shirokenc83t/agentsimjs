@@ -131,16 +131,7 @@ export function RunConfigPanel() {
   return <RunConfigEditor key={loaded.run.header.runId} loaded={loaded} />;
 }
 
-const SECTIONS = [
-  { id: "run", n: 1, title: "RUN" },
-  { id: "planning", n: 2, title: "PLANNING" },
-  { id: "drive", n: 3, title: "GROUND DRIVE" },
-  { id: "beliefs", n: 4, title: "BELIEFS" },
-  { id: "effective", n: 5, title: "EFFECTIVE" },
-  { id: "presets", n: 6, title: "PRESETS" },
-] as const;
-
-/** The rail's glyph for a section: ✕ n for errors, ▲ n for warnings, ✓ when it is clean. */
+/** The glyph at the head of a section: ✕ n for errors, ▲ n for warnings, ✓ when it is clean. */
 function StatusGlyph(props: { status: SectionStatus | undefined }) {
   const s = props.status;
   if (!s) return null;
@@ -156,12 +147,11 @@ function RunConfigEditor(props: { loaded: Loaded }) {
   const [planningScope, setPlanningScope] = useState("default");
   const [driveScope, setDriveScope] = useState("default");
   const [beliefsScope, setBeliefsScope] = useState("default");
-  const [section, setSection] = useState<(typeof SECTIONS)[number]["id"]>("run");
   // The text view: a column the researcher can widen, narrow or fold away (the form keeps the rest).
   const [jsonOpen, setJsonOpen] = useState(true);
   const [jsonW, setJsonW] = useState<number | undefined>(undefined);
   const body = useRef<HTMLDivElement>(null);
-  const clampW = (w: number) => Math.round(Math.max(220, Math.min((body.current?.clientWidth ?? 1200) - 168 - 320, w)));
+  const clampW = (w: number) => Math.round(Math.max(220, Math.min((body.current?.clientWidth ?? 1200) - 320, w)));
   const dragSplit = (e: PointerEvent<HTMLDivElement>) => {
     if (e.buttons !== 1 || !body.current) return;
     setJsonW(clampW(body.current.getBoundingClientRect().right - e.clientX));
@@ -201,24 +191,10 @@ function RunConfigEditor(props: { loaded: Loaded }) {
   const weighted = alg !== undefined && typeof alg !== "string" ? alg["weighted-astar"].weight : undefined;
   const setAlgorithm = (name: AlgorithmName | undefined) =>
     setP(withField(pEntry, "algorithm", name === undefined ? undefined : name === "weighted-astar" ? { "weighted-astar": { weight: weighted ?? 1.5 } } : name));
-  const goTo = (id: (typeof SECTIONS)[number]["id"]) => {
-    setSection(id);
-    document.querySelector(`[data-section="${id}"]`)?.scrollIntoView?.({ block: "start" });
-  };
 
   return (
     <div className="panel run-config rc" data-testid="run-config-panel">
-      <div ref={body} className="rc-body" style={{ gridTemplateColumns: jsonOpen ? `168px minmax(0, 1fr) 6px ${jsonW === undefined ? "36%" : `${jsonW}px`}` : "168px minmax(0, 1fr)" }}>
-        <nav className="rc-rail" aria-label="Run configuration sections">
-          {SECTIONS.map((s) => (
-            <button key={s.id} type="button" className={`nv${section === s.id ? " on" : ""}`} aria-current={section === s.id ? "true" : undefined} onClick={() => goTo(s.id)} data-testid={`rc-nav-${s.id}`}>
-              <span className="n">{s.n}</span>
-              {s.title}
-              {s.id === "effective" ? <span className="c3">{validation.ok ? validation.resolved.agents.length : ""}</span> : s.id === "presets" ? null : <StatusGlyph status={status[s.id]} />}
-            </button>
-          ))}
-        </nav>
-
+      <div ref={body} className="rc-body" style={{ gridTemplateColumns: jsonOpen ? `minmax(0, 1fr) 6px ${jsonW === undefined ? "36%" : `${jsonW}px`}` : "minmax(0, 1fr)" }}>
         <FieldErrorProvider value={error}>
           <div className="rc-form">
             <p className="rc-meta mono">
@@ -232,6 +208,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
               <h4 className="sec">
                 <b>1 · RUN</b>
                 <span className="rule" />
+                <span data-testid="rc-status-run"><StatusGlyph status={status.run} /></span>
               </h4>
               <NumberField
                 label="seed"
@@ -257,6 +234,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
               <h4 className="sec">
                 <b>2 · PLANNING</b>
                 <span className="rule" />
+                <span data-testid="rc-status-planning"><StatusGlyph status={status.planning} /></span>
                 <ScopeSelect label="Planning level" value={planningScope} scopes={planningScopes(view)} onChange={setPlanningScope} testId="rc-planning-scope" setCount={(s) => countSet(getEntry(draft, "planning", s))} />
               </h4>
               <OptionField label="planner" sub="algorithm or strategy" value={kind === "inherit" ? undefined : kind} options={PLANNERS} inheritLabel="(inherit)" onChange={setPlanner} testId="rc-planner" />
@@ -294,6 +272,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
               <h4 className="sec">
                 <b>3 · GROUND DRIVE</b>
                 <span className="rule" />
+                <span data-testid="rc-status-drive"><StatusGlyph status={status.drive} /></span>
                 <ScopeSelect label="Drive level" value={driveScope} scopes={driveScopes(view)} onChange={setDriveScope} testId="rc-drive-scope" setCount={(s) => countSet(getEntry(draft, "drive", s))} />
               </h4>
               <OptionField label="drive" value={dEntry?.drive} options={DRIVES} onChange={(v) => setD(withField(dEntry, "drive", v))} testId="rc-drive" fieldKey="drive" />
@@ -316,6 +295,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
               <h4 className="sec">
                 <b>4 · BELIEFS</b>
                 <span className="rule" />
+                <span data-testid="rc-status-beliefs"><StatusGlyph status={status.beliefs} /></span>
                 <ScopeSelect label="Beliefs level" value={beliefsScope} scopes={planningScopes(view)} onChange={setBeliefsScope} testId="rc-beliefs-scope" setCount={(s) => countSet(getEntry(draft, "beliefs", s))} />
               </h4>
               <OptionField

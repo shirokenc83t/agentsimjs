@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loadF2, runCommand, sendTo, step, stepUntilEnded } from "./helpers.ts";
+import { loadF2, runCommand, sendTo, stepUntilEnded } from "./helpers.ts";
 
 // ROADMAP F2 acceptance, from the Inspector's "What the mind receives": the decision request of the selected agent as
 // its mind gets it (the world's own builder, JSON text), never a UI-side reconstruction.
@@ -38,10 +38,11 @@ test("a grounded UAV has no allowed goTo until it takes off; the mind view says 
   await expect(page.getByTestId("mind-allowed")).toContainText("takeoff");
   await expect(page.getByTestId("mind-unavailable-goTo")).toContainText("precondition_failed");
 
-  // Send-to is refused by the same precondition, with its code, in the command result.
-  await sendTo(page, "uav-001", 20, 20);
-  await step(page, 1);
-  await expect(page.getByTestId("inspector-command-result")).toContainText("goTo · refused · precondition_failed");
+  // The same precondition is said before the click: send-to and the commands that need flight are off, with the reason and the step to do first.
+  await expect(page.getByTestId("send-to")).toBeDisabled();
+  await expect(page.getByTestId("send-to")).toHaveAttribute("title", /needs airborne · take off first/);
+  await expect(page.getByTestId("command-hint")).toContainText("Explore needs airborne · take off first");
+  await expect(page.getByTestId("command-land")).toHaveAttribute("aria-disabled", "true");
 
   // After takeoff the mind is allowed goTo (and no longer allowed takeoff).
   await page.getByTestId("command-takeoff").click();

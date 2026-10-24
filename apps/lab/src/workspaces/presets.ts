@@ -1,7 +1,7 @@
 import type { PanelId } from "./registry.tsx";
 
 /** Workspaces available in F0 (UI-SPEC §3, §11). Others arrive with their phases. */
-export type WorkspaceId = "scene" | "debug" | "author" | "data" | "settings" | "experiments" | "analysis";
+export type WorkspaceId = "scene" | "debug" | "configurations" | "data" | "settings" | "experiments" | "analysis";
 
 export interface PresetPanel {
   readonly id: PanelId;
@@ -44,6 +44,12 @@ const LEGEND_WINDOW: PresetPanel = { id: "legend", floating: { width: 340, heigh
  * console join in F3.
  */
 export const WORKSPACES: readonly WorkspacePreset[] = [
+  // Configurations (UI-SPEC §3): the first workspace, where a run is set up: the scenario editor and the run configuration as tabs (the editor active).
+  {
+    id: "configurations",
+    title: "Configurations",
+    panels: [{ id: "runConfig" }, { id: "scenarioEditor" }],
+  },
   {
     id: "scene",
     title: "Scene",
@@ -69,12 +75,6 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
       { id: "traceTree", position: { referencePanel: "inspector", direction: "above" }, initialHeight: 180 },
       PERF_WINDOW,
     ],
-  },
-  // Author (UI-SPEC §3): the scenario editor and the run configuration as tabs (the editor active).
-  {
-    id: "author",
-    title: "Author",
-    panels: [{ id: "runConfig" }, { id: "scenarioEditor" }],
   },
   { id: "data", title: "Data", panels: [{ id: "storage" }, { id: "sqlConsole", position: { referencePanel: "storage", direction: "below" }, initialHeight: 330 }] },
   { id: "settings", title: "Settings", panels: [{ id: "settings" }] },
@@ -119,5 +119,5 @@ export const LAYOUT_NAMESPACE = "layout";
  * Saved layouts are keyed with this version: a preset that gains panels (F1 e4: Explorer, Inspector; F3a: the Debug workspace) starts
  * from the new preset instead of a saved layout that lacks them.
  */
-export const LAYOUT_VERSION = 11;
+export const LAYOUT_VERSION = 12;
 export const layoutKey = (workspace: WorkspaceId) => `${workspace}@${LAYOUT_VERSION}`;

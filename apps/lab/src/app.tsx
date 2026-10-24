@@ -1,6 +1,6 @@
 import type { StorageInfo } from "@agentsim/storage";
 import type { DockviewApi } from "dockview-react";
-import { Banner, CommandPalette, downloadBytes, THEME_PREFERENCES, useUiContext, type Command } from "@agentsim/ui";
+import { Banner, CommandPalette, downloadBytes, getThemeState, THEME_PREFERENCES, useUiContext, type Command } from "@agentsim/ui";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { applyAppearance, loadAppearance } from "./config/appearance.ts";
 import { AppActionsProvider, CurrentRunProvider, usePolled, useServices, useStorageStatus, useThemeSetting, type CurrentRun } from "./services.tsx";
@@ -138,8 +138,16 @@ export function App() {
     return () => clearInterval(t);
   }, [status, storage]);
 
+  const setThemeRef = useRef(setTheme);
+  setThemeRef.current = setTheme;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Ctrl+Shift+L: dark and light, from anywhere (the theme control in the top bar has it in its tooltip).
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        setThemeRef.current(getThemeState().resolved === "dark" ? "light" : "dark");
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
@@ -172,6 +180,20 @@ export function App() {
     setBuiltinActive(undefined);
     setActiveLayout(undefined);
     setLayoutEpoch((n) => n + 1);
+  }, [storage]);
+
+  /** Reset layout: the open workspace's dock is rebuilt from its preset (a floated or closed panel is back where the preset has it); the layouts of the others are left. */
+  const resetLayout = useCallback(() => {
+    const id = workspaceRef.current;
+    const done = storage.status().state === "ready" ? storage.ports.userData.delete(LAYOUT_NAMESPACE, layoutKey(id)).catch(() => {}) : Promise.resolve();
+    // The saved layout is gone before the dock is rebuilt: a dock that reads it back would restore what is being reset.
+    void done.then(() => {
+      autosave.current = true;
+      stash.current = undefined;
+      setBuiltinActive(undefined);
+      setActiveLayout(undefined);
+      setLayoutEpoch((n) => n + 1);
+    });
   }, [storage]);
 
   // Named layouts of the open workspace: listed when it opens (and once storage is ready), saved, loaded and deleted from the top bar.
@@ -353,7 +375,7 @@ export function App() {
         run: loadReference,
       },
       ...agentCommands,
-      { id: "run.config", title: "Open run configuration", group: "Run", run: () => setWorkspace("author") },
+      { id: "run.config", title: "Open run configuration", group: "Run", run: () => setWorkspace("configurations") },
       { id: "run.resimWindow", title: "Re-simulate window…", group: "Run", disabled: !ready || !view?.runId, run: () => void resimulateWindow() },
       { id: "run.headless", title: rerunCommands > 0 ? "Re-run headless" : "Run headless", group: "Run", disabled: !ready || runBusy || !run, run: () => runHeadless() },
       { id: "run.rerun", title: "Re-run (same scenario version and run configuration)", group: "Run", disabled: !ready || runBusy || !run, run: () => rerunCurrent() },
@@ -369,12 +391,14 @@ export function App() {
         run: () => void storage.admin.exportDb().then((b) => downloadBytes(b, "agentsim.sqlite")),
       },
       { id: "db.browser", title: "Open Storage browser", group: "Storage", run: () => setWorkspace("data") },
-      { id: "layout.reset", title: "Reset workspace layouts", group: "Layout", run: resetLayouts },
+      { id: "layout.reset", title: "Reset layout", group: "Layout", run: resetLayout },
+      { id: "layout.resetAll", title: "Reset all workspace layouts", group: "Layout", run: resetLayouts },
       ...THEME_PREFERENCES.map((t) => ({ id: `theme.${t}`, title: `Theme: ${t}`, group: "Theme", run: () => setTheme(t) })),
+      { id: "theme.toggle", title: "Theme: toggle dark and light", group: "Theme", keys: "ctrl+shift+L", run: () => setTheme(getThemeState().resolved === "dark" ? "light" : "dark") },
       { id: "panel.perf", title: "Open the Performance window", group: "Panel", run: openPerformance },
       ...panelCommands,
     ],
-    [ready, sim, storage, resetLayouts, setTheme, openPerformance, resimulateWindow, view?.runId, loadDemo, loadReference, rerunCurrent, rerunInMode, runHeadless, rerunCommands, otherMode, runBusy, run, agentCommands, panelCommands],
+    [ready, sim, storage, resetLayouts, resetLayout, setTheme, openPerformance, resimulateWindow, view?.runId, loadDemo, loadReference, rerunCurrent, rerunInMode, runHeadless, rerunCommands, otherMode, runBusy, run, agentCommands, panelCommands],
   );
 
   return (
@@ -392,13 +416,14 @@ export function App() {
             onSelectLayout={selectLayout}
             onSaveLayout={saveLayout}
             onDeleteLayout={deleteLayout}
-            onResetLayout={resetLayouts}
+            onResetLayout={resetLayout}
             runLabel={run ? `${run.header.runId} · ${run.header.scenarioId ?? "?"} v${run.header.scenarioVersion ?? "?"}` : "run: —"}
             runOpen={runAnchor !== null}
             onRunClick={setRunAnchor}
             replaying={view?.mode === "replay"}
             derived={view?.replay?.derived}
             onPalette={() => setPaletteOpen(true)}
+            onTheme={setTheme}
           >
             {runAnchor && (
               <Suspense fallback={null}>
@@ -431,7 +456,7 @@ export function App() {
             sim={sim}
             snap={snap}
             view={view}
-            compact={workspace === "author" || workspace === "data" || workspace === "settings"}
+            compact={workspace === "configurations" || workspace === "data" || workspace === "settings"}
             recorded={run?.header.recording === "stored"}
             busy={runBusy}
             onRerunInMode={(mode) => run && rerunInMode(mode)}

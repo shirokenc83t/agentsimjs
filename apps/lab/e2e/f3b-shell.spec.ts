@@ -6,7 +6,7 @@ import { loadDemo, step } from "./helpers.ts";
 
 test("1–5 open the workspaces, Space plays and pauses, the dot steps one tick", async ({ page }) => {
   await loadDemo(page);
-  for (const [key, id] of [["2", "debug"], ["3", "author"], ["4", "data"], ["5", "settings"], ["1", "scene"]] as const) {
+  for (const [key, id] of [["3", "debug"], ["1", "configurations"], ["4", "data"], ["5", "settings"], ["2", "scene"]] as const) {
     await page.keyboard.press(key);
     await expect(page.getByTestId(`workspace-${id}`)).toBeVisible();
     await expect(page.getByTestId(`tab-${id}`)).toHaveAttribute("aria-current", "page");
@@ -61,11 +61,11 @@ test("a recording shown in the player: the ◷ REPLAY segment, the hatched band 
   await expect(page.getByTestId("player")).not.toHaveClass(/\brp\b/);
 });
 
-test("the player is one row in Author, Data and Settings", async ({ page }) => {
+test("the player is one row in Configurations, Data and Settings", async ({ page }) => {
   await loadDemo(page);
   const full = (await page.getByTestId("player").boundingBox())?.height ?? 0;
-  await page.keyboard.press("3");
-  await expect(page.getByTestId("workspace-author")).toBeVisible();
+  await page.keyboard.press("1");
+  await expect(page.getByTestId("workspace-configurations")).toBeVisible();
   const compact = (await page.getByTestId("player").boundingBox())?.height ?? 0;
   expect(full).toBeGreaterThanOrEqual(54);
   expect(compact).toBeLessThanOrEqual(42);

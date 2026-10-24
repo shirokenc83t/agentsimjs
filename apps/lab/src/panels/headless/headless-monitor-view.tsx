@@ -49,7 +49,7 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
     return (
       <div className="panel hm" data-testid="headless-monitor" data-state="none">
         <p className="muted hm-empty" data-testid="hm-empty">
-          No headless run. “Run headless” (the player, the run popover, Author, or the palette) runs the scenario again with no live view, as fast as lockstep allows, always recorded.
+          No headless run. “Run headless” (the player, the run popover, Configurations, or the palette) runs the scenario again with no live view, as fast as lockstep allows, always recorded.
         </p>
       </div>
     );

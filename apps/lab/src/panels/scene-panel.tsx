@@ -6,6 +6,7 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import { identityOf, SceneView, shortLabel, useUiContext, type AgentDecor, type GridViewMode, type MapPin, type SceneRenderer } from "@agentsim/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { attachRendererProbe } from "../probe.ts";
+import { agentFacts, commandHint } from "../commands.ts";
 import { usePolled, useSource } from "../services.tsx";
 import { Scene2dView } from "./scene-2d.tsx";
 import { actionLabel } from "./agent-views.ts";
@@ -41,6 +42,8 @@ export function ScenePanel() {
   const selectedAgent = selection?.kind === "agent" ? selection.id : undefined;
   // Features with no recorded source are off in replay, each with its reason (undefined while the source has them).
   const noCommands = source.unavailable("commands");
+  // Sending an agent somewhere is a goTo: it asks the same availability check as the Inspector's buttons (a grounded UAV needs to take off first).
+  const sendHint = selectedAgent === undefined ? undefined : commandHint("goTo", "Send to", agentFacts(snap.run, snap.agentStatus, snap.entityIds, selectedAgent));
   const noRays = source.unavailable("rays");
   const noTopology = source.unavailable("topology");
   // "Send to" mode (ADR-0015 researcher command): the next ground click becomes the selected agent's target.
@@ -273,11 +276,11 @@ export function ScenePanel() {
               size="small"
               variant={sendFor ? "contained" : "outlined"}
               color="inherit"
-              disabled={!selectedAgent || noCommands !== undefined}
+              disabled={!selectedAgent || noCommands !== undefined || sendHint !== undefined}
               onClick={() => setSendFor(sendFor ? undefined : selectedAgent)}
               aria-pressed={sendFor !== undefined}
               data-testid="send-to"
-              title={noCommands ?? "Send the selected agent to a point (G); Esc cancels"}
+              title={noCommands ?? sendHint ?? "Send the selected agent to a point (G); Esc cancels"}
             >
               {sendFor ? `⇢ click a target for ${shortLabel(sendFor)} · Esc` : selectedAgent ? `⇢ send ${shortLabel(selectedAgent)} to… · G` : "⇢ send to… (select an agent)"}
             </Button>)}

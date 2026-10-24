@@ -9,7 +9,7 @@ test("the brush window starts folded, opens, and moves inside the map's area", a
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?probe");
   await waitForStorageReady(page);
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await page.getByTestId("ed-new").click();
   await page.getByTestId("ed-new-id").fill("brush-yard");
   await page.getByTestId("ed-new-create").click();
@@ -43,7 +43,7 @@ test("Run configuration: the JSON view folds and resizes, and the scope select c
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await loadDemo(page);
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const json = page.getByRole("complementary", { name: "Text view" });
   await expect(json).toBeVisible();

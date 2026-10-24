@@ -7,7 +7,7 @@ const refine = (mode: "lazy" | "eager") => JSON.stringify({ schemaVersion: 0, id
 
 /** A new run with a refine strategy in `mode` on `unknown` maps and a slow planner (100 expansions per tick), so planning takes ticks. */
 async function runRefine(page: Page, mode: "lazy" | "eager") {
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-planner").selectOption("strategy");

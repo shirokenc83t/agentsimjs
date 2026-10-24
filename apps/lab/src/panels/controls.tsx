@@ -1,7 +1,7 @@
 import type { ChangeEvent, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
 
 /**
- * The plain controls of the Author panels (ADR-0042): square, token-styled, no library behind them. Their props follow the
+ * The plain controls of the Configurations panels (ADR-0042): square, token-styled, no library behind them. Their props follow the
  * few the forms use; the look is `.btn`, `.rc-input` and the field rows of panels.css.
  */
 

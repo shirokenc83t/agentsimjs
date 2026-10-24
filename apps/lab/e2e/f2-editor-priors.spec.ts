@@ -25,7 +25,7 @@ const priorCell = (page: Page, i: number, j: number) => page.evaluate(([ci, cj])
 /** Opens the stored F2 discovery scenario (stored by loading the preset) in the editor. */
 async function openDiscovery(page: Page) {
   await loadF2(page, "discovery");
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await page.getByTestId("ed-open-select").selectOption("f2-discovery");
   await page.getByTestId("ed-open").click();
   await expect(page.getByTestId("ed-status")).toContainText("128 × 128 cells at 0.5 m · v1");

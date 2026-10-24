@@ -66,7 +66,7 @@ test("the run popover and Author start it too, and Author runs the configuration
   await page.getByTestId("run-headless-popover").click();
   await expect(page.getByTestId("workspace-experiments")).toBeVisible();
   await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 60_000 });
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   await page.getByTestId("rc-run-headless").click();
   await expect(page.getByTestId("workspace-experiments")).toBeVisible();

@@ -40,7 +40,15 @@ export function dockPanel(api: DockviewApi, panel: IDockviewPanel, preset?: Work
     return true;
   }
   const target = api.groups.find((g) => g.api.location.type === "grid");
-  if (!target) return false;
+  if (!target) {
+    // A grid with nothing in it (the only panel of a workspace, the headless monitor, was floated): the panel is put back as the preset lays it out, as the first of the grid.
+    const p = preset?.panels.find((x) => x.id === panel.id);
+    if (!preset || !p) return false;
+    panel.api.close();
+    const { floating: _floating, ...docked } = p;
+    addPresetPanel(api, preset, docked);
+    return true;
+  }
   panel.api.moveTo({ group: target });
   return true;
 }

@@ -1,5 +1,5 @@
 import "../panels.css";
-import { identityOf, KIND_STYLE, shortLabel } from "@agentsim/ui";
+import { identityOf, KIND_STYLE, shortLabel, useTheme } from "@agentsim/ui";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { mapTransform, thinMarkers, type MapMarker, type MapModel, type MapPalette } from "./analysis-model.ts";
 
@@ -60,6 +60,8 @@ function readPalette(el: Element): MapPalette {
  */
 export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function TopDownMap(props, ref) {
   const { model } = props;
+  // The canvas reads its colours from the tokens when it draws: it draws again when the theme changes (the choice in Settings or the top bar, or the system under "system").
+  const theme = useTheme().resolved;
   const canvas = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 600, h: 400 });
   const [hover, setHover] = useState<{ x: number; y: number; text: string } | undefined>(undefined);
@@ -224,7 +226,7 @@ export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function
       list.push(performance.now() - started);
       if (list.length > 2000) list.splice(0, list.length - 2000);
     }
-  }, [model, size, tf, base, drawn, props.selectedAgent, props.selectedSeq]);
+  }, [model, size, tf, base, drawn, props.selectedAgent, props.selectedSeq, theme]);
 
   useEffect(() => {
     draw();

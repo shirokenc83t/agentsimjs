@@ -38,5 +38,5 @@
   font-weight: 400;
   font-display: swap;
   src: url("/fonts/agentsim-glyphs.ttf") format("truetype");
-  unicode-range: U+2502, U+25AA, U+25B2, U+25B6, U+25BC, U+25C6-25C7, U+25CB, U+25CF, U+25F7, U+2713, U+2715, U+275A;
+  unicode-range: U+2502, U+25AA, U+25B2, U+25B6, U+25BC, U+25C6-25C7, U+25CB, U+25CF, U+25D0, U+25F7, U+2713, U+2715, U+275A;
 }

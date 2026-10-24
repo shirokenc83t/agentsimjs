@@ -5,6 +5,7 @@ import { stepUavTowards, type UavState } from "../body/kinematics.ts";
 import { cos, sin } from "../numerics/detmath/index.ts";
 import { contentHash64 } from "../numerics/content-hash.ts";
 import type { AllowedAction, UnavailableAction } from "../world/mind-view.ts";
+import { stateAvailability, vehicleAvailability, type AgentFacts, type Unavailable } from "./availability.ts";
 
 
 import { err, ok, type CodedError, type Result } from "../result.ts";
@@ -17,7 +18,7 @@ import { predictTracking, type PredriveOutcome } from "./predrive.ts";
 export type ActionStatus = "running" | "succeeded" | "failed" | "preempted";
 
 /** A failure with a stable code from tools-schema (capability-specific or common). */
-export type ActionFailure = CodedError<string>;
+export type ActionFailure = CodedError<string> & { /** For `precondition_failed`: the precondition that does not hold. */ readonly requires?: string };
 
 export interface ActionInfo {
   readonly actionId: string;
@@ -45,13 +46,7 @@ export interface EndedAction {
   readonly recordId?: string;
 }
 
-/** Why an action cannot be started now, before its parameters matter (the single start-time availability predicate). */
-export interface Unavailable {
-  readonly code: string;
-  readonly message: string;
-  /** For `precondition_failed`: the precondition that does not hold. */
-  readonly requires?: string;
-}
+export type { Unavailable };
 
 export interface Caller {
   readonly scope: Scope;
@@ -388,7 +383,7 @@ export class ActionRuntime {
     if (this.ports.capabilities.kind(name) !== "action") return { code: "not_an_action", message: `${name} is not an action: it accompanies a decision` };
     if (injected && !this.ports.capabilities.injectable(name)) return { code: "not_injectable", message: `${name} cannot be injected as a researcher command` };
     const u = this.availability(agent, name, caller, injected);
-    return u ? { code: u.code, message: u.message } : undefined;
+    return u ? { code: u.code, message: u.message, ...(u.requires === undefined ? {} : { requires: u.requires }) } : undefined;
   }
 
   /** Validates the parameters of a bookkeeping capability (timers) from a mind's decision: the tools-schema schema. */
@@ -407,20 +402,16 @@ export class ActionRuntime {
    */
   availability(agent: SimAgent, name: string, caller: Caller, injected = false): Unavailable | undefined {
     const caps = this.ports.capabilities;
-    if (!caps.vehicles(name).includes(agent.kind)) return { code: "vehicle_unsupported", message: `${name} is not available to ${agent.kind}` };
+    const vehicle = vehicleAvailability(caps, name, agent.kind);
+    if (vehicle) return vehicle;
     const self = caps.scope(name) === "self" && caller.scope === "self" && caller.id === agent.id;
     // Injected: a self-scope base action started by the world on the agent's behalf (ADR-0015 clarification).
     const injectedBaseAction = injected && caller.scope === "world" && caps.scope(name) === "self";
     if (!self && !injectedBaseAction) {
       return { code: "scope_denied", message: `${name} can only be started by the agent itself` };
     }
-    if (agent.battery.soc <= 0) return { code: "battery_depleted", message: "battery is empty" };
-    for (const p of caps.preconditions(name)) {
-      if (p.vehicles && !p.vehicles.includes(agent.kind)) continue;
-      const holds = p.name === "airborne" ? agent.kind === "uav" && agent.state.airborne : p.name === "grounded" ? agent.kind === "uav" && !agent.state.airborne : p.name === "hasBase" ? agent.base !== undefined : p.name === "hasRangeSensor" ? (this.ports.frontiers?.hasRangeSensor(agent.id) ?? false) : false;
-      if (!holds) return { code: "precondition_failed", message: `${name} requires ${p.name}`, requires: p.name };
-    }
-    return undefined;
+    const facts: AgentFacts = { kind: agent.kind, airborne: agent.kind === "uav" && agent.state.airborne, soc: agent.battery.soc, hasBase: agent.base !== undefined, hasRangeSensor: this.ports.frontiers?.hasRangeSensor(agent.id) ?? false };
+    return stateAvailability(caps, name, facts);
   }
 
   /**

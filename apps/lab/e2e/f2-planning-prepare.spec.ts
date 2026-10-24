@@ -28,7 +28,7 @@ test("HPA* graphs are prepared before tick 0: progress in the status line, time 
   const first = await runId(page);
 
   // HPA* from the run configuration: the new run prepares its abstract graph (about 1.7 s locally).
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-algorithm").selectOption("hpa");

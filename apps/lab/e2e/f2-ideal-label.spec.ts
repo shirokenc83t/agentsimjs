@@ -18,7 +18,7 @@ test("ideal agents are labelled in the Explorer and the Inspector; the F2 demos 
   await expect(page.getByTestId("inspector-init")).toContainText("unknown");
 
   // Run configuration → Beliefs: make only the rover ideal; the effective table shows it; the new run labels it.
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-beliefs-scope").selectOption("byAgent.rover");

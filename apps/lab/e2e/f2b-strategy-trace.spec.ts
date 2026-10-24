@@ -7,7 +7,7 @@ const inline = (root: unknown) => JSON.stringify({ schemaVersion: 0, id: "mine",
 
 /** Starts a new run with the given inline strategy for every agent. */
 async function runWithStrategy(page: Page, root: unknown) {
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-planner").selectOption("strategy");

@@ -1,5 +1,5 @@
-import { GLYPH, useUiContext } from "@agentsim/ui";
-import { useState, type ReactNode } from "react";
+import { GLYPH, useTheme, useUiContext, type ThemePreference } from "@agentsim/ui";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ReplayDerived } from "../sim/run-source.ts";
 import type { WorkspaceId } from "../workspaces/presets.ts";
 
@@ -25,6 +25,8 @@ export interface TopBarProps {
   /** When the recording shown is a re-simulated window of another run: where it comes from and its verdict. */
   readonly derived?: ReplayDerived | undefined;
   readonly onPalette: () => void;
+  /** The theme chosen from the theme menu (dark, light, system). */
+  readonly onTheme: (preference: ThemePreference) => void;
   /** The run popover (anchored to the run selector), when open. */
   readonly children?: ReactNode;
 }
@@ -70,6 +72,9 @@ export function TopBar(props: TopBarProps) {
         {props.children}
       </div>
       {props.replaying && <ReplaySegment derived={props.derived} />}
+      <div className="seg r">
+        <ThemeMenu onTheme={props.onTheme} />
+      </div>
       <div className="seg r">
         <button type="button" className="tb tip-right" onClick={props.onPalette} aria-label="Command palette" data-tip="Command palette · ctrl+k">
           ctrl+k
@@ -148,6 +153,73 @@ function LayoutSegment(props: TopBarProps) {
       <button type="button" className="tb" onClick={props.onResetLayout} data-tip="Reset this workspace's layout to the preset" data-testid="layout-reset">
         reset
       </button>
+    </div>
+  );
+}
+
+/**
+ * The theme control (ADR-0042, U-010): a 24 px `◐` between the run selector and the palette, a menu of dark, light and system (with what system is now), the current one
+ * checked. `Ctrl+Shift+L` toggles dark and light from anywhere (the app owns that key). The tooltip says the theme in use.
+ */
+function ThemeMenu(props: { onTheme: (preference: ThemePreference) => void }) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+  const items: readonly { readonly value: ThemePreference; readonly label: string }[] = [
+    { value: "dark", label: "● dark" },
+    { value: "light", label: "○ light" },
+    { value: "system", label: `◐ system · now ${theme.resolved}` },
+  ];
+  return (
+    <div className="theme-menu" ref={box}>
+      <button
+        type="button"
+        className="tb theme-btn glyph"
+        aria-label={`Theme: ${theme.preference === "system" ? `system (${theme.resolved})` : theme.preference}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        data-tip={`Theme: ${theme.preference === "system" ? `system, now ${theme.resolved}` : theme.preference} · ctrl+shift+L toggles dark and light`}
+        onClick={() => setOpen((o) => !o)}
+        data-testid="theme-button"
+      >
+        ◐
+      </button>
+      {open && (
+        <div className="theme-pop" role="menu" aria-label="Theme" data-testid="theme-menu">
+          {items.map((it) => (
+            <button
+              key={it.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={theme.preference === it.value}
+              className={`tb${theme.preference === it.value ? " on" : ""}`}
+              onClick={() => {
+                props.onTheme(it.value);
+                setOpen(false);
+              }}
+              data-testid={`theme-${it.value}`}
+            >
+              <span className="chk">{theme.preference === it.value ? "✓" : ""}</span>
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

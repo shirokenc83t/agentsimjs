@@ -34,6 +34,8 @@ export interface CommandView {
   readonly name: string;
   readonly ok: boolean;
   readonly failure: string | undefined;
+  /** For a refusal because a precondition does not hold: which one (the words for the researcher come from it). */
+  readonly requires?: string | undefined;
   readonly atS: number;
 }
 
@@ -132,7 +134,8 @@ export function agentViews(records: readonly TraceRecord[]): Map<string, AgentVi
       };
     } else if (r.kind === "injected" && p.op === "command") {
       const failure = typeof (p as { failure?: unknown }).failure === "string" ? ((p as { failure?: string }).failure as string) : undefined;
-      v.command = { name: str(p.name) ?? "?", ok: p.ok === true, failure, atS: r.simTime };
+      const requires = str((p as { requires?: unknown }).requires);
+      v.command = { name: str(p.name) ?? "?", ok: p.ok === true, failure, ...(requires === undefined ? {} : { requires }), atS: r.simTime };
     } else if (r.kind === "reflex") {
       v.reflex = { reflex: str(p.reflex) ?? "?", code: str(p.code) ?? "?", then: str(p.then), atS: r.simTime };
     }

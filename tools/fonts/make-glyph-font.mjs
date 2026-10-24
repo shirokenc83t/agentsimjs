@@ -78,6 +78,16 @@ export const GLYPHS = [
       solid([[CX, MID], [CX, MID + 170], ...[1, 2, 3, 4, 5, 6].map((i) => [Math.round(CX + 170 * Math.sin((i * Math.PI) / 14)), Math.round(MID + 170 * Math.cos((i * Math.PI) / 14))]), [CX + 170, MID]]),
     ],
   },
+  {
+    code: 0x25d0,
+    name: "circle-left-half-black",
+    // The ring of the ring glyph, and the left half of what it encloses as a solid half disc: the theme control.
+    contours: [
+      solid(circle(CX, CY, 300, 32)),
+      hole(circle(CX, CY, 205, 32)),
+      solid(Array.from({ length: 17 }, (_, i) => [Math.round(CX + 205 * Math.cos(Math.PI / 2 + (Math.PI * i) / 16)), Math.round(CY + 205 * Math.sin(Math.PI / 2 + (Math.PI * i) / 16))])),
+    ],
+  },
   { code: 0x25c6, name: "diamond", contours: [solid(diamond(340))] },
   { code: 0x25c7, name: "diamond-outline", contours: [solid(diamond(340)), hole(diamond(250))] },
   { code: 0x25aa, name: "small-square", contours: [solid([[170, 220], [170, 480], [430, 480], [430, 220]])] },

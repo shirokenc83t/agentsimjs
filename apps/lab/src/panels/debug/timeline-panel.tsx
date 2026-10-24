@@ -1,5 +1,5 @@
 import "../panels.css";
-import { KIND_STYLE, useUiContext } from "@agentsim/ui";
+import { KIND_STYLE, useTheme, useUiContext } from "@agentsim/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { useAppActions, usePolled, useSource } from "../../services.tsx";
 import { gapLabel } from "../../sim/gap-click.ts";
@@ -17,6 +17,7 @@ import { useRunMarks } from "./use-run-marks.ts";
  * and the cursor is read imperatively: dragging does not re-render the panel.
  */
 export function TimelinePanel() {
+  const theme = useTheme().resolved; // the colours are the tokens read when drawing: drawn again when the theme changes
   const source = useSource();
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const dt = snap.run?.dtS ?? 0.1;
@@ -175,7 +176,7 @@ export function TimelinePanel() {
     ctx.fillRect(lx, 1, w, RULER_PX - 3);
     ctx.fillStyle = color("--acfg");
     ctx.fillText(text, lx + 4, RULER_PX / 2 - 1);
-  }, [width, height, lanes, marks, scale, headS, simHeadS, startS]);
+  }, [width, height, lanes, marks, scale, headS, simHeadS, startS, theme]);
 
   useEffect(() => {
     draw();

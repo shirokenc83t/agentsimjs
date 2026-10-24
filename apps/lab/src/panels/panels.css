@@ -327,7 +327,7 @@
 .st { font-weight: 600; font-size: var(--type-label-size); letter-spacing: 0.03em; white-space: nowrap; }
 
 .run-config.rc { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-.rc-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 168px minmax(0, 1fr) minmax(240px, 36%); }
+.rc-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 36%); }
 .rc-rail { display: flex; flex-direction: column; padding: 6px 0; border-right: 1px solid var(--ln); background: var(--bg1); overflow: auto; }
 .rc-rail .nv { appearance: none; border: 0; background: transparent; text-align: left; color: var(--fg2); padding: 0 10px; height: 26px; cursor: pointer; font: inherit; font-size: var(--type-label-size); letter-spacing: var(--type-label-tracking); display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .rc-rail .nv:hover { background: var(--bg3); color: var(--fg); }
@@ -542,3 +542,15 @@
 .scene-2d { position: absolute; inset: 0; background: var(--bg0); }
 .tdm-agents { position: absolute; margin: 0; padding: 0; list-style: none; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .tdm-agents button:focus-visible { position: fixed; z-index: 4; clip-path: none; width: auto; height: auto; padding: 2px 8px; background: var(--bg3); color: var(--fg); border: 1px solid var(--ac); font: inherit; font-size: var(--type-label-size); }
+
+/* A command the agent cannot be given now (its precondition does not hold): it stays focusable, dashed, with no hover tint, and says why on the line below. */
+.pre-off.MuiButton-root { border-style: dashed; color: var(--fg3); cursor: not-allowed; }
+.pre-off.MuiButton-root:hover { background: transparent; border-style: dashed; }
+.pre-hint { margin: 2px 0 6px; font-size: var(--type-label-size); }
+
+/* The theme control of the top bar: a 24 px glyph button and its small menu under it. */
+.theme-menu { position: relative; display: inline-flex; }
+.theme-btn { width: 24px; padding: 0; justify-content: center; }
+.theme-pop { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; display: flex; flex-direction: column; min-width: 190px; padding: 2px; background: var(--bg2); border: 1px solid var(--ln2); }
+.theme-pop .tb { justify-content: flex-start; gap: 6px; height: 24px; }
+.theme-pop .chk { display: inline-block; width: 12px; }

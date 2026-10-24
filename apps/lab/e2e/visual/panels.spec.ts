@@ -72,7 +72,7 @@ for (const theme of THEMES) {
     });
 
     test("run configuration and cost-profile form", async ({ page }) => {
-      await openWorkspace(page, "author");
+      await openWorkspace(page, "configurations");
       await openPanelTab(page, "Run configuration");
       const panel = page.getByTestId("run-config-panel");
       await expect(panel.getByTestId("rc-valid")).toBeVisible();
@@ -96,7 +96,7 @@ for (const theme of THEMES) {
     // F2b: the planner choice of a planning entry: a shipped preset with its description and document, an inline strategy with
     // the resolver's code and path next to the editor, and the lazy-on-belief-map warning.
     test("run configuration: strategy picker, inline error and warning (F2b)", async ({ page }) => {
-      await openWorkspace(page, "author");
+      await openWorkspace(page, "configurations");
       await openPanelTab(page, "Run configuration");
       const panel = page.getByTestId("run-config-panel");
       await panel.getByTestId("rc-planner").selectOption("strategy");
@@ -126,7 +126,7 @@ for (const theme of THEMES) {
     // test (researcher tool) with a result on the agent's belief map. Everything is a count of sim ticks, so deterministic.
     test("Inspector: planning queries and Strategy test (F2b)", async ({ page }) => {
       test.setTimeout(120_000);
-      await openWorkspace(page, "author");
+      await openWorkspace(page, "configurations");
       await openPanelTab(page, "Run configuration");
       const panel = page.getByTestId("run-config-panel");
       await panel.getByTestId("rc-beliefs-init").selectOption("unknown");
@@ -152,7 +152,7 @@ for (const theme of THEMES) {
 
     test("scenario editor (sidebar: document, brush, agent and body form, zones)", async ({ page }) => {
       test.setTimeout(90_000);
-      await openWorkspace(page, "author");
+      await openWorkspace(page, "configurations");
       await page.getByTestId("ed-new").click();
       await page.getByTestId("ed-new-id").fill("visual-yard");
       await page.getByTestId("ed-new-x").fill("64");
@@ -186,7 +186,7 @@ for (const theme of THEMES) {
     // F2: prior maps in the scenario editor: made from the world, edited with the prior brush (the banner says which layer is painted).
     test("scenario editor (prior maps and the edit target)", async ({ page }) => {
       test.setTimeout(90_000);
-      await openWorkspace(page, "author");
+      await openWorkspace(page, "configurations");
       await page.getByTestId("ed-open-select").selectOption("f1-demo");
       await page.getByTestId("ed-open").click();
       await sceneSettled(page);

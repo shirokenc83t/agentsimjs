@@ -1,5 +1,5 @@
 import "../panels.css";
-import { KIND_STYLE } from "@agentsim/ui";
+import { KIND_STYLE, useTheme } from "@agentsim/ui";
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import { BIN_PX, binMarks, describeAt, flagRole, GLYPH_PX, glyphOf, type Mark } from "../debug/marks.ts";
 import { LABEL_PX, LANE_PX, RULER_PX, rulerTicks, selectionFromDrag } from "../debug/timeline-geometry.ts";
@@ -25,6 +25,7 @@ export interface AnalysisTimelineProps {
  * folded), the shared cursor, and the **brush**: a drag on the ruler selects a window, which is the filter's `t:` term and moves the other views with it.
  */
 export function AnalysisTimeline(props: AnalysisTimelineProps) {
+  const theme = useTheme().resolved; // the colours are the tokens read when drawing: drawn again when the theme changes
   const canvas = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(600);
   const drag = useRef<{ from: number; to: number; moved: boolean } | undefined>(undefined);
@@ -125,7 +126,7 @@ export function AnalysisTimeline(props: AnalysisTimelineProps) {
     const t = Math.min(props.cursorS, scale);
     ctx.fillStyle = color("--ac");
     ctx.fillRect(Math.round(x(t)) - 1, 0, 2, height);
-  }, [width, height, scale, props.lanes, props.marks, props.window, props.cursorS]);
+  }, [width, height, scale, props.lanes, props.marks, props.window, props.cursorS, theme]);
 
   useEffect(() => draw(), [draw]);
 

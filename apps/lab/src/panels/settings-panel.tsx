@@ -16,7 +16,7 @@ const SECTIONS = [
 const KEYS: readonly (readonly [string, string])[] = [
   ["Space", "play or pause"],
   [".", "step one tick"],
-  ["1 – 5", "open scene, debug, author, data, settings"],
+  ["1 – 5", "open configurations, scene, debug, data, settings"],
   ["Ctrl+K", "command palette"],
   ["Alt+1 … 9", "focus the panel with that number"],
   ["↑ ↓ Home End", "move in the event list and the Explorer"],

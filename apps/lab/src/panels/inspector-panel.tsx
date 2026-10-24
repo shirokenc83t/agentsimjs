@@ -1,11 +1,11 @@
 import "./panels.css";
-import { STATUS_STRIDE, type SimLoadedMessage } from "@agentsim/core";
+import { STATUS_STRIDE, type AgentFacts, type SimLoadedMessage } from "@agentsim/core";
 import { identityOf, shortLabel, STATE_GLYPH, useUiContext } from "@agentsim/ui";
 import Button from "@mui/material/Button";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePolled, useSource } from "../services.tsx";
 import type { RunFeature, RunSnapshot, RunSource } from "../sim/run-source.ts";
-import { AGENT_COMMANDS, agentExploreRadius, commandParams } from "../commands.ts";
+import { AGENT_COMMANDS, agentExploreRadius, agentFacts, commandHint, commandParams, refusalWords } from "../commands.ts";
 import { actionLabel, actionState, recoveryLabel, waypointsText, type AgentViews, type CommandView } from "./agent-views.ts";
 import { MindViewSection } from "./mind-view-section.tsx";
 import { PlanQueryTable, StrategyRow } from "./plan-query-table.tsx";
@@ -96,8 +96,8 @@ function bodyRows(body: Record<string, unknown>): [string, string][] {
  * Researcher commands (ADR-0015 addition of 2026-10-12): world scope, recorded as run inputs. Every button is always
  * available: preconditions still apply, so a command the agent cannot run now is refused with its code, shown here.
  */
-function CommandsSection(props: { id: string; kind: string; body: Record<string, unknown>; source: RunSource; command: CommandView | undefined }) {
-  const { id, kind, body, source, command } = props;
+function CommandsSection(props: { id: string; kind: string; body: Record<string, unknown>; source: RunSource; command: CommandView | undefined; facts: AgentFacts | undefined }) {
+  const { id, kind, body, source, command, facts } = props;
   const [altitude, setAltitude] = useState("");
   const parsed = Number(altitude);
   const altitudeM = altitude.trim() !== "" && Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
@@ -106,6 +106,7 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
   const parsedRadius = Number(radius);
   const radiusM = radius.trim() !== "" && Number.isFinite(parsedRadius) && parsedRadius > 0 ? parsedRadius : undefined;
   const configuredRadius = agentExploreRadius(source.snapshot().run, id);
+  const hints = AGENT_COMMANDS.flatMap((c) => commandHint(c.op, c.title, facts) ?? []);
   return (
     <Section title="Commands (researcher, world scope)" testId="inspector-commands">
       <Row k="send">
@@ -144,26 +145,39 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
         m
       </Row>
       <Row k="run">
-        {AGENT_COMMANDS.map((c) => (
-          <Button
-            key={c.op}
-            size="small"
-            variant="outlined"
-            color="inherit"
-            sx={{ marginRight: 0.5 }}
-            disabled={source.unavailable("commands") !== undefined}
-            title={source.unavailable("commands")}
-            onClick={() => source.command(id, c.op, commandParams(c.op, body, altitudeM, radiusM))}
-            data-testid={`command-${c.op}`}
-          >
-            {c.title}
-          </Button>
-        ))}
+        {/* A command the agent cannot be given now stays on the row, focusable (aria-disabled, so its tooltip and its hint are read), with its reason and the step to do first. */}
+        {AGENT_COMMANDS.map((c) => {
+          const hint = commandHint(c.op, c.title, facts);
+          const off = source.unavailable("commands");
+          return (
+            <Button
+              key={c.op}
+              size="small"
+              variant="outlined"
+              color="inherit"
+              sx={{ marginRight: 0.5 }}
+              className={hint === undefined ? undefined : "pre-off"}
+              disabled={off !== undefined}
+              aria-disabled={hint === undefined ? undefined : true}
+              aria-describedby={hint === undefined ? undefined : `command-hint-${id}`}
+              title={off ?? (hint === undefined ? undefined : hint)}
+              onClick={() => hint === undefined && source.command(id, c.op, commandParams(c.op, body, altitudeM, radiusM))}
+              data-testid={`command-${c.op}`}
+            >
+              {c.title}
+            </Button>
+          );
+        })}
       </Row>
+      {hints.length > 0 && (
+        <p className="muted pre-hint" id={`command-hint-${id}`} data-testid="command-hint">
+          → {hints.join(" · ")}
+        </p>
+      )}
       <Row k="last command" testId="inspector-command-result">
         {command ? (
           <span className={`mono ${command.ok ? "st-ok" : "st-alm"}`}>
-            {command.ok ? STATE_GLYPH.ok : STATE_GLYPH.alm} {command.name} · {command.ok ? "accepted" : `refused · ${command.failure ?? "?"}`} @ {command.atS.toFixed(1)} s
+            {command.ok ? STATE_GLYPH.ok : STATE_GLYPH.alm} {command.name} · {command.ok ? "accepted" : `refused · ${refusalWords(command, facts?.kind)}`} @ {command.atS.toFixed(1)} s
           </span>
         ) : (
           "none yet"
@@ -261,7 +275,7 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
           </Row>
         )}
       </Section>
-      <CommandsSection id={id} kind={agent.kind} body={body} source={source} command={v?.command} />
+      <CommandsSection id={id} kind={agent.kind} body={body} source={source} command={v?.command} facts={agentFacts(run, snap.agentStatus, snap.entityIds, id)} />
       <Section title="Last plan" testId="inspector-plan">
         {v?.plan ? (
           <>

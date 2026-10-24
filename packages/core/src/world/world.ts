@@ -343,7 +343,7 @@ export class World implements Steppable {
         kind: "injected",
         agentId: agent.id,
         detail: "full",
-        payload: { op: "command", caller: "world", inputId: input.inputId, name: input.name, params: input.params, ...(r.ok ? { ok: true, actionId: r.value } : { ok: false, failure: r.error.code }) },
+        payload: { op: "command", caller: "world", inputId: input.inputId, name: input.name, params: input.params, ...(r.ok ? { ok: true, actionId: r.value } : { ok: false, failure: r.error.code, message: r.error.message, ...(r.error.requires === undefined ? {} : { requires: r.error.requires }) }) },
       });
     }
     // 2. Brains, in agent-ID order.

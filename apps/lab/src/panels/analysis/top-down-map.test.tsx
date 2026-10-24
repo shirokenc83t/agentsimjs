@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { setThemePreference } from "@agentsim/ui";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mapTransform, type MapModel } from "./analysis-model.ts";
 import { niceLength, TopDownMap } from "./top-down-map.tsx";
@@ -90,5 +91,44 @@ describe("TopDownMap markers and scale", () => {
     expect(niceLength(9.9)).toBe(5);
     expect(niceLength(0.34)).toBe(0.2);
     expect(niceLength(0)).toBe(1);
+  });
+});
+
+describe("TopDownMap and the theme", () => {
+  it("draws again with the new tokens when the theme changes: the background and the obstacle colour follow", () => {
+    const fills: string[] = [];
+    const strokes: string[] = [];
+    const ctx = new Proxy(
+      {} as Record<string, unknown>,
+      {
+        get: (t, k: string) => (k in t ? t[k] : () => undefined),
+        set: (t, k: string, v) => {
+          t[k] = v;
+          if (k === "fillStyle") fills.push(String(v));
+          if (k === "strokeStyle") strokes.push(String(v));
+          return true;
+        },
+      },
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
+    const root = document.documentElement;
+    const tokens = (bg: string, ln: string) => {
+      root.style.setProperty("--bg0", bg);
+      root.style.setProperty("--ln2", ln);
+    };
+    tokens("#101010", "#303030");
+    act(() => setThemePreference("dark"));
+    render(<TopDownMap model={model} label="map" />);
+    expect(fills[0]).toBe("#101010"); // the background of the first draw
+    expect(strokes).toContain("#303030"); // the extent of the world, in the obstacle colour
+    fills.length = 0;
+    strokes.length = 0;
+    // The theme changes: the tokens are the other theme's, and the map draws again with them.
+    tokens("#f0f0f0", "#c0c0c0");
+    act(() => setThemePreference("light"));
+    expect(fills[0]).toBe("#f0f0f0");
+    expect(strokes).toContain("#c0c0c0");
+    root.style.removeProperty("--bg0");
+    root.style.removeProperty("--ln2");
   });
 });
