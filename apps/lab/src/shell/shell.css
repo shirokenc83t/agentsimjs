@@ -115,3 +115,7 @@
 .rerun-same { margin: 4px 8px 4px; font-size: var(--type-label-size); white-space: normal; }
 .ready-start .pb { width: auto; min-width: 0; padding: 0 10px; white-space: nowrap; }
 .player.compact .ready-sum { display: none; }
+.ready-block { display: inline-flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
+.ready-block .ready-sum { max-width: 460px; }
+.pb { white-space: nowrap; }
+.ready-start .pb, .ready-start .pb.pri { height: 28px; font-size: var(--type-label-size); }

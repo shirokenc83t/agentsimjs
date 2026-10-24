@@ -81,7 +81,7 @@ function Transport(props: PlayerProps & { replay: boolean }) {
   return (
     <div className="ply" role="toolbar" aria-label="Run control">
       {ready && snap.run ? (
-        <>
+        <span className="ready-block">
           <span className="ready-start mono" data-testid="ready-start" role="group" aria-label={`Start ${snap.run.runId}`}>
             START {snap.run.runId} ·
             <button type="button" className="pb pri" onClick={() => sim.play()} aria-label="Start live" data-tip="Run it with the live view · Space" data-testid="play">
@@ -94,7 +94,7 @@ function Transport(props: PlayerProps & { replay: boolean }) {
           <span className="ready-sum muted mono" data-testid="ready-summary">
             {snap.mode} · {snap.run.scenarioId} v{snap.run.scenarioVersion} · seed {snap.run.seed} · profile {profileLabel()}
           </span>
-        </>
+        </span>
       ) : snap.running ? (
         <button type="button" className="pb pri" onClick={() => sim.pause()} aria-label="Pause" data-tip="Pause · Space" data-testid="pause">
           {GLYPH.paused}
