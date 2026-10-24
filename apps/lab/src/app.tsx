@@ -396,13 +396,14 @@ export function App() {
       ...THEME_PREFERENCES.map((t) => ({ id: `theme.${t}`, title: `Theme: ${t}`, group: "Theme", run: () => setTheme(t) })),
       { id: "theme.toggle", title: "Theme: toggle dark and light", group: "Theme", keys: "ctrl+shift+L", run: () => setTheme(getThemeState().resolved === "dark" ? "light" : "dark") },
       { id: "panel.perf", title: "Open the Performance window", group: "Panel", run: openPerformance },
+      { id: "panel.open.traceGraph", title: "Open panel: Trace graph", group: "Panel", run: () => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, "traceGraph") },
       ...panelCommands,
     ],
     [ready, sim, storage, resetLayouts, resetLayout, setTheme, openPerformance, resimulateWindow, view?.runId, loadDemo, loadReference, rerunCurrent, rerunInMode, runHeadless, rerunCommands, otherMode, runBusy, run, agentCommands, panelCommands],
   );
 
   return (
-    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun, resimulateWindow: () => void resimulateWindow(), backToDebug: leaveBuiltin }}>
+    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun, resimulateWindow: () => void resimulateWindow(), backToDebug: leaveBuiltin, openPanel: (id) => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, id) }}>
       <CurrentRunProvider value={currentRun}>
       <div className="shell">
         <div data-testid="shell-header">

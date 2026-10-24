@@ -1,6 +1,6 @@
 import type { DockviewApi, DockviewGroupPanel, IDockviewPanel } from "dockview-react";
 import type { PanelId } from "./registry.tsx";
-import { panelNumber, PERF_WINDOW, tabTitle, type PresetPanel, type WorkspacePreset } from "./presets.ts";
+import { panelNumber, PERF_WINDOW, TRACE_GRAPH_WINDOW, tabTitle, type PresetPanel, type WorkspacePreset } from "./presets.ts";
 import { PANELS } from "./registry.tsx";
 
 /**
@@ -120,7 +120,7 @@ export function openPanel(api: DockviewApi, preset: WorkspacePreset, id: PanelId
     return;
   }
   // The Performance window is in no workspace but the Scene and the Debug: opened from the status bar or the palette, it is open, at the bottom right of the dock.
-  const p: PresetPanel = preset.panels.find((x) => x.id === id) ?? (id === "perf" && PERF_WINDOW.floating ? { id, floating: { ...PERF_WINDOW.floating, collapsed: false, host: undefined } } : { id });
+  const p: PresetPanel = preset.panels.find((x) => x.id === id) ?? (id === "perf" && PERF_WINDOW.floating ? { id, floating: { ...PERF_WINDOW.floating, collapsed: false, host: undefined } } : id === "traceGraph" ? TRACE_GRAPH_WINDOW : { id });
   addPresetPanel(api, preset, p);
 }
 
@@ -144,9 +144,11 @@ export function addPresetPanel(api: DockviewApi, preset: WorkspacePreset, p: Pre
   const base = { id: p.id, component: p.id, title: tabTitle(preset, p.id, PANELS[p.id].title) };
   if (p.floating) {
     const f = p.floating;
-    const position = floatingPosition(api, f);
-    const width = f.collapsed ? COLLAPSED_WIDTH_PX : f.width;
-    const height = f.collapsed ? COLLAPSED_HEIGHT_PX : f.height;
+    // A big window (the trace graph) is as large as it asks and at most the dock less a margin, centred at the top; the small ones sit at the bottom right of their host.
+    const big = f.width >= 1000 && !f.collapsed;
+    const width = f.collapsed ? COLLAPSED_WIDTH_PX : big ? Math.min(f.width, Math.max(400, api.width - 24)) : f.width;
+    const height = f.collapsed ? COLLAPSED_HEIGHT_PX : big ? Math.min(f.height, Math.max(300, api.height - 24)) : f.height;
+    const position = big ? { top: 12, left: Math.max(12, Math.round((api.width - width) / 2)) } : floatingPosition(api, f);
     const panel = api.addPanel({ ...base, floating: { width, height, position } });
     before.set(panel.group, { width: f.width, height: f.height });
     if (f.collapsed) panel.group.element.classList.add("collapsed");

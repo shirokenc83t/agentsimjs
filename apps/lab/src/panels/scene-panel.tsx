@@ -274,7 +274,8 @@ export function ScenePanel() {
             </ToggleButtonGroup>
             {view === "3d" && (<Button
               size="small"
-              variant={sendFor ? "contained" : "outlined"}
+              variant="outlined"
+              className={sendFor ? "act-armed" : undefined}
               color="inherit"
               disabled={!selectedAgent || noCommands !== undefined || sendHint !== undefined}
               onClick={() => setSendFor(sendFor ? undefined : selectedAgent)}
@@ -282,7 +283,7 @@ export function ScenePanel() {
               data-testid="send-to"
               title={noCommands ?? sendHint ?? "Send the selected agent to a point (G); Esc cancels"}
             >
-              {sendFor ? `⇢ click a target for ${shortLabel(sendFor)} · Esc` : selectedAgent ? `⇢ send ${shortLabel(selectedAgent)} to… · G` : "⇢ send to… (select an agent)"}
+              {sendFor ? `◎ pick a target for ${shortLabel(sendFor)} · Esc` : selectedAgent ? `⇢ send ${shortLabel(selectedAgent)} to… · G` : "⇢ send to… (select an agent)"}
             </Button>)}
           </div>
           {view === "3d" && (noRays !== undefined || noTopology !== undefined || picking || sendFor !== undefined || ((showRays || showTopology) && !selectedAgent) || (overlay !== "truth" && (!selectedAgent || ideal)) || overlay === "difference" || (showExplore && !selectedAgent)) && (

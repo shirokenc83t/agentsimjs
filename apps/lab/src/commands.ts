@@ -2,6 +2,7 @@ import { useUiContext, type Command } from "@agentsim/ui";
 import { commandAvailability, describeUnavailable, STATUS_STRIDE, type AgentFacts, type PresetId } from "@agentsim/core";
 import { toolsSchemaCapabilities } from "@agentsim/scenarios";
 import type { RunSource } from "./sim/run-source.ts";
+import type { ActionView, CommandView, ReflexView } from "./panels/agent-views.ts";
 
 /**
  * Researcher commands on one agent (ADR-0015 addition of 2026-10-12): the closed set the worker accepts besides
@@ -103,4 +104,35 @@ export function agentPaletteCommands(source: RunSource, hasRun: boolean, startPr
     { id: "run.f2prior", title: "Load F2 prior map demo (new run, 1 km², stale survey)", group: "Run", disabled: busy, run: () => startPreset("f2-prior-1km") },
     { id: "run.f2agents", title: "Load F2 20 agents demo (new run, 180-ray lidar)", group: "Run", disabled: busy, run: () => startPreset("f2-20-agents") },
   ]);
+}
+
+/** How long a button says "done" after its action succeeded (ms). */
+export const DONE_MS = 4000;
+
+/**
+ * The state of an action button of the Inspector, from the action's state in the trace and not from the click (U-010 §1): idle; running (this is the agent's current action,
+ * with its phase); done (it succeeded, for `DONE_MS`); refused (the start was rejected, in words, until the next click); preempted (a reflex took over, until the next action).
+ * "Armed" (waiting for a map click) belongs to the Scene's send-to control and is its own mode.
+ */
+export type ButtonState =
+  | { readonly state: "idle" }
+  | { readonly state: "running"; readonly phase: string | undefined }
+  | { readonly state: "done" }
+  | { readonly state: "refused"; readonly words: string }
+  | { readonly state: "preempted"; readonly reflex: string | undefined };
+
+export function commandButtonState(
+  op: string,
+  v: { readonly action: ActionView | undefined; readonly command: CommandView | undefined; readonly reflex: ReflexView | undefined },
+  opts: { readonly doneVisible: boolean; readonly refusalAcked: boolean; readonly kind: string | undefined },
+): ButtonState {
+  const a = v.action;
+  if (a !== undefined && a.name === op) {
+    if (a.status === "running") return { state: "running", phase: a.phase };
+    if (a.status === "preempted") return { state: "preempted", reflex: v.reflex?.reflex };
+    if (a.status === "succeeded" && opts.doneVisible) return { state: "done" };
+  }
+  const c = v.command;
+  if (c !== undefined && !c.ok && c.name === op && !opts.refusalAcked) return { state: "refused", words: refusalWords(c, opts.kind) };
+  return { state: "idle" };
 }

@@ -22,7 +22,12 @@ test("takeoff, land, explore, hold and send-to from the UI; a command the agent 
 
   // Takeoff from the Inspector is accepted and runs to success; then explore and send-to are on, and takeoff is the one that is off.
   await page.getByTestId("command-takeoff").click();
+  await step(page, 1);
+  // The button's state is the action's, from the trace: running (with its phase and a hold button inside), then done for a few seconds.
+  await expect(page.getByTestId("command-takeoff")).toHaveAttribute("data-state", /running|done/);
   await stepUntilEnded(page, 6);
+  await expect(page.getByTestId("command-takeoff")).toHaveAttribute("data-state", "done");
+  await expect(page.getByTestId("command-takeoff")).toContainText("✓ Takeoff · succeeded");
   await expect(result).toContainText("takeoff · accepted");
   await expect(label).toContainText("takeoff · succeeded");
   await expect(page.getByTestId("command-explore")).not.toHaveAttribute("aria-disabled", "true");

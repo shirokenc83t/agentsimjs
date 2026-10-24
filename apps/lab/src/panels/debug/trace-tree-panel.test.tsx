@@ -24,7 +24,7 @@ async function setup(records: TraceRecord[]) {
   const storage = { ports, status: () => ({ state: "ready", mode: "memory-fallback" }), onStatus: () => () => {} } as unknown as StorageClient;
   render(
     <ServicesProvider value={{ storage, sim: {} as SimClient, source, setReplaySource: () => {} }}>
-      <AppActionsProvider value={{ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {}, resimulateWindow: () => {}, backToDebug: () => {} }}>
+      <AppActionsProvider value={{ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {}, resimulateWindow: () => {}, backToDebug: () => {}, openPanel: () => {} }}>
         <TraceTreePanel />
       </AppActionsProvider>
     </ServicesProvider>,

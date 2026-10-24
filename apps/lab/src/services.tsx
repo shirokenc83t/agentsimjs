@@ -3,6 +3,7 @@ import { isThemePreference, setThemePreference, type ThemePreference } from "@ag
 import { createContext, useContext, useEffect, useState } from "react";
 import type { LabRun } from "./sim/run-controller.ts";
 import type { WorkspaceId } from "./workspaces/presets.ts";
+import type { PanelId } from "./workspaces/registry.tsx";
 import type { RunSource } from "./sim/run-source.ts";
 import type { SimClient } from "./sim/sim-client.ts";
 
@@ -47,8 +48,10 @@ export interface AppActions {
   resimulateWindow(): void;
   /** Leaves the Debug's "debug · logs" layout and puts the dock back as it was. */
   backToDebug(): void;
+  /** Opens a window of the open workspace's dock that is in no preset or was closed (the trace graph from the Trace panel): where the preset has it, or as a floating window. */
+  openPanel(id: PanelId): void;
 }
-const AppActionsContext = createContext<AppActions>({ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {}, resimulateWindow: () => {}, backToDebug: () => {} });
+const AppActionsContext = createContext<AppActions>({ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {}, resimulateWindow: () => {}, backToDebug: () => {}, openPanel: () => {} });
 export const AppActionsProvider = AppActionsContext.Provider;
 export const useAppActions = (): AppActions => useContext(AppActionsContext);
 

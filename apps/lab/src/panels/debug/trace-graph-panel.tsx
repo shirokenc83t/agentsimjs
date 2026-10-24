@@ -1,0 +1,355 @@
+import "../panels.css";
+import { KIND_STYLE, useUiContext } from "@agentsim/ui";
+import type { TraceRecord } from "@agentsim/trace";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { usePolled, useServices, useSource } from "../../services.tsx";
+import { layoutTraceGraph, NODE_H, NODE_W, nodeLines, outcomeGlyph, PAGE, type GraphLayout, type GraphNode, type Side } from "./trace-graph-layout.ts";
+import { buildTraceTree, type TraceTree } from "./trace-tree.ts";
+import { useJump } from "./use-jump.ts";
+
+/**
+ * The trace graph window (U-010 §2): the record picked in the log and what is around it as a layered graph, left to right: parents (solid edges) and causes (dashed) on the
+ * left, children and effects on the right, ordered by time, never moved by a force. A click selects (the shared cursor and record: the Log, the Timeline and the Inspector follow),
+ * a double click or Enter puts the graph around that record with a breadcrumb back (Backspace goes back), the arrows move between nodes, and a side panel has the record's
+ * fields and its JSON. A column of many children shows the first few and a dashed group node that a click expands.
+ */
+export function TraceGraphPanel() {
+  const source = useSource();
+  const { storage } = useServices();
+  const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
+  const jump = useJump(snap);
+  const picked = useUiContext((s) => s.selectedRecord);
+  const runId = snap.runId;
+  const head = snap.persistedHeadTick ?? 0;
+  const sharedSeq = picked !== undefined && picked.runId === runId ? picked.seq : undefined;
+
+  const [center, setCenter] = useState<number | undefined>(sharedSeq);
+  const [trail, setTrail] = useState<readonly number[]>([]);
+  const [depth, setDepth] = useState<1 | 2 | 3>(1);
+  const [sides, setSides] = useState<Record<Side, boolean>>({ parents: true, causes: true, children: true, effects: true });
+  const [groupByKind, setGroupByKind] = useState(false);
+  const [expanded, setExpanded] = useState<ReadonlyMap<string, number>>(new Map());
+  const [tree, setTree] = useState<TraceTree | undefined | null>(null);
+  const [zoom, setZoom] = useState<"fit" | number>("fit");
+  const [focusKey, setFocusKey] = useState<string | undefined>(undefined);
+  const generation = useRef(0);
+  const box = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 900, h: 600 });
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => setSize({ w: Math.max(200, el.clientWidth), h: Math.max(160, el.clientHeight) });
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    return () => ro.disconnect();
+  }, []);
+
+  // The record picked elsewhere is the one the graph is about, unless it is already a node of it (then it is only marked).
+  const layoutKeys = useRef<ReadonlySet<number>>(new Set());
+  useEffect(() => {
+    if (sharedSeq === undefined) return;
+    if (center === undefined || !layoutKeys.current.has(sharedSeq)) {
+      setCenter(sharedSeq);
+      setTrail([]);
+      setExpanded(new Map());
+    }
+  }, [sharedSeq, runId]);
+
+  useEffect(() => {
+    if (runId === undefined || center === undefined) {
+      setTree(null);
+      return;
+    }
+    const mine = ++generation.current;
+    void buildTraceTree(storage.ports, runId, center, { depthUp: depth, depthCauses: depth, depthDown: depth, perNode: 400 }).then((t) => {
+      if (mine === generation.current) setTree(t);
+    });
+  }, [storage, runId, center, depth, head]);
+
+  const layout = useMemo<GraphLayout | undefined>(() => (tree ? layoutTraceGraph(tree, { depth, sides, groupByKind, expanded }) : undefined), [tree, depth, sides, groupByKind, expanded]);
+  useEffect(() => {
+    layoutKeys.current = new Set((layout?.nodes ?? []).flatMap((n) => (n.record ? [n.record.seq] : [])));
+  }, [layout]);
+
+  const PAD = 24;
+  const fit = layout ? Math.min(1, (size.w - 2 * PAD) / layout.width, (size.h - 2 * PAD) / layout.height) : 1;
+  const scale = zoom === "fit" ? fit : zoom;
+
+  const select = (r: TraceRecord) => {
+    if (runId === undefined) return;
+    useUiContext.getState().selectRecord({ runId, seq: r.seq });
+    jump(r.simTime, r.agentId);
+  };
+  const recentre = (seq: number) => {
+    if (seq === center) return;
+    setTrail((t) => (center === undefined ? t : [...t, center]));
+    setCenter(seq);
+    setExpanded(new Map());
+  };
+  const back = () => {
+    const prev = trail[trail.length - 1];
+    if (prev === undefined) return;
+    setTrail((t) => t.slice(0, -1));
+    setCenter(prev);
+    setExpanded(new Map());
+  };
+  const expand = (key: string) => setExpanded((m) => new Map([...m, [key, (m.get(key) ?? 0) + PAGE]]));
+
+  const onKey = (e: KeyboardEvent<HTMLDivElement>, n: GraphNode) => {
+    if (e.key === "Backspace") {
+      e.preventDefault();
+      back();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (n.record) recentre(n.record.seq);
+      else if (n.group) expand(n.group.key);
+    } else if (e.key === " ") {
+      e.preventDefault();
+      if (n.record) select(n.record);
+      else if (n.group) expand(n.group.key);
+    } else if (e.key.startsWith("Arrow") && layout) {
+      e.preventDefault();
+      const next = neighbour(layout.nodes, n, e.key as "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown");
+      if (next) {
+        setFocusKey(next.key);
+        box.current?.querySelector<HTMLElement>(`[data-node="${next.key}"]`)?.focus();
+      }
+    }
+  };
+
+  const selectedRecord = layout?.nodes.find((n) => n.record?.seq === sharedSeq)?.record ?? (tree ? tree.selected.record : undefined);
+  const centerRecord = tree ? tree.selected.record : undefined;
+
+  if (center === undefined) {
+    return (
+      <div className="panel tg" data-testid="trace-graph">
+        <p className="muted tt-empty" data-testid="trace-graph-empty">
+          Pick a record in the log: the graph shows what it came from and what came of it.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="panel tg" data-testid="trace-graph">
+      <div className="tg-bar mono" role="toolbar" aria-label="Graph controls">
+        <span className="tg-group" role="group" aria-label="Depth">
+          depth
+          {([1, 2, 3] as const).map((d) => (
+            <button key={d} type="button" className={`kt${depth === d ? " on" : ""}`} aria-pressed={depth === d} onClick={() => setDepth(d)} data-testid={`tg-depth-${d}`}>
+              {d}
+            </button>
+          ))}
+        </span>
+        <span className="tg-group" role="group" aria-label="Sides">
+          {(
+            [
+              ["parents", "↑ parents"],
+              ["causes", "← causes"],
+              ["children", "↓ children"],
+              ["effects", "→ effects"],
+            ] as const
+          ).map(([k, label]) => (
+            <button key={k} type="button" className={`kt${sides[k] ? "" : " off"}`} aria-pressed={sides[k]} onClick={() => setSides((s) => ({ ...s, [k]: !s[k] }))} data-testid={`tg-side-${k}`}>
+              {label}
+            </button>
+          ))}
+        </span>
+        <label className="tg-check">
+          <input type="checkbox" checked={groupByKind} onChange={(e) => setGroupByKind(e.target.checked)} data-testid="tg-group" /> group by kind · op
+        </label>
+        <button type="button" className="kt" onClick={() => setZoom("fit")} data-testid="tg-fit" data-tip="Fit the graph to the window">
+          fit
+        </button>
+        <button type="button" className="kt" onClick={() => setZoom(Math.min(2, Math.round((scale + 0.1) * 10) / 10))} aria-label="Zoom in" data-testid="tg-zoom-in">
+          +
+        </button>
+        <button type="button" className="kt" onClick={() => setZoom(Math.max(0.3, Math.round((scale - 0.1) * 10) / 10))} aria-label="Zoom out" data-testid="tg-zoom-out">
+          −
+        </button>
+        <span className="sp" />
+        <nav className="tg-crumbs" aria-label="Where the graph has been" data-testid="tg-crumbs">
+          {trail.map((s, i) => (
+            <span key={`${s}-${i}`}>
+              <button type="button" className="kt" onClick={() => (setCenter(s), setTrail(trail.slice(0, i)), setExpanded(new Map()))} data-testid={`tg-crumb-${s}`}>
+                #{s}
+              </button>
+              {" › "}
+            </span>
+          ))}
+          <b data-testid="tg-center">#{center}</b>
+          {trail.length > 0 && (
+            <button type="button" className="kt" onClick={back} aria-label="Back to the previous record (Backspace)" data-testid="tg-back">
+              ⌫ back
+            </button>
+          )}
+        </nav>
+      </div>
+      <div className="tg-body">
+        <div className="tg-canvas" ref={box} data-testid="tg-canvas">
+          {tree === null && <p className="muted tt-empty">Reading…</p>}
+          {tree === undefined && (
+            <p className="muted tt-empty" data-testid="tg-missing">
+              Record #{center} is not in this run (yet).
+            </p>
+          )}
+          {layout && (
+            <div className="tg-stage" style={{ width: layout.width * scale + 2 * PAD, height: layout.height * scale + 2 * PAD }}>
+              <div className="tg-scaled" style={{ transform: `translate(${PAD}px, ${PAD}px) scale(${scale})`, width: layout.width, height: layout.height }} data-testid="tg-scaled" data-scale={scale.toFixed(2)}>
+                <svg className="tg-edges" width={layout.width} height={layout.height} aria-hidden="true">
+                  {layout.edges.map((e) => {
+                    const a = layout.nodes.find((n) => n.key === e.from);
+                    const b = layout.nodes.find((n) => n.key === e.to);
+                    if (!a || !b) return null;
+                    const x1 = a.x + NODE_W;
+                    const y1 = a.y + NODE_H / 2;
+                    const x2 = b.x;
+                    const y2 = b.y + NODE_H / 2;
+                    const mid = (x1 + x2) / 2;
+                    return <path key={`${e.from}>${e.to}:${e.relation}`} d={`M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`} className={`tg-edge ${e.relation}${e.failed ? " failed" : ""}`} data-testid={`tg-edge-${e.relation}`} />;
+                  })}
+                </svg>
+                {layout.nodes.map((n) => (
+                  <GraphNodeView
+                    key={n.key}
+                    n={n}
+                    selected={n.record?.seq === sharedSeq}
+                    tabbable={focusKey === n.key || (focusKey === undefined && n.center)}
+                    onSelect={select}
+                    onRecentre={recentre}
+                    onExpand={expand}
+                    onKey={onKey}
+                    onFocus={() => setFocusKey(n.key)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <aside className="tg-side" aria-label="The selected record" data-testid="tg-side">
+          {selectedRecord ? <RecordFields r={selectedRecord} center={centerRecord?.seq === selectedRecord.seq} /> : <p className="muted tt-empty">Nothing selected.</p>}
+        </aside>
+      </div>
+      <p className="muted tg-keys mono">↑ ↓ ← → move · ⏎ recentre · ⌫ back · space select · click a dashed group to show more</p>
+    </div>
+  );
+}
+
+function GraphNodeView(props: {
+  n: GraphNode;
+  selected: boolean;
+  tabbable: boolean;
+  onSelect: (r: TraceRecord) => void;
+  onRecentre: (seq: number) => void;
+  onExpand: (key: string) => void;
+  onKey: (e: KeyboardEvent<HTMLDivElement>, n: GraphNode) => void;
+  onFocus: () => void;
+}) {
+  const { n } = props;
+  const style = { left: n.x, top: n.y, width: NODE_W, height: NODE_H } as const;
+  if (n.group) {
+    return (
+      <div
+        role="button"
+        tabIndex={props.tabbable ? 0 : -1}
+        className="tg-node group mono"
+        style={style}
+        onClick={() => props.onExpand(n.group?.key ?? "")}
+        onKeyDown={(e) => props.onKey(e, n)}
+        onFocus={props.onFocus}
+        data-node={n.key}
+        data-testid="tg-group-node"
+        aria-label={`${n.group.label}: show ${Math.min(PAGE, n.group.hidden)} more`}
+      >
+        <span className="tg-l1">{n.group.label}</span>
+        <span className="tg-l2 muted">click to show {Math.min(PAGE, n.group.hidden)} more</span>
+      </div>
+    );
+  }
+  const r = n.record as TraceRecord;
+  const st = KIND_STYLE[r.kind as keyof typeof KIND_STYLE];
+  const lines = nodeLines(r);
+  const glyph = outcomeGlyph(r);
+  return (
+    <div
+      role="button"
+      tabIndex={props.tabbable ? 0 : -1}
+      className={`tg-node mono${n.center ? " center" : ""}${props.selected ? " sel" : ""}${n.failed ? " failed" : ""}`}
+      style={style}
+      onClick={() => props.onSelect(r)}
+      onDoubleClick={() => props.onRecentre(r.seq)}
+      onKeyDown={(e) => props.onKey(e, n)}
+      onFocus={props.onFocus}
+      aria-current={n.center ? "true" : undefined}
+      aria-pressed={props.selected}
+      data-node={n.key}
+      data-seq={r.seq}
+      data-testid={n.center ? "tg-node-center" : `tg-node-${r.seq}`}
+      title={r.id}
+    >
+      <span className="tg-l1">
+        <span className="tag" style={{ color: `var(--kind-${st?.family ?? "slate"})` }}>
+          [{st?.tag ?? r.kind.slice(0, 3).toUpperCase()}]
+        </span>{" "}
+        <span className="tg-sum">{lines.top}</span>
+        {glyph !== undefined && <span className={`tg-glyph${n.failed ? " alm" : ""}`}> {glyph}</span>}
+      </span>
+      <span className="tg-l2 muted">{lines.bottom}</span>
+    </div>
+  );
+}
+
+/** The fields of a record and its JSON, for the side panel. */
+function RecordFields(props: { r: TraceRecord; center: boolean }) {
+  const { r } = props;
+  const rows: [string, string][] = [
+    ["id", r.id],
+    ["time", `${r.simTime.toFixed(3)} s`],
+    ["kind", r.kind],
+    ["source", r.source],
+    ["agent", r.agentId ?? "—"],
+    ["parent", r.parentId ?? "—"],
+    ["causes", r.causeIds && r.causeIds.length > 0 ? r.causeIds.join(", ") : "—"],
+  ];
+  return (
+    <div data-testid="tg-record">
+      <h4 className="sec">
+        <b>{props.center ? "THIS RECORD" : "SELECTED"} · #{r.seq}</b>
+        <span className="rule" />
+      </h4>
+      <dl className="tg-fields mono">
+        {rows.map(([k, v]) => (
+          <div key={k}>
+            <dt className="muted">{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <pre className="tg-json mono" data-testid="tg-json">
+        {JSON.stringify(r, null, 2)}
+      </pre>
+    </div>
+  );
+}
+
+/** The node nearest in a direction: in the next column to the right or left (or the same column above or below), the one whose centre is closest. */
+export function neighbour(nodes: readonly GraphNode[], from: GraphNode, key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"): GraphNode | undefined {
+  const cx = from.x + NODE_W / 2;
+  const cy = from.y + NODE_H / 2;
+  const candidates = nodes.filter((n) => {
+    if (n.key === from.key) return false;
+    if (key === "ArrowRight") return n.x > from.x;
+    if (key === "ArrowLeft") return n.x < from.x;
+    if (key === "ArrowDown") return n.x === from.x && n.y > from.y;
+    return n.x === from.x && n.y < from.y;
+  });
+  const dist = (n: GraphNode) => {
+    const dx = n.x + NODE_W / 2 - cx;
+    const dy = n.y + NODE_H / 2 - cy;
+    // Sideways, the column nearest first, then the row nearest; up and down stay in the column.
+    return key === "ArrowLeft" || key === "ArrowRight" ? Math.abs(dx) * 1000 + Math.abs(dy) : Math.abs(dy);
+  };
+  return [...candidates].sort((a, b) => dist(a) - dist(b) || (a.key < b.key ? -1 : 1))[0];
+}
+

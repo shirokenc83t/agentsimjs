@@ -2,7 +2,7 @@ import "../panels.css";
 import { KIND_STYLE, useUiContext } from "@agentsim/ui";
 import type { TraceRecord } from "@agentsim/trace";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePolled, useServices, useSource } from "../../services.tsx";
+import { useAppActions, usePolled, useServices, useSource } from "../../services.tsx";
 import { summary } from "./log-rows.ts";
 import { buildTraceTree, type TraceTree, type TreeNode } from "./trace-tree.ts";
 import { useJump } from "./use-jump.ts";
@@ -17,6 +17,7 @@ export function TraceTreePanel() {
   const { storage } = useServices();
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const jump = useJump(snap);
+  const { openPanel } = useAppActions();
   const picked = useUiContext((s) => s.selectedRecord);
   const head = snap.persistedHeadTick ?? 0;
   const [tree, setTree] = useState<TraceTree | undefined | null>(null);
@@ -70,7 +71,7 @@ export function TraceTreePanel() {
           Record #{seq} is not in this run (yet).
         </p>
       ) : (
-        <TreeView tree={tree} compact={compact} open={open} more={more} />
+        <TreeView tree={tree} compact={compact} open={open} more={more} openGraph={() => openPanel("traceGraph")} />
       )}
     </div>
   );
@@ -130,7 +131,7 @@ export function firstPart(c: Record<Part, number>): Part {
   return (["children", "effects", "causes", "parents"] as const).find((k) => c[k] > 0) ?? "children";
 }
 
-function TreeView(props: { tree: TraceTree; compact: boolean; open: (r: TraceRecord) => void; more: (key: string, shown: number) => void }) {
+function TreeView(props: { tree: TraceTree; compact: boolean; open: (r: TraceRecord) => void; more: (key: string, shown: number) => void; openGraph: () => void }) {
   const { tree, open, more, compact } = props;
   const counts: Record<Part, number> = { parents: tree.ancestors.length, causes: tree.causes.length, children: tree.children.length, effects: tree.effects.length };
   const [chosen, setChosen] = useState<{ seq: number; part: Part } | undefined>(undefined);
@@ -165,6 +166,10 @@ function TreeView(props: { tree: TraceTree; compact: boolean; open: (r: TraceRec
             {h.glyph} {h.label} <span className="muted">{counts[h.part]}</span>
           </button>
         ))}
+        <span className="sp" />
+        <button type="button" className="kt tip-right" onClick={props.openGraph} aria-label="Open the trace graph" data-tip="Open the trace graph: a window with this record and what is around it as a graph" data-testid="trace-open-graph">
+          ⧉
+        </button>
       </div>
       {section(
         "parents",

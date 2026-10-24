@@ -88,8 +88,21 @@ export const GLYPHS = [
       solid(Array.from({ length: 17 }, (_, i) => [Math.round(CX + 205 * Math.cos(Math.PI / 2 + (Math.PI * i) / 16)), Math.round(CY + 205 * Math.sin(Math.PI / 2 + (Math.PI * i) / 16))])),
     ],
   },
+  { code: 0x25ce, name: "bullseye", contours: [solid(circle(CX, CY, 300, 32)), hole(circle(CX, CY, 215, 32)), solid(circle(CX, CY, 120, 32))] },
+  {
+    code: 0x29c9,
+    name: "two-joined-squares",
+    // The back square as an outline, and the front one over its corner as an outline too (the window button of the trace graph).
+    contours: [
+      solid([[60, 300], [60, 640], [400, 640], [400, 300]]),
+      hole([[120, 360], [120, 580], [340, 580], [340, 360]]),
+      solid([[200, 90], [200, 430], [540, 430], [540, 90]]),
+      hole([[260, 150], [260, 370], [480, 370], [480, 150]]),
+    ],
+  },
   { code: 0x25c6, name: "diamond", contours: [solid(diamond(340))] },
   { code: 0x25c7, name: "diamond-outline", contours: [solid(diamond(340)), hole(diamond(250))] },
+  { code: 0x25a0, name: "square", contours: [solid([[95, 95], [95, 635], [505, 635], [505, 95]])] },
   { code: 0x25aa, name: "small-square", contours: [solid([[170, 220], [170, 480], [430, 480], [430, 220]])] },
   { code: 0x2713, name: "check", contours: [solid(bar(60, 330, 225, 150, 110)), solid(bar(225, 150, 540, 650, 110))] },
   { code: 0x2502, name: "light-vertical", contours: [solid([[270, -150], [270, 800], [330, 800], [330, -150]])] },

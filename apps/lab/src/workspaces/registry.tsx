@@ -13,6 +13,7 @@ const TimelinePanel = lazy(() => import("../panels/debug/timeline-panel.tsx").th
 const EventListPanel = lazy(() => import("../panels/debug/event-list-panel.tsx").then((m) => ({ default: m.EventListPanel })));
 const LogInspectorPanel = lazy(() => import("../panels/inspector/multi-log-inspector.tsx").then((m) => ({ default: m.MultiLogInspector })));
 const SqlConsolePanel = lazy(() => import("../panels/sql/sql-console-panel.tsx").then((m) => ({ default: m.SqlConsolePanel })));
+const TraceGraphPanel = lazy(() => import("../panels/debug/trace-graph-panel.tsx").then((m) => ({ default: m.TraceGraphPanel })));
 const TraceTreePanel = lazy(() => import("../panels/debug/trace-tree-panel.tsx").then((m) => ({ default: m.TraceTreePanel })));
 const OverviewPanel = lazy(() => import("../panels/overview-panel.tsx").then((m) => ({ default: m.OverviewPanel })));
 const LegendPanel = lazy(() => import("../panels/legend-panel.tsx").then((m) => ({ default: m.LegendPanel })));
@@ -55,7 +56,7 @@ export const LazyPlayerMarks = lazy(() => import("../shell/player-marks.tsx").th
 /** The run header popover, loaded on first open (the toolbar keeps only the run label). */
 export const LazyRunPopover = lazy(() => import("../run-info.tsx").then((m) => ({ default: m.RunPopover })));
 
-export type PanelId = "overview" | "legend" | "perf" | "scene" | "explorer" | "inspector" | "timeline" | "eventList" | "traceTree" | "sqlConsole" | "logInspector" | "headlessMonitor" | "analysisView" | "runConfig" | "scenarioEditor" | "storage" | "settings";
+export type PanelId = "overview" | "legend" | "perf" | "scene" | "explorer" | "inspector" | "timeline" | "eventList" | "traceTree" | "traceGraph" | "sqlConsole" | "logInspector" | "headlessMonitor" | "analysisView" | "runConfig" | "scenarioEditor" | "storage" | "settings";
 
 export const PANELS: Record<PanelId, { readonly title: string; readonly component: ComponentType }> = {
   perf: { title: "Performance", component: PerfPanel },
@@ -67,6 +68,7 @@ export const PANELS: Record<PanelId, { readonly title: string; readonly componen
   timeline: { title: "Timeline", component: TimelinePanel },
   eventList: { title: "Log", component: EventListPanel },
   traceTree: { title: "Trace", component: TraceTreePanel },
+  traceGraph: { title: "Trace graph", component: TraceGraphPanel },
   logInspector: { title: "Logs", component: LogInspectorPanel },
   headlessMonitor: { title: "Headless monitor", component: HeadlessMonitorPanel },
   analysisView: { title: "Analysis", component: AnalysisPanel },

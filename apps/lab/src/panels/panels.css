@@ -554,3 +554,41 @@
 .theme-pop { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; display: flex; flex-direction: column; min-width: 190px; padding: 2px; background: var(--bg2); border: 1px solid var(--ln2); }
 .theme-pop .tb { justify-content: flex-start; gap: 6px; height: 24px; }
 .theme-pop .chk { display: inline-block; width: 12px; }
+
+/* The states of an action button (U-010 §1): from the action's state in the trace. Run, ok, alarm and warn take their state colours with their glyphs. */
+.act-grp { display: inline-flex; align-items: center; }
+.act-running.MuiButton-root { color: var(--run); border-color: var(--run); background: color-mix(in srgb, var(--run) 14%, transparent); }
+.act-done.MuiButton-root { color: var(--ok); border-color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.act-refused.MuiButton-root { color: var(--alm); border-color: var(--alm); background: var(--almbg); }
+.act-preempted.MuiButton-root { color: var(--warn); border-color: var(--warn); background: var(--warnbg); }
+.act-armed.MuiButton-root { color: var(--fg); border-color: var(--ac); background: var(--acbg); box-shadow: inset 0 0 0 1px var(--ac); }
+
+/* The trace graph window (U-010 section 2): a toolbar, the graph (nodes of 230 x 44 over an edge layer, scaled to fit) and a side panel with the record. */
+.tg { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.tg-bar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 4px 10px; background: var(--bg0); border-bottom: 1px solid var(--ln); font-size: var(--type-mono-size); }
+.tg-group { display: inline-flex; align-items: center; gap: 4px; }
+.tg-check { display: inline-flex; align-items: center; gap: 4px; color: var(--fg2); }
+.tg-crumbs { display: inline-flex; align-items: center; gap: 2px; }
+.tg-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
+.tg-canvas { position: relative; overflow: auto; background: var(--bg0); min-height: 0; }
+.tg-stage { position: relative; }
+.tg-scaled { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.tg-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.tg-edge { fill: none; stroke: var(--ln2); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.tg-edge.cause { stroke-dasharray: 5 4; }
+.tg-edge.failed { stroke: var(--alm); }
+.tg-node { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 8px; overflow: hidden; background: var(--bg1); border: 1px solid var(--ln2); cursor: pointer; font-size: var(--type-mono-size); }
+.tg-node:hover { background: var(--bg3); }
+.tg-node.center { background: var(--bg2); border-color: var(--fg3); }
+.tg-node.sel { background: var(--acbg); border-color: var(--ac); box-shadow: inset 0 0 0 1px var(--ac); }
+.tg-node.failed { border-color: var(--alm); }
+.tg-node.group { border-style: dashed; background: transparent; }
+.tg-l1, .tg-l2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tg-l2 { font-size: var(--type-label-size); }
+.tg-glyph.alm { color: var(--alm); }
+.tg-side { min-width: 0; overflow: auto; padding: 4px 12px; border-left: 1px solid var(--ln); background: var(--bg1); }
+.tg-fields { display: grid; gap: 2px; margin: 4px 0 8px; font-size: var(--type-mono-size); }
+.tg-fields div { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px; }
+.tg-fields dd { margin: 0; overflow-wrap: anywhere; }
+.tg-json { margin: 0; padding: 6px 8px; overflow: auto; background: var(--bg0); border: 1px solid var(--ln); font-size: var(--type-mono-size); }
+.tg-keys { flex: none; margin: 0; padding: 2px 10px; border-top: 1px solid var(--ln); font-size: var(--type-label-size); }

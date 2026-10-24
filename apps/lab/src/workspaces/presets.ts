@@ -35,6 +35,11 @@ export interface WorkspacePreset {
  * the frame segment of the status bar or from the palette (`openPanel` falls back to this, open, at the bottom right of the dock).
  */
 export const PERF_WINDOW: PresetPanel = { id: "perf", floating: { width: 300, height: 400, collapsed: true, host: "scene", stack: 0 } };
+/**
+ * The trace graph (U-010 §2): a big floating window opened from the Trace panel or the palette, in no workspace's preset. "5c" is the Trace's sub-window: the Trace is panel 5 of
+ * the Debug.
+ */
+export const TRACE_GRAPH_WINDOW: PresetPanel = { id: "traceGraph", floating: { width: 1360, height: 840, collapsed: false } };
 /** The windows of the Scene (ADR-0042 section 8): the Legend above the Performance window at the bottom right of the map and the Overview at its bottom left (open together they do not touch); all start collapsed. */
 const OVERVIEW_WINDOW: PresetPanel = { id: "overview", floating: { width: 240, height: 200, collapsed: true, host: "scene", stack: 1, side: "left" } };
 const LEGEND_WINDOW: PresetPanel = { id: "legend", floating: { width: 340, height: 330, collapsed: true, host: "scene", stack: 1 } };
@@ -110,6 +115,7 @@ export function panelNumber(preset: WorkspacePreset, id: PanelId): number | unde
 
 /** The tab title of a panel: `[2] Explorer`. */
 export function tabTitle(preset: WorkspacePreset, id: PanelId, title: string): string {
+  if (id === "traceGraph") return `[5c] ${title}`;
   const n = panelNumber(preset, id);
   return n === undefined ? title : `[${n}] ${title}`;
 }

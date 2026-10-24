@@ -57,7 +57,7 @@ async function setup(): Promise<{ openReplay: ReturnType<typeof vi.fn> }> {
   const openReplay = vi.fn();
   render(
     <ServicesProvider value={{ storage, sim: {} as SimClient, source, setReplaySource: () => {} }}>
-      <AppActionsProvider value={{ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay, resimulateWindow: () => {}, backToDebug: () => {} }}>
+      <AppActionsProvider value={{ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay, resimulateWindow: () => {}, backToDebug: () => {}, openPanel: () => {} }}>
         <AnalysisPanel />
       </AppActionsProvider>
     </ServicesProvider>,

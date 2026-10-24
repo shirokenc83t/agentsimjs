@@ -1,12 +1,12 @@
 import "./panels.css";
 import { STATUS_STRIDE, type AgentFacts, type SimLoadedMessage } from "@agentsim/core";
-import { identityOf, shortLabel, STATE_GLYPH, useUiContext } from "@agentsim/ui";
+import { GLYPH, identityOf, shortLabel, STATE_GLYPH, useUiContext } from "@agentsim/ui";
 import Button from "@mui/material/Button";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePolled, useSource } from "../services.tsx";
 import type { RunFeature, RunSnapshot, RunSource } from "../sim/run-source.ts";
-import { AGENT_COMMANDS, agentExploreRadius, agentFacts, commandHint, commandParams, refusalWords } from "../commands.ts";
-import { actionLabel, actionState, recoveryLabel, waypointsText, type AgentViews, type CommandView } from "./agent-views.ts";
+import { AGENT_COMMANDS, agentExploreRadius, agentFacts, commandButtonState, commandHint, commandParams, DONE_MS, refusalWords } from "../commands.ts";
+import { actionLabel, actionState, recoveryLabel, waypointsText, type AgentViews } from "./agent-views.ts";
 import { MindViewSection } from "./mind-view-section.tsx";
 import { PlanQueryTable, StrategyRow } from "./plan-query-table.tsx";
 import { querySelection, useQuerySelection } from "./query-selection.ts";
@@ -96,8 +96,19 @@ function bodyRows(body: Record<string, unknown>): [string, string][] {
  * Researcher commands (ADR-0015 addition of 2026-10-12): world scope, recorded as run inputs. Every button is always
  * available: preconditions still apply, so a command the agent cannot run now is refused with its code, shown here.
  */
-function CommandsSection(props: { id: string; kind: string; body: Record<string, unknown>; source: RunSource; command: CommandView | undefined; facts: AgentFacts | undefined }) {
-  const { id, kind, body, source, command, facts } = props;
+function CommandsSection(props: { id: string; kind: string; body: Record<string, unknown>; source: RunSource; views: AgentViews | undefined; facts: AgentFacts | undefined }) {
+  const { id, kind, body, source, facts } = props;
+  const command = props.views?.command;
+  const action = props.views?.action;
+  // "done" lasts a few seconds after the action succeeded (wall time: a paused run is looked at as long as it is); a refusal stays until the next click.
+  const [doneFor, setDoneFor] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (action?.status !== "succeeded" || action.actionId === doneFor) return;
+    setDoneFor(action.actionId);
+    const t = setTimeout(() => setDoneFor((cur) => (cur === action.actionId ? `${action.actionId}:over` : cur)), DONE_MS);
+    return () => clearTimeout(t);
+  }, [action?.status, action?.actionId, doneFor]);
+  const [ackedAtS, setAckedAtS] = useState<number | undefined>(undefined);
   const [altitude, setAltitude] = useState("");
   const parsed = Number(altitude);
   const altitudeM = altitude.trim() !== "" && Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
@@ -149,23 +160,37 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
         {AGENT_COMMANDS.map((c) => {
           const hint = commandHint(c.op, c.title, facts);
           const off = source.unavailable("commands");
+          const st = commandButtonState(c.op, { action, command, reflex: props.views?.reflex }, { doneVisible: action !== undefined && doneFor === action.actionId, refusalAcked: command !== undefined && ackedAtS === command.atS, kind: facts?.kind });
+          const label =
+            st.state === "running" ? `${GLYPH.running} ${c.title} · ${st.phase ?? "running"}` : st.state === "done" ? `${STATE_GLYPH.ok} ${c.title} · succeeded` : st.state === "refused" ? `${STATE_GLYPH.alm} ${c.title} · refused · ${st.words}` : st.state === "preempted" ? `${GLYPH.warn} ${c.title} · preempted${st.reflex ? ` · ${st.reflex}` : ""}` : c.title;
           return (
-            <Button
-              key={c.op}
-              size="small"
-              variant="outlined"
-              color="inherit"
-              sx={{ marginRight: 0.5 }}
-              className={hint === undefined ? undefined : "pre-off"}
-              disabled={off !== undefined}
-              aria-disabled={hint === undefined ? undefined : true}
-              aria-describedby={hint === undefined ? undefined : `command-hint-${id}`}
-              title={off ?? (hint === undefined ? undefined : hint)}
-              onClick={() => hint === undefined && source.command(id, c.op, commandParams(c.op, body, altitudeM, radiusM))}
-              data-testid={`command-${c.op}`}
-            >
-              {c.title}
-            </Button>
+            <span key={c.op} className="act-grp">
+              <Button
+                size="small"
+                variant="outlined"
+                color="inherit"
+                sx={{ marginRight: 0.5 }}
+                className={[hint === undefined ? "" : "pre-off", st.state === "idle" ? "" : `act-${st.state}`].filter(Boolean).join(" ") || undefined}
+                disabled={off !== undefined}
+                aria-disabled={hint === undefined ? undefined : true}
+                aria-describedby={hint === undefined ? undefined : `command-hint-${id}`}
+                title={off ?? (hint === undefined ? undefined : hint)}
+                onClick={() => {
+                  if (hint !== undefined) return;
+                  setAckedAtS(command?.atS);
+                  source.command(id, c.op, commandParams(c.op, body, altitudeM, radiusM));
+                }}
+                data-testid={`command-${c.op}`}
+                data-state={st.state}
+              >
+                {label}
+              </Button>
+              {st.state === "running" && c.op !== "hold" && (
+                <Button size="small" variant="outlined" color="inherit" sx={{ marginRight: 0.5, minWidth: 0 }} aria-label={`Hold: stop ${c.title}`} title={`Hold: stop ${c.title.toLowerCase()}`} onClick={() => source.command(id, "hold", undefined)} data-testid={`command-hold-${c.op}`}>
+                  ■
+                </Button>
+              )}
+            </span>
           );
         })}
       </Row>
@@ -275,7 +300,7 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
           </Row>
         )}
       </Section>
-      <CommandsSection id={id} kind={agent.kind} body={body} source={source} command={v?.command} facts={agentFacts(run, snap.agentStatus, snap.entityIds, id)} />
+      <CommandsSection id={id} kind={agent.kind} body={body} source={source} views={v} facts={agentFacts(run, snap.agentStatus, snap.entityIds, id)} />
       <Section title="Last plan" testId="inspector-plan">
         {v?.plan ? (
           <>
