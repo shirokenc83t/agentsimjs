@@ -104,7 +104,7 @@ test("a run waits in READY at tick 0 with the choice live or headless; nothing r
 test("the player's Re-run is one split button: the label repeats the last choice and the menu has live lockstep, live realtime and headless, with what they share", async ({ page }) => {
   test.setTimeout(120_000);
   await loadDemo(page);
-  await expect(page.getByTestId("rerun")).toHaveText(/Re-run$/);
+  await expect(page.getByTestId("player-rerun")).toHaveText(/Re-run$/);
   await expect(page.getByTestId("rerun-in-mode")).toHaveCount(0);
   await page.getByTestId("rerun-menu").click();
   await expect(page.getByTestId("rerun-live-lockstep")).toContainText("Ctrl+R");
@@ -113,7 +113,7 @@ test("the player's Re-run is one split button: the label repeats the last choice
   await expect(page.getByTestId("rerun-same")).toContainText("same scenario, config, seed and the 0 commands of run-000001");
   await page.getByTestId("rerun-live-realtime").click();
   await expect(page.getByTestId("time-mode")).toHaveText("realtime");
-  await expect(page.getByTestId("rerun")).toContainText("Re-run · live · realtime"); // the label repeats the last choice
+  await expect(page.getByTestId("player-rerun")).toContainText("Re-run · live · realtime"); // the label repeats the last choice
   // Ctrl+Shift+R is the headless re-run.
   await page.keyboard.press("Control+Shift+R");
   await expect(page.getByTestId("workspace-experiments")).toBeVisible();

@@ -1,7 +1,6 @@
 import { formatSimTime, GLYPH, useUiContext } from "@agentsim/ui";
 import { Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
 import { useSource } from "../services.tsx";
-import { getRecordingSelection } from "../sim/recording-choice.ts";
 import { gapLabel, resolveGapClick } from "../sim/gap-click.ts";
 import type { RunSnapshot } from "../sim/run-source.ts";
 import type { SimClient, SimSnapshot } from "../sim/sim-client.ts";
@@ -36,6 +35,8 @@ export interface PlayerProps {
   readonly onStartHeadless: () => void;
   /** The commands the run shown has recorded: a re-run applies them again. */
   readonly rerunCommands: number;
+  /** How the run is recorded, for the summary of a run that waits to start: the profile's name, or why it is not recorded. */
+  readonly recordingLabel: string;
   readonly onScrubBack: (runId: string) => void;
   readonly onBackToLive: () => void;
 }
@@ -92,7 +93,7 @@ function Transport(props: PlayerProps & { replay: boolean }) {
             </button>
           </span>
           <span className="ready-sum muted mono" data-testid="ready-summary">
-            {snap.mode} · {snap.run.scenarioId} v{snap.run.scenarioVersion} · seed {snap.run.seed} · profile {profileLabel()}
+            {snap.mode} · {snap.run.scenarioId} v{snap.run.scenarioVersion} · seed {snap.run.seed} · profile {props.recordingLabel}
           </span>
         </span>
       ) : snap.running ? (
@@ -321,12 +322,6 @@ function Telemetry(props: { snap: SimSnapshot; recorded: boolean }) {
   );
 }
 
-/** The recording profile named in the summary of a run waiting to start: the choice made for the next run, which the loaded run was started with. */
-function profileLabel(): string {
-  const sel = getRecordingSelection();
-  return sel.optOut ? "not recorded" : sel.preset === "custom" ? "custom" : String(sel.preset);
-}
-
 /**
  * The split Re-run button (U-010 section 4): the label repeats the last choice and a click does it again; the caret opens the three ways (live in lockstep `Ctrl+R`, live in
  * realtime, headless `Ctrl+Shift+R`) and says what they share: the scenario, the configuration, the seed and the commands of the run.
@@ -359,7 +354,7 @@ function RerunSplit(props: { busy: boolean; runId: string; commands: number; onR
   const items: readonly { how: RerunChoice; key?: string }[] = [{ how: "live-lockstep", key: "Ctrl+R" }, { how: "live-realtime" }, { how: "headless", key: "Ctrl+Shift+R" }];
   return (
     <span className="rerun-split" ref={box}>
-      <button type="button" className="pb sm" onClick={() => run(last)} aria-disabled={props.busy} data-testid="rerun" data-tip={`Run it again: ${RERUN_WORDS[last]}`}>
+      <button type="button" className="pb sm" onClick={() => run(last)} aria-disabled={props.busy} data-testid="player-rerun" data-tip={`Run it again: ${RERUN_WORDS[last]}`}>
         ⟲ Re-run{last === "live-lockstep" ? "" : ` · ${RERUN_WORDS[last]}`}
       </button>
       <button type="button" className="pb sm caret" aria-haspopup="menu" aria-expanded={open} aria-label="Re-run: choose how" onClick={() => setOpen((o) => !o)} data-testid="rerun-menu">

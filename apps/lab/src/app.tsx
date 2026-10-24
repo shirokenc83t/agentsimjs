@@ -512,6 +512,7 @@ export function App() {
             }}
             onStartHeadless={() => runHeadless()}
             rerunCommands={rerunCommands}
+            recordingLabel={run?.header.recording === "stored" ? ((run.header.recordingProfile as { name?: string } | undefined)?.name ?? "custom") : "not recorded"}
             onScrubBack={setReplayRun}
             onBackToLive={() => setReplayRun(undefined)}
           />
