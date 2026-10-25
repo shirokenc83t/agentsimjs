@@ -172,3 +172,21 @@ test("a command given while the run waits is queued at once: the button says so 
   await expect(page.getByTestId("command-explore")).not.toHaveAttribute("data-state", "queued");
   await expect(page.getByTestId("command-explore")).toHaveAttribute("data-state", /running|done/);
 });
+
+test("the Log's title bar has a 1 col | 2 col switch between the two Debug layouts", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await loadDemo(page);
+  await openWorkspace(page, "debug");
+  await expect(page.getByTestId("cols-1")).toHaveAttribute("aria-pressed", "true");
+  const dockW = async () => (await page.locator(".dv-dockview").first().boundingBox())?.width ?? 1;
+  const logW = async () => (await page.getByTestId("event-list").boundingBox())?.width ?? 0;
+  const before = await logW();
+  await page.getByTestId("cols-2").click();
+  await expect(page.getByTestId("cols-2")).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await logW()) / (await dockW())).toBeLessThan(0.34); // the Log leaves the 38 % column for its own of about 28 %
+  expect(await logW()).toBeLessThan(before);
+  await page.getByTestId("cols-1").click();
+  await expect(page.getByTestId("cols-1")).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await logW()) / (await dockW())).toBeGreaterThan(0.34);
+});

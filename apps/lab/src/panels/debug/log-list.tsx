@@ -2,7 +2,7 @@ import "../panels.css";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { identityOf, KIND_STYLE, ROW_PX } from "@agentsim/ui";
 import type { TraceRecord } from "@agentsim/trace";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, type KeyboardEvent } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type KeyboardEvent } from "react";
 import { copyOfRecord } from "./derived-tag.tsx";
 import { resultOf, summary } from "./log-rows.ts";
 
@@ -28,6 +28,8 @@ export interface LogListProps {
   readonly onSelect: (r: TraceRecord) => void;
   /** Enter on the selected row: take the shared cursor there. */
   readonly onJump: (r: TraceRecord) => void;
+  /** The trace graph of a record (the row's context menu, and the T key which the app takes): when given, the context menu offers it. */
+  readonly onOpenGraph?: ((r: TraceRecord) => void) | undefined;
   /** The researcher's keys that are the console's (follow, expand, copy, flags): offered the key first. Returns true when it took it. */
   readonly onKey?: (e: KeyboardEvent<HTMLDivElement>) => boolean;
   /** The list is at its end (within a row or two) or is not: the console pauses a tail that is not. */
@@ -45,6 +47,19 @@ const NEAR_END_PX = 28;
 export const LogList = forwardRef<LogListHandle, LogListProps>(function LogList(props, ref) {
   const { rows, more, entityIds, selectedSeq, expanded } = props;
   const scroller = useRef<HTMLDivElement>(null);
+  // The row's context menu: what can be done with the record under the pointer.
+  const [menu, setMenu] = useState<{ readonly r: TraceRecord; readonly x: number; readonly y: number } | undefined>(undefined);
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(undefined);
+    const key = (e: globalThis.KeyboardEvent) => e.key === "Escape" && close();
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", key);
+    };
+  }, [menu]);
   const virtual = useVirtualizer({ count: rows.length + (more ? 1 : 0), getScrollElement: () => scroller.current, estimateSize: () => ROW_PX.compact, overscan: 12 });
   const items = virtual.getVirtualItems();
   const last = items[items.length - 1];
@@ -159,6 +174,12 @@ export const LogList = forwardRef<LogListHandle, LogListProps>(function LogList(
               className={`event-row selectable${it.index % 2 === 1 ? " zebra" : ""}${result?.failed ? " alm" : ""}${open ? " open" : ""}`}
               onClick={() => props.onSelect(r)}
               onDoubleClick={() => props.onJump(r)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                props.onSelect(r);
+                const box = scroller.current?.getBoundingClientRect();
+                setMenu({ r, x: e.clientX - (box?.left ?? 0), y: e.clientY - (box?.top ?? 0) + (scroller.current?.scrollTop ?? 0) });
+              }}
               style={{ position: "absolute", top: 0, left: 0, right: 0, ...(open ? { minHeight: it.size } : { height: it.size }), transform: `translateY(${it.start}px)` }}
             >
               <span className="mono muted">{r.simTime.toFixed(2)} s</span>
@@ -187,6 +208,18 @@ export const LogList = forwardRef<LogListHandle, LogListProps>(function LogList(
           );
         })}
       </div>
+      {menu && (
+        <div className="log-menu" role="menu" aria-label={`Record #${menu.r.seq}`} style={{ left: menu.x, top: menu.y }} data-testid="log-menu" onPointerDown={(e) => e.stopPropagation()}>
+          {props.onOpenGraph && (
+            <button type="button" role="menuitem" className="tb" onClick={() => (props.onOpenGraph?.(menu.r), setMenu(undefined))} data-testid="log-menu-graph">
+              trace graph <span className="k">T</span>
+            </button>
+          )}
+          <button type="button" role="menuitem" className="tb" onClick={() => (props.onJump(menu.r), setMenu(undefined))} data-testid="log-menu-jump">
+            jump to it <span className="k">⏎</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 });

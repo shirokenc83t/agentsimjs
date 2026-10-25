@@ -220,7 +220,7 @@ function ThemeMenu(props: { onTheme: (preference: ThemePreference) => void }) {
     <div className="theme-menu" ref={box}>
       <button
         type="button"
-        className="tb theme-btn glyph tip-right"
+        className="tb theme-btn tip-right"
         aria-label={`Theme: ${theme.preference === "system" ? `system (${theme.resolved})` : theme.preference}`}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -228,7 +228,7 @@ function ThemeMenu(props: { onTheme: (preference: ThemePreference) => void }) {
         onClick={() => setOpen((o) => !o)}
         data-testid="theme-button"
       >
-        ◐
+        ◐ {theme.preference} <span className="k">▾</span>
       </button>
       {open && (
         <div className="theme-pop" role="menu" aria-label="Theme" data-testid="theme-menu">

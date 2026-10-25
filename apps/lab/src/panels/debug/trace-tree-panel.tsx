@@ -62,7 +62,7 @@ export function TraceTreePanel() {
     <div ref={box} className="panel trace-tree" data-testid="trace-tree" data-compact={compact}>
       {seq === undefined ? (
         <p className="muted tt-empty" data-testid="trace-tree-empty">
-          Pick a record in the log to see what it came from and what came of it.
+          Pick a record in the log to see what it came from and what came of it, then press T for its graph.
         </p>
       ) : tree === null ? (
         <p className="muted tt-empty">Reading…</p>
@@ -167,8 +167,8 @@ function TreeView(props: { tree: TraceTree; compact: boolean; open: (r: TraceRec
           </button>
         ))}
         <span className="sp" />
-        <button type="button" className="kt tip-right" onClick={props.openGraph} aria-label="Open the trace graph" data-tip="Open the trace graph: a window with this record and what is around it as a graph" data-testid="trace-open-graph">
-          ⧉
+        <button type="button" className="kt tip-right" onClick={props.openGraph} data-tip="A window with this record and what is around it as a graph · press T on a selected record" data-testid="trace-open-graph">
+          ⧉ open graph · T
         </button>
       </div>
       {section(

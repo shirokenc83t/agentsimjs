@@ -2,13 +2,13 @@
 
 /* Row 1: the top bar. */
 .top { display: flex; align-items: stretch; height: 28px; background: var(--bg1); border-bottom: 1px solid var(--ln); white-space: nowrap; }
-.top .seg { display: flex; align-items: center; gap: 8px; padding: 0 10px; border-right: 1px solid var(--ln); min-width: 0; flex: 0 1 auto; }
+.top .seg { display: flex; align-items: center; gap: 8px; padding: 0 8px; border-right: 1px solid var(--ln); min-width: 0; flex: 0 1 auto; }
 .top .seg.r { border-right: 0; border-left: 1px solid var(--ln); }
 .top .ws-nav { padding: 0; gap: 0; }
 .top .brand { background: var(--bg3); color: var(--fg); font-weight: 600; letter-spacing: 0.04em; }
 .top .k, .bot .k { color: var(--fg3); }
 .sp { flex: 1; }
-.ws { appearance: none; border: 0; background: transparent; color: var(--fg2); padding: 0 8px; height: 28px; cursor: pointer; font: inherit; }
+.ws { appearance: none; border: 0; background: transparent; color: var(--fg2); padding: 0 6px; height: 28px; cursor: pointer; font: inherit; }
 .ws b { color: var(--fg3); font-weight: 400; margin-right: 4px; }
 .ws:hover { color: var(--fg); background: var(--bg3); }
 .ws.on { background: var(--bg0); color: var(--fg); box-shadow: inset 0 2px 0 var(--ac); }
@@ -119,3 +119,5 @@
 .ready-block .ready-sum { max-width: 460px; }
 .pb { white-space: nowrap; }
 .ready-start .pb, .ready-start .pb.pri { height: 28px; font-size: var(--type-label-size); }
+/* The run selector keeps to a width: a long run label is cut (its whole text is the popover's), so the bar does not outgrow a 1280 px window. */
+.top .runsel { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }

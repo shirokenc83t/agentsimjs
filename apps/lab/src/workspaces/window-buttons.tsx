@@ -2,7 +2,7 @@ import { KIND_STYLE, useUiContext } from "@agentsim/ui";
 import { MARK_LEGEND } from "../panels/debug/marks.ts";
 import type { IDockviewHeaderActionsProps } from "dockview-react";
 import { useContext, useEffect, useReducer } from "react";
-import { usePolled } from "../services.tsx";
+import { useAppActions, usePolled } from "../services.tsx";
 import { getFrameStats } from "../shell/frame-stats.ts";
 import { PresetContext } from "./preset-context.ts";
 import { CloseIcon, CollapseIcon, DockIcon, ExpandIcon, FloatIcon, MaximizeIcon, RestoreIcon } from "./window-icons.tsx";
@@ -72,6 +72,7 @@ function PanelContext(props: { panelId: string }) {
 export function WindowButtons(props: IDockviewHeaderActionsProps) {
   const { containerApi: api, group, activePanel } = props;
   const preset = useContext(PresetContext);
+  const { layoutVariant, selectLayout } = useAppActions();
   const [, refresh] = useReducer((n: number) => n + 1, 0);
   useEffect(() => {
     const layout = api.onDidLayoutChange(refresh);
@@ -90,6 +91,21 @@ export function WindowButtons(props: IDockviewHeaderActionsProps) {
   return (
     <div className="wbtn" data-testid={`window-buttons-${id}`}>
       <PanelContext panelId={id} />
+      {id === "eventList" && !floating && selectLayout !== undefined && (
+        // The Debug's two layouts as a switch in the title bar of the column's top panel: the stacked right column or the Log in a column of its own.
+        <span className="cols-switch" role="group" aria-label="Debug layout" data-testid="cols-switch">
+          {(
+            [
+              ["debug · default", "1 col", "cols-1"],
+              ["debug · two columns", "2 col", "cols-2"],
+            ] as const
+          ).map(([name, label, tid]) => (
+            <button key={name} type="button" className={`kt${layoutVariant === name ? " on" : ""}`} aria-pressed={layoutVariant === name} onClick={() => selectLayout(name)} data-tip={`Layout: ${name}`} data-testid={tid}>
+              {label}
+            </button>
+          ))}
+        </span>
+      )}
       {floating && (
         <button type="button" className="wb" onClick={() => toggleCollapse(group)} aria-label={`${collapsed ? "Open" : "Collapse"} ${title}`} data-tip={collapsed ? "Open the window" : "Collapse to the title bar"} data-testid={`wb-collapse-${id}`}>
           {collapsed ? <ExpandIcon /> : <CollapseIcon />}

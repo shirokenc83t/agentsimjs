@@ -50,6 +50,9 @@ export interface AppActions {
   backToDebug(): void;
   /** Opens a window of the open workspace's dock that is in no preset or was closed (the trace graph from the Trace panel): where the preset has it, or as a floating window. */
   openPanel(id: PanelId): void;
+  /** The layout that ships with the open workspace that is on (its name; the first when none was chosen), and a way to put another on: the Log's `1 col | 2 col` switch. */
+  layoutVariant?: string | undefined;
+  selectLayout?(name: string): void;
 }
 const AppActionsContext = createContext<AppActions>({ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {}, resimulateWindow: () => {}, backToDebug: () => {}, openPanel: () => {} });
 export const AppActionsProvider = AppActionsContext.Provider;

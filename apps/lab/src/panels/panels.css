@@ -550,7 +550,7 @@
 
 /* The theme control of the top bar: a 24 px glyph button and its small menu under it. */
 .theme-menu { position: relative; display: inline-flex; }
-.theme-btn { width: 24px; padding: 0; justify-content: center; }
+.theme-btn { padding: 0 8px; justify-content: center; white-space: nowrap; gap: 4px; }
 .theme-pop { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; display: flex; flex-direction: column; min-width: 190px; padding: 2px; background: var(--bg2); border: 1px solid var(--ln2); }
 .theme-pop .tb { justify-content: flex-start; gap: 6px; height: 24px; }
 .theme-pop .chk { display: inline-block; width: 12px; }
@@ -623,3 +623,9 @@
 .sql-trow .sql-tname { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
 .sql-trow .sql-twist { flex: none; width: 18px; padding: 0; text-align: center; }
 .sql-count { flex: none; padding-right: 8px; font-size: var(--type-label-size); }
+.event-scroller { position: relative; }
+.log-menu { position: absolute; z-index: 20; display: flex; flex-direction: column; min-width: 150px; padding: 2px; background: var(--bg2); border: 1px solid var(--ln2); box-shadow: var(--float); }
+.log-menu .tb { justify-content: space-between; height: 24px; gap: 14px; }
+.cols-switch { display: inline-flex; gap: 0; margin-right: 6px; }
+.cols-switch .kt { height: 22px; padding: 0 8px; }
+.cols-switch .kt.on { background: var(--acbg); border-color: var(--ac); color: var(--fg); }

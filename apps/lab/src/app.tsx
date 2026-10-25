@@ -18,6 +18,9 @@ import "./shell/shell.css";
 import type { LabRun } from "./sim/run-controller.ts";
 
 /** Lab shell (UI-SPEC §2): top bar, player, banners, workspace, status bar, command palette. */
+/** A key typed in a field, a select or an editable area is the field's: the shell's single-key shortcuts leave it alone. */
+const isTyping = (t: EventTarget | null): boolean => t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable || t.closest('[role="dialog"]') !== null);
+
 export function App() {
   const { sim, source, storage } = useServices();
   const status = useStorageStatus(storage);
@@ -48,6 +51,7 @@ export function App() {
   const builtinRef = useRef<string | undefined>(undefined);
   const enterLogsRef = useRef<() => void>(() => {});
   const cycleLayoutRef = useRef<() => void>(() => {});
+  const openGraphRef = useRef<() => void>(() => {});
   const rerunKeyRef = useRef<(how: "live-lockstep" | "headless") => void>(() => {});
   const selectLayoutRef = useRef<(name: string | undefined) => void>(() => {});
   const [run, setRun] = useState<LabRun | undefined>(undefined);
@@ -194,6 +198,12 @@ export function App() {
         setPaletteOpen((o) => !o);
         return;
       }
+      // T: the trace graph of the selected record (in the Debug: from the Log, the Events and the Timeline alike; not while typing).
+      if (e.key.toLowerCase() === "t" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && workspaceRef.current === "debug" && !isTyping(e.target) && useUiContext.getState().selectedRecord !== undefined) {
+        e.preventDefault();
+        openGraphRef.current();
+        return;
+      }
       // Alt+L: the next layout that ships with the workspace (its presets), from anywhere.
       if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === "KeyL") {
         e.preventDefault();
@@ -292,6 +302,7 @@ export function App() {
     setActiveLayout(undefined);
   }, []);
   enterLogsRef.current = () => enterBuiltin(DEBUG_LOGS_LAYOUT);
+  openGraphRef.current = () => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, "traceGraph");
   const cycleLayout = useCallback(() => {
     const list = LAYOUT_VARIANTS[workspace] ?? [];
     if (list.length === 0) return;
@@ -466,14 +477,14 @@ export function App() {
       ...THEME_PREFERENCES.map((t) => ({ id: `theme.${t}`, title: `Theme: ${t}`, group: "Theme", run: () => setTheme(t) })),
       { id: "theme.toggle", title: "Theme: toggle dark and light", group: "Theme", keys: "ctrl+shift+L", run: () => setTheme(getThemeState().resolved === "dark" ? "light" : "dark") },
       { id: "panel.perf", title: "Open the Performance window", group: "Panel", run: openPerformance },
-      { id: "panel.open.traceGraph", title: "Open panel: Trace graph", group: "Panel", run: () => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, "traceGraph") },
+      { id: "panel.open.traceGraph", title: "Open panel: Trace graph", group: "Panel", keys: "T", run: () => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, "traceGraph") },
       ...panelCommands,
     ],
     [ready, sim, storage, resetLayouts, resetLayout, workspace, selectLayout, cycleLayout, setTheme, openPerformance, resimulateWindow, view?.runId, loadDemo, loadReference, rerunCurrent, rerunInMode, runHeadless, rerunCommands, otherMode, runBusy, run, agentCommands, panelCommands],
   );
 
   return (
-    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun, resimulateWindow: () => void resimulateWindow(), backToDebug: leaveBuiltin, openPanel: (id) => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, id) }}>
+    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun, resimulateWindow: () => void resimulateWindow(), backToDebug: leaveBuiltin, openPanel: (id) => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, id), layoutVariant: variant ?? LAYOUT_VARIANTS[workspace]?.[0]?.name, selectLayout }}>
       <CurrentRunProvider value={currentRun}>
       <div className="shell">
         <div data-testid="shell-header">

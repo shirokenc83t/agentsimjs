@@ -93,3 +93,35 @@ test("a column of many children shows the first few and a dashed group node that
   await page.getByTestId("tg-fit").click();
   await expect(page.getByTestId("tg-scaled")).toHaveAttribute("data-scale", /^\d/);
 });
+
+test("the graph is easy to find: a labelled button in the Trace, T on a selected record, the Log row's context menu, the palette, and the Trace's empty state says so", async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, 3);
+  await expect(page.getByTestId("trace-open-graph")).toHaveText(/open graph · T/);
+  const closeGraph = async () => {
+    await page.getByTestId("wb-close-traceGraph").click();
+    await expect(page.getByTestId("trace-graph")).toHaveCount(0);
+  };
+  // T on the selected record (focus on the list, as after a click on a row).
+  await page.keyboard.press("t");
+  await expect(page.getByTestId("trace-graph")).toBeVisible();
+  await closeGraph();
+  // The row's context menu.
+  await page.locator('[data-testid^="event-row-"]').first().click({ button: "right" });
+  await expect(page.getByTestId("log-menu")).toBeVisible();
+  await page.getByTestId("log-menu-graph").click();
+  await expect(page.getByTestId("trace-graph")).toBeVisible();
+  await closeGraph();
+  // The palette.
+  await runCommand(page, "Open panel: Trace graph");
+  await expect(page.getByTestId("trace-graph")).toBeVisible();
+});
+
+test("the Trace's empty state points to the graph, and the theme button says its theme", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await loadF2(page, "discovery");
+  await openWorkspace(page, "debug");
+  await expect(page.getByTestId("trace-tree-empty")).toContainText("press T");
+  await expect(page.getByTestId("theme-button")).toHaveText(/◐ (dark|light|system) ▾/);
+});

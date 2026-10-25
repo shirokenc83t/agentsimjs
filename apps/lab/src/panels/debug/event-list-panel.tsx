@@ -40,7 +40,8 @@ export const effectiveFilter = (text: string): string => (text.includes("source:
 export function EventListPanel() {
   const source = useSource();
   const { storage } = useServices();
-  const { resimulateWindow } = useAppActions();
+  const { resimulateWindow, openPanel } = useAppActions();
+  const openGraphFor = (_r: TraceRecord) => openPanel("traceGraph"); // the row is the selected record: the graph is about it
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const dt = snap.run?.dtS ?? 0.1;
   const headS = (snap.persistedHeadTick ?? 0) * dt;
@@ -372,6 +373,7 @@ export function EventListPanel() {
         </div>
       )}
       <LogList
+        onOpenGraph={(r) => openGraphFor(r)}
         ref={list}
         rows={rows}
         more={more}
