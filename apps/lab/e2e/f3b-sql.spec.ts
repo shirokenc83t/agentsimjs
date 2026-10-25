@@ -150,7 +150,6 @@ test("the schema is a tree with row counts; a click on a table previews its firs
   await step(page, 1);
   await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 30_000 });
   await openWorkspace(page, "data");
-  await page.getByTestId("sql-schema-toggle").click();
   await expect(page.getByTestId("sql-count-trace_records")).toContainText(/\d[\d,]* rows/, { timeout: 15_000 });
   await expect(page.getByTestId("sql-schema")).toContainText("user_data  (not readable here)");
   await page.getByTestId("sql-twist-trace_records").click();
@@ -173,7 +172,6 @@ test("the result grid's header and cells share one set of column widths: every h
   await step(page, 1);
   await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 30_000 });
   await openWorkspace(page, "data");
-  await page.getByTestId("sql-schema-toggle").click();
   await page.getByTestId("sql-table-trace_records").click();
   await expect(page.getByTestId("sql-status").first()).toContainText("10 rows", { timeout: 15_000 });
   const grid = page.getByTestId("sql-grid");

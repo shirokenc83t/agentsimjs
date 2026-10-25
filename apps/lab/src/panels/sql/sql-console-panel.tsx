@@ -4,6 +4,7 @@ import { SQL_LIMITS, type SqlError, type SqlResult, type SqlSchema } from "@agen
 import { downloadBytes, formatBytes, ROW_PX } from "@agentsim/ui";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { loadSnippets, storeSnippets, withoutSnippet, withSnippet, type SqlSnippet } from "../../config/sql-snippets.ts";
+import { loadSchemaOpen, storeSchemaOpen } from "../../config/sql-schema-open.ts";
 import { useAppActions, useServices } from "../../services.tsx";
 import { complete, type Completion } from "./sql-complete.ts";
 import { toCsv, toJsonl } from "./sql-export.ts";
@@ -26,7 +27,15 @@ export function SqlConsolePanel() {
   const [maxRows, setMaxRows] = useState(String(SQL_LIMITS.defaultRows));
   const [timeoutS, setTimeoutS] = useState(String(SQL_LIMITS.defaultTimeoutMs / 1000));
   const [schema, setSchema] = useState<SqlSchema | undefined>(undefined);
-  const [showSchema, setShowSchema] = useState(false);
+  // The schema tree is open unless the researcher closed it, which is remembered per user in `user_data`.
+  const [showSchema, setShowSchema] = useState(true);
+  useEffect(() => {
+    let off = false;
+    void loadSchemaOpen(storage.ports.userData).then((open) => !off && open !== undefined && setShowSchema(open), () => undefined);
+    return () => {
+      off = true;
+    };
+  }, [storage]);
   // The schema as a tree: database, tables (with their row counts), columns (with their types). A click on a table runs a read-only preview of its first rows; the counts are
   // read by one read-only statement through the same path as any other.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -190,6 +199,12 @@ export function SqlConsolePanel() {
   return (
     <div className="panel sql-console" data-testid="sql-console">
       <div className="sql-bar mono">
+        <button type="button" className="kt" aria-pressed={showSchema} onClick={() => {
+            setShowSchema(!showSchema);
+            void storeSchemaOpen(storage.ports.userData, !showSchema).catch(() => undefined);
+          }} data-testid="sql-schema-toggle">
+          schema
+        </button>
         <span className="ps">sql</span>
         <span className="pf">read-only</span>
         <label className="sql-limit">
@@ -250,9 +265,6 @@ export function SqlConsolePanel() {
             unsave
           </button>
         )}
-        <button type="button" className="kt" aria-pressed={showSchema} onClick={() => setShowSchema((v) => !v)} data-testid="sql-schema-toggle">
-          schema
-        </button>
       </div>
       <div className="sql-body">
         {showSchema && schema && (

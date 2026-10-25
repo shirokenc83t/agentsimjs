@@ -196,7 +196,6 @@ for (const theme of THEMES) {
       await step(page, 2);
       await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 200", { timeout: 30_000 });
       await openWorkspace(page, "data");
-      await page.getByTestId("sql-schema-toggle").click();
       await page.getByTestId("sql-twist-trace_records").click();
       await page.getByTestId("sql-table-trace_records").click();
       await expect(page.getByTestId("sql-preview-note")).toBeVisible({ timeout: 15_000 });

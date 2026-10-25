@@ -20,8 +20,7 @@ const schema: SqlSchema = {
 };
 const result = (over: Partial<SqlResult> = {}): SqlResult => ({ columns: ["kind", "n"], rows: [["action", 12], ["event", 3], ["note", null]], truncated: false, cellsCut: false, elapsedMs: 4.2, ...over });
 
-function setup(run: (sql: string, limits: unknown) => { result: Promise<Result<SqlResult, SqlError>>; cancel?: () => Promise<void> } = () => ({ result: Promise.resolve({ ok: true, value: result() }) })) {
-  const ports = createMemoryPorts();
+function setup(run: (sql: string, limits: unknown) => { result: Promise<Result<SqlResult, SqlError>>; cancel?: () => Promise<void> } = () => ({ result: Promise.resolve({ ok: true, value: result() }) }), ports = createMemoryPorts()) {
   const calls: { sql: string; limits: unknown }[] = [];
   const storage = {
     ports,
@@ -55,7 +54,7 @@ describe("SqlConsolePanel", () => {
     await userEvent.type(screen.getByTestId("sql-editor"), "SELECT kind, count(*) AS n FROM trace_records");
     await userEvent.click(screen.getByTestId("sql-run"));
     await waitFor(() => expect(screen.getByTestId("sql-status")).toHaveTextContent("3 rows"));
-    expect(calls).toEqual([{ sql: "SELECT kind, count(*) AS n FROM trace_records", limits: { maxRows: 50, timeoutMs: 2500 } }]);
+    expect(calls.filter((c) => !c.sql.includes("AS t, count"))).toEqual([{ sql: "SELECT kind, count(*) AS n FROM trace_records", limits: { maxRows: 50, timeoutMs: 2500 } }]);
     expect(screen.getByTestId("sql-status")).toHaveTextContent("4 ms");
     expect(screen.getByTestId("sql-grid")).toHaveAttribute("data-rows", "3");
   });
@@ -64,7 +63,7 @@ describe("SqlConsolePanel", () => {
     const { calls } = setup();
     await userEvent.click(screen.getByTestId("sql-editor"));
     await userEvent.keyboard("{Control>}{Enter}{/Control}");
-    await waitFor(() => expect(calls.length).toBe(1));
+    await waitFor(() => expect(calls.filter((c) => !c.sql.includes("AS t, count")).length).toBe(1));
   });
 
   it("says when the row limit cut the result", async () => {
@@ -108,9 +107,25 @@ describe("SqlConsolePanel", () => {
     expect(screen.queryByTestId("sql-complete")).toBeNull();
   });
 
+  it("opens with the schema tree shown and its button first in the bar; closing it is remembered per user", async () => {
+    const { ports } = setup();
+    expect(await screen.findByTestId("sql-schema")).toBeInTheDocument();
+    const toggle = screen.getByTestId("sql-schema-toggle");
+    expect(toggle.parentElement?.firstElementChild).toBe(toggle);
+    await userEvent.click(toggle);
+    expect(screen.queryByTestId("sql-schema")).toBeNull();
+    await waitFor(async () => expect(await ports.userData.get("sql", "schemaOpen")).toBe(false));
+  });
+
+  it("starts closed for a researcher who closed it", async () => {
+    const ports = createMemoryPorts();
+    await ports.userData.set("sql", "schemaOpen", false);
+    setup(undefined, ports);
+    await waitFor(() => expect(screen.queryByTestId("sql-schema")).toBeNull());
+  });
+
   it("lists the schema, and the table that is not readable cannot be inserted", async () => {
     setup();
-    await userEvent.click(screen.getByTestId("sql-schema-toggle"));
     const list = await screen.findByTestId("sql-schema");
     expect(list).toHaveTextContent("trace_records");
     expect(list).toHaveTextContent("user_data (not readable here)");
@@ -134,7 +149,6 @@ describe("SqlConsolePanel", () => {
 
   it("shows the schema as a tree with the row count of each readable table, and the columns with their types when a table is opened", async () => {
     const { calls } = setup((sql) => ({ result: Promise.resolve({ ok: true, value: sql.includes("UNION ALL") || sql.includes("count(*) AS n FROM \"trace_records\"") ? result({ columns: ["t", "n"], rows: [["trace_records", 12345]] }) : result() }) }));
-    await userEvent.click(screen.getByTestId("sql-schema-toggle"));
     await waitFor(() => expect(screen.getByTestId("sql-count-trace_records")).toHaveTextContent("12,345 rows"));
     // The counts are one read-only statement through the console's own path; user_data is not in it.
     expect(calls[0]?.sql).toContain('FROM "trace_records"');
@@ -147,7 +161,6 @@ describe("SqlConsolePanel", () => {
 
   it("a click on a table runs a read-only preview of its first 10 rows and says so, with a button for 100; a double click puts the name in the editor; user_data has none", async () => {
     const { calls } = setup((sql) => ({ result: Promise.resolve({ ok: true, value: sql.includes("count(*) AS n FROM \"trace_records\"") ? result({ columns: ["t", "n"], rows: [["trace_records", 12345]] }) : result() }) }));
-    await userEvent.click(screen.getByTestId("sql-schema-toggle"));
     await screen.findByTestId("sql-table-trace_records");
     await waitFor(() => expect(screen.getByTestId("sql-count-trace_records")).toHaveTextContent("12,345 rows"));
     await userEvent.click(screen.getByTestId("sql-table-trace_records"));
@@ -167,7 +180,6 @@ describe("SqlConsolePanel", () => {
 
   it("double click on a table or a column inserts its name at the caret, and a column that is indexed says so", async () => {
     setup();
-    await userEvent.click(screen.getByTestId("sql-schema-toggle"));
     await userEvent.clear(screen.getByTestId("sql-editor"));
     await userEvent.type(screen.getByTestId("sql-editor"), "SELECT  FROM x");
     (screen.getByTestId("sql-editor") as HTMLTextAreaElement).setSelectionRange(7, 7);
