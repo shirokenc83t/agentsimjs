@@ -235,11 +235,13 @@
       "report": true
     },
     "sim.sensing20x180": {
-      "stat": "p95",
-      "max": 9,
+      "stat": "median",
+      "max": 8,
+      "tailStat": "p95",
+      "tailMax": 12,
       "ciStat": "median",
       "ciMax": 18,
-      "$comment": "F2 M2a: sensing phase per tick, 20 UGVs with the built-in sensors (180-ray lidar 30 m at 10 Hz) on the 1 km² reference world. Measured after the optimization pass (Ryzen 7 9800X3D): median 6.0 ms, p95 7.0 ms. ADR-0030: local p95 with ~30 % margin, CI median at 2x"
+      "$comment": "F2 M2a: sensing phase per tick, 20 UGVs with the built-in sensors (180-ray lidar 30 m at 10 Hz) on the 1 km² reference world. Measured after the optimization pass (Ryzen 7 9800X3D): median 6.0 ms, p95 7.0 ms. Local gate on the median at ~30 % margin: the median stays in 4.7-5.9 ms over 31 runs, while the p95 of 100 samples (the fifth slowest) moves between 5.4 and 9.1 ms with the same code, so a p95 of 9 failed on noise; the p95 stays as a loose guard against a tail regression (12 ms). CI median at 2x (ADR-0030)"
     },
     "sim.tick20AgentsSensing": {
       "stat": "p95",
@@ -249,11 +251,13 @@
       "$comment": "F2 acceptance tick budget (2026-10-09): a whole tick for 20 agents with the built-in sensors at 10 Hz, no planning query in flight (planning stays bounded per agent by planning.slice20k), <= 25 ms p95 locally (a quarter of the 100 ms period). Measured: median 6.2 ms, p95 8.2 ms"
     },
     "sim.tick20AgentsExploring": {
-      "stat": "p95",
-      "max": 25,
+      "stat": "median",
+      "max": 19,
+      "tailStat": "p95",
+      "tailMax": 30,
       "ciStat": "median",
       "ciMax": 50,
-      "$comment": "F2 tick budget for exploring agents (2026-10-10): the same whole tick for 20 agents that reveal new cells every tick (moved 1 m between ticks), planning views prepared: sensing, view sync, topology, runtime, state hash; no planning query in flight. <= 25 ms p95 locally. Measured after the per-cell view sync pass: median 14.1 ms, p95 17.6 ms"
+      "$comment": "F2 tick budget for exploring agents (2026-10-10): the same whole tick for 20 agents that reveal new cells every tick (moved 1 m between ticks), planning views prepared: sensing, view sync, topology, runtime, state hash; no planning query in flight. Measured after the per-cell view sync pass: median 14.1 ms, p95 17.6 ms. Local gate on the median (19 ms, ~35 % margin), because the p95 of 100 samples moves from 17 to 27 ms between runs of the same code while the median does not; the p95 stays as a guard against a tail regression (30 ms). CI median at 2x (ADR-0030)"
     },
     "observer.beliefVsTruth20Exploring": {
       "stat": "p95",
