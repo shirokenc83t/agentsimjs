@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, loadF2, openPanelTab, openWorkspace, runCommand, sceneSettled, sendTo, step } from "../helpers.ts";
+import { loadDemo, loadF2, openInspectorSections, openPanelTab, openWorkspace, runCommand, sceneSettled, sendTo, step } from "../helpers.ts";
 
 /**
  * Visual regression (ADR-0032 §9): a fixed set of panels in both themes, from the deterministic F1 demo at
@@ -39,12 +39,17 @@ for (const theme of THEMES) {
     test("Explorer and Inspector (agent)", async ({ page }) => {
       await page.getByTestId("explorer-row-ugv-001").click();
       await expect(page.getByTestId("inspector-agent")).toBeVisible();
-      // The streamed sections (what the mind receives, the researcher view) have their first data.
-      await expect(page.getByTestId("mind-request-status")).toBeVisible();
-      await expect(page.getByTestId("researcher-ideal")).toBeVisible();
       await settle(page);
       await expect(page.getByTestId("explorer")).toHaveScreenshot(`explorer-${theme}.png`);
+      // The Inspector as it opens: the ID card and the commands, every other section one line.
       await expect(page.getByTestId("inspector")).toHaveScreenshot(`inspector-agent-${theme}.png`);
+      // Opened: the streamed sections (what the mind receives, the researcher view) have their first data.
+      await openInspectorSections(page);
+      await expect(page.getByTestId("mind-request-status")).toBeVisible();
+      await expect(page.getByTestId("researcher-ideal")).toBeVisible();
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      await expect(page.getByTestId("inspector")).toHaveScreenshot(`inspector-agent-open-${theme}.png`);
     });
 
     // F2: the sections of an agent with an unknown map at tick 0 (the F2 discovery demo): what the mind receives, the
@@ -54,6 +59,7 @@ for (const theme of THEMES) {
       await loadF2(page, "discovery");
       await page.addStyleTag({ content: ".dv-resize-container { display: none !important; }" });
       await page.getByTestId("explorer-row-ugv-001").click();
+      await openInspectorSections(page);
       await expect(page.getByTestId("mind-request-status")).toContainText("would be sent now");
       await expect(page.getByTestId("researcher-unknown")).toBeVisible();
       await page.locator("body").click({ position: { x: 1, y: 1 } });
@@ -138,6 +144,7 @@ for (const theme of THEMES) {
       await sceneSettled(page);
       await sendTo(page, "ugv-001", 50, 10);
       await step(page, 1);
+      await openInspectorSections(page);
       await page.getByTestId(/^plan-query-row-/).first().click();
       await page.getByTestId("st-strategy").selectOption("astar-then-hpa@1");
       await page.getByTestId("st-x").fill("50");
