@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loadDemo, openPanelTab, openWorkspace, step, waitForStorageReady } from "./helpers.ts";
+import { loadDemo, openPanelTab, openScenarioEditor, step, waitForStorageReady } from "./helpers.ts";
 
 // F3b M1 review: the Author conditions. The brush is a window the researcher can fold and move, and it starts folded at a corner; the JSON view of the run
 // configuration folds and resizes; the scope select says how many values are set; numbers are typed with a dot; the run popover offers a replay of a stored run.
@@ -9,7 +9,7 @@ test("the brush window starts folded, opens, and moves inside the map's area", a
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?probe");
   await waitForStorageReady(page);
-  await openWorkspace(page, "configurations");
+  await openScenarioEditor(page);
   await page.getByTestId("ed-new").click();
   await page.getByTestId("ed-new-id").fill("brush-yard");
   await page.getByTestId("ed-new-create").click();
@@ -43,7 +43,7 @@ test("Run configuration: the JSON view folds and resizes, and the scope select c
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await loadDemo(page);
-  await openWorkspace(page, "configurations");
+  await openScenarioEditor(page);
   await openPanelTab(page, "Run configuration");
   const json = page.getByRole("complementary", { name: "Text view" });
   await expect(json).toBeVisible();

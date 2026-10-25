@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, loadF2, openInspectorSections, openPanelTab, openWorkspace, runCommand, sceneSettled, sendTo, step } from "../helpers.ts";
+import { loadDemo, loadF2, openInspectorSections, openPanelTab, openScenarioEditor, openWorkspace, runCommand, sceneSettled, sendTo, step } from "../helpers.ts";
 
 /**
  * Visual regression (ADR-0032 §9): a fixed set of panels in both themes, from the deterministic F1 demo at
@@ -159,7 +159,7 @@ for (const theme of THEMES) {
 
     test("scenario editor (sidebar: document, brush, agent and body form, zones)", async ({ page }) => {
       test.setTimeout(90_000);
-      await openWorkspace(page, "configurations");
+      await openScenarioEditor(page);
       await page.getByTestId("ed-new").click();
       await page.getByTestId("ed-new-id").fill("visual-yard");
       await page.getByTestId("ed-new-x").fill("64");
@@ -193,7 +193,7 @@ for (const theme of THEMES) {
     // F2: prior maps in the scenario editor: made from the world, edited with the prior brush (the banner says which layer is painted).
     test("scenario editor (prior maps and the edit target)", async ({ page }) => {
       test.setTimeout(90_000);
-      await openWorkspace(page, "configurations");
+      await openScenarioEditor(page);
       await page.getByTestId("ed-open-select").selectOption("f1-demo");
       await page.getByTestId("ed-open").click();
       await sceneSettled(page);

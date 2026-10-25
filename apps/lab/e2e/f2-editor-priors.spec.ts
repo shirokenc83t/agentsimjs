@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadF2, openWorkspace, sceneSettled } from "./helpers.ts";
+import { loadF2, openScenarioEditor, sceneSettled } from "./helpers.ts";
 
 /** Screen point of a ground position (metres) in the visible scene (editor or Scene workspace). */
 async function ground(page: Page, x: number, y: number): Promise<{ x: number; y: number }> {
@@ -25,7 +25,7 @@ const priorCell = (page: Page, i: number, j: number) => page.evaluate(([ci, cj])
 /** Opens the stored F2 discovery scenario (stored by loading the preset) in the editor. */
 async function openDiscovery(page: Page) {
   await loadF2(page, "discovery");
-  await openWorkspace(page, "configurations");
+  await openScenarioEditor(page);
   await page.getByTestId("ed-open-select").selectOption("f2-discovery");
   await page.getByTestId("ed-open").click();
   await expect(page.getByTestId("ed-status")).toContainText("128 × 128 cells at 0.5 m · v1");

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { openInspectorSections, openWorkspace, runCommand, sceneSettled, step, waitForStorageReady } from "./helpers.ts";
+import { openInspectorSections, openScenarioEditor, runCommand, sceneSettled, step, waitForStorageReady } from "./helpers.ts";
 
 /** Screen point of a ground position (metres) in the visible scene (editor or Scene workspace). */
 async function ground(page: Page, x: number, y: number): Promise<{ x: number; y: number }> {
@@ -30,7 +30,7 @@ const settled = sceneSettled;
 async function newScenario(page: Page, id: string) {
   await page.goto("/?probe");
   await waitForStorageReady(page);
-  await openWorkspace(page, "configurations");
+  await openScenarioEditor(page);
   await page.getByTestId("ed-new").click();
   await page.getByTestId("ed-new-id").fill(id);
   await page.getByTestId("ed-new-x").fill("64");
@@ -94,7 +94,7 @@ test("paint a wall, draw a base, place an agent, save a version and run it: the 
   expect(ys.some((y) => y < 4 || y > 28), text).toBe(true);
 
   // A scenario with stored runs cannot be deleted (its runs must stay replayable).
-  await openWorkspace(page, "configurations");
+  await openScenarioEditor(page);
   await page.getByTestId("ed-open-select").selectOption("e7-yard");
   await page.getByTestId("ed-open").click();
   await expect(page.getByTestId("ed-msg")).toHaveText("✓ opened e7-yard v1");

@@ -239,3 +239,9 @@ export async function openTimelineLanes(page: Page, lanes: number): Promise<void
   if (shown < lanes) await canvas.click({ position: { x: 40, y: RULER + (shown - 1) * LANE + LANE / 2 } });
   await expect.poll(async () => Math.round(((await canvas.boundingBox())?.height ?? 0) - RULER) / LANE, { message: `lanes shown before the click: ${shown}` }).toBeGreaterThanOrEqual(lanes);
 }
+
+/** Configurations opens on the Run configuration; the Scenario editor is its second tab. */
+export async function openScenarioEditor(page: Page): Promise<void> {
+  await openWorkspace(page, "configurations");
+  await page.getByRole("tab", { name: /Scenario editor/ }).click();
+}
