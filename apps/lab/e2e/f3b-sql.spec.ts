@@ -143,3 +143,23 @@ test("Data opens with the Storage about 30 % and the SQL console 70 %; the edito
   await expect(page.getByTestId("sql-pinned-status")).toContainText("SELECT run_id, label FROM runs");
   await expect(page.getByTestId("sql-pinned").getByTestId("sql-grid")).toBeVisible();
 });
+
+test("the schema is a tree with row counts; a click on a table previews its first 10 rows through the read-only path; user_data is listed and not readable", async ({ page }) => {
+  test.setTimeout(120_000);
+  await loadDemo(page);
+  await step(page, 1);
+  await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 30_000 });
+  await openWorkspace(page, "data");
+  await page.getByTestId("sql-schema-toggle").click();
+  await expect(page.getByTestId("sql-count-trace_records")).toContainText(/\d[\d,]* rows/, { timeout: 15_000 });
+  await expect(page.getByTestId("sql-schema")).toContainText("user_data  (not readable here)");
+  await page.getByTestId("sql-twist-trace_records").click();
+  await expect(page.getByTestId("sql-schema")).toContainText("seq");
+  await page.getByTestId("sql-table-trace_records").click();
+  await expect(page.getByTestId("sql-editor")).toHaveValue('SELECT * FROM "trace_records" LIMIT 10');
+  await expect(page.getByTestId("sql-status").first()).toContainText("10 rows", { timeout: 15_000 });
+  await page.getByTestId("sql-preview-rows").selectOption("100");
+  await page.getByTestId("sql-table-runs").click();
+  await expect(page.getByTestId("sql-editor")).toHaveValue('SELECT * FROM "runs" LIMIT 100');
+  await expect(page.getByTestId("sql-status").first()).toContainText("row", { timeout: 15_000 });
+});

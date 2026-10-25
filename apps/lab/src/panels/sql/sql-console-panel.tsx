@@ -27,6 +27,11 @@ export function SqlConsolePanel() {
   const [timeoutS, setTimeoutS] = useState(String(SQL_LIMITS.defaultTimeoutMs / 1000));
   const [schema, setSchema] = useState<SqlSchema | undefined>(undefined);
   const [showSchema, setShowSchema] = useState(false);
+  // The schema as a tree: database, tables (with their row counts), columns (with their types). A click on a table runs a read-only preview of its first rows; the counts are
+  // read by one read-only statement through the same path as any other.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [previewRows, setPreviewRows] = useState<10 | 100>(10);
+  const [counts, setCounts] = useState<Readonly<Record<string, number | undefined>>>({});
   const [running, setRunning] = useState(false);
   const [outcome, setOutcome] = useState<Outcome>(undefined);
   const [open, setOpen] = useState<(Completion & { index: number }) | undefined>(undefined);
@@ -65,14 +70,34 @@ export function SqlConsolePanel() {
     };
   }, [storage, refreshSchema]);
 
-  const run = async () => {
+  const tableList = (schema?.tables ?? []).filter((t) => t.readable).map((t) => t.name).join(",");
+  const countTables = useCallback(() => {
+    const names = tableList === "" ? [] : tableList.split(",");
+    if (names.length === 0) return;
+    const statement = names.map((n) => `SELECT '${n}' AS t, count(*) AS n FROM "${n.replace(/"/g, '""')}"`).join(" UNION ALL ");
+    void storage.sql.run(statement, { maxRows: 200, timeoutMs: 5000 }).result.then(
+      (r) => {
+        if (!r.ok) return;
+        const next: Record<string, number> = {};
+        for (const row of r.value.rows) next[String(row[0])] = Number(row[1]);
+        setCounts(next);
+      },
+      () => undefined,
+    );
+  }, [storage, tableList]);
+  useEffect(() => {
+    if (showSchema) countTables();
+  }, [showSchema, countTables]);
+
+  const run = async (statement?: string) => {
     if (running) return;
+    const text = statement ?? sql;
     const rows = Number(maxRows);
     const ms = Math.round(Number(timeoutS) * 1000);
     setOpen(undefined);
     setRunning(true);
     setOutcome(undefined);
-    const j = storage.sql.run(sql, { maxRows: rows, timeoutMs: ms });
+    const j = storage.sql.run(text, { maxRows: rows, timeoutMs: ms });
     job.current = j;
     try {
       const r = await j.result;
@@ -131,6 +156,13 @@ export function SqlConsolePanel() {
     if (!result) return;
     const text = kind === "csv" ? toCsv(result) : toJsonl(result);
     downloadBytes(new TextEncoder().encode(text), `query.${kind}`, kind === "csv" ? "text/csv" : "application/x-ndjson");
+  };
+  /** A read-only preview of the first rows of a table: the statement is shown in the editor and runs like any other (the same path, never `user_data`). */
+  const previewTable = (name: string) => {
+    const text = `SELECT * FROM "${name.replace(/"/g, '""')}" LIMIT ${previewRows}`;
+    setSql(text);
+    setOpen(undefined);
+    void run(text);
   };
   const insertName = (name: string) => {
     const el = editor.current;
@@ -210,23 +242,54 @@ export function SqlConsolePanel() {
         <div className="sql-top" style={maximized ? { display: "none" } : { flex: `0 0 ${splitPct}%` }}>
         <div className="sql-main">
           {showSchema && schema && (
-            <div className="sql-schema mono" data-testid="sql-schema">
-              {schema.tables.map((t) => (
-                <div key={t.name} className="sql-table">
-                  <button type="button" className="tt-node" disabled={!t.readable} onClick={() => insertName(t.name)} title={t.readable ? `insert ${t.name}` : "not readable in the console"}>
-                    {t.name}
-                    {t.readable ? "" : "  (not readable here)"}
-                  </button>
-                  {t.columns.map((c) => (
-                    <button key={c.name} type="button" className="tt-node sql-col" onClick={() => insertName(c.name)}>
+          <div className="sql-schema mono" data-testid="sql-schema" role="tree" aria-label="The database">
+            <div className="sql-tree-head">
+              <span className="muted">database · {schema.tables.length} tables</span>
+              <label className="sql-limit">
+                preview
+                <select className="kt" value={previewRows} onChange={(e) => setPreviewRows(e.target.value === "100" ? 100 : 10)} aria-label="Rows of a table preview" data-testid="sql-preview-rows">
+                  <option value="10">10 rows</option>
+                  <option value="100">100 rows</option>
+                </select>
+              </label>
+              <button type="button" className="kt" onClick={countTables} aria-label="Count the rows of the tables again" data-testid="sql-recount">
+                ⟳
+              </button>
+            </div>
+            {schema.tables.map((t) => (
+              <div key={t.name} className="sql-table" role="treeitem" aria-expanded={t.readable ? expanded.has(t.name) : undefined}>
+                {t.readable ? (
+                  <div className="sql-trow">
+                    <button type="button" className="tt-node sql-twist" onClick={() => setExpanded((s) => new Set(s.has(t.name) ? [...s].filter((x) => x !== t.name) : [...s, t.name]))} aria-label={`Columns of ${t.name}`} data-testid={`sql-twist-${t.name}`}>
+                      {expanded.has(t.name) ? "▾" : "▸"}
+                    </button>
+                    <button type="button" className="tt-node sql-tname" onClick={() => void previewTable(t.name)} title={`Preview the first ${previewRows} rows of ${t.name} (read-only)`} data-testid={`sql-table-${t.name}`}>
+                      {t.name}
+                    </button>
+                    <span className="muted sql-count" data-testid={`sql-count-${t.name}`}>
+                      {counts[t.name] === undefined ? "…" : `${counts[t.name]?.toLocaleString("en")} rows`}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="sql-trow">
+                    <button type="button" className="tt-node sql-tname" disabled title="not readable in the console">
+                      {t.name}
+                      {"  (not readable here)"}
+                    </button>
+                  </div>
+                )}
+                {t.readable &&
+                  expanded.has(t.name) &&
+                  t.columns.map((c) => (
+                    <button key={c.name} type="button" className="tt-node sql-col" role="treeitem" onClick={() => insertName(c.name)} title={`insert ${c.name}`}>
                       {c.name} <span className="muted">{c.type.toLowerCase()}</span>
                     </button>
                   ))}
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="sql-editor-wrap">
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="sql-editor-wrap">
             <div className="sql-stack">
               {/* The colours are drawn behind the text area, whose own text is transparent: the caret, the selection and the keys stay the browser's. */}
               <pre ref={painted} className="sql-hl mono" aria-hidden="true" data-testid="sql-highlight">

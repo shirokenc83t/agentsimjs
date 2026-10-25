@@ -131,4 +131,32 @@ describe("SqlConsolePanel", () => {
     await userEvent.click(screen.getByTestId("sql-snippet-delete"));
     await waitFor(async () => expect(await ports.userData.get("sql", "snippets")).toEqual([]));
   });
+
+  it("shows the schema as a tree with the row count of each readable table, and the columns with their types when a table is opened", async () => {
+    const { calls } = setup((sql) => ({ result: Promise.resolve({ ok: true, value: sql.includes("UNION ALL") || sql.includes("count(*) AS n FROM \"trace_records\"") ? result({ columns: ["t", "n"], rows: [["trace_records", 12345]] }) : result() }) }));
+    await userEvent.click(screen.getByTestId("sql-schema-toggle"));
+    await waitFor(() => expect(screen.getByTestId("sql-count-trace_records")).toHaveTextContent("12,345 rows"));
+    // The counts are one read-only statement through the console's own path; user_data is not in it.
+    expect(calls[0]?.sql).toContain('FROM "trace_records"');
+    expect(calls[0]?.sql).not.toContain("user_data");
+    expect(screen.queryByTestId("sql-column")).toBeNull();
+    await userEvent.click(screen.getByTestId("sql-twist-trace_records"));
+    expect(screen.getByTestId("sql-schema")).toHaveTextContent("seq integer");
+    expect(screen.getByTestId("sql-schema")).toHaveTextContent("kind text");
+  });
+
+  it("a click on a table runs a read-only preview of its first 10 rows (100 on request), shown in the editor and the results; user_data has none", async () => {
+    const { calls } = setup();
+    await userEvent.click(screen.getByTestId("sql-schema-toggle"));
+    await screen.findByTestId("sql-table-trace_records");
+    await userEvent.click(screen.getByTestId("sql-table-trace_records"));
+    await waitFor(() => expect(screen.getByTestId("sql-status")).toHaveTextContent("3 rows"));
+    expect(calls.at(-1)?.sql).toBe('SELECT * FROM "trace_records" LIMIT 10');
+    expect((screen.getByTestId("sql-editor") as HTMLTextAreaElement).value).toBe('SELECT * FROM "trace_records" LIMIT 10');
+    await userEvent.selectOptions(screen.getByTestId("sql-preview-rows"), "100");
+    await userEvent.click(screen.getByTestId("sql-table-trace_records"));
+    await waitFor(() => expect(calls.at(-1)?.sql).toBe('SELECT * FROM "trace_records" LIMIT 100'));
+    expect(screen.queryByTestId("sql-table-user_data")).toBeNull();
+    expect(screen.getByRole("button", { name: /user_data/ })).toBeDisabled();
+  });
 });

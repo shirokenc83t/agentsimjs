@@ -17,13 +17,14 @@ test("the palette groups its results, marks the matched letters, shows keys and 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 });
 
-test("Settings: sections with a rail, the theme as a segmented control, reduced motion and the dock grid, the keys listed", async ({ page }) => {
+test("Settings: sections headed in place with no rail, the theme as a segmented control, reduced motion and the dock grid, the keys listed", async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto("/");
   await waitForStorageReady(page);
   await openWorkspace(page, "settings");
   const panel = page.getByTestId("settings-panel");
-  await expect(panel.getByRole("navigation", { name: "Settings sections" })).toBeVisible();
+  await expect(panel.getByRole("navigation", { name: "Settings sections" })).toHaveCount(0); // no rail: the sections are headed in one column
+  await expect(panel.locator("section.fs > h4")).toHaveCount(5);
   await expect(panel).toContainText("Minimum quota");
   await expect(panel).toContainText("play or pause");
   // A key is only ever “set” or “not set”: there is nothing to type here yet.

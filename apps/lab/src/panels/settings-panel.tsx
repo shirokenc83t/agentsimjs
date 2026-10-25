@@ -5,14 +5,6 @@ import { applyAppearance, DEFAULT_APPEARANCE, loadAppearance, saveAppearance, ty
 import { readQuotaThreshold, writeQuotaThreshold } from "../config/environment.ts";
 import { useAppActions, useServices, useStorageStatus } from "../services.tsx";
 
-const SECTIONS = [
-  { id: "appearance", n: 1, title: "APPEARANCE" },
-  { id: "providers", n: 2, title: "PROVIDERS AND KEYS" },
-  { id: "storage", n: 3, title: "STORAGE" },
-  { id: "layouts", n: 4, title: "LAYOUTS" },
-  { id: "keyboard", n: 5, title: "KEYBOARD" },
-] as const;
-
 const KEYS: readonly (readonly [string, string])[] = [
   ["Space", "play or pause"],
   [".", "step one tick"],
@@ -51,29 +43,16 @@ export function SettingsPanel() {
   useEffect(() => {
     if (ready) void loadAppearance(storage.ports.userData).then(setAppearance, () => {});
   }, [ready, storage]);
-  const [section, setSection] = useState<(typeof SECTIONS)[number]["id"]>("appearance");
   const set = (patch: Partial<Appearance>) => {
     const next = { ...appearance, ...patch };
     setAppearance(next);
     applyAppearance(next);
     if (ready) void saveAppearance(storage.ports.userData, next);
   };
-  const goTo = (id: (typeof SECTIONS)[number]["id"]) => {
-    setSection(id);
-    document.querySelector(`[data-section="${id}"]`)?.scrollIntoView?.({ block: "start" });
-  };
 
   return (
     <div className="panel settings rc" data-testid="settings-panel">
       <div className="st-body">
-        <nav className="rc-rail" aria-label="Settings sections">
-          {SECTIONS.map((s) => (
-            <button key={s.id} type="button" className={`nv${section === s.id ? " on" : ""}`} aria-current={section === s.id ? "true" : undefined} onClick={() => goTo(s.id)}>
-              <span className="n">{s.n}</span>
-              {s.title}
-            </button>
-          ))}
-        </nav>
         <div className="rc-form">
           <section className="fs" data-section="appearance">
             <h4 className="sec">

@@ -116,7 +116,7 @@
 .sql-limit { display: inline-flex; align-items: center; gap: 4px; color: var(--fg2); }
 .sql-limit .log-filter { flex: none; width: 70px; min-width: 0; }
 .sql-main { flex: none; display: flex; min-height: 0; max-height: 46%; }
-.sql-schema { flex: none; width: 220px; overflow: auto; border-right: 1px solid var(--ln); background: var(--bg1); padding: 4px 0; }
+.sql-schema { flex: none; width: 250px; overflow: auto; border-right: 1px solid var(--ln); background: var(--bg1); padding: 4px 0; }
 .sql-table { padding-bottom: 4px; }
 .sql-col { padding-left: 22px; color: var(--fg2); }
 .sql-editor-wrap { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -432,7 +432,7 @@
 
 /* Settings: the rail of the Run configuration, rows of label and control, a segmented control and switches. */
 .settings.rc { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-.st-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 200px minmax(0, 1fr); }
+.st-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .st-row { display: grid; grid-template-columns: 240px minmax(0, 1fr); align-items: center; gap: 10px; min-height: 30px; }
 .segc { display: inline-flex; border: 1px solid var(--ln2); }
 .segc label { position: relative; display: flex; align-items: center; height: 24px; padding: 0 10px; border-right: 1px solid var(--ln2); background: var(--bg1); color: var(--fg2); font-size: var(--type-label-size); cursor: pointer; }
@@ -618,3 +618,8 @@
 .rc-form .fs > h4.sec { position: sticky; top: 30px; z-index: 4; margin: 0; padding: 4px 14px; background: var(--bg1); }
 .fs.folded > :not(h4) { display: none; }
 .act-queued.MuiButton-root { color: var(--fg); border-color: var(--ac); border-style: dashed; background: var(--acbg); }
+.sql-tree-head { display: flex; align-items: center; gap: 6px; padding: 2px 8px 4px; font-size: var(--type-label-size); position: sticky; top: 0; background: var(--bg1); }
+.sql-trow { display: flex; align-items: center; gap: 2px; }
+.sql-trow .sql-tname { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.sql-trow .sql-twist { flex: none; width: 18px; padding: 0; text-align: center; }
+.sql-count { flex: none; padding-right: 8px; font-size: var(--type-label-size); }
