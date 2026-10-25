@@ -222,6 +222,7 @@ test("render loop on the 1 km² reference world with the belief overlay", async 
   // The stages overlay joins them (F2b M4): a researcher's Strategy test of a refine (coarse path dashed, legs, numbered joints)
   // from the scout to its target, drawn by the same class that draws a run's query stages.
   await page.getByTestId("overlay-stages").click();
+  await page.getByTestId("inspector-expand-all").click(); // the Inspector's sections are one line each until opened
   await page.getByTestId("st-strategy").selectOption("inline");
   await page.getByTestId("st-json").fill(
     JSON.stringify({ schemaVersion: 0, id: "bench", version: 1, origin: "human", root: { kind: "refine", mode: "eager", coarse: { kind: "algorithm", algorithm: "hpa" }, local: { kind: "algorithm", algorithm: "astar" } } }),
