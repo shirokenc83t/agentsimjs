@@ -145,7 +145,8 @@ function Transport(props: PlayerProps & { replay: boolean }) {
       )}
       {!replay && recorded && view?.runId && (
         <button type="button" className="pb sm" onClick={() => props.onScrubBack(view.runId as string)} data-testid="scrub-back" data-tip="Look back at the run as it is saved (the run goes on)">
-          « <span className="lbl-long">scrub back</span>
+          «{" "}
+          <span className="lbl-long">scrub back</span>
         </button>
       )}
     </div>
