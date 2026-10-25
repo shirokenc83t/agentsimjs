@@ -261,7 +261,7 @@ export function SqlConsolePanel() {
             <button type="button" className="tt-node sql-twist" onClick={() => setDbOpen((o) => !o)} aria-expanded={dbOpen} aria-label="The database: open or fold" data-testid="sql-db-twist">
               {dbOpen ? "\u25be" : "\u25b8"}
             </button>
-            <span data-testid="sql-db">
+            <span data-testid="sql-db" title={`database ${dbInfo ?? ""}`}>
               database <span className="muted">{dbInfo ?? ""}</span>
             </span>
             <button type="button" className="kt" onClick={countTables} aria-label="Count the rows of the tables again" data-testid="sql-recount">
@@ -508,7 +508,7 @@ export function Grid(props: { result: SqlResult }) {
       <div style={{ minWidth }}>
         <div className="sql-head mono" role="row" style={{ gridTemplateColumns: template }}>
           {columns.map((c, i) => (
-            <span key={`${c}-${i}`} role="columnheader" title={c}>
+            <span key={`${c}-${i}`} role="columnheader" title={c} className={typeof rows[0]?.[i] === "number" ? "num" : ""}>
               {c}
             </span>
           ))}

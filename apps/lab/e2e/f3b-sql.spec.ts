@@ -166,3 +166,27 @@ test("the schema is a tree with row counts; a click on a table previews its firs
   await page.getByTestId("sql-table-runs").dblclick();
   await expect(page.getByTestId("sql-editor")).toHaveValue(/runs/);
 });
+
+test("the result grid's header and cells share one set of column widths: every header starts where its cells start; the tree's root row is one line", async ({ page }) => {
+  test.setTimeout(120_000);
+  await loadDemo(page);
+  await step(page, 1);
+  await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 30_000 });
+  await openWorkspace(page, "data");
+  await page.getByTestId("sql-schema-toggle").click();
+  await page.getByTestId("sql-table-trace_records").click();
+  await expect(page.getByTestId("sql-status").first()).toContainText("10 rows", { timeout: 15_000 });
+  const grid = page.getByTestId("sql-grid");
+  const heads = await grid.locator('[role="columnheader"]').evaluateAll((els) => els.map((e) => ({ left: e.getBoundingClientRect().left, right: e.getBoundingClientRect().right, name: e.textContent })));
+  const cells = await grid.getByTestId("sql-row-0").locator('[role="cell"]').evaluateAll((els) => els.map((e) => ({ left: e.getBoundingClientRect().left, right: e.getBoundingClientRect().right })));
+  expect(heads.length).toBeGreaterThan(8);
+  expect(cells).toHaveLength(heads.length);
+  heads.forEach((h, i) => {
+    expect(Math.abs(h.left - (cells[i] as { left: number }).left), `${h.name}: header and cell start together`).toBeLessThanOrEqual(1);
+    expect(Math.abs(h.right - (cells[i] as { right: number }).right), `${h.name}: header and cell end together`).toBeLessThanOrEqual(1);
+  });
+  // The root row of the tree is one line, as wide as the tree, not a word a line in a narrow column.
+  const root = await page.getByTestId("sql-db").evaluate((e) => ({ w: e.getBoundingClientRect().width, h: e.getBoundingClientRect().height }));
+  expect(root.w).toBeGreaterThan(100);
+  expect(root.h).toBeLessThan(45);
+});

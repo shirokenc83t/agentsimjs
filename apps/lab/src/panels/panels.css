@@ -137,7 +137,10 @@
 .sql-actions { flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--bg1); border-bottom: 1px solid var(--ln); }
 .sql-status { flex: none; padding: 3px 10px; font-size: var(--type-label-size); background: var(--bg2); border-bottom: 1px solid var(--ln); white-space: pre-wrap; overflow-wrap: anywhere; }
 .sql-grid { flex: 1; min-height: 60px; overflow: auto; background: var(--bg0); }
-.sql-head { display: grid; position: sticky; top: 0; z-index: 2; gap: 8px; padding: 0 10px; height: 20px; align-items: center; background: var(--bg2); border-bottom: 1px solid var(--ln); color: var(--fg2); font-size: var(--type-label-size); font-weight: 600; }
+/* The header and the rows are sized in `ch` of one font (the rows' own), so their columns are the same width; the header's text is smaller inside its cell. */
+.sql-head { display: grid; position: sticky; top: 0; z-index: 2; gap: 8px; padding: 0 10px; height: 20px; align-items: center; background: var(--bg2); border-bottom: 1px solid var(--ln); color: var(--fg2); font-size: var(--type-mono-size); font-weight: 600; }
+.sql-head > span { font-size: var(--type-label-size); }
+.sql-head .num { text-align: right; }
 .sql-row { display: grid; gap: 8px; padding: 0 10px; align-items: center; font-size: var(--type-mono-size); white-space: nowrap; }
 .sql-row.zebra { background: color-mix(in srgb, var(--bg1) 60%, transparent); }
 .sql-head > span, .sql-row > span { overflow: hidden; text-overflow: ellipsis; }
@@ -666,3 +669,6 @@
 .sql-tree-head > span { flex: 1; min-width: 0; }
 .sql-tree-head > span .muted { display: block; font-size: var(--type-label-size); }
 .inspector .kv > .pre-hint { grid-column: 1 / -1; margin: 2px 0 6px; }
+.sql-tree-head .sql-twist { flex: none; width: 18px; padding: 0; text-align: center; }
+.sql-tree-head > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sql-tree-head > span .muted { display: block; overflow: hidden; text-overflow: ellipsis; }
