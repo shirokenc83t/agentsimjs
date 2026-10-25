@@ -24,7 +24,7 @@ export interface MonitorViewProps {
   readonly sparks: readonly Spark[];
   /** The storage writer's state as the worker reports it (`ok`, or why the run waits). */
   readonly writer: { readonly state: "ok" | "storage_backpressure" | "storage_quota"; readonly backlogRecords: number } | undefined;
-  readonly actions: { pause(): void; play(): void; stop(): void; openDebug(): void; openAnalysis: (() => void) | undefined };
+  readonly actions: { pause(): void; play(): void; stop(): void; openDebug(): void; openAnalysis: (() => void) | undefined; rerunHeadless?: (() => void) | undefined };
 }
 
 /** How a finished run ended, in words: its end condition reached, or stopped before it (or with none). */
@@ -48,9 +48,19 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
   if (p === undefined || run === undefined) {
     return (
       <div className="panel hm" data-testid="headless-monitor" data-state="none">
-        <p className="muted hm-empty" data-testid="hm-empty">
-          No headless run. “Run headless” (the player, the run popover, Configurations, or the palette) runs the scenario again with no live view, as fast as lockstep allows, always recorded.
-        </p>
+        <div className="hm-empty-box" data-testid="hm-empty">
+          <p className="hm-empty-line mono">
+            <span className="muted">No headless run</span>
+            {props.actions.rerunHeadless !== undefined && (
+              <button type="button" className="btn pri" onClick={props.actions.rerunHeadless} data-testid="hm-rerun-headless">
+                Re-run headless <span className="k">Ctrl+Shift+R</span>
+              </button>
+            )}
+          </p>
+          <p className="muted hm-empty">
+            Run headless (the player, the run popover, Configurations or the palette) runs the scenario again with no live view, as fast as lockstep allows, always recorded. Where it is, how fast and what it writes are shown here.
+          </p>
+        </div>
       </div>
     );
   }

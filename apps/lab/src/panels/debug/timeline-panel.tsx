@@ -5,6 +5,7 @@ import { useAppActions, usePolled, useSource } from "../../services.tsx";
 import { gapLabel } from "../../sim/gap-click.ts";
 import { DerivedTag } from "./derived-tag.tsx";
 import { BIN_PX, binMarks, describeAt, flagRole, GLYPH_PX, glyphOf, isFailure, nearestMark, type Mark } from "./marks.ts";
+import { foldLabel, foldLanes, FOLD_LANE } from "./lane-fold.ts";
 import { LABEL_PX, LANE_PX, laneAt, RULER_PX, rulerTicks, selectionFromDrag } from "./timeline-geometry.ts";
 import { useJump } from "./use-jump.ts";
 import { useRunMarks } from "./use-run-marks.ts";
@@ -25,7 +26,10 @@ export function TimelinePanel() {
   const simHeadS = Math.max(headS, snap.simHeadTick * dt);
   const scale = Math.max(simHeadS, dt);
   const marks = useRunMarks(snap.runId, headS);
-  const lanes = useMemo(() => ["run", ...snap.entityIds], [snap.entityIds]);
+  const [emptyOpen, setEmptyOpen] = useState(false);
+  // The agents with no marks take one row until it is opened.
+  const folded = useMemo(() => foldLanes(["run", ...snap.entityIds], marks, emptyOpen), [snap.entityIds, marks, emptyOpen]);
+  const lanes = folded.lanes;
   const jump = useJump(snap);
   const { resimulateWindow } = useAppActions();
   const startS = snap.replay?.startS ?? 0;
@@ -90,6 +94,11 @@ export function TimelinePanel() {
       ctx.fillRect(0, y, LABEL_PX, LANE_PX);
       ctx.fillStyle = color("--ln");
       ctx.fillRect(0, y + LANE_PX - 1, width, 1);
+      if (lane === FOLD_LANE) {
+        ctx.fillStyle = color("--fg3");
+        ctx.fillText(foldLabel(folded.empty.length, emptyOpen), 8, y + LANE_PX / 2);
+        return;
+      }
       ctx.fillStyle = color("--fg2");
       ctx.fillText(lane, 8, y + LANE_PX / 2);
     });
@@ -176,7 +185,7 @@ export function TimelinePanel() {
     ctx.fillRect(lx, 1, w, RULER_PX - 3);
     ctx.fillStyle = color("--acfg");
     ctx.fillText(text, lx + 4, RULER_PX / 2 - 1);
-  }, [width, height, lanes, marks, scale, headS, simHeadS, startS, theme]);
+  }, [width, height, lanes, marks, scale, headS, simHeadS, startS, theme, emptyOpen, folded.empty.length]);
 
   useEffect(() => {
     draw();
@@ -239,6 +248,10 @@ export function TimelinePanel() {
     const box = e.currentTarget.getBoundingClientRect();
     const px = e.clientX - box.left;
     const lane = laneAt(e.clientY - box.top, lanes.length);
+    if (lane >= 0 && lanes[lane] === FOLD_LANE) {
+      setEmptyOpen((o) => !o);
+      return;
+    }
     const t = Math.max(0, Math.min(scale, ((px - LABEL_PX) / (width - LABEL_PX)) * scale));
     // A mark within 5 px of the click on that lane is what was clicked (the ruler picks none).
     const picked: Mark | undefined = px >= LABEL_PX && lane >= 0 ? nearestMark(marks, lanes, lane, t, (5 / (width - LABEL_PX)) * scale) : undefined;

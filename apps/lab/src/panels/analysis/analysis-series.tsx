@@ -18,6 +18,8 @@ export interface AnalysisSeriesProps {
 const PAD = { l: 52, r: 78, t: 6, b: 16 };
 const ROW_H = 92;
 const LABEL_GAP = 11;
+/** More lines than this get end labels for the selected agent and the first few only, and the legend under the chart lists every one (it scrolls). */
+const END_LABELS = 6;
 
 const fmt = (v: number): string => (Math.abs(v) >= 1000 ? String(Math.round(v)) : Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(1) : String(Math.round(v * 100) / 100));
 
@@ -63,6 +65,18 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
             lo = Math.min(lo, p.v);
             hi = Math.max(hi, p.v);
           }
+        // Lines that never move (every agent at one value the whole run, or one sample) take one line, not a plot: the value and how long it held; the room goes to the charts that say something.
+        if (hi - lo < 1e-9 && lo !== Infinity) {
+          const value = first.unit === "fraction" ? lo.toFixed(2) : fmt(lo);
+          const who = lines.length === 1 ? shortLabel((lines[0] as AnalysisSeries).agentId) : `${lines.length} agents`;
+          return (
+            <figure key={name} className="asv-chart asv-flat" data-testid={`series-${name.replace(/\s+/g, "-")}`} data-flat="true">
+              <figcaption className="mono">
+                <b>{name}</b>: <span data-testid={`series-flat-${name.replace(/\s+/g, "-")}`}>{value}</span> <span className="muted">all run · {first.unit} · {who} · {sourceNote(first)}</span>
+              </figcaption>
+            </figure>
+          );
+        }
         // A fraction is on its natural axis, 0 to 1, whatever part of it the lines use; any other quantity on the range of its data.
         if (first.unit === "fraction") [lo, hi] = [0, 1];
         // One value (a single sample, or lines that never move): the axis is that value plus and minus one, and the value is written once, in the middle.
@@ -70,10 +84,15 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
         const flatValue = lo;
         if (flat) [lo, hi] = [lo - 1, hi + 1];
         const y = (v: number) => PAD.t + (1 - (v - lo) / (hi - lo)) * (ROW_H - PAD.t - PAD.b);
-        const ends = lines.flatMap((l) => {
+        const allEnds = lines.flatMap((l) => {
           const last = l.points[l.points.length - 1];
           return last === undefined ? [] : [{ line: l, v: last.v, y: y(last.v) }];
         });
+        // Many lines: labels at the ends for the selected agent and the first few; the rest are in the legend under the chart.
+        const crowded = allEnds.length > END_LABELS;
+        const ends = crowded
+          ? [...allEnds.filter((e) => e.line.agentId === props.selectedAgent), ...allEnds.filter((e) => e.line.agentId !== props.selectedAgent)].slice(0, END_LABELS).sort((a, b) => allEnds.indexOf(a) - allEnds.indexOf(b))
+          : allEnds;
         const labelYs = stackedLabelYs(ends.map((e) => e.y), LABEL_GAP, PAD.t + 5, ROW_H - PAD.b - 2);
         const hv = hover?.chart === name ? hover.t : undefined;
         const readout = hv === undefined ? undefined : lines.flatMap((l) => {
@@ -149,6 +168,15 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
               {props.cursorS >= t0 && props.cursorS <= t1 && <line className="cursor" x1={x(props.cursorS)} y1={PAD.t} x2={x(props.cursorS)} y2={ROW_H - PAD.b} />}
               {hv !== undefined && <line className="hover" x1={x(hv)} y1={PAD.t} x2={x(hv)} y2={ROW_H - PAD.b} />}
             </svg>
+            {crowded && (
+              <ul className="asv-legend mono" data-testid={`series-legend-${testName}`} aria-label={`${name}: every agent and its last value`}>
+                {allEnds.map((e) => (
+                  <li key={e.line.key} className={props.selectedAgent === e.line.agentId ? "sel" : undefined}>
+                    <span className="sw" style={{ background: `var(--agent-${identityOf(props.indexOf(e.line.agentId)).colorIndex})` }} /> {shortLabel(e.line.agentId)} <span className="muted">{fmt(e.v)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </figure>
         );
       })}

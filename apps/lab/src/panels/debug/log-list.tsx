@@ -4,6 +4,7 @@ import { identityOf, KIND_STYLE, ROW_PX } from "@agentsim/ui";
 import type { TraceRecord } from "@agentsim/trace";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type KeyboardEvent } from "react";
 import { copyOfRecord } from "./derived-tag.tsx";
+import { WordClip } from "../word-clip.tsx";
 import { resultOf, summary } from "./log-rows.ts";
 
 /** The list's own controls, for the console around it: where it is, and moving it. */
@@ -194,13 +195,13 @@ export const LogList = forwardRef<LogListHandle, LogListProps>(function LogList(
                 [{tag}]
               </span>
               <span className="mono muted">{r.source}</span>
-              <span className="mono">
+              <span className="mono sum">
                 {copyOf !== undefined && (
                   <span className="muted" data-testid={`row-copy-${r.seq}`} title={`A copy of ${copyOf}: the derived run carries it from its parent`}>
                     ◇{" "}
                   </span>
                 )}
-                {summary(r)}
+                <WordClip text={summary(r)} style={{ display: "inline-block", maxWidth: copyOf === undefined ? "100%" : "calc(100% - 2ch)", verticalAlign: "top" }} />
               </span>
               <span className={`mono${result?.failed ? " danger" : result ? " ok" : ""}`}>{result?.text ?? ""}</span>
               {open && <pre className="log-payload mono">{JSON.stringify(r, null, 2)}</pre>}

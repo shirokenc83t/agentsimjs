@@ -642,7 +642,7 @@
 .inspector .fold-head h4 { margin: 0; flex: none; overflow: visible; }
 .inspector .fold-head h4::after { display: none; }
 .inspector .fold-twist { flex: none; width: 1em; color: var(--fg3); }
-.inspector .fold-sum { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.inspector .fold-sum { flex: 1; min-width: 0; }
 .inspector .fold.open > .fold-head { margin-bottom: 2px; }
 .inspector .fold-bare > .inspector-section { padding: 0; border: 0; }
 .inspector .fold-bare > .inspector-section > h4 { display: none; }
@@ -673,3 +673,19 @@
 .sql-tree-head > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sql-tree-head > span .muted { display: block; overflow: hidden; text-overflow: ellipsis; }
 .sql-trow > .sql-tname:only-child { padding-left: 20px; }
+.hm-empty-box { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.hm-empty-line { display: flex; align-items: center; gap: 14px; margin: 0; }
+.editor-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.editor-empty p { margin: 0; }
+.sql-empty { padding: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.asv-flat { margin: 0; padding: 2px 0; }
+.asv-flat figcaption { padding: 2px 10px; }
+.wordclip { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+.wordclip > span { display: inline-block; vertical-align: top; }
+.asv-legend { display: flex; flex-wrap: wrap; gap: 2px 14px; max-height: 38px; overflow-y: auto; margin: 2px 10px 0; padding: 0; list-style: none; font-size: var(--type-label-size); }
+.asv-legend .sw { display: inline-block; width: 7px; height: 7px; }
+.asv-legend .sel { font-weight: 600; }
+/* Tooltips inside the run popover wrap in a narrow box: a long one that hung out to the right (hidden, but still part of what scrolls) gave the popover a scrollbar of its own. */
+.run-info { overflow-x: hidden !important; }
+.run-info [data-tip]::after { white-space: normal; width: max-content; max-width: 240px; }
+.explorer .legend { overflow: hidden; text-overflow: ellipsis; }

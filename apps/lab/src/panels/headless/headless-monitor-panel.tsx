@@ -19,7 +19,7 @@ const SPARKS = [
 export function HeadlessMonitorPanel() {
   const { sim, storage } = useServices();
   const { run } = useCurrentRun();
-  const { openReplay, openWorkspace } = useAppActions();
+  const { openReplay, openWorkspace, rerunHeadless } = useAppActions();
   const snap = usePolled(useCallback(() => sim.snapshot(), [sim]), 200);
   // The client keeps the latest progress, so a monitor opened late (the workspace was elsewhere) shows the run as it is.
   const progress = snap.progress;
@@ -49,6 +49,7 @@ export function HeadlessMonitorPanel() {
       sparks={sparks}
       writer={snap.recording === undefined || snap.recording.runId !== runId ? undefined : { state: snap.recording.state, backlogRecords: snap.recording.backlogRecords }}
       actions={{
+        rerunHeadless,
         pause: () => sim.pause(),
         play: () => sim.play(),
         stop: () => sim.stop(),

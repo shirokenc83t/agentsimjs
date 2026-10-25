@@ -378,7 +378,15 @@ export function ScenarioEditorPanel() {
           )}
           <div className="editor-view">
             <SceneView interpolator={view.interpolator} onRenderer={onRenderer}>
-              {!draft && <p className="editor-empty muted">Open a stored scenario, import a file, or create a new one.</p>}
+              {!draft && (
+                <div className="editor-empty" data-testid="ed-empty">
+                  <p className="muted">No scenario open · the map you paint and the agents you place appear here.</p>
+                  <button type="button" className="btn pri" onClick={() => setNewForm(true)} data-testid="ed-empty-new">
+                    New scenario
+                  </button>
+                  <p className="muted">or open a stored one, or import a file, from the bar above.</p>
+                </div>
+              )}
             </SceneView>
             {draft && tool === "paint" && (
               <div

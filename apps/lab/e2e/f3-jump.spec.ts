@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadF2, openWorkspace, runCommand, step } from "./helpers.ts";
+import { loadF2, openTimelineLanes, openWorkspace, runCommand, step } from "./helpers.ts";
 import { LABEL_PX, LANE_PX, RULER_PX } from "../src/panels/debug/timeline-geometry.ts";
 
 // F3a M3: a click on a row of the event list moves the shared cursor: the Scene's agents and the belief overlay go to that instant. The overlay at the
@@ -129,6 +129,7 @@ test("the Timeline of the Debug workspace has a lane per agent with the marks of
   await expect(page.getByTestId("timeline-canvas")).toBeVisible();
   await expect.poll(async () => Number(((await page.getByText(/^\d+ marks$/).textContent()) ?? "0").split(" ")[0]), { timeout: 15_000 }).toBeGreaterThan(10);
   await expect(page.getByTestId("timeline-gap")).toHaveCount(0); // everything is saved
+  await openTimelineLanes(page, 4); // the agents with no marks yet are one row until it is opened
   const box = await page.getByTestId("timeline-canvas").boundingBox();
   if (!box) throw new Error("no timeline");
   // A click on the rover's lane (run, uav-001, ugv-001, ugv-002: the third lane) at the middle of the run: the panels show the run from storage, at that moment.

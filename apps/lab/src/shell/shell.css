@@ -1,4 +1,4 @@
-/* The shell (UI-SPEC §2, ADR-0042): top bar 28 px, player 56 px (40 px compact), status bar 24 px. Colours only from token variables. */
+/* The shell (UI-SPEC §2, ADR-0042): top bar 28 px, player 56 px in every workspace, status bar 24 px. Colours only from token variables. */
 
 /* Row 1: the top bar. */
 .top { display: flex; align-items: stretch; height: 28px; background: var(--bg1); border-bottom: 1px solid var(--ln); white-space: nowrap; }
@@ -21,7 +21,6 @@
 
 /* Row 2: the player. */
 .player { display: grid; grid-template-columns: auto 140px minmax(0, 1fr) auto; align-items: stretch; height: 56px; background: var(--bg2); border-bottom: 2px solid var(--ln2); }
-.player.compact { height: 40px; grid-template-columns: auto auto minmax(0, 1fr); }
 .player.rp { background-color: var(--bg3); background-image: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--fg) 6%, transparent) 9px 18px); border-top: 2px solid var(--fg2); border-bottom-color: var(--fg2); }
 .ply { display: flex; align-items: center; gap: 4px; padding: 0 12px; border-right: 1px solid var(--ln); }
 .pb { appearance: none; font: inherit; width: 32px; height: 32px; border: 1px solid var(--ln2); background: var(--bg1); color: var(--fg); cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
@@ -33,24 +32,18 @@
 .pb.static:hover { background: transparent; border-color: var(--ln2); }
 .pb.golive { border-color: var(--run); color: var(--run); }
 .pb[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
-.player.compact .pb.pri { width: 28px; height: 28px; font-size: 12px; }
-.player.compact .pb.sm { height: 24px; }
 .clock { display: flex; flex-direction: column; justify-content: center; padding: 0 14px; border-right: 1px solid var(--ln); }
 .clock .big { font-size: var(--type-clock-size); font-weight: var(--type-clock-weight); line-height: 1.1; white-space: nowrap; }
 .lbl { font-size: var(--type-label-size); letter-spacing: var(--type-label-tracking); color: var(--fg3); text-transform: uppercase; }
-.player.compact .clock { flex-direction: row; align-items: center; gap: 8px; }
-.player.compact .clock .big { font-size: 15px; }
 .scrub { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 14px; border-right: 1px solid var(--ln); min-width: 0; overflow: hidden; }
 .scrub .row { display: flex; align-items: center; gap: 10px; font-size: var(--type-label-size); color: var(--fg3); min-width: 0; margin: 0; flex-wrap: nowrap; overflow: hidden; }
 .scrub .row > * { flex: none; }
 .scrub .row > .derived-mark { flex: 0 1 auto; min-width: 8ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scrub .row > .trunc { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scrub .row .sp { flex: 1 1 0; }
-.player.compact .hide-compact { display: none; }
 .track { position: relative; height: 14px; background: var(--bg0); border: 1px solid var(--ln); }
 .track.clickable { cursor: pointer; }
-.player.compact .track { height: 10px; }
-.track .sv { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--ok) 22%, transparent); }
+.track .sv { position: absolute; left: 0; top: 0; bottom: 0; background: var(--bg3); }
 .track .gap { position: absolute; top: 0; bottom: 0; background-image: var(--hatch-pattern); }
 .track .tick { position: absolute; top: 2px; bottom: 2px; width: 2px; }
 .track .hd { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: var(--ac); }
@@ -114,7 +107,6 @@
 .rerun-pop .tb { justify-content: flex-start; height: 26px; }
 .rerun-same { margin: 4px 8px 4px; font-size: var(--type-label-size); white-space: normal; }
 .ready-start .pb { width: auto; min-width: 0; padding: 0 10px; white-space: nowrap; }
-.player.compact .ready-sum { display: none; }
 .ready-block { display: inline-flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
 .ready-block .ready-sum { max-width: 460px; }
 .pb { white-space: nowrap; }

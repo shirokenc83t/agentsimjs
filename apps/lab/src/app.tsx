@@ -484,7 +484,7 @@ export function App() {
   );
 
   return (
-    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun, resimulateWindow: () => void resimulateWindow(), backToDebug: leaveBuiltin, openPanel: (id) => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, id), layoutVariant: variant ?? LAYOUT_VARIANTS[workspace]?.[0]?.name, selectLayout }}>
+    <AppActionsProvider value={{ resetLayouts, setTheme, openWorkspace: setWorkspace, openReplay: setReplayRun, resimulateWindow: () => void resimulateWindow(), backToDebug: leaveBuiltin, openPanel: (id) => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, id), layoutVariant: variant ?? LAYOUT_VARIANTS[workspace]?.[0]?.name, selectLayout, rerunHeadless: () => rerunKeyRef.current("headless") }}>
       <CurrentRunProvider value={currentRun}>
       <div className="shell">
         <div data-testid="shell-header">
@@ -538,7 +538,6 @@ export function App() {
             sim={sim}
             snap={snap}
             view={view}
-            compact={workspace === "configurations" || workspace === "data" || workspace === "settings"}
             recorded={run?.header.recording === "stored"}
             busy={runBusy}
             onRerun={(how) => {

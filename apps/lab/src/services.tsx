@@ -53,6 +53,8 @@ export interface AppActions {
   /** The layout that ships with the open workspace that is on (its name; the first when none was chosen), and a way to put another on: the Log's `1 col | 2 col` switch. */
   layoutVariant?: string | undefined;
   selectLayout?(name: string): void;
+  /** A new headless run of the run shown (the player's Re-run menu, Ctrl+Shift+R). */
+  rerunHeadless?(): void;
 }
 const AppActionsContext = createContext<AppActions>({ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {}, resimulateWindow: () => {}, backToDebug: () => {}, openPanel: () => {} });
 export const AppActionsProvider = AppActionsContext.Provider;

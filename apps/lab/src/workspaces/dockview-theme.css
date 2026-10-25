@@ -85,3 +85,12 @@
 .dockview-theme-agentsim .wb svg { display: block; }
 /* The summary of a floating window stays whatever its width: it is what a collapsed window shows. */
 .dockview-theme-agentsim .dv-resize-container .tmeta { display: inline !important; }
+.dockview-theme-agentsim .dv-resize-container .dv-tab { flex: none; }
+.dockview-theme-agentsim .dv-resize-container .dv-tabs-container { flex: none; overflow: visible; }
+.dockview-theme-agentsim .dv-resize-container .tmeta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dockview-theme-agentsim .dv-resize-container .dv-scrollable { flex: none; overflow: visible; }
+.dockview-theme-agentsim .dv-resize-container .dv-right-actions-container { min-width: 0; flex: 1 1 0%; justify-content: flex-end; }
+.dockview-theme-agentsim .dv-resize-container .dv-react-part, .dockview-theme-agentsim .dv-resize-container .wbtn { min-width: 0; width: 100%; }
+.dockview-theme-agentsim .dv-resize-container .wbtn { display: flex; align-items: center; justify-content: flex-end; }
+.dockview-theme-agentsim .dv-resize-container .tmeta { flex: 1 1 auto; text-align: right; margin-right: 6px; }
+.dockview-theme-agentsim .dv-groupview.collapsed .tmeta { display: none !important; }

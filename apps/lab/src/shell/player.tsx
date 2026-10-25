@@ -26,7 +26,6 @@ export interface PlayerProps {
   /** What the panels show: the live run, or a recording read from storage (the player is then the replay control, with its cursor). */
   readonly view: RunSnapshot | undefined;
   /** The one-row form of the Configurations, Data and Settings workspaces. */
-  readonly compact: boolean;
   /** The run is recorded: the player offers to scrub it back and flags its marks. */
   readonly recorded: boolean;
   readonly busy: boolean;
@@ -49,18 +48,18 @@ export interface PlayerProps {
  * UI context's: the renderer and the source read it imperatively, so dragging re-renders only this band.
  */
 export function Player(props: PlayerProps) {
-  const { snap, view, compact, recorded } = props;
+  const { snap, view, recorded } = props;
   const replay = view?.mode === "replay" && view.replay !== undefined;
   const dtS = view?.run?.dtS ?? snap.run?.dtS ?? 0.1;
   return (
-    <section className={`player${replay ? " rp" : ""}${compact ? " compact" : ""}`} aria-label={replay ? "Player, replay of a stored run" : "Player, live run"} data-testid="player">
+    <section className={`player${replay ? " rp" : ""}`} aria-label={replay ? "Player, replay of a stored run" : "Player, live run"} data-testid="player">
       <Transport {...props} replay={replay} />
       <div className="clock">
         <span className="lbl">{replay ? "REPLAY" : "SIM TIME"}</span>
         <ClockValue replay={replay} simTimeS={snap.simTimeS} />
       </div>
       {replay && view ? <ReplayScrub view={view} dtS={dtS} onBackToLive={props.onBackToLive} /> : <LiveScrub snap={snap} view={view} dtS={dtS} recorded={recorded} />}
-      {!compact && <Telemetry snap={snap} recorded={recorded} />}
+      <Telemetry snap={snap} recorded={recorded} />
     </section>
   );
 }
@@ -210,11 +209,11 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
         <span className="live rp" data-testid="player-state">
           {GLYPH.replay} REPLAY
         </span>
-        <span className="hide-compact trunc" data-testid="replay-label">
+        <span className="trunc" data-testid="replay-label">
           {GLYPH.replay} {live ? "Scrubbing" : "Replay of"} {view.runId} from storage (the live run is not touched)
         </span>
         {derived !== undefined && <DerivedMark derived={derived} />}
-        <span className="muted hide-compact hide-narrow" data-testid="replay-pose-rate">
+        <span className="muted hide-narrow" data-testid="replay-pose-rate">
           {replay.poseRate}
         </span>
         <span className="sp" />
@@ -224,7 +223,7 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
           </span>
         )}
         {notice !== undefined && (
-          <span className="muted hide-compact" data-testid="replay-notice">
+          <span className="muted" data-testid="replay-notice">
             {notice}
           </span>
         )}
@@ -232,7 +231,7 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
           {shown.toFixed(1)} s / {head.toFixed(1)} s
         </span>
         {live && (
-          <label className="hide-compact">
+          <label>
             <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} data-testid="replay-follow" /> Follow saved
           </label>
         )}

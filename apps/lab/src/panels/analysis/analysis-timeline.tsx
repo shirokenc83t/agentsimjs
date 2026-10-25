@@ -1,6 +1,7 @@
 import "../panels.css";
 import { KIND_STYLE, useTheme } from "@agentsim/ui";
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { foldLabel, foldLanes, FOLD_LANE } from "../debug/lane-fold.ts";
 import { BIN_PX, binMarks, describeAt, flagRole, GLYPH_PX, glyphOf, type Mark } from "../debug/marks.ts";
 import { LABEL_PX, LANE_PX, RULER_PX, rulerTicks, selectionFromDrag } from "../debug/timeline-geometry.ts";
 
@@ -30,7 +31,11 @@ export function AnalysisTimeline(props: AnalysisTimelineProps) {
   const [width, setWidth] = useState(600);
   const drag = useRef<{ from: number; to: number; moved: boolean } | undefined>(undefined);
   const dragged = useRef(false);
-  const height = RULER_PX + props.lanes.length * LANE_PX;
+  // The agents with no marks take one row until it is opened.
+  const [emptyOpen, setEmptyOpen] = useState(false);
+  const folded = useMemo(() => foldLanes(props.lanes, props.marks, emptyOpen), [props.lanes, props.marks, emptyOpen]);
+  const lanes = folded.lanes;
+  const height = RULER_PX + lanes.length * LANE_PX;
   const scale = Math.max(props.scaleS, 0.1);
 
   useEffect(() => {
@@ -65,18 +70,23 @@ export function AnalysisTimeline(props: AnalysisTimelineProps) {
       ctx.fillText(tick.label, Math.min(width - 14, Math.max(LABEL_PX + 14, tx)), RULER_PX / 2 - 1);
     }
     ctx.textAlign = "left";
-    props.lanes.forEach((lane, i) => {
+    lanes.forEach((lane, i) => {
       const y = RULER_PX + i * LANE_PX;
       ctx.fillStyle = i % 2 === 0 ? color("--bg0") : color("--bg1");
       ctx.fillRect(0, y, width, LANE_PX);
       ctx.fillStyle = color("--ln");
       ctx.fillRect(0, y + LANE_PX - 1, width, 1);
+      if (lane === FOLD_LANE) {
+        ctx.fillStyle = color("--fg3");
+        ctx.fillText(foldLabel(folded.empty.length, emptyOpen), 8, y + LANE_PX / 2);
+        return;
+      }
       ctx.fillStyle = color("--fg2");
       ctx.fillText(lane, 8, y + LANE_PX / 2);
     });
     ctx.fillStyle = color("--ln");
     ctx.fillRect(LABEL_PX - 1, RULER_PX, 1, height - RULER_PX);
-    const binned = binMarks(props.marks, props.lanes, scale, track, BIN_PX);
+    const binned = binMarks(props.marks, lanes, scale, track, BIN_PX);
     for (const b of binned.bins) {
       const family = KIND_STYLE[b.shown.kind as keyof typeof KIND_STYLE]?.family ?? "slate";
       const cy = RULER_PX + b.lane * LANE_PX + LANE_PX / 2;
@@ -126,7 +136,7 @@ export function AnalysisTimeline(props: AnalysisTimelineProps) {
     const t = Math.min(props.cursorS, scale);
     ctx.fillStyle = color("--ac");
     ctx.fillRect(Math.round(x(t)) - 1, 0, 2, height);
-  }, [width, height, scale, props.lanes, props.marks, props.window, props.cursorS, theme]);
+  }, [width, height, scale, emptyOpen, folded.empty.length, lanes, props.marks, props.window, props.cursorS, theme]);
 
   useEffect(() => draw(), [draw]);
 
@@ -148,7 +158,7 @@ export function AnalysisTimeline(props: AnalysisTimelineProps) {
     const box = e.currentTarget.getBoundingClientRect();
     const lane = Math.floor((e.clientY - box.top - RULER_PX) / LANE_PX);
     const at = px(e) - LABEL_PX;
-    e.currentTarget.title = lane >= 0 && lane < props.lanes.length && at >= 0 ? describeAt(binMarks(props.marks, props.lanes, scale, width - LABEL_PX, BIN_PX), lane, at) : "";
+    e.currentTarget.title = lane >= 0 && lane < lanes.length && at >= 0 ? describeAt(binMarks(props.marks, lanes, scale, width - LABEL_PX, BIN_PX), lane, at) : "";
   };
   const onPointerUp = (e: PointerEvent<HTMLCanvasElement>) => {
     const d = drag.current;
@@ -168,17 +178,22 @@ export function AnalysisTimeline(props: AnalysisTimelineProps) {
     }
     const box = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - box.left;
+    const row = Math.floor((e.clientY - box.top - RULER_PX) / LANE_PX);
+    if (row >= 0 && lanes[row] === FOLD_LANE) {
+      setEmptyOpen((o) => !o);
+      return;
+    }
     if (x < LABEL_PX) return;
     const t = Math.max(0, Math.min(scale, ((x - LABEL_PX) / (width - LABEL_PX)) * scale));
     const lane = Math.floor((e.clientY - box.top - RULER_PX) / LANE_PX);
-    const agent = lane > 0 && lane < props.lanes.length ? props.lanes[lane] : undefined;
+    const agent = lane > 0 && lane < lanes.length ? lanes[lane] : undefined;
     // The mark of that lane within a few pixels is what was clicked.
     let near: Mark | undefined;
-    if (lane >= 0 && lane < props.lanes.length) {
+    if (lane >= 0 && lane < lanes.length) {
       const tol = (5 / (width - LABEL_PX)) * scale;
       let bestD = tol;
       for (const m of props.marks) {
-        const l = m.agentId === undefined ? 0 : props.lanes.indexOf(m.agentId);
+        const l = m.agentId === undefined ? 0 : lanes.indexOf(m.agentId);
         if ((l < 0 ? 0 : l) !== lane) continue;
         const d = Math.abs(m.t - t);
         if (d <= bestD) {

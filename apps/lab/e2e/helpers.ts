@@ -222,3 +222,20 @@ export async function openInspectorSections(page: Page): Promise<void> {
   await expect(page.getByTestId("inspector-agent")).toBeVisible();
   await page.getByTestId("inspector-expand-all").click();
 }
+
+/**
+ * The Timeline folds the agents with no marks into one row; a spec that clicks the lane of an agent by its place opens them first (the last row is the fold row when there are fewer
+ * lanes than the run has entities).
+ */
+export async function openTimelineLanes(page: Page, lanes: number): Promise<void> {
+  const canvas = page.getByTestId("timeline-canvas");
+  // The lanes fold by the marks the run has: read them first, or the lanes are all folded until they arrive.
+  await expect.poll(async () => Number(((await page.getByText(/^\d+ marks$/).first().textContent()) ?? "0").split(" ")[0]), { timeout: 20_000 }).toBeGreaterThan(5);
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("no timeline");
+  const RULER = 18;
+  const LANE = 19;
+  const shown = Math.round((box.height - RULER) / LANE);
+  if (shown < lanes) await canvas.click({ position: { x: 40, y: RULER + (shown - 1) * LANE + LANE / 2 } });
+  await expect.poll(async () => Math.round(((await canvas.boundingBox())?.height ?? 0) - RULER) / LANE, { message: `lanes shown before the click: ${shown}` }).toBeGreaterThanOrEqual(lanes);
+}

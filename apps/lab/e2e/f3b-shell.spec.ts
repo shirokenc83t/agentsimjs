@@ -61,14 +61,14 @@ test("a recording shown in the player: the ◷ REPLAY segment, the hatched band 
   await expect(page.getByTestId("player")).not.toHaveClass(/\brp\b/);
 });
 
-test("the player is one row in Configurations, Data and Settings", async ({ page }) => {
+test("the player keeps its one row and its height in Configurations, Data and Settings", async ({ page }) => {
   await loadDemo(page);
   const full = (await page.getByTestId("player").boundingBox())?.height ?? 0;
   await page.keyboard.press("1");
   await expect(page.getByTestId("workspace-configurations")).toBeVisible();
-  const compact = (await page.getByTestId("player").boundingBox())?.height ?? 0;
+  const other = (await page.getByTestId("player").boundingBox())?.height ?? 0;
   expect(full).toBeGreaterThanOrEqual(54);
-  expect(compact).toBeLessThanOrEqual(42);
+  expect(other, "the player keeps its height in every workspace").toBe(full);
   expect((await page.getByTestId("topbar").boundingBox())?.height).toBeCloseTo(28, 0);
   expect((await page.getByTestId("statusline").boundingBox())?.height).toBeCloseTo(24, 0);
 });

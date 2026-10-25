@@ -133,6 +133,6 @@ test("the Trace's empty state points to the graph, and the theme button says its
   await page.setViewportSize({ width: 1440, height: 900 });
   await loadF2(page, "discovery");
   await openWorkspace(page, "debug");
-  await expect(page.getByTestId("trace-tree-empty")).toContainText("press T");
+  await expect(page.getByTestId("trace-tree-empty")).toContainText("T opens its graph");
   await expect(page.getByTestId("theme-button")).toHaveText(/◐ (dark|light|system) ▾/);
 });

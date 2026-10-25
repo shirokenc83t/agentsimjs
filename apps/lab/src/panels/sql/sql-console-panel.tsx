@@ -467,6 +467,15 @@ export function SqlConsolePanel() {
             </button>
           </div>
           {result && <Grid result={result} />}
+          {outcome === undefined && !running && (
+            <div className="sql-empty mono" data-testid="sql-empty">
+              <span>No result yet</span>
+              <span className="muted">Write a read-only statement and run it (Ctrl+Enter), or click a table in the tree to preview its first 10 rows.</span>
+              <button type="button" className="btn pri" onClick={() => void run(sql)} disabled={sql.trim() === ""} data-testid="sql-empty-run">
+                Run the statement above
+              </button>
+            </div>
+          )}
         </div>
       </div>
       </div>

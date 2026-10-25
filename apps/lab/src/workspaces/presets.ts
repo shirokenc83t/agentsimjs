@@ -24,7 +24,7 @@ export interface PresetPanel {
    * sits: at the bottom right of the panel it belongs to (`host`), `stack` windows up from the bottom of it (0 is the lowest), `side: "left"` at the bottom left of it instead
    * (the Overview and the Legend open together without covering each other: one at each side of the map).
    */
-  readonly floating?: { readonly width: number; readonly height: number; readonly collapsed: boolean; readonly host?: PanelId | undefined; readonly stack?: number; readonly side?: "left" };
+  readonly floating?: { readonly width: number; readonly height: number; readonly collapsed: boolean; readonly host?: PanelId | undefined; readonly stack?: number; /** A collapsed window sits in a row along the host's bottom edge: its place in the row, from the corner of its side (0 first). */ readonly slot?: number; readonly side?: "left" };
 }
 
 export interface WorkspacePreset {
@@ -38,7 +38,7 @@ export interface WorkspacePreset {
  * The Performance HUD: a floating window inside the map of the Scene (Scene and Debug), collapsed until opened (ADR-0042 §5). Elsewhere it is closed and is opened from
  * the frame segment of the status bar or from the palette (`openPanel` falls back to this, open, at the bottom right of the dock).
  */
-export const PERF_WINDOW: PresetPanel = { id: "perf", floating: { width: 300, height: 400, collapsed: true, host: "scene", stack: 0 } };
+export const PERF_WINDOW: PresetPanel = { id: "perf", floating: { width: 300, height: 400, collapsed: true, host: "scene", stack: 0, slot: 0 } };
 /**
  * The trace graph (U-010 §2): a big floating window opened from the Trace panel or the palette, in no workspace's preset. "5c" is the Trace's sub-window: the Trace is panel 5 of
  * the Debug.
@@ -46,9 +46,9 @@ export const PERF_WINDOW: PresetPanel = { id: "perf", floating: { width: 300, he
 export const TRACE_GRAPH_WINDOW: PresetPanel = { id: "traceGraph", floating: { width: 1360, height: 840, collapsed: false } };
 /** The SQL results pinned in a window (U-010 section 5): opened from the console, in no preset. */
 export const SQL_RESULT_WINDOW: PresetPanel = { id: "sqlResult", floating: { width: 760, height: 420, collapsed: false } };
-/** The windows of the Scene (ADR-0042 section 8): the Legend above the Performance window at the bottom right of the map and the Overview at its bottom left (open together they do not touch); all start collapsed. */
-const OVERVIEW_WINDOW: PresetPanel = { id: "overview", floating: { width: 240, height: 200, collapsed: true, host: "scene", stack: 1, side: "left" } };
-const LEGEND_WINDOW: PresetPanel = { id: "legend", floating: { width: 340, height: 330, collapsed: true, host: "scene", stack: 1 } };
+/** The windows of the Scene (ADR-0042 section 8): all start collapsed, in one row along the bottom edge of the map (the Overview at the left, the Legend and the Performance window at the right) so that they hide none of it; opened, each grows from there. */
+const OVERVIEW_WINDOW: PresetPanel = { id: "overview", floating: { width: 200, height: 200, collapsed: true, host: "scene", stack: 1, slot: 0, side: "left" } };
+const LEGEND_WINDOW: PresetPanel = { id: "legend", floating: { width: 300, height: 330, collapsed: true, host: "scene", stack: 1, slot: 1 } };
 
 /**
  * The Debug as it opens (U-010 §3, "debug · default"): the Scene 62 % wide and 62 % high with the Timeline under it, and a right column of 38 % holding the Log (46 %), the Trace

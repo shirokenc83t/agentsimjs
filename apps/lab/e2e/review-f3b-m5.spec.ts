@@ -218,5 +218,44 @@ for (const theme of THEMES) {
       await expect(page.getByTestId("command-battery-warning")).toBeVisible();
       await shot(page, "g02-critical-battery-warning", theme);
     });
+
+    test("polish: empty states, folded lanes and flat series, the shell's player and the Scene's window strip", async ({ page }) => {
+      test.setTimeout(240_000);
+      await loadDemo(page);
+      await shot(page, "polish-scene-window-strip", theme, false);
+      await openWorkspace(page, "experiments");
+      await expect(page.getByTestId("hm-empty")).toBeVisible();
+      await shot(page, "polish-empty-experiments", theme);
+      await openWorkspace(page, "data");
+      await expect(page.getByTestId("sql-empty")).toBeVisible();
+      await shot(page, "polish-empty-sql", theme);
+      await openWorkspace(page, "configurations");
+      await page.getByRole("tab", { name: /Scenario editor/ }).click();
+      await expect(page.getByTestId("ed-empty")).toBeVisible();
+      await shot(page, "polish-empty-scenario-editor", theme);
+      await openWorkspace(page, "debug");
+      await shot(page, "polish-empty-trace", theme);
+      await page.getByTestId("run-label").click();
+      await expect(page.locator(".run-info")).toBeVisible();
+      await shot(page, "polish-run-popover", theme);
+      await page.keyboard.press("Escape");
+      // A run with a rover exploring: the timeline folds the agents with no marks, the Analysis charts of what never moves are one line, the Log summary is cut at a word.
+      await loadF2(page, "discovery");
+      await openWorkspace(page, "scene");
+      await page.getByTestId(`explorer-row-${AGENT}`).click();
+      await runCommand(page, `Explore selected agent (${AGENT})`);
+      await step(page, 3);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 300", { timeout: 30_000 });
+      await openWorkspace(page, "debug");
+      await expect.poll(async () => Number(((await page.getByText(/^\d+ marks$/).first().textContent()) ?? "0").split(" ")[0]), { timeout: 20_000 }).toBeGreaterThan(5);
+      await shot(page, "polish-debug-folded-lanes", theme);
+      await openWorkspace(page, "scene");
+      await sendTo(page, "ugv-001", 50, 10);
+      await runCommand(page, "Re-run headless");
+      await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 120_000 });
+      await page.getByTestId("hm-open-analysis").click();
+      await expect(page.getByTestId("analysis")).toHaveAttribute("data-status", "ready", { timeout: 60_000 });
+      await shot(page, "polish-analysis", theme);
+    });
   });
 }

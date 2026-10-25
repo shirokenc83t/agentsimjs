@@ -146,8 +146,8 @@ export function ExplorerPanel() {
           })}
         </div>
       </div>
-      <p className="muted legend">
-        {agents.length} agents · {KIND_STYLE.action.tag} state from the action trace
+      <p className="muted legend nowrap" title={`${agents.length} agents · ${KIND_STYLE.action.tag} state comes from the action trace`}>
+        {agents.length} agents · state from trace
       </p>
     </div>
   );

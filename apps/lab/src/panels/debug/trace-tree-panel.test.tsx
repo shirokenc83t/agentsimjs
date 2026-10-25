@@ -36,7 +36,7 @@ afterEach(() => act(() => useUiContext.getState().selectRecord(undefined)));
 describe("TraceTreePanel", () => {
   it("asks for a record before one is picked", async () => {
     await setup([rec(0)]);
-    expect(screen.getByTestId("trace-tree-empty")).toHaveTextContent("Pick a record in the log");
+    expect(screen.getByTestId("trace-tree-empty")).toHaveTextContent("No record selected · pick one in the Log");
   });
 
   it("draws the parents, the causes, the record, its children and its effects, one part at a time behind the toggles of a small window", async () => {

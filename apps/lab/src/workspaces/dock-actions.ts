@@ -14,7 +14,7 @@ export const FLOAT_SIZE = { width: 440, height: 340 } as const;
 /** Height (px) of a collapsed floating window: its title bar. */
 export const COLLAPSED_HEIGHT_PX = 29;
 /** Width (px) of a collapsed floating window: its title and summary, not the width it has open. */
-export const COLLAPSED_WIDTH_PX = 300;
+export const COLLAPSED_WIDTH_PX = 250;
 /** Space (px) between windows stacked in a panel, and from its edges. */
 const STACK_GAP_PX = 6;
 
@@ -134,6 +134,13 @@ function floatingPosition(api: DockviewApi, f: NonNullable<PresetPanel["floating
   const h = host?.getBoundingClientRect();
   const r = root?.getBoundingClientRect();
   const stackPx = (f.stack ?? 0) * (COLLAPSED_HEIGHT_PX + STACK_GAP_PX);
+  // Collapsed, they sit side by side along the bottom edge of their host, flush with it: a strip, not a stack over the map.
+  const rowPx = (f.slot ?? 0) * (COLLAPSED_WIDTH_PX + STACK_GAP_PX);
+  if (f.collapsed && f.slot !== undefined) {
+    if (!h || !r || h.width === 0) return f.side === "left" ? { bottom: STACK_GAP_PX, left: STACK_GAP_PX + rowPx } : { bottom: STACK_GAP_PX, right: STACK_GAP_PX + rowPx };
+    const edge = Math.max(0, r.bottom - h.bottom) + STACK_GAP_PX;
+    return f.side === "left" ? { bottom: edge, left: Math.max(0, h.left - r.left) + STACK_GAP_PX + rowPx } : { bottom: edge, right: Math.max(0, r.right - h.right) + STACK_GAP_PX + rowPx };
+  }
   if (!h || !r || h.width === 0) return f.side === "left" ? { bottom: 16 + stackPx, left: 16 } : { bottom: 16 + stackPx, right: 16 };
   const bottom = Math.max(0, r.bottom - h.bottom) + STACK_GAP_PX + stackPx + 24;
   return f.side === "left" ? { bottom, left: Math.max(0, h.left - r.left) + STACK_GAP_PX + 4 } : { bottom, right: Math.max(0, r.right - h.right) + STACK_GAP_PX + 4 };

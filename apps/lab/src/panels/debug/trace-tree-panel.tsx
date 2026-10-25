@@ -62,7 +62,7 @@ export function TraceTreePanel() {
     <div ref={box} className="panel trace-tree" data-testid="trace-tree" data-compact={compact}>
       {seq === undefined ? (
         <p className="muted tt-empty" data-testid="trace-tree-empty">
-          Pick a record in the log to see what it came from and what came of it, then press T for its graph.
+          No record selected · pick one in the Log (↑ ↓ then Enter) to see what it came from and what came of it; T opens its graph.
         </p>
       ) : tree === null ? (
         <p className="muted tt-empty">Reading…</p>

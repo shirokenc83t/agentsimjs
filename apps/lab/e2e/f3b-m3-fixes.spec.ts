@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { layoutControls, loadDemo, loadF2, openWorkspace, runCommand, step, waitForStorageReady } from "./helpers.ts";
+import { layoutControls, loadDemo, loadF2, openTimelineLanes, openWorkspace, runCommand, step, waitForStorageReady } from "./helpers.ts";
 
 // F3b M3, fix round 1 (the designer's review of the observability panels): what the review found, each as a check that fails without the fix.
 
@@ -192,6 +192,7 @@ test("N6: a hover on the Timeline tells what is under it", async ({ page }) => {
   await explored(page);
   await openWorkspace(page, "debug");
   const canvas = page.getByTestId("timeline-canvas");
+  await openTimelineLanes(page, 4);
   const box = await canvas.boundingBox();
   if (!box) throw new Error("no timeline");
   // Find a bin of the ugv-001 lane by hovering along it.

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { loadInspectorFolds, storeInspectorFolds } from "../config/inspector-folds.ts";
 import { useServices } from "../services.tsx";
+import { WordClip } from "./word-clip.tsx";
 
 /** Every section of the agent Inspector that can be folded, by name (the order they are shown in). */
 export const FOLD_IDS = ["mindView", "beliefs", "state", "action", "plan", "queries", "config", "strategyTest", "researcher", "warnings"] as const;
@@ -64,7 +65,7 @@ export function Fold(props: { id: string; title: string; summary: string; testId
           {open ? "▾" : "▸"}
         </span>
         <h4>{props.title}</h4>
-        {!open && <span className="fold-sum mono muted">{props.summary}</span>}
+        {!open && <WordClip className="fold-sum mono muted" text={props.summary} />}
       </button>
       {open && props.children}
     </section>
