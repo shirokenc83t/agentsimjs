@@ -85,9 +85,34 @@ export function App() {
   );
   const listRuns = useCallback(async () => (await loadRunController()).resimulatableRuns(storage), [storage]);
   const resimulate = useCallback((runId: string) => startRun(async () => (await loadRunController()).resimulateRun(storage, sim, runId)), [startRun, storage, sim]);
-  const rerunCurrent = useCallback(() => run && startRun(async () => (await loadRunController()).rerun(storage, sim, run)), [startRun, storage, sim, run]);
+  // A live re-run chosen from a headless run (the Experiments monitor, or a run that was headless) is for watching it: it opens the Scene and starts live. From a live run it waits
+  // in READY like any new run.
+  const fromHeadless = () => sim.snapshot().headless === true || workspaceRef.current === "experiments";
+  const goLive = (wasHeadless: boolean) => {
+    if (!wasHeadless) return;
+    setWorkspace("scene");
+    sim.play();
+  };
+  const rerunCurrent = useCallback(
+    () =>
+      run &&
+      startRun(async () => {
+        const wasHeadless = fromHeadless();
+        const r = await (await loadRunController()).rerun(storage, sim, run);
+        goLive(wasHeadless);
+        return r;
+      }),
+    [startRun, storage, sim, run],
+  );
   const rerunInMode = useCallback(
-    (mode: "lockstep" | "realtime") => run && startRun(async () => (await loadRunController()).rerunInMode(storage, sim, run, mode)),
+    (mode: "lockstep" | "realtime") =>
+      run &&
+      startRun(async () => {
+        const wasHeadless = fromHeadless();
+        const r = await (await loadRunController()).rerunInMode(storage, sim, run, mode);
+        goLive(wasHeadless);
+        return r;
+      }),
     [startRun, storage, sim, run],
   );
   const otherMode = snap.mode === "realtime" ? "lockstep" : "realtime";

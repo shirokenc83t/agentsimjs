@@ -159,8 +159,23 @@ export function actionState(a: ActionView | undefined): StateName {
 }
 
 /** One line for an action: `goTo · following`, `goTo · failed · unreachable`, `idle`. */
-export function actionLabel(a: ActionView | undefined): string {
+/** The reason a reflex gives, in words (the stable code is for the trace). */
+export const reflexWords = (code: string): string => ({ battery_critical: "battery critical", geofence: "outside the geofence", obstacle_ahead: "obstacle ahead" })[code as "geofence"] ?? code.replace(/_/g, " ");
+
+/** What an agent does when a reflex has sent it there: `returnToBase` is "returning to base", the others "landing" and "holding". */
+const RECOVERY_WORDS: Readonly<Record<string, string>> = { returnToBase: "returning to base", land: "landing", hold: "holding" };
+
+/**
+ * What the agent is doing, in words. An action the battery or another reflex started on the agent's behalf says why (`returning to base: battery critical`), and an action a reflex
+ * preempted says by what (`explore · preempted · battery critical`); the plain label is the action and its state.
+ */
+export function actionLabel(a: ActionView | undefined, reflex?: ReflexView | undefined): string {
   if (!a) return "idle";
+  if (reflex !== undefined) {
+    const recovery = RECOVERY_WORDS[a.name];
+    if (a.status === "running" && recovery !== undefined && reflex.then === a.name && a.startedAtS >= reflex.atS - 1e-6 && a.startedAtS - reflex.atS <= 0.5) return `${recovery}: ${reflexWords(reflex.code)}`;
+    if (a.status === "preempted" && reflex.atS >= a.startedAtS) return `${a.name} · preempted · ${reflexWords(reflex.code)}`;
+  }
   if (a.status === "running") return a.phase ? `${a.name} · ${a.phase}` : a.name;
   return a.failure ? `${a.name} · ${a.status} · ${a.failure}` : `${a.name} · ${a.status}`;
 }

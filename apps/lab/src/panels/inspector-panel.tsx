@@ -5,7 +5,7 @@ import Button from "@mui/material/Button";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePolled, useSource } from "../services.tsx";
 import type { RunFeature, RunSnapshot, RunSource } from "../sim/run-source.ts";
-import { AGENT_COMMANDS, agentExploreRadius, agentFacts, commandButtonState, commandHint, commandParams, DONE_MS, refusalWords } from "../commands.ts";
+import { AGENT_COMMANDS, agentExploreRadius, agentFacts, batteryWarning, commandButtonState, commandHint, commandParams, DONE_MS, refusalWords } from "../commands.ts";
 import { actionLabel, actionState, recoveryLabel, waypointsText, type AgentViews } from "./agent-views.ts";
 import { MindViewSection } from "./mind-view-section.tsx";
 import { PlanQueryTable, StrategyRow } from "./plan-query-table.tsx";
@@ -109,6 +109,12 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
     return () => clearTimeout(t);
   }, [action?.status, action?.actionId, doneFor]);
   const [ackedAtS, setAckedAtS] = useState<number | undefined>(undefined);
+  // A command given while the run is paused (or waiting to start) is accepted into the queue and applied at the next tick: its button says "queued" until the run has applied it
+  // (its `injected` record, a record newer than the moment of the click).
+  const [queued, setQueued] = useState<{ readonly op: string; readonly atS: number } | undefined>(undefined);
+  useEffect(() => {
+    if (queued !== undefined && command !== undefined && command.name === queued.op && command.atS > queued.atS) setQueued(undefined);
+  }, [queued, command]);
   const [altitude, setAltitude] = useState("");
   const parsed = Number(altitude);
   const altitudeM = altitude.trim() !== "" && Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
@@ -118,6 +124,7 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
   const radiusM = radius.trim() !== "" && Number.isFinite(parsedRadius) && parsedRadius > 0 ? parsedRadius : undefined;
   const configuredRadius = agentExploreRadius(source.snapshot().run, id);
   const hints = AGENT_COMMANDS.flatMap((c) => commandHint(c.op, c.title, facts) ?? []);
+  const batteryNote = batteryWarning(body, facts?.soc);
   return (
     <Section title="Commands (researcher, world scope)" testId="inspector-commands">
       <Row k="send">
@@ -160,9 +167,9 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
         {AGENT_COMMANDS.map((c) => {
           const hint = commandHint(c.op, c.title, facts);
           const off = source.unavailable("commands");
-          const st = commandButtonState(c.op, { action, command, reflex: props.views?.reflex }, { doneVisible: action !== undefined && doneFor === action.actionId, refusalAcked: command !== undefined && ackedAtS === command.atS, kind: facts?.kind });
+          const st = commandButtonState(c.op, { action, command, reflex: props.views?.reflex }, { doneVisible: action !== undefined && doneFor === action.actionId, refusalAcked: command !== undefined && ackedAtS === command.atS, kind: facts?.kind, queued: queued?.op === c.op });
           const label =
-            st.state === "running" ? `${GLYPH.running} ${c.title} · ${st.phase ?? "running"}` : st.state === "done" ? `${STATE_GLYPH.ok} ${c.title} · succeeded` : st.state === "refused" ? `${STATE_GLYPH.alm} ${c.title} · refused · ${st.words}` : st.state === "preempted" ? `${GLYPH.warn} ${c.title} · preempted${st.reflex ? ` · ${st.reflex}` : ""}` : c.title;
+            st.state === "queued" ? `${GLYPH.idle} ${c.title} · queued` : st.state === "running" ? `${GLYPH.running} ${c.title} · ${st.phase ?? "running"}` : st.state === "done" ? `${STATE_GLYPH.ok} ${c.title} · succeeded` : st.state === "refused" ? `${STATE_GLYPH.alm} ${c.title} · refused · ${st.words}` : st.state === "preempted" ? `${GLYPH.warn} ${c.title} · preempted${st.reflex ? ` · ${st.reflex}` : ""}` : c.title;
           return (
             <span key={c.op} className="act-grp">
               <Button
@@ -178,6 +185,7 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
                 onClick={() => {
                   if (hint !== undefined) return;
                   setAckedAtS(command?.atS);
+                  setQueued({ op: c.op, atS: source.snapshot().simTimeS });
                   source.command(id, c.op, commandParams(c.op, body, altitudeM, radiusM));
                 }}
                 data-testid={`command-${c.op}`}
@@ -194,6 +202,11 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
           );
         })}
       </Row>
+      {batteryNote !== undefined && (
+        <p className="warn pre-hint" data-testid="command-battery-warning">
+          ▲ {batteryNote}
+        </p>
+      )}
       {hints.length > 0 && (
         <p className="muted pre-hint" id={`command-hint-${id}`} data-testid="command-hint">
           → {hints.join(" · ")}
@@ -244,7 +257,7 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
         </h3>
         <div className="mono" data-testid="inspector-idcard-state">
           <span className={`st-${state}`}>
-            {STATE_GLYPH[state]} {actionLabel(action)}
+            {STATE_GLYPH[state]} {actionLabel(action, v?.reflex)}
           </span>
           {action && <span className="muted nowrap"> · since {action.startedAtS.toFixed(1)} s</span>}
         </div>
@@ -282,7 +295,7 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
       <Section title="Action" testId="inspector-action">
         <Row k="action" testId="inspector-action-label">
           <span className={`mono st-${state}`}>
-            {STATE_GLYPH[state]} {actionLabel(action)}
+            {STATE_GLYPH[state]} {actionLabel(action, v?.reflex)}
           </span>
         </Row>
         {action && <Row k="id">{action.actionId}</Row>}

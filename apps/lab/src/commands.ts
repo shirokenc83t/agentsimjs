@@ -2,7 +2,7 @@ import { useUiContext, type Command } from "@agentsim/ui";
 import { commandAvailability, describeUnavailable, STATUS_STRIDE, type AgentFacts, type PresetId } from "@agentsim/core";
 import { toolsSchemaCapabilities } from "@agentsim/scenarios";
 import type { RunSource } from "./sim/run-source.ts";
-import type { ActionView, CommandView, ReflexView } from "./panels/agent-views.ts";
+import { reflexWords, type ActionView, type CommandView, type ReflexView } from "./panels/agent-views.ts";
 
 /**
  * Researcher commands on one agent (ADR-0015 addition of 2026-10-12): the closed set the worker accepts besides
@@ -53,6 +53,17 @@ export function commandHint(op: string, title: string, facts: AgentFacts | undef
 function factsOf(source: RunSource, id: string): AgentFacts | undefined {
   const s = source.snapshot();
   return agentFacts(s.run, s.agentStatus, s.entityIds, id);
+}
+
+/**
+ * A warning for the commands of an agent whose battery is at or below its critical level: the runtime accepts a command then (it refuses only an empty battery), and the battery
+ * reflex takes the agent over (it is latched: it acts once, as it crosses the level) by sending it back to base. Said before the click, so that the agent going home by itself is
+ * not a surprise. Undefined above the level, or when the body does not say its level.
+ */
+export function batteryWarning(body: Readonly<Record<string, unknown>> | undefined, soc: number | undefined): string | undefined {
+  const critical = (body?.["battery"] as { criticalSoc?: unknown } | undefined)?.criticalSoc;
+  if (typeof critical !== "number" || soc === undefined || soc > critical || soc <= 0) return undefined;
+  return `battery ${(soc * 100).toFixed(1)} % is at or below its critical level (${(critical * 100).toFixed(0)} %): the battery reflex preempts what it is doing and sends it back to base (a UAV without a base lands, a rover holds)`;
 }
 
 /** A refused command in words: the missing condition and the step to do first when a precondition did not hold (`land needs airborne · take off first`), else the stable code. */
@@ -116,6 +127,7 @@ export const DONE_MS = 4000;
  */
 export type ButtonState =
   | { readonly state: "idle" }
+  | { readonly state: "queued" }
   | { readonly state: "running"; readonly phase: string | undefined }
   | { readonly state: "done" }
   | { readonly state: "refused"; readonly words: string }
@@ -124,14 +136,17 @@ export type ButtonState =
 export function commandButtonState(
   op: string,
   v: { readonly action: ActionView | undefined; readonly command: CommandView | undefined; readonly reflex: ReflexView | undefined },
-  opts: { readonly doneVisible: boolean; readonly refusalAcked: boolean; readonly kind: string | undefined },
+  opts: { readonly doneVisible: boolean; readonly refusalAcked: boolean; readonly kind: string | undefined; readonly queued?: boolean },
 ): ButtonState {
   const a = v.action;
   if (a !== undefined && a.name === op) {
     if (a.status === "running") return { state: "running", phase: a.phase };
-    if (a.status === "preempted") return { state: "preempted", reflex: v.reflex?.reflex };
+    // Given and not yet applied (the run is paused or waiting to start: a command takes effect at a tick): it is in the queue, whatever this action did the last time.
+    if (opts.queued) return { state: "queued" };
+    if (a.status === "preempted") return { state: "preempted", reflex: v.reflex === undefined ? undefined : reflexWords(v.reflex.code) };
     if (a.status === "succeeded" && opts.doneVisible) return { state: "done" };
   }
+  if (opts.queued) return { state: "queued" };
   const c = v.command;
   if (c !== undefined && !c.ok && c.name === op && !opts.refusalAcked) return { state: "refused", words: refusalWords(c, opts.kind) };
   return { state: "idle" };

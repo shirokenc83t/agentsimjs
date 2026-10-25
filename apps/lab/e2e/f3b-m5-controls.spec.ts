@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, openWorkspace } from "./helpers.ts";
+import { loadDemo, loadF2, openWorkspace, runCommand } from "./helpers.ts";
 
 // F3b M5 (the maintainer's manual check): the theme control of the top bar, and the canvases that draw with the tokens (the top-down map, the Timeline) follow a change of theme.
 
@@ -143,4 +143,32 @@ test("the run configuration is one column with a jump row that scrolls the form 
   expect(await page.evaluate(() => window.scrollY + document.documentElement.scrollTop)).toBe(0);
   // The section header stays under the jump row while its fields scroll.
   await expect(page.getByTestId("rc-status-beliefs")).toBeVisible();
+});
+
+test("a live re-run chosen from a headless run opens the Scene and starts live", async ({ page }) => {
+  test.setTimeout(120_000);
+  await loadDemo(page);
+  await runCommand(page, "Run headless");
+  await expect(page.getByTestId("workspace-experiments")).toBeVisible();
+  await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 60_000 });
+  await page.getByTestId("player-rerun").click();
+  await expect(page.getByTestId("workspace-scene")).toBeVisible();
+  await expect(page.getByTestId("run-label")).toContainText("run-000003");
+  await expect(page.getByTestId("pause")).toBeVisible({ timeout: 15_000 }); // it is running, live
+  await expect(page.getByTestId("ready-start")).toHaveCount(0);
+});
+
+test("a command given while the run waits is queued at once: the button says so until a tick applies it", async ({ page }) => {
+  test.setTimeout(120_000);
+  await loadF2(page, "discovery");
+  await page.getByTestId("explorer-row-ugv-001").click();
+  await expect(page.getByTestId("ready-start")).toBeVisible(); // nothing runs: the run is waiting
+  await page.getByTestId("command-explore").click();
+  await expect(page.getByTestId("command-explore")).toHaveAttribute("data-state", "queued");
+  await expect(page.getByTestId("command-explore")).toContainText("queued");
+  await page.waitForTimeout(800);
+  await expect(page.getByTestId("command-explore")).toHaveAttribute("data-state", "queued"); // still waiting: no tick has run
+  await page.getByTestId("step").click();
+  await expect(page.getByTestId("command-explore")).not.toHaveAttribute("data-state", "queued");
+  await expect(page.getByTestId("command-explore")).toHaveAttribute("data-state", /running|done/);
 });

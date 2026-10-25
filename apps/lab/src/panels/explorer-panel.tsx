@@ -133,7 +133,7 @@ export function ExplorerPanel() {
                 <span className="muted">{a.key ?? ""}</span>
                 <span className="kind-tag mono">{a.kind.toUpperCase()}</span>
                 <span className={`mono st-${state}`} data-testid={`explorer-state-${a.id}`}>
-                  {STATE_GLYPH[state]} {actionLabel(action)}
+                  {STATE_GLYPH[state]} {actionLabel(action, views.get(a.id)?.reflex)}
                   {ideal.has(a.id) && (
                     <span className="kind-tag" data-testid={`explorer-ideal-${a.id}`} title="ideal: plans on the ground truth (baseline), not on its own map">
                       {" "}

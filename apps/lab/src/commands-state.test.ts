@@ -33,6 +33,14 @@ describe("the state of an action button", () => {
 
   it("is preempted when a reflex took the action over, naming the reflex", () => {
     const reflex: ReflexView = { reflex: "obstacle", code: "obstacle_ahead", then: undefined, atS: 5 };
-    expect(commandButtonState("explore", { action: action({ status: "preempted" }), command: undefined, reflex }, opts)).toEqual({ state: "preempted", reflex: "obstacle" });
+    expect(commandButtonState("explore", { action: action({ status: "preempted" }), command: undefined, reflex }, opts)).toEqual({ state: "preempted", reflex: "obstacle ahead" });
+  });
+
+  it("is queued from the click until the run has applied the command, over what this action did the last time, and never over an action that is running", () => {
+    const old = { action: action({ status: "succeeded", name: "land" }), command: undefined, reflex: undefined };
+    expect(commandButtonState("land", old, { ...opts, queued: true })).toEqual({ state: "queued" });
+    expect(commandButtonState("land", old, { ...opts, queued: false })).toEqual({ state: "done" });
+    expect(commandButtonState("land", { action: undefined, command: refused, reflex: undefined }, { ...opts, queued: true })).toEqual({ state: "queued" });
+    expect(commandButtonState("explore", { action: action(), command: undefined, reflex: undefined }, { ...opts, queued: true })).toEqual({ state: "running", phase: "following" });
   });
 });

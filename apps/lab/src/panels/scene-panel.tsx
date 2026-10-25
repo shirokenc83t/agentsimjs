@@ -327,7 +327,7 @@ export function ScenePanel() {
             <div>
               {hoverAgent.id} · {shortLabel(hoverAgent.id)} · {hoverAgent.kind.toUpperCase()}
             </div>
-            <div className="muted">{actionLabel(views.get(hoverAgent.id)?.action)}</div>
+            <div className="muted">{actionLabel(views.get(hoverAgent.id)?.action, views.get(hoverAgent.id)?.reflex)}</div>
             {hoverCondition && (
               <div className={hoverCondition.level === "alarm" ? "danger" : "warn"}>
                 {hoverCondition.glyph} {hoverCondition.label}
