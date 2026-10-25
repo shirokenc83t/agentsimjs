@@ -5,6 +5,7 @@ import { useAppActions, usePolled, useSource } from "../../services.tsx";
 import { gapLabel } from "../../sim/gap-click.ts";
 import { DerivedTag } from "./derived-tag.tsx";
 import { BIN_PX, binMarks, describeAt, flagRole, GLYPH_PX, glyphOf, isFailure, nearestMark, type Mark } from "./marks.ts";
+import { useDockPanel } from "../../workspaces/panel-context.ts";
 import { foldLabel, foldLanes, FOLD_LANE } from "./lane-fold.ts";
 import { LABEL_PX, LANE_PX, laneAt, RULER_PX, rulerTicks, selectionFromDrag } from "./timeline-geometry.ts";
 import { useJump } from "./use-jump.ts";
@@ -41,6 +42,28 @@ export function TimelinePanel() {
   const [width, setWidth] = useState(600);
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const height = RULER_PX + lanes.length * LANE_PX;
+  // The panel's window is as tall as what it holds (its header, the ruler and its lanes): no empty band under folded lanes, and no scrollbar. Done when the number of lanes
+  // changes, and only for a docked window; what the researcher drags afterwards stays until the lanes change again.
+  const dock = useDockPanel();
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = root.current;
+    if (!dock || !el || dock.api.location.type === "floating") return;
+    let tries = 0;
+    let raf = 0;
+    // The dock lays the window out over a few frames after a size is asked (and a first, narrower answer may be overtaken by the next): ask again until it is the size it was asked for.
+    const fit = () => {
+      if (dock.api.isMaximized() || el.clientHeight === 0) return;
+      const needed = (el.querySelector(".timeline-head")?.getBoundingClientRect().height ?? 26) + height + 6;
+      const delta = Math.round(needed - el.clientHeight);
+      const cap = Math.round(dock.containerApi.height * 0.5);
+      if (Math.abs(delta) <= 6 || tries++ >= 6) return;
+      dock.api.group.api.setSize({ height: Math.min(cap, Math.max(90, dock.api.group.api.height + delta)) });
+      raf = requestAnimationFrame(() => (raf = requestAnimationFrame(fit)));
+    };
+    raf = requestAnimationFrame(fit);
+    return () => cancelAnimationFrame(raf);
+  }, [dock, lanes.length, height]);
   const label = gapLabel(snap.persistedHeadTick ?? 0, snap.simHeadTick, dt);
   const reflexes = marks.filter((m) => m.kind === "reflex").length;
   const failures = marks.filter(isFailure).length;
@@ -259,7 +282,7 @@ export function TimelinePanel() {
   };
 
   return (
-    <div className="panel timeline" data-testid="timeline" tabIndex={-1} onKeyDown={onKeyDown}>
+    <div ref={root} className="panel timeline" data-testid="timeline" tabIndex={-1} onKeyDown={onKeyDown}>
       <div className="timeline-head">
         <span className="muted">{marks.length} marks</span>
         <DerivedTag derived={snap.replay?.derived} />
@@ -280,7 +303,7 @@ export function TimelinePanel() {
           data-tip={selection !== undefined ? "Re-simulate the selected window into a derived run" : "Re-simulate the cursor with a few seconds either side into a derived run (drag on the ruler to choose the window)"}
           data-testid="timeline-resim"
         >
-          Re-simulate this window
+          Re-simulate<span className="lbl-long"> this window</span>
         </button>
         {label !== undefined && (
           <span className="warn" data-testid="timeline-gap">

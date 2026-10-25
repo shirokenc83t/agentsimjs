@@ -59,7 +59,7 @@ function PanelContext(props: { panelId: string }) {
       break;
   }
   return text ? (
-    <span className="tmeta mono" data-testid="panel-context">
+    <span className={`tmeta mono${props.panelId === "eventList" ? " drop-first" : ""}`} data-testid="panel-context">
       {text}
     </span>
   ) : null;
@@ -96,12 +96,13 @@ export function WindowButtons(props: IDockviewHeaderActionsProps) {
         <span className="cols-switch" role="group" aria-label="Debug layout" data-testid="cols-switch">
           {(
             [
-              ["debug · default", "1 col", "cols-1"],
-              ["debug · two columns", "2 col", "cols-2"],
+              ["debug · default", "1", "cols-1"],
+              ["debug · two columns", "2", "cols-2"],
             ] as const
           ).map(([name, label, tid]) => (
-            <button key={name} type="button" className={`kt${layoutVariant === name ? " on" : ""}`} aria-pressed={layoutVariant === name} onClick={() => selectLayout(name)} data-tip={`Layout: ${name}`} data-testid={tid}>
+            <button key={name} type="button" className={`kt${layoutVariant === name ? " on" : ""}`} aria-pressed={layoutVariant === name} onClick={() => selectLayout(name)} aria-label={`${label} ${label === "1" ? "column" : "columns"}`} data-tip={`Layout: ${name} · ${label} ${label === "1" ? "column" : "columns"}`} data-testid={tid}>
               {label}
+              <span className="col-word"> col</span>
             </button>
           ))}
         </span>

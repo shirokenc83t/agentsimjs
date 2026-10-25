@@ -8,7 +8,7 @@ import type { TraceTree, TreeNode } from "./trace-tree.ts";
 // a dot a step, the time on the left and the gap to the step before where it matters, ordered by time and sequence number and ending at the `end` record. Runs of the same kind · op
 // fold into one row (the order is kept), and a long middle collapses into a row that opens a page at a time. Pure: the panel only draws it.
 
-export const NODE_W = 230;
+export const NODE_W = 270;
 export const NODE_H = 44;
 export const GAP_X = 110;
 export const GAP_Y = 14;
@@ -111,7 +111,8 @@ function summaryOf(records: readonly TraceRecord[]): string {
   for (const r of records) counts.set(kindOpShort(r), (counts.get(kindOpShort(r)) ?? 0) + 1);
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([k, n]) => `${k} ×${n}`).join(", ");
 }
-const kindOpShort = (r: TraceRecord): string => {
+/** The op of a record when it has one (`start`, `phase`), else its kind. */
+export const kindOpShort = (r: TraceRecord): string => {
   const p = r.payload !== null && typeof r.payload === "object" ? (r.payload as { op?: unknown }) : {};
   return typeof p.op === "string" ? p.op : r.kind;
 };

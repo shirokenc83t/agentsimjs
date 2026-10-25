@@ -3,7 +3,7 @@ import { KIND_STYLE, useUiContext } from "@agentsim/ui";
 import type { TraceRecord } from "@agentsim/trace";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { usePolled, useServices, useSource } from "../../services.tsx";
-import { LANE_PAGE, layoutTraceGraph, NODE_W, nodeLines, outcomeGlyph, PAGE, RAIL_W, type GraphLayout, type GraphNode, type Side } from "./trace-graph-layout.ts";
+import { kindOpShort, LANE_PAGE, layoutTraceGraph, NODE_W, nodeLines, outcomeGlyph, PAGE, RAIL_W, type GraphLayout, type GraphNode, type Side } from "./trace-graph-layout.ts";
 import { buildTraceTree, type TraceTree } from "./trace-tree.ts";
 import { useJump } from "./use-jump.ts";
 
@@ -33,6 +33,15 @@ export function TraceGraphPanel() {
   const [zoom, setZoom] = useState<"fit" | number>("fit");
   const [focusKey, setFocusKey] = useState<string | undefined>(undefined);
   const generation = useRef(0);
+  // How long the tree has been read for, in seconds, while it is.
+  const [reading, setReading] = useState(0);
+  useEffect(() => {
+    if (tree !== null) return;
+    const t0 = Date.now();
+    setReading(0);
+    const timer = setInterval(() => setReading(Math.round((Date.now() - t0) / 100) / 10), 200);
+    return () => clearInterval(timer);
+  }, [tree]);
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 900, h: 600 });
 
@@ -171,16 +180,26 @@ export function TraceGraphPanel() {
           −
         </button>
         <span className="sp" />
-        <nav className="tg-crumbs" aria-label="Where the graph has been" data-testid="tg-crumbs">
+        <nav className="tg-crumbs" aria-label="The path from the run to this record" data-testid="tg-crumbs">
           {trail.map((s, i) => (
-            <span key={`${s}-${i}`}>
+            <span key={`${s}-${i}`} className="tg-visited">
               <button type="button" className="kt" onClick={() => (setCenter(s), setTrail(trail.slice(0, i)), setExpanded(new Map()))} data-testid={`tg-crumb-${s}`}>
                 #{s}
               </button>
               {" › "}
             </span>
           ))}
-          <b data-testid="tg-center">#{center}</b>
+          {[...(tree?.ancestors ?? [])].reverse().map((a) => (
+            <span key={`up-${a.record.seq}`}>
+              <button type="button" className="kt" onClick={() => recentre(a.record.seq)} data-testid={`tg-up-${a.record.seq}`} title={`${nodeLines(a.record).top} · its parent`}>
+                #{a.record.seq} {kindOpShort(a.record)}
+              </button>
+              {" › "}
+            </span>
+          ))}
+          <b data-testid="tg-center" title={tree ? nodeLines(tree.selected.record).top : undefined}>
+            #{center}
+          </b>
           {trail.length > 0 && (
             <button type="button" className="kt" onClick={back} aria-label="Back to the previous record (Backspace)" data-testid="tg-back">
               ⌫ back
@@ -190,7 +209,14 @@ export function TraceGraphPanel() {
       </div>
       <div className="tg-body">
         <div className="tg-canvas" ref={box} data-testid="tg-canvas">
-          {tree === null && <p className="muted tt-empty">Reading…</p>}
+          {tree === null && (
+            // The tree is read from storage by filters that scan the run (a record's children and effects are found by `parent:` and `cause:`, which no index serves yet): on a long run it takes
+            // seconds, so the window says what it is doing and for how long, with the shape of what is coming.
+            <div className="tg-reading" role="status" aria-busy="true" data-testid="tg-reading">
+              <p className="muted tt-empty">Reading the records around #{center} from storage… {reading} s</p>
+              <span className="tg-skeleton" aria-hidden="true" />
+            </div>
+          )}
           {tree === undefined && (
             <p className="muted tt-empty" data-testid="tg-missing">
               Record #{center} is not in this run (yet).

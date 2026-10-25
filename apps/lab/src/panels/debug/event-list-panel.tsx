@@ -91,6 +91,9 @@ export function EventListPanel() {
 
   const select = (r: TraceRecord) => {
     setSelected(r);
+    // The picked row stays in view: the tail stops following (it would scroll the row away as records arrive) and the list shows it.
+    setAtEnd(false);
+    requestAnimationFrame(() => list.current?.scrollToSeq(r.seq));
     if (runId !== undefined) useUiContext.getState().selectRecord({ runId, seq: r.seq });
     jump(r.simTime, r.agentId);
   };
@@ -108,7 +111,10 @@ export function EventListPanel() {
     if (runId === undefined) return;
     let off = false;
     void storage.ports.trace.query({ runId, afterSeq: picked.seq - 1, limit: 1 }).then(([x]) => {
-      if (!off && x?.seq === picked.seq) setSelected(x);
+      if (off || x?.seq !== picked.seq) return;
+      setSelected(x);
+      setAtEnd(false);
+      requestAnimationFrame(() => list.current?.scrollToSeq(x.seq));
     });
     return () => {
       off = true;

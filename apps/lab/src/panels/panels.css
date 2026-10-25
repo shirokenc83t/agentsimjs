@@ -52,13 +52,18 @@
 .event-list { display: flex; flex-direction: column; padding: 0; }
 .event-scroller { flex: 1; min-height: 80px; overflow: auto; outline: none; background: var(--bg0); container: eventlist / inline-size; }
 .event-scroller:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
-.event-row { display: grid; grid-template-columns: 62px 96px 46px 112px minmax(0, 1fr) 118px; align-items: center; gap: 8px; padding: 0 10px; font-size: var(--type-mono-size); white-space: nowrap; overflow: hidden; }
+.event-row { display: grid; grid-template-columns: 56px 76px 38px 112px minmax(0, 1fr) 96px; align-items: center; gap: 8px; padding: 0 10px; font-size: var(--type-mono-size); white-space: nowrap; overflow: hidden; }
 .event-row > span { overflow: hidden; text-overflow: ellipsis; }
-/* A row's columns by priority: time, agent, tag and summary are always there and the result stays at the right; below about 640 px the source goes first (it is in the row's
-   tooltip and in the opened row), and the summary takes what is left with an ellipsis. */
+/* A row's columns by priority: time, agent, tag and the summary are always there, and the summary keeps at least 200 px. Below about 640 px the source goes first (it is in the row's
+   tooltip and in the opened row) and the result is narrower; below about 500 px the result goes too (a failed row is tinted and its result is in the opened row). The Log's own
+   minimum, 420 px, still leaves the summary 200 px. */
 @container eventlist (max-width: 640px) {
-  .event-row { grid-template-columns: 62px minmax(0, 96px) 46px minmax(0, 1fr) minmax(0, 96px); }
+  .event-row { grid-template-columns: 56px 76px 38px minmax(200px, 1fr) minmax(0, 72px); }
   .event-row > span:nth-child(4) { display: none; }
+}
+@container eventlist (max-width: 500px) {
+  .event-row { grid-template-columns: 56px 76px 38px minmax(200px, 1fr); }
+  .event-row > span:nth-child(6) { display: none; }
 }
 .event-row.zebra { background: color-mix(in srgb, var(--bg1) 60%, transparent); }
 .event-row.alm:not([aria-selected="true"]) { background: var(--almbg); }
@@ -689,3 +694,20 @@
 .run-info { overflow-x: hidden !important; }
 .run-info [data-tip]::after { white-space: normal; width: max-content; max-width: 240px; }
 .explorer .legend { overflow: hidden; text-overflow: ellipsis; }
+
+/* The Log's title bar in a narrow column: the run and cursor text goes first, then the switch is `1 | 2` (its tooltips say "columns"); the title stays. */
+@container (max-width: 600px) {
+  .tmeta.drop-first { display: none; }
+}
+@container (max-width: 470px) {
+  .cols-switch .col-word { display: none; }
+}
+/* The Timeline's header on one line: the counts, the re-simulate button and the gap say it in less when the panel is narrow. */
+.timeline { container: timeline / inline-size; }
+.timeline-head { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
+@container timeline (max-width: 560px) {
+  .timeline-head .lbl-long { display: none; }
+}
+.tg-reading { padding: 24px 28px; }
+.tg-skeleton { display: block; width: 270px; height: 44px; margin: 8px 0 0 28px; border: 1px dashed var(--ln2); background: var(--bg1); }
+.tg-crumbs { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }

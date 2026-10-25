@@ -56,7 +56,12 @@ export function SettingsPanel() {
     if (!f || !sec) return;
     f.scrollTo({ top: Math.max(0, sec.getBoundingClientRect().top - f.getBoundingClientRect().top + f.scrollTop - 30) });
   };
-  const notPersistent = ready && status.state === "ready" && status.mode === "memory-fallback";
+  // Not kept across sessions: in memory only, or on disk without the browser's promise to keep it (the Storage panel says "may be evicted").
+  const [persisted, setPersisted] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (ready) void storage.admin?.info?.().then((i) => setPersisted(i.persisted), () => undefined);
+  }, [ready, storage]);
+  const notPersistent = ready && status.state === "ready" && (status.mode === "memory-fallback" || persisted === false);
   const set = (patch: Partial<Appearance>) => {
     const next = { ...appearance, ...patch };
     setAppearance(next);

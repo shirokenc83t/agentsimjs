@@ -38,8 +38,8 @@
 .scrub { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 14px; border-right: 1px solid var(--ln); min-width: 0; overflow: hidden; }
 .scrub .row { display: flex; align-items: center; gap: 10px; font-size: var(--type-label-size); color: var(--fg3); min-width: 0; margin: 0; flex-wrap: nowrap; overflow: hidden; }
 .scrub .row > * { flex: none; }
-.scrub .row > .derived-mark { flex: 0 1 auto; min-width: 8ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scrub .row > .trunc { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scrub .row > .derived-mark { flex: 0 100 auto; min-width: 8ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scrub .row > .trunc { flex: 0 1 auto; min-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scrub .row .sp { flex: 1 1 0; }
 .track { position: relative; height: 14px; background: var(--bg0); border: 1px solid var(--ln); }
 .track.clickable { cursor: pointer; }
@@ -113,5 +113,10 @@
 .ready-start .pb, .ready-start .pb.pri { height: 28px; font-size: var(--type-label-size); }
 /* The run selector keeps to a width: a long run label is cut (its whole text is the popover's), so the bar does not outgrow a 1280 px window. */
 .top .runsel { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
-.queued-note { white-space: nowrap; font-size: var(--type-label-size); }
+.queued-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16em; font-size: var(--type-label-size); }
 .top.compact .theme-btn .lbl { display: none; }
+/* A narrow window: the launch row gives up the run's id (the summary under it has it), the time mode chip (it is in that summary too) and the words of "scrub back". */
+@media (max-width: 1100px) {
+  .ready-start .rid, .hide-1100, .ply .lbl-long { display: none; }
+}
+.top .theme-btn { text-transform: none; }

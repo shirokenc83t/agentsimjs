@@ -3,6 +3,7 @@ import { lazy, Suspense, type ComponentType, type FunctionComponent } from "reac
 
 // Heavy panels are lazy-loaded per workspace (ADR-0016, ADR-0021). This is the only app module
 // allowed to use dynamic import().
+import { DockPanelContext } from "./panel-context.ts";
 const ScenePanel = lazy(() => import("../panels/scene-panel.tsx").then((m) => ({ default: m.ScenePanel })));
 const StoragePanel = lazy(() => import("../panels/storage-panel.tsx").then((m) => ({ default: m.StoragePanel })));
 const SettingsPanel = lazy(() => import("../panels/settings-panel.tsx").then((m) => ({ default: m.SettingsPanel })));
@@ -82,10 +83,12 @@ export const PANELS: Record<PanelId, { readonly title: string; readonly componen
 };
 
 function withSuspense(C: ComponentType): FunctionComponent<IDockviewPanelProps> {
-  const Wrapped = () => (
-    <Suspense fallback={<div className="panel muted">Loading…</div>}>
-      <C />
-    </Suspense>
+  const Wrapped = (props: IDockviewPanelProps) => (
+    <DockPanelContext.Provider value={props}>
+      <Suspense fallback={<div className="panel muted">Loading…</div>}>
+        <C />
+      </Suspense>
+    </DockPanelContext.Provider>
   );
   return Wrapped;
 }

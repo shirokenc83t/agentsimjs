@@ -78,13 +78,15 @@ function Transport(props: PlayerProps & { replay: boolean }) {
   const { sim, snap, busy, replay, recorded, view } = props;
   // READY (U-010 section 4): a run that was just selected or made waits at tick 0 and nothing runs until the researcher chooses: live or headless. Step and the keys still work
   // (a way of going live, paused); what is replaced is the play button, which becomes the launch group.
+  const queued = useQueuedText(snap.simTimeS);
+  const summaryText = snap.run ? `${snap.mode} · ${snap.run.scenarioId} v${snap.run.scenarioVersion} · seed ${snap.run.seed} · profile ${props.recordingLabel}` : "";
   const ready = !replay && snap.run !== undefined && snap.tick === 0 && !snap.running && snap.headless !== true && snap.progress === undefined && !busy;
   return (
     <div className="ply" role="toolbar" aria-label="Run control">
       {ready && snap.run ? (
         <span className="ready-block">
           <span className="ready-start mono" data-testid="ready-start" role="group" aria-label={`Start ${snap.run.runId}`}>
-            START {snap.run.runId} ·
+            START <span className="rid">{snap.run.runId}</span> ·
             <button type="button" className="pb pri" onClick={() => sim.play()} aria-label="Start live" data-tip="Run it with the live view · Space" data-testid="play">
               {GLYPH.running} Live
             </button>
@@ -92,9 +94,16 @@ function Transport(props: PlayerProps & { replay: boolean }) {
               ⇥ Headless
             </button>
           </span>
-          <span className="ready-sum muted mono" data-testid="ready-summary">
-            {snap.mode} · {snap.run.scenarioId} v{snap.run.scenarioVersion} · seed {snap.run.seed} · profile {props.recordingLabel}
-          </span>
+          {/* The second line of the launch cell: what is queued while something is, else what the run is. Never a third thing in the row. */}
+          {queued !== undefined ? (
+            <span className="ready-sum queued-note muted mono" data-testid="player-queued" title={`${queued} · ${summaryText}`}>
+              {queued}
+            </span>
+          ) : (
+            <span className="ready-sum muted mono" data-testid="ready-summary">
+              {summaryText}
+            </span>
+          )}
         </span>
       ) : snap.running ? (
         <button type="button" className="pb pri" onClick={() => sim.pause()} aria-label="Pause" data-tip="Pause · Space" data-testid="pause">
@@ -105,7 +114,11 @@ function Transport(props: PlayerProps & { replay: boolean }) {
           {GLYPH.running}
         </button>
       )}
-      <QueuedNote simTimeS={snap.simTimeS} />
+      {!ready && queued !== undefined && (
+        <span className="queued-note mono muted" data-testid="player-queued" title={queued}>
+          {queued}
+        </span>
+      )}
       <button type="button" className="pb sm" onClick={() => sim.step()} aria-label="Step one tick" data-tip="Step one tick · ." data-testid="step">
         {GLYPH.running}| step
       </button>
@@ -119,7 +132,7 @@ function Transport(props: PlayerProps & { replay: boolean }) {
       {snap.run ? (
         // A scenario run has its time mode as part of the run (header, runConfigHash): read-only while it is loaded. Changing it starts a new run of the same scenario version.
         <>
-          <span className="pb sm static mono" data-testid="time-mode" title="The time mode is part of the run. Re-run to change it.">
+          <span className="pb sm static mono hide-1100" data-testid="time-mode" title="The time mode is part of the run. Re-run to change it.">
             {snap.mode}
           </span>
           <RerunSplit busy={busy} runId={snap.run.runId} commands={props.rerunCommands} onRerun={props.onRerun} />
@@ -132,7 +145,7 @@ function Transport(props: PlayerProps & { replay: boolean }) {
       )}
       {!replay && recorded && view?.runId && (
         <button type="button" className="pb sm" onClick={() => props.onScrubBack(view.runId as string)} data-testid="scrub-back" data-tip="Look back at the run as it is saved (the run goes on)">
-          « scrub back
+          « <span className="lbl-long">scrub back</span>
         </button>
       )}
     </div>
@@ -209,8 +222,8 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
         <span className="live rp" data-testid="player-state">
           {GLYPH.replay} REPLAY
         </span>
-        <span className="trunc" data-testid="replay-label">
-          {GLYPH.replay} {live ? "Scrubbing" : "Replay of"} {view.runId} from storage (the live run is not touched)
+        <span className="trunc" data-testid="replay-label" title={`${live ? "Scrubbing" : "Replay of"} ${view.runId} from storage: the live run is not touched`}>
+          {GLYPH.replay} {live ? "Scrubbing" : "Replay of"} {view.runId}
         </span>
         {derived !== undefined && <DerivedMark derived={derived} />}
         <span className="muted hide-narrow" data-testid="replay-pose-rate">
@@ -379,13 +392,10 @@ function RerunSplit(props: { busy: boolean; runId: string; commands: number; onR
 }
 
 /** What waits for the next tick, next to Play (U-011 section 5): "1 command queued · ugv-001 explore". Nothing when nothing waits. */
-function QueuedNote(props: { simTimeS: number }) {
-  const waiting = pendingAt(useQueuedCommands(), props.simTimeS);
-  if (waiting.length === 0) return null;
+/** What is queued, in words (`1 command queued · ugv-001 explore`), or undefined when nothing waits. */
+function useQueuedText(simTimeS: number): string | undefined {
+  const waiting = pendingAt(useQueuedCommands(), simTimeS);
+  if (waiting.length === 0) return undefined;
   const last = waiting[waiting.length - 1];
-  return (
-    <span className="queued-note mono muted" data-testid="player-queued">
-      {waiting.length} command{waiting.length === 1 ? "" : "s"} queued{last ? ` · ${last.agentId} ${last.op}` : ""}
-    </span>
-  );
+  return `${waiting.length} command${waiting.length === 1 ? "" : "s"} queued${last ? ` · ${last.agentId} ${last.op}` : ""}`;
 }

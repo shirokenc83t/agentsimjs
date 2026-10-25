@@ -185,6 +185,42 @@ export function addPresetPanel(api: DockviewApi, preset: WorkspacePreset, p: Pre
   if (p.background) front?.api.setActive();
 }
 
+/**
+ * The collapsed windows of a preset are placed against their host's edge, but the host (the Scene) has its final size only after the dock has laid out every panel (a Debug that
+ * gives the Scene a share of the dock): once it has, the windows still collapsed and untouched are placed again, so the row sits on the map's bottom edge in every workspace.
+ */
+function placeAfterLayout(api: DockviewApi, preset: WorkspacePreset): void {
+  const again = () => {
+    for (const p of preset.panels) {
+      if (!p.floating?.collapsed || p.floating.slot === undefined) continue;
+      const panel = api.getPanel(p.id);
+      if (!panel || !isFloating(panel) || !isCollapsed(panel.group)) continue;
+      const host = p.floating.host ? api.getPanel(p.floating.host)?.group.element.getBoundingClientRect() : undefined;
+      const win = panel.group.element.closest(".dv-resize-container")?.getBoundingClientRect();
+      if (!host || host.width === 0 || !win) continue;
+      // Already on the host's bottom edge: nothing to do.
+      if (Math.abs(host.bottom - win.bottom) <= STACK_GAP_PX + 4 && win.left >= host.left - 1 && win.right <= host.right + 1) continue;
+      panel.api.close();
+      addPresetPanel(api, preset, p);
+    }
+  };
+  requestAnimationFrame(() => requestAnimationFrame(again));
+  // And whenever the host changes size (the Timeline under the Scene is sized to its lanes after the marks are read), so the row stays on its edge.
+  hostWatch.get(api)?.disconnect();
+  const hostId = preset.panels.find((p) => p.floating?.host)?.floating?.host;
+  const hostEl = hostId ? api.getPanel(hostId)?.group.element : undefined;
+  if (hostEl && typeof ResizeObserver !== "undefined") {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ro = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(again, 200);
+    });
+    ro.observe(hostEl);
+    hostWatch.set(api, ro);
+  }
+}
+const hostWatch = new WeakMap<DockviewApi, ResizeObserver>();
+
 /** Lays a preset out from nothing (the first time, and on reset). */
 export function applyPreset(api: DockviewApi, preset: WorkspacePreset): void {
   api.clear();
@@ -196,4 +232,5 @@ export function applyPreset(api: DockviewApi, preset: WorkspacePreset): void {
     const panel = p.minWidthPx === undefined || p.floating ? undefined : api.getPanel(p.id);
     if (panel && p.minWidthPx !== undefined && panel.group.width > 0 && panel.group.width < p.minWidthPx) panel.api.setSize({ width: p.minWidthPx });
   }
+  placeAfterLayout(api, preset);
 }

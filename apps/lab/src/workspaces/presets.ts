@@ -58,8 +58,8 @@ const DEBUG_DEFAULT_PANELS: readonly PresetPanel[] = [
   { id: "scene" },
   { id: "timeline", position: { referencePanel: "scene", direction: "below" }, initialHeight: 190, initialHeightPct: 0.38, late: true },
   { id: "eventList", position: { referencePanel: "scene", direction: "right" }, initialWidth: 500, initialWidthPct: 0.38 },
-  { id: "inspector", position: { referencePanel: "eventList", direction: "below" }, initialHeight: 210, initialHeightPct: 0.3 },
-  { id: "traceTree", position: { referencePanel: "inspector", direction: "above" }, initialHeight: 180, initialHeightPct: 0.24 },
+  { id: "inspector", position: { referencePanel: "eventList", direction: "below" }, initialHeight: 210, initialHeightPct: 0.38 },
+  { id: "traceTree", position: { referencePanel: "inspector", direction: "above" }, initialHeight: 180, initialHeightPct: 0.22 },
 ];
 
 /**
@@ -71,7 +71,7 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
   {
     id: "configurations",
     title: "Configurations",
-    panels: [{ id: "runConfig" }, { id: "scenarioEditor" }],
+    panels: [{ id: "runConfig" }, { id: "scenarioEditor", background: true }],
   },
   {
     id: "scene",
