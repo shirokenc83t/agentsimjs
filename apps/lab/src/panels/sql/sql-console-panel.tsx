@@ -1,7 +1,7 @@
 import "../panels.css";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { SQL_LIMITS, type SqlError, type SqlResult, type SqlSchema } from "@agentsim/storage";
-import { downloadBytes, ROW_PX } from "@agentsim/ui";
+import { downloadBytes, formatBytes, ROW_PX } from "@agentsim/ui";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { loadSnippets, storeSnippets, withoutSnippet, withSnippet, type SqlSnippet } from "../../config/sql-snippets.ts";
 import { useAppActions, useServices } from "../../services.tsx";
@@ -31,6 +31,19 @@ export function SqlConsolePanel() {
   // read by one read-only statement through the same path as any other.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [previewRows, setPreviewRows] = useState<10 | 100>(10);
+  // The table whose preview is in the results (and the statement that made it), and what the database is (its mode, schema version and size) for the root of the tree.
+  const [previewOf, setPreviewOf] = useState<{ readonly table: string; readonly text: string } | undefined>(undefined);
+  const [dbOpen, setDbOpen] = useState(true);
+  const [dbInfo, setDbInfo] = useState<string | undefined>(undefined);
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(clickTimer.current), []);
+  useEffect(() => {
+    if (!showSchema) return;
+    void storage.admin?.info?.().then(
+      (i) => setDbInfo(`${i.mode} \u00b7 schema v${i.schemaVersion} \u00b7 ${formatBytes(i.dbFileBytes)}`),
+      () => undefined,
+    );
+  }, [showSchema, storage]);
   const [counts, setCounts] = useState<Readonly<Record<string, number | undefined>>>({});
   const [running, setRunning] = useState(false);
   const [outcome, setOutcome] = useState<Outcome>(undefined);
@@ -92,6 +105,7 @@ export function SqlConsolePanel() {
   const run = async (statement?: string) => {
     if (running) return;
     const text = statement ?? sql;
+    if (statement === undefined) setPreviewOf(undefined);
     const rows = Number(maxRows);
     const ms = Math.round(Number(timeoutS) * 1000);
     setOpen(undefined);
@@ -158,10 +172,12 @@ export function SqlConsolePanel() {
     downloadBytes(new TextEncoder().encode(text), `query.${kind}`, kind === "csv" ? "text/csv" : "application/x-ndjson");
   };
   /** A read-only preview of the first rows of a table: the statement is shown in the editor and runs like any other (the same path, never `user_data`). */
-  const previewTable = (name: string) => {
-    const text = `SELECT * FROM "${name.replace(/"/g, '""')}" LIMIT ${previewRows}`;
+  const previewTable = (name: string, limit: 10 | 100 = previewRows) => {
+    setPreviewRows(limit);
+    const text = `SELECT * FROM "${name.replace(/"/g, '""')}" LIMIT ${limit}`;
     setSql(text);
     setOpen(undefined);
+    setPreviewOf({ table: name, text });
     void run(text);
   };
   const insertName = (name: string) => {
@@ -244,49 +260,84 @@ export function SqlConsolePanel() {
           {showSchema && schema && (
           <div className="sql-schema mono" data-testid="sql-schema" role="tree" aria-label="The database">
             <div className="sql-tree-head">
-              <span className="muted">database · {schema.tables.length} tables</span>
-              <label className="sql-limit">
-                preview
-                <select className="kt" value={previewRows} onChange={(e) => setPreviewRows(e.target.value === "100" ? 100 : 10)} aria-label="Rows of a table preview" data-testid="sql-preview-rows">
-                  <option value="10">10 rows</option>
-                  <option value="100">100 rows</option>
-                </select>
-              </label>
+              <button type="button" className="tt-node sql-twist" onClick={() => setDbOpen((o) => !o)} aria-expanded={dbOpen} aria-label="The database: open or fold" data-testid="sql-db-twist">
+                {dbOpen ? "\u25be" : "\u25b8"}
+              </button>
+              <span data-testid="sql-db">
+                database <span className="muted">{dbInfo ?? ""}</span>
+              </span>
               <button type="button" className="kt" onClick={countTables} aria-label="Count the rows of the tables again" data-testid="sql-recount">
                 ⟳
               </button>
             </div>
-            {schema.tables.map((t) => (
-              <div key={t.name} className="sql-table" role="treeitem" aria-expanded={t.readable ? expanded.has(t.name) : undefined}>
-                {t.readable ? (
-                  <div className="sql-trow">
-                    <button type="button" className="tt-node sql-twist" onClick={() => setExpanded((s) => new Set(s.has(t.name) ? [...s].filter((x) => x !== t.name) : [...s, t.name]))} aria-label={`Columns of ${t.name}`} data-testid={`sql-twist-${t.name}`}>
-                      {expanded.has(t.name) ? "▾" : "▸"}
-                    </button>
-                    <button type="button" className="tt-node sql-tname" onClick={() => void previewTable(t.name)} title={`Preview the first ${previewRows} rows of ${t.name} (read-only)`} data-testid={`sql-table-${t.name}`}>
-                      {t.name}
-                    </button>
-                    <span className="muted sql-count" data-testid={`sql-count-${t.name}`}>
-                      {counts[t.name] === undefined ? "…" : `${counts[t.name]?.toLocaleString("en")} rows`}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="sql-trow">
-                    <button type="button" className="tt-node sql-tname" disabled title="not readable in the console">
-                      {t.name}
-                      {"  (not readable here)"}
-                    </button>
-                  </div>
-                )}
-                {t.readable &&
-                  expanded.has(t.name) &&
-                  t.columns.map((c) => (
-                    <button key={c.name} type="button" className="tt-node sql-col" role="treeitem" onClick={() => insertName(c.name)} title={`insert ${c.name}`}>
-                      {c.name} <span className="muted">{c.type.toLowerCase()}</span>
-                    </button>
-                  ))}
-              </div>
-            ))}
+            {dbOpen &&
+              schema.tables.map((t) => (
+                <div key={t.name} className="sql-table" role="treeitem" aria-expanded={t.readable ? expanded.has(t.name) : undefined}>
+                  {t.readable ? (
+                    <div className="sql-trow">
+                      <button type="button" className="tt-node sql-twist" onClick={() => setExpanded((s) => new Set(s.has(t.name) ? [...s].filter((x) => x !== t.name) : [...s, t.name]))} aria-label={`Columns of ${t.name}`} data-testid={`sql-twist-${t.name}`}>
+                        {expanded.has(t.name) ? "\u25be" : "\u25b8"}
+                      </button>
+                      <button
+                        type="button"
+                        className="tt-node sql-tname"
+                        // A click previews the table; a double click puts its name in the editor (the click is held a moment so that a double click does not also run a preview).
+                        onClick={() => {
+                          clearTimeout(clickTimer.current);
+                          clickTimer.current = setTimeout(() => void previewTable(t.name), 220);
+                        }}
+                        onDoubleClick={() => {
+                          clearTimeout(clickTimer.current);
+                          insertName(t.name);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            clearTimeout(clickTimer.current);
+                            void previewTable(t.name);
+                          } else if (e.key === "i") insertName(t.name);
+                        }}
+                        title={`Click: preview the first ${previewRows} rows of ${t.name} (read-only) \u00b7 double click: insert its name`}
+                        data-testid={`sql-table-${t.name}`}
+                      >
+                        {t.name}
+                      </button>
+                      <span className="muted sql-count" data-testid={`sql-count-${t.name}`}>
+                        {counts[t.name] === undefined ? "\u2026" : `${counts[t.name]?.toLocaleString("en")} rows`}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="sql-trow">
+                      <button type="button" className="tt-node sql-tname" disabled title="not readable in the console">
+                        {t.name}
+                        {"  (not readable here)"}
+                      </button>
+                    </div>
+                  )}
+                  {t.readable &&
+                    expanded.has(t.name) &&
+                    t.columns.map((c) => (
+                      <button
+                        key={c.name}
+                        type="button"
+                        className="tt-node sql-col"
+                        role="treeitem"
+                        onDoubleClick={() => insertName(c.name)}
+                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), insertName(c.name))}
+                        title={`Double click or Enter: insert ${c.name}${c.indexed ? " \u00b7 indexed" : ""}`}
+                        data-testid={`sql-col-${t.name}-${c.name}`}
+                      >
+                        {c.name} <span className="muted">{c.type.toLowerCase()}</span>
+                        {c.indexed ? (
+                          <span className="sql-ix" title="indexed" aria-label="indexed">
+                            {" "}
+                            ●
+                          </span>
+                        ) : null}
+                      </button>
+                    ))}
+                </div>
+              ))}
           </div>
         )}
         <div className="sql-editor-wrap">
@@ -366,6 +417,16 @@ export function SqlConsolePanel() {
         <div className="sql-results" data-testid="sql-results" onKeyDown={(e) => e.key === "Escape" && maximized && (e.stopPropagation(), setMaximized(false))}>
           <div className="sql-res-head">
             <Status running={running} outcome={outcome} limit={maxRows} />
+            {previewOf !== undefined && result !== undefined && (
+              <span className="sql-preview-note mono" data-testid="sql-preview-note">
+                preview · {result.rows.length} of {counts[previewOf.table]?.toLocaleString("en") ?? "?"} rows
+                {previewRows === 10 && (counts[previewOf.table] ?? 11) > 10 && (
+                  <button type="button" className="kt" onClick={() => previewTable(previewOf.table, 100)} data-testid="sql-show-100">
+                    show 100
+                  </button>
+                )}
+              </span>
+            )}
             <span className="sp" />
             <button type="button" className="kt" disabled={!result} onClick={() => download("csv")} data-testid="sql-export-csv">
               CSV

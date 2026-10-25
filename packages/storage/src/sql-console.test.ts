@@ -302,6 +302,10 @@ describe("the schema for completion", () => {
     expect(s.tables.find((t) => t.name === "metrics")?.columns.map((x) => x.name)).toEqual(["run_id", "source", "name", "tick", "sim_time", "value"]);
     expect(s.tables.find((t) => t.name === "user_data")).toMatchObject({ readable: false });
     expect(s.payloadKeys).toEqual(expect.arrayContaining(["op", "name", "n"]));
+    // The columns say whether they are indexed (the key of the table, or the leading column of an index): the SQL tree marks them.
+    const cols = (t: string) => Object.fromEntries((s.tables.find((x) => x.name === t)?.columns ?? []).map((x) => [x.name, x.indexed]));
+    expect(cols("metrics")).toMatchObject({ run_id: true, source: true, name: true, tick: true, value: false });
+    expect(cols("trace_records")).toMatchObject({ run_id: true, seq: true, payload: false });
   });
 });
 

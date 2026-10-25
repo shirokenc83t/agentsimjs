@@ -51,7 +51,7 @@ export type SqlErrorCode = "empty" | "too_long" | "multiple_statements" | "not_r
 export type SqlError = CodedError<SqlErrorCode>;
 
 export interface SqlSchema {
-  readonly tables: readonly { readonly name: string; readonly columns: readonly { readonly name: string; readonly type: string }[]; readonly readable: boolean }[];
+  readonly tables: readonly { readonly name: string; readonly columns: readonly { readonly name: string; readonly type: string; /** The column is the primary key or the first column of an index (absent: not said). */ readonly indexed?: boolean }[]; readonly readable: boolean }[];
   /** The keys of the payloads of the latest records (for `json_extract(payload, '$.…')`). */
   readonly payloadKeys: readonly string[];
 }
@@ -284,15 +284,28 @@ export class SqlConsole {
     }
   }
 
+  /** The columns of a table with their types, and whether each is indexed (the primary key, or the leading column of an index). */
+  private columnsOf(table: string): { name: string; type: string; indexed: boolean }[] {
+    const cols = this.db.selectObjects(`PRAGMA table_info(${quoteIdent(table)})`) as { name: string; type: string; pk: number }[];
+    const leading = new Set<string>();
+    try {
+      for (const ix of this.db.selectObjects(`PRAGMA index_list(${quoteIdent(table)})`) as { name: string }[]) {
+        const first = (this.db.selectObjects(`PRAGMA index_info(${quoteIdent(ix.name)})`) as { seqno: number; name: string }[]).find((c) => c.seqno === 0);
+        if (first) leading.add(first.name);
+      }
+    } catch {
+      // a table without indexes to read: nothing is marked
+    }
+    return cols.map((c) => ({ name: c.name, type: c.type, indexed: c.pk > 0 || leading.has(c.name) }));
+  }
+
   /** The tables, their columns, and the keys of the latest payloads: what completion offers. Not a statement of the researcher's: read here by the console itself. */
   schema(): SqlSchema {
     const names = this.db.selectValues("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name") as string[];
     const tables = names.map((name) => ({
       name,
       readable: !DENIED_TABLES.has(name.toLowerCase()),
-      columns: DENIED_TABLES.has(name.toLowerCase())
-        ? []
-        : (this.db.selectObjects(`PRAGMA table_info(${quoteIdent(name)})`) as { name: string; type: string }[]).map((c) => ({ name: c.name, type: c.type })),
+      columns: DENIED_TABLES.has(name.toLowerCase()) ? [] : this.columnsOf(name),
     }));
     let payloadKeys: string[] = [];
     try {

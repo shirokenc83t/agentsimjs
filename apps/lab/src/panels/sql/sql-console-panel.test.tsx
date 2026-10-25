@@ -145,18 +145,37 @@ describe("SqlConsolePanel", () => {
     expect(screen.getByTestId("sql-schema")).toHaveTextContent("kind text");
   });
 
-  it("a click on a table runs a read-only preview of its first 10 rows (100 on request), shown in the editor and the results; user_data has none", async () => {
-    const { calls } = setup();
+  it("a click on a table runs a read-only preview of its first 10 rows and says so, with a button for 100; a double click puts the name in the editor; user_data has none", async () => {
+    const { calls } = setup((sql) => ({ result: Promise.resolve({ ok: true, value: sql.includes("count(*) AS n FROM \"trace_records\"") ? result({ columns: ["t", "n"], rows: [["trace_records", 12345]] }) : result() }) }));
     await userEvent.click(screen.getByTestId("sql-schema-toggle"));
     await screen.findByTestId("sql-table-trace_records");
+    await waitFor(() => expect(screen.getByTestId("sql-count-trace_records")).toHaveTextContent("12,345 rows"));
     await userEvent.click(screen.getByTestId("sql-table-trace_records"));
     await waitFor(() => expect(screen.getByTestId("sql-status")).toHaveTextContent("3 rows"));
     expect(calls.at(-1)?.sql).toBe('SELECT * FROM "trace_records" LIMIT 10');
     expect((screen.getByTestId("sql-editor") as HTMLTextAreaElement).value).toBe('SELECT * FROM "trace_records" LIMIT 10');
-    await userEvent.selectOptions(screen.getByTestId("sql-preview-rows"), "100");
-    await userEvent.click(screen.getByTestId("sql-table-trace_records"));
+    expect(screen.getByTestId("sql-preview-note")).toHaveTextContent("preview · 3 of 12,345 rows");
+    await userEvent.click(screen.getByTestId("sql-show-100"));
     await waitFor(() => expect(calls.at(-1)?.sql).toBe('SELECT * FROM "trace_records" LIMIT 100'));
+    expect(screen.queryByTestId("sql-show-100")).toBeNull(); // 100 are shown: no more to ask for
+    // A statement of the researcher's own is not a preview.
+    await userEvent.click(screen.getByTestId("sql-run"));
+    await waitFor(() => expect(screen.queryByTestId("sql-preview-note")).toBeNull());
     expect(screen.queryByTestId("sql-table-user_data")).toBeNull();
     expect(screen.getByRole("button", { name: /user_data/ })).toBeDisabled();
+  });
+
+  it("double click on a table or a column inserts its name at the caret, and a column that is indexed says so", async () => {
+    setup();
+    await userEvent.click(screen.getByTestId("sql-schema-toggle"));
+    await userEvent.clear(screen.getByTestId("sql-editor"));
+    await userEvent.type(screen.getByTestId("sql-editor"), "SELECT  FROM x");
+    (screen.getByTestId("sql-editor") as HTMLTextAreaElement).setSelectionRange(7, 7);
+    await screen.findByTestId("sql-table-trace_records");
+    await userEvent.dblClick(screen.getByTestId("sql-table-trace_records"));
+    expect((screen.getByTestId("sql-editor") as HTMLTextAreaElement).value).toBe("SELECT trace_records FROM x");
+    await userEvent.click(screen.getByTestId("sql-twist-trace_records"));
+    await userEvent.dblClick(screen.getByTestId("sql-col-trace_records-seq"));
+    expect((screen.getByTestId("sql-editor") as HTMLTextAreaElement).value).toContain("seq");
   });
 });

@@ -116,7 +116,7 @@
 .sql-limit { display: inline-flex; align-items: center; gap: 4px; color: var(--fg2); }
 .sql-limit .log-filter { flex: none; width: 70px; min-width: 0; }
 .sql-main { flex: none; display: flex; min-height: 0; max-height: 46%; }
-.sql-schema { flex: none; width: 250px; overflow: auto; border-right: 1px solid var(--ln); background: var(--bg1); padding: 4px 0; }
+.sql-schema { flex: none; width: 230px; overflow: auto; border-right: 1px solid var(--ln); background: var(--bg1); padding: 4px 0; }
 .sql-table { padding-bottom: 4px; }
 .sql-col { padding-left: 22px; color: var(--fg2); }
 .sql-editor-wrap { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -629,3 +629,6 @@
 .cols-switch { display: inline-flex; gap: 0; margin-right: 6px; }
 .cols-switch .kt { height: 22px; padding: 0 8px; }
 .cols-switch .kt.on { background: var(--acbg); border-color: var(--ac); color: var(--fg); }
+.sql-preview-note { display: inline-flex; align-items: center; gap: 6px; font-size: var(--type-label-size); white-space: nowrap; color: var(--fg2); }
+.sql-ix { color: var(--ac); }
+.sql-schema { width: 230px; }

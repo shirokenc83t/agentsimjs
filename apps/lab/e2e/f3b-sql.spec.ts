@@ -158,8 +158,11 @@ test("the schema is a tree with row counts; a click on a table previews its firs
   await page.getByTestId("sql-table-trace_records").click();
   await expect(page.getByTestId("sql-editor")).toHaveValue('SELECT * FROM "trace_records" LIMIT 10');
   await expect(page.getByTestId("sql-status").first()).toContainText("10 rows", { timeout: 15_000 });
-  await page.getByTestId("sql-preview-rows").selectOption("100");
-  await page.getByTestId("sql-table-runs").click();
-  await expect(page.getByTestId("sql-editor")).toHaveValue('SELECT * FROM "runs" LIMIT 100');
-  await expect(page.getByTestId("sql-status").first()).toContainText("row", { timeout: 15_000 });
+  await expect(page.getByTestId("sql-preview-note")).toContainText(/preview · 10 of \d/);
+  await page.getByTestId("sql-show-100").click();
+  await expect(page.getByTestId("sql-editor")).toHaveValue('SELECT * FROM "trace_records" LIMIT 100');
+  // The columns say their type and whether they are indexed; a double click puts a name in the editor.
+  await expect(page.getByTestId("sql-col-trace_records-run_id")).toContainText("●");
+  await page.getByTestId("sql-table-runs").dblclick();
+  await expect(page.getByTestId("sql-editor")).toHaveValue(/runs/);
 });
