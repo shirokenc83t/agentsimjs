@@ -177,7 +177,7 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
         />{" "}
         m
       </Row>
-      <Row k="run">
+      <div className="act-row" role="group" aria-label="Commands">
         {/* A command the agent cannot be given now stays on the row, focusable (aria-disabled, so its tooltip and its hint are read), with its reason and the step to do first. */}
         {offered.map((c) => {
           const hint = commandHint(c.op, c.title, facts);
@@ -216,7 +216,7 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
             </span>
           );
         })}
-      </Row>
+      </div>
       {unsupported.length > 0 && (
         <p className="muted pre-hint" data-testid="command-unsupported">
           Not offered for this agent: {unsupported.join(" · ")}

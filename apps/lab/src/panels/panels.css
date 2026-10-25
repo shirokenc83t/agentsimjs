@@ -656,3 +656,12 @@
 .tg-time, .tg-gap { position: absolute; left: 0; text-align: right; font-size: var(--type-label-size); white-space: nowrap; }
 .tg-node.run { border-style: dashed; background: var(--bg1); }
 .tg-node.gap { border-style: dashed; background: transparent; justify-content: center; }
+.inspector .act-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.inspector .act-row .act-grp { display: inline-flex; gap: 4px; }
+.inspector .act-row .MuiButton-root { margin-right: 0 !important; }
+.sql-body { flex: 1; min-height: 0; display: flex; }
+.sql-body > .sql-split-host { flex: 1; min-width: 0; }
+.sql-body > .sql-schema { align-self: stretch; }
+.sql-tree-head { display: flex; align-items: flex-start; gap: 4px; padding: 0 6px 4px; }
+.sql-tree-head > span { flex: 1; min-width: 0; }
+.sql-tree-head > span .muted { display: block; font-size: var(--type-label-size); }
