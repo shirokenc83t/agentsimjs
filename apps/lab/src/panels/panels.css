@@ -672,3 +672,4 @@
 .sql-tree-head .sql-twist { flex: none; width: 18px; padding: 0; text-align: center; }
 .sql-tree-head > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sql-tree-head > span .muted { display: block; overflow: hidden; text-overflow: ellipsis; }
+.sql-trow > .sql-tname:only-child { padding-left: 20px; }
