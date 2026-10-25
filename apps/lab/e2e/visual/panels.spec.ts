@@ -276,6 +276,88 @@ for (const theme of THEMES) {
       await expect(page.getByTestId("workspace-analysis")).toHaveScreenshot(`analysis-${theme}.png`);
     });
 
+
+    // F3b M5: the screens of the analysis side that had no baseline: the SQL console with its tree and a table previewed and with a result, the Debug panels (the Log, the Trace and
+    // the Timeline) of an exploring rover, the Log row's menu, and the trace graph with its time lane. All of them are the recording of a deterministic run: sim times, sequence numbers
+    // and records are the same every time; what is the machine's (row counts that depend on how far the writer had got, the size of the database, the wall time of a record) is masked.
+    test("Data: the SQL tree with a table previewed, and a result", async ({ page }) => {
+      test.setTimeout(90_000);
+      await step(page, 1);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 15_000 });
+      await openWorkspace(page, "data");
+      await expect(page.getByTestId("sql-console")).toBeVisible();
+      await page.getByTestId("sql-schema-toggle").click();
+      await page.getByTestId("sql-twist-trace_records").click();
+      await page.getByTestId("sql-table-trace_records").click();
+      await expect(page.getByTestId("sql-preview-note")).toBeVisible({ timeout: 15_000 });
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      // The counts and the database's size are the machine's; the preview's rows hold wall times.
+      const mask = [page.locator('[data-testid^="sql-count-"]'), page.getByTestId("sql-db"), page.getByTestId("sql-grid"), page.getByTestId("sql-preview-note")];
+      await expect(page.getByTestId("sql-console")).toHaveScreenshot(`sql-tree-preview-${theme}.png`, { mask });
+      await page.getByTestId("sql-editor").fill("SELECT seq, id, sim_time, kind, tier, detail FROM trace_records WHERE seq < 14 ORDER BY seq");
+      await page.getByTestId("sql-run").click();
+      await expect(page.getByTestId("sql-status").first()).toContainText("14 rows", { timeout: 15_000 });
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      await expect(page.getByTestId("sql-results")).toHaveScreenshot(`sql-results-${theme}.png`, { mask: [page.getByTestId("sql-status")] });
+    });
+
+    /** An exploring rover recorded to tick 800, in the Debug workspace with the Log filtered to its actions and its first `start` picked. */
+    async function exploringRover(page: Page) {
+      await loadF2(page, "discovery");
+      await page.addStyleTag({ content: ".dv-resize-container { display: none !important; }" });
+      await page.getByTestId("explorer-row-ugv-001").click();
+      await runCommand(page, "Explore selected agent (ugv-001)");
+      await step(page, 8);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 800", { timeout: 30_000 });
+      await openWorkspace(page, "debug");
+      await page.getByTestId("log-filter").fill("kind:action agent:ugv-001 text:start");
+      await expect.poll(async () => Number(await page.getByTestId("event-scroller").getAttribute("data-count")), { timeout: 15_000 }).toBeGreaterThan(0);
+      await page.getByTestId("event-scroller").evaluate((el) => {
+        el.scrollTop = 0;
+      });
+      await page.locator('[data-testid^="event-row-"]').filter({ hasText: "start" }).first().click();
+      await expect(page.getByTestId("trace-tree-selected")).toBeVisible();
+    }
+
+    test("Debug: the Log, the Trace and the Timeline of an exploring rover, and the Log row's menu", async ({ page }) => {
+      test.setTimeout(240_000);
+      await exploringRover(page);
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      const mask = [page.locator(".telem"), page.getByTestId("status-recording-saved")];
+      await expect(page.getByTestId("event-list")).toHaveScreenshot(`log-${theme}.png`, { mask });
+      await expect(page.getByTestId("trace-tree")).toHaveScreenshot(`trace-${theme}.png`);
+      await expect(page.getByTestId("timeline")).toHaveScreenshot(`timeline-${theme}.png`);
+      await expect(page.getByTestId("workspace-debug")).toHaveScreenshot(`debug-workspace-${theme}.png`, { mask });
+      await page.locator('[data-testid^="event-row-"]').first().click({ button: "right" });
+      await expect(page.getByTestId("log-menu")).toBeVisible();
+      await settle(page);
+      await expect(page.getByTestId("event-list")).toHaveScreenshot(`log-menu-${theme}.png`, { mask });
+    });
+
+    test("Trace graph: the time lane of an exploring rover's start, and its collapsed middle opened", async ({ page }) => {
+      test.setTimeout(240_000);
+      await exploringRover(page);
+      await page.getByTestId("trace-open-graph").click();
+      // The graph is a floating window: show it alone.
+      await page.addStyleTag({ content: ".dv-resize-container:has([data-testid='trace-graph']) { display: block !important; }" });
+      await expect(page.getByTestId("tg-lane")).toBeVisible({ timeout: 15_000 });
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      const graph = page.getByTestId("trace-graph");
+      // The side panel's JSON holds the record's wall time.
+      const mask = [page.getByTestId("tg-json")];
+      await expect(graph).toHaveScreenshot(`trace-graph-${theme}.png`, { mask });
+      await page.getByTestId("tg-group-node").click();
+      await page.getByTestId("tg-lane").evaluate((el) => {
+        el.scrollTop = 240;
+      });
+      await settle(page);
+      await expect(graph).toHaveScreenshot(`trace-graph-opened-${theme}.png`, { mask });
+    });
+
     test("command palette", async ({ page }) => {
       await page.keyboard.press("Control+k");
       const palette = page.getByRole("dialog", { name: "Command palette" });
