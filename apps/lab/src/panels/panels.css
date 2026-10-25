@@ -681,7 +681,7 @@
 .asv-flat { margin: 0; padding: 2px 0; }
 .asv-flat figcaption { padding: 2px 10px; }
 .wordclip { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
-.wordclip > span { display: inline-block; vertical-align: top; }
+.wordclip > span { display: inline-block; vertical-align: top; margin-right: 1ch; }
 .asv-legend { display: flex; flex-wrap: wrap; gap: 2px 14px; max-height: 38px; overflow-y: auto; margin: 2px 10px 0; padding: 0; list-style: none; font-size: var(--type-label-size); }
 .asv-legend .sw { display: inline-block; width: 7px; height: 7px; }
 .asv-legend .sel { font-weight: 600; }

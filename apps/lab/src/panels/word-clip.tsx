@@ -9,7 +9,7 @@ export function WordClip(props: { text: string; className?: string | undefined; 
   return (
     <span className={`wordclip${props.className ? ` ${props.className}` : ""}`} style={props.style} title={props.text} data-testid={props.testId}>
       {words.map((w, i) => (
-        <span key={i}>{w} </span>
+        <span key={i}>{w}</span>
       ))}
     </span>
   );

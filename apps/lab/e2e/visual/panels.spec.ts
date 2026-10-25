@@ -240,7 +240,8 @@ for (const theme of THEMES) {
       await expect(page.getByTestId("sql-status")).toContainText("rows", { timeout: 15_000 });
       await page.locator("body").click({ position: { x: 1, y: 1 } });
       await settle(page);
-      const mask = [page.getByTestId("storage-info"), page.locator(".size-bar"), page.locator('[data-testid^="run-row-"]'), page.getByTestId("sql-status"), page.getByTestId("sql-grid")];
+      // The tree's row counts and the database line depend on how far the writer had got and on the file.
+      const mask = [page.getByTestId("storage-info"), page.locator(".size-bar"), page.locator('[data-testid^="run-row-"]'), page.getByTestId("sql-status"), page.getByTestId("sql-grid"), page.locator('[data-testid^="sql-count-"]'), page.getByTestId("sql-db")];
       await expect(page.getByTestId("workspace-data")).toHaveScreenshot(`data-workspace-${theme}.png`, { mask });
     });
 
