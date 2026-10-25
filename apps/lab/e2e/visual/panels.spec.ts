@@ -325,7 +325,8 @@ for (const theme of THEMES) {
       await exploringRover(page);
       await page.locator("body").click({ position: { x: 1, y: 1 } });
       await settle(page);
-      const mask = [page.locator(".telem"), page.getByTestId("status-recording-saved")];
+      // The Log's detail pane shows the selected record's JSON, which holds its wall time.
+      const mask = [page.locator(".telem"), page.getByTestId("status-recording-saved"), page.getByTestId("log-inspector")];
       await expect(page.getByTestId("event-list")).toHaveScreenshot(`log-${theme}.png`, { mask });
       await expect(page.getByTestId("trace-tree")).toHaveScreenshot(`trace-${theme}.png`);
       await expect(page.getByTestId("timeline")).toHaveScreenshot(`timeline-${theme}.png`);
