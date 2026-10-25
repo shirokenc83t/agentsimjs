@@ -145,6 +145,7 @@ export function SqlConsolePanel() {
     setOpen(undefined);
   };
   const onChange = (value: string, cursor: number) => {
+    clearTimeout(closing.current);
     setSql(value);
     if (!schema) return setOpen(undefined);
     const c = complete(value, cursor, schema);
@@ -374,6 +375,9 @@ export function SqlConsolePanel() {
                 onScroll={(e) => {
                   if (painted.current) painted.current.scrollTop = e.currentTarget.scrollTop;
                 }}
+                // A blur closes the completion list after a moment (so that a click on an item still lands); coming back to the editor, or typing, cancels that, or a list opened by the
+                // first keys is closed by the blur of the click before it.
+                onFocus={() => clearTimeout(closing.current)}
                 onBlur={() => {
                   clearTimeout(closing.current);
                   closing.current = setTimeout(() => setOpen(undefined), 120);

@@ -1,5 +1,5 @@
 import { createMemoryPorts, type SqlError, type SqlResult, type SqlSchema, type StorageClient } from "@agentsim/storage";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Result } from "@agentsim/core";
@@ -105,6 +105,20 @@ describe("SqlConsolePanel", () => {
     await userEvent.keyboard("{Tab}");
     expect(editor.value).toBe("SELECT * FROM trace_records");
     expect(screen.queryByTestId("sql-complete")).toBeNull();
+  });
+
+  it("keeps the completion list open when the editor is entered again and typed in within the moment a blur waits to close it", async () => {
+    setup();
+    const editor = screen.getByTestId("sql-editor") as HTMLTextAreaElement;
+    await waitFor(() => expect(screen.getByTestId("sql-schema-toggle")).toBeInTheDocument());
+    await userEvent.clear(editor);
+    await userEvent.type(editor, "SELECT * FROM tra");
+    await waitFor(() => expect(screen.getByTestId("sql-complete")).toBeInTheDocument());
+    fireEvent.blur(editor); // the click on another control before it: a close is waiting
+    editor.focus();
+    await userEvent.type(editor, "c");
+    await new Promise((r) => setTimeout(r, 250)); // longer than the wait
+    expect(screen.getByTestId("sql-complete")).toBeInTheDocument();
   });
 
   it("opens with the schema tree shown and its button first in the bar; closing it is remembered per user", async () => {

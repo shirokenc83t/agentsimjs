@@ -64,6 +64,13 @@ export function closePanel(panel: IDockviewPanel): void {
 
 // The size a window had before it was collapsed: what opening it again restores.
 const before = new WeakMap<DockviewGroupPanel, { width: number; height: number }>();
+/** The width a collapsed window was given (a third of its host, at most COLLAPSED_WIDTH_PX), which it goes back to when collapsed again. */
+const collapsedWidth = new WeakMap<DockviewGroupPanel, number>();
+
+/** The width of a collapsed window of a host: the three of the Scene share one row along its edge, so a third of it less the gaps, at most COLLAPSED_WIDTH_PX and at least 150. */
+function collapsedWidthIn(hostPx: number | undefined): number {
+  return hostPx === undefined || hostPx <= 0 ? COLLAPSED_WIDTH_PX : Math.max(150, Math.min(COLLAPSED_WIDTH_PX, Math.floor((hostPx - 4 * STACK_GAP_PX) / 3)));
+}
 
 /** A floating window is collapsed when it is no taller than its title bar (so a saved layout that holds one collapsed is read the same way). */
 export const isCollapsed = (group: DockviewGroupPanel): boolean =>
@@ -84,7 +91,7 @@ export function toggleCollapse(group: DockviewGroupPanel): void {
   } else {
     if (group.height > COLLAPSED_HEIGHT_PX + 2) before.set(group, { width: group.width, height: group.height });
     group.element.classList.add("collapsed");
-    group.api.setSize({ width: COLLAPSED_WIDTH_PX, height: COLLAPSED_HEIGHT_PX });
+    group.api.setSize({ width: collapsedWidth.get(group) ?? COLLAPSED_WIDTH_PX, height: COLLAPSED_HEIGHT_PX });
   }
 }
 
@@ -135,7 +142,7 @@ function floatingPosition(api: DockviewApi, f: NonNullable<PresetPanel["floating
   const r = root?.getBoundingClientRect();
   const stackPx = (f.stack ?? 0) * (COLLAPSED_HEIGHT_PX + STACK_GAP_PX);
   // Collapsed, they sit side by side along the bottom edge of their host, flush with it: a strip, not a stack over the map.
-  const rowPx = (f.slot ?? 0) * (COLLAPSED_WIDTH_PX + STACK_GAP_PX);
+  const rowPx = (f.slot ?? 0) * (collapsedWidthIn(h?.width) + STACK_GAP_PX);
   if (f.collapsed && f.slot !== undefined) {
     if (!h || !r || h.width === 0) return f.side === "left" ? { bottom: STACK_GAP_PX, left: STACK_GAP_PX + rowPx } : { bottom: STACK_GAP_PX, right: STACK_GAP_PX + rowPx };
     const edge = Math.max(0, r.bottom - h.bottom) + STACK_GAP_PX;
@@ -153,11 +160,13 @@ export function addPresetPanel(api: DockviewApi, preset: WorkspacePreset, p: Pre
     const f = p.floating;
     // A big window (the trace graph) is as large as it asks and at most the dock less a margin, centred at the top; the small ones sit at the bottom right of their host.
     const big = f.width >= 700 && !f.collapsed;
-    const width = f.collapsed ? COLLAPSED_WIDTH_PX : big ? Math.min(f.width, Math.max(400, api.width - 24)) : f.width;
+    const hostWidth = f.host ? api.getPanel(f.host)?.group.element.getBoundingClientRect().width : undefined;
+    const width = f.collapsed ? collapsedWidthIn(hostWidth) : big ? Math.min(f.width, Math.max(400, api.width - 24)) : f.width;
     const height = f.collapsed ? COLLAPSED_HEIGHT_PX : big ? Math.min(f.height, Math.max(300, api.height - 24)) : f.height;
     const position = big ? { top: 12, left: Math.max(12, Math.round((api.width - width) / 2)) } : floatingPosition(api, f);
     const panel = api.addPanel({ ...base, floating: { width, height, position } });
     before.set(panel.group, { width: f.width, height: f.height });
+    if (f.collapsed) collapsedWidth.set(panel.group, width);
     if (f.collapsed) panel.group.element.classList.add("collapsed");
     return;
   }
