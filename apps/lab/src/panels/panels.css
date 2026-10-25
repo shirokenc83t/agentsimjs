@@ -665,3 +665,4 @@
 .sql-tree-head { display: flex; align-items: flex-start; gap: 4px; padding: 0 6px 4px; }
 .sql-tree-head > span { flex: 1; min-width: 0; }
 .sql-tree-head > span .muted { display: block; font-size: var(--type-label-size); }
+.inspector .kv > .pre-hint { grid-column: 1 / -1; margin: 2px 0 6px; }
