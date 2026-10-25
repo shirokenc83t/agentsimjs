@@ -4,6 +4,7 @@
 import { appendFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { cpus, platform, release, totalmem } from "node:os";
 import { resolve } from "node:path";
+import { evaluate, limitsOf } from "./gates.mjs";
 
 const gpu = process.argv.includes("--gpu");
 const ci = ["1", "true"].includes((process.env.CI ?? "").toLowerCase());
@@ -23,23 +24,21 @@ if (existsSync(dir)) {
 
 const fmt = (v, unit) =>
   v === undefined ? "—" : unit === "bytes" ? `${(v / 1024).toFixed(1)} KB` : unit === "count" ? `${Math.round(v)}` : `${v.toFixed(2)} ms`;
-/** The stat and bound applied in this mode. */
-const gate = (t) => (ci && t.ciMax !== undefined ? { stat: t.ciStat ?? t.stat ?? "p95", max: t.ciMax } : { stat: t.stat ?? "p95", max: t.max });
+/** The limits of a row in this mode, as the table says them (`median ≤ 8.00 ms · p95 ≤ 12.00 ms`). */
+const words = (t, unit) => limitsOf(t, ci).map((l) => `${l.stat} ≤ ${fmt(l.max, unit)}`).join(" · ");
 const rows = [];
 let failed = false;
 for (const [name, t] of Object.entries(thresholds.metrics)) {
   const m = results[name];
-  const g = gate(t);
   if (!m) {
-    rows.push([name, "—", "—", "—", t.report ? "report" : `${g.stat} ≤ ${g.max}`, t.required === false ? "skipped" : "MISSING"]);
+    rows.push([name, "—", "—", "—", t.report ? "report" : limitsOf(t, ci).map((l) => `${l.stat} ≤ ${l.max}`).join(" · "), t.required === false ? "skipped" : "MISSING"]);
     if (t.required !== false) failed = true;
     continue;
   }
-  const value = m[g.stat];
-  const ok = t.report || (typeof value === "number" && value <= g.max);
+  const { ok, failures } = evaluate(t, m, ci);
   if (!ok) failed = true;
-  const result = ok ? "ok" : typeof value === "number" ? "FAIL" : `MISSING ${g.stat}`;
-  rows.push([name, fmt(m.mean, m.unit), fmt(m.median, m.unit), fmt(m.p95, m.unit), t.report ? "report only" : `${g.stat} ≤ ${fmt(g.max, m.unit)}`, result]);
+  const result = ok ? "ok" : failures.every((l) => typeof m[l.stat] === "number") ? `FAIL ${failures.map((l) => l.stat).join(", ")}` : `MISSING ${failures.map((l) => l.stat).join(", ")}`;
+  rows.push([name, fmt(m.mean, m.unit), fmt(m.median, m.unit), fmt(m.p95, m.unit), t.report ? "report only" : words(t, m.unit), result]);
 }
 
 const header = ["metric", "mean", "median", "p95", "threshold", "result"];
