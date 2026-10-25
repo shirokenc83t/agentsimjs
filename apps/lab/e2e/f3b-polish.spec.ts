@@ -243,3 +243,20 @@ test("Configurations opens on the Run configuration, Settings' jump row warns on
   const tt = await page.getByTestId("theme-button").evaluate((e) => getComputedStyle(e).textTransform);
   expect(tt).toBe("none");
 });
+
+test("the Debug's right column is Log 40 · Trace 22 · Inspector 38 % of the dock", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await loadDemo(page);
+  await openWorkspace(page, "debug");
+  await expect(page.getByTestId("event-list")).toBeVisible();
+  await expect(page.getByTestId("trace-tree")).toBeVisible();
+  const h = await page.evaluate(() => {
+    const of = (id: string) => (document.querySelector(`[data-testid="${id}"]`)?.closest(".dv-groupview") as HTMLElement | null)?.getBoundingClientRect().height ?? 0;
+    return { log: of("event-list"), trace: of("trace-tree"), inspector: of("inspector") };
+  });
+  const total = h.log + h.trace + h.inspector;
+  expect(h.log / total, JSON.stringify(h)).toBeCloseTo(0.4, 1);
+  expect(h.trace / total, JSON.stringify(h)).toBeCloseTo(0.22, 1);
+  expect(h.inspector / total, JSON.stringify(h)).toBeCloseTo(0.38, 1);
+});

@@ -58,7 +58,8 @@ const DEBUG_DEFAULT_PANELS: readonly PresetPanel[] = [
   { id: "scene" },
   { id: "timeline", position: { referencePanel: "scene", direction: "below" }, initialHeight: 190, initialHeightPct: 0.38, late: true },
   { id: "eventList", position: { referencePanel: "scene", direction: "right" }, initialWidth: 500, initialWidthPct: 0.38 },
-  { id: "inspector", position: { referencePanel: "eventList", direction: "below" }, initialHeight: 210, initialHeightPct: 0.38 },
+  // The Trace is cut out of the Inspector's share when it is added above it, so the Inspector is given the Trace's 22 % as well: Log 40 · Trace 22 · Inspector 38.
+  { id: "inspector", position: { referencePanel: "eventList", direction: "below" }, initialHeight: 210, initialHeightPct: 0.6 },
   { id: "traceTree", position: { referencePanel: "inspector", direction: "above" }, initialHeight: 180, initialHeightPct: 0.22 },
 ];
 

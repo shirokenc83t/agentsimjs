@@ -67,9 +67,9 @@ const before = new WeakMap<DockviewGroupPanel, { width: number; height: number }
 /** The width a collapsed window was given (a third of its host, at most COLLAPSED_WIDTH_PX), which it goes back to when collapsed again. */
 const collapsedWidth = new WeakMap<DockviewGroupPanel, number>();
 
-/** The width of a collapsed window of a host: the three of the Scene share one row along its edge, so a third of it less the gaps, at most COLLAPSED_WIDTH_PX and at least 150. */
+/** The width of a collapsed window of a host: the three of the Scene share one row along its edge, so a third of it less the gaps, at most COLLAPSED_WIDTH_PX and at least 112. */
 function collapsedWidthIn(hostPx: number | undefined): number {
-  return hostPx === undefined || hostPx <= 0 ? COLLAPSED_WIDTH_PX : Math.max(150, Math.min(COLLAPSED_WIDTH_PX, Math.floor((hostPx - 4 * STACK_GAP_PX) / 3)));
+  return hostPx === undefined || hostPx <= 0 ? COLLAPSED_WIDTH_PX : Math.max(112, Math.min(COLLAPSED_WIDTH_PX, Math.floor((hostPx - 4 * STACK_GAP_PX) / 3)));
 }
 
 /** A floating window is collapsed when it is no taller than its title bar (so a saved layout that holds one collapsed is read the same way). */

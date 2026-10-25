@@ -257,5 +257,18 @@ for (const theme of THEMES) {
       await expect(page.getByTestId("analysis")).toHaveAttribute("data-status", "ready", { timeout: 60_000 });
       await shot(page, "polish-analysis", theme);
     });
+
+    test("last fixes: READY with a command queued, at 1440 and at 1000 px", async ({ page }) => {
+      test.setTimeout(180_000);
+      for (const width of [1440, 1000]) {
+        await page.setViewportSize({ width, height: 900 });
+        await loadF2(page, "discovery");
+        await openWorkspace(page, "scene");
+        await page.getByTestId(`explorer-row-${AGENT}`).click();
+        await page.getByTestId("command-explore").click();
+        await expect(page.getByTestId("player-queued")).toBeVisible();
+        await shot(page, `polish-ready-queued-${width}`, theme, false);
+      }
+    });
   });
 }
