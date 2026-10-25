@@ -617,7 +617,7 @@
 .rc-col { max-width: 880px; }
 .rc-form .fs > h4.sec { position: sticky; top: 30px; z-index: 4; margin: 0; padding: 4px 14px; background: var(--bg1); }
 .fs.folded > :not(h4) { display: none; }
-.act-queued.MuiButton-root { color: var(--fg); border-color: var(--ac); border-style: dashed; background: var(--acbg); }
+.act-queued.MuiButton-root { color: var(--run); border-color: var(--run); border-style: dashed; background: transparent; }
 .sql-tree-head { display: flex; align-items: center; gap: 6px; padding: 2px 8px 4px; font-size: var(--type-label-size); position: sticky; top: 0; background: var(--bg1); }
 .sql-trow { display: flex; align-items: center; gap: 2px; }
 .sql-trow .sql-tname { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }

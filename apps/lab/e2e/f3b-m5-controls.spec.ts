@@ -165,11 +165,13 @@ test("a command given while the run waits is queued at once: the button says so 
   await expect(page.getByTestId("ready-start")).toBeVisible(); // nothing runs: the run is waiting
   await page.getByTestId("command-explore").click();
   await expect(page.getByTestId("command-explore")).toHaveAttribute("data-state", "queued");
-  await expect(page.getByTestId("command-explore")).toContainText("queued");
+  await expect(page.getByTestId("command-explore")).toContainText("▷ Explore · queued · starts on ▶");
+  await expect(page.getByTestId("player-queued")).toHaveText("1 command queued · ugv-001 explore"); // and the player says it next to Play
   await page.waitForTimeout(800);
   await expect(page.getByTestId("command-explore")).toHaveAttribute("data-state", "queued"); // still waiting: no tick has run
   await page.getByTestId("step").click();
   await expect(page.getByTestId("command-explore")).not.toHaveAttribute("data-state", "queued");
+  await expect(page.getByTestId("player-queued")).toHaveCount(0);
   await expect(page.getByTestId("command-explore")).toHaveAttribute("data-state", /running|done/);
 });
 

@@ -1,5 +1,6 @@
 import { formatSimTime, GLYPH, useUiContext } from "@agentsim/ui";
 import { Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
+import { pendingAt, useQueuedCommands } from "../queued-commands.ts";
 import { useSource } from "../services.tsx";
 import { gapLabel, resolveGapClick } from "../sim/gap-click.ts";
 import type { RunSnapshot } from "../sim/run-source.ts";
@@ -105,6 +106,7 @@ function Transport(props: PlayerProps & { replay: boolean }) {
           {GLYPH.running}
         </button>
       )}
+      <QueuedNote simTimeS={snap.simTimeS} />
       <button type="button" className="pb sm" onClick={() => sim.step()} aria-label="Step one tick" data-tip="Step one tick · ." data-testid="step">
         {GLYPH.running}| step
       </button>
@@ -373,6 +375,18 @@ function RerunSplit(props: { busy: boolean; runId: string; commands: number; onR
           </p>
         </div>
       )}
+    </span>
+  );
+}
+
+/** What waits for the next tick, next to Play (U-011 section 5): "1 command queued · ugv-001 explore". Nothing when nothing waits. */
+function QueuedNote(props: { simTimeS: number }) {
+  const waiting = pendingAt(useQueuedCommands(), props.simTimeS);
+  if (waiting.length === 0) return null;
+  const last = waiting[waiting.length - 1];
+  return (
+    <span className="queued-note mono muted" data-testid="player-queued">
+      {waiting.length} command{waiting.length === 1 ? "" : "s"} queued{last ? ` · ${last.agentId} ${last.op}` : ""}
     </span>
   );
 }

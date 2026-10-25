@@ -121,3 +121,4 @@
 .ready-start .pb, .ready-start .pb.pri { height: 28px; font-size: var(--type-label-size); }
 /* The run selector keeps to a width: a long run label is cut (its whole text is the popover's), so the bar does not outgrow a 1280 px window. */
 .top .runsel { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.queued-note { white-space: nowrap; font-size: var(--type-label-size); }

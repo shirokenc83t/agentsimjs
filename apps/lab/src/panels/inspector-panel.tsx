@@ -5,6 +5,7 @@ import Button from "@mui/material/Button";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePolled, useSource } from "../services.tsx";
 import type { RunFeature, RunSnapshot, RunSource } from "../sim/run-source.ts";
+import { pendingAt, queueCommand, useQueuedCommands } from "../queued-commands.ts";
 import { AGENT_COMMANDS, agentExploreRadius, agentFacts, batteryWarning, commandButtonState, commandHint, commandParams, DONE_MS, refusalWords } from "../commands.ts";
 import { actionLabel, actionState, recoveryLabel, waypointsText, type AgentViews } from "./agent-views.ts";
 import { MindViewSection } from "./mind-view-section.tsx";
@@ -111,10 +112,11 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
   const [ackedAtS, setAckedAtS] = useState<number | undefined>(undefined);
   // A command given while the run is paused (or waiting to start) is accepted into the queue and applied at the next tick: its button says "queued" until the run has applied it
   // (its `injected` record, a record newer than the moment of the click).
-  const [queued, setQueued] = useState<{ readonly op: string; readonly atS: number } | undefined>(undefined);
-  useEffect(() => {
-    if (queued !== undefined && command !== undefined && command.name === queued.op && command.atS > queued.atS) setQueued(undefined);
-  }, [queued, command]);
+  const waiting = useQueuedCommands();
+  const nowS = useUiContext((s) => s.simTime);
+  const simS = source.snapshot().simTimeS;
+  void nowS;
+  const queuedOps = new Set(pendingAt(waiting, simS).filter((q) => q.agentId === id).map((q) => q.op));
   const [altitude, setAltitude] = useState("");
   const parsed = Number(altitude);
   const altitudeM = altitude.trim() !== "" && Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
@@ -167,9 +169,9 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
         {AGENT_COMMANDS.map((c) => {
           const hint = commandHint(c.op, c.title, facts);
           const off = source.unavailable("commands");
-          const st = commandButtonState(c.op, { action, command, reflex: props.views?.reflex }, { doneVisible: action !== undefined && doneFor === action.actionId, refusalAcked: command !== undefined && ackedAtS === command.atS, kind: facts?.kind, queued: queued?.op === c.op });
+          const st = commandButtonState(c.op, { action, command, reflex: props.views?.reflex }, { doneVisible: action !== undefined && doneFor === action.actionId, refusalAcked: command !== undefined && ackedAtS === command.atS, kind: facts?.kind, queued: queuedOps.has(c.op) });
           const label =
-            st.state === "queued" ? `${GLYPH.idle} ${c.title} · queued` : st.state === "running" ? `${GLYPH.running} ${c.title} · ${st.phase ?? "running"}` : st.state === "done" ? `${STATE_GLYPH.ok} ${c.title} · succeeded` : st.state === "refused" ? `${STATE_GLYPH.alm} ${c.title} · refused · ${st.words}` : st.state === "preempted" ? `${GLYPH.warn} ${c.title} · preempted${st.reflex ? ` · ${st.reflex}` : ""}` : c.title;
+            st.state === "queued" ? `▷ ${c.title} · queued · starts on ▶` : st.state === "running" ? `${GLYPH.running} ${c.title} · ${st.phase ?? "running"}` : st.state === "done" ? `${STATE_GLYPH.ok} ${c.title} · succeeded` : st.state === "refused" ? `${STATE_GLYPH.alm} ${c.title} · refused · ${st.words}` : st.state === "preempted" ? `${GLYPH.warn} ${c.title} · preempted${st.reflex ? ` · ${st.reflex}` : ""}` : c.title;
           return (
             <span key={c.op} className="act-grp">
               <Button
@@ -185,7 +187,7 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
                 onClick={() => {
                   if (hint !== undefined) return;
                   setAckedAtS(command?.atS);
-                  setQueued({ op: c.op, atS: source.snapshot().simTimeS });
+                  queueCommand({ agentId: id, op: c.op, atS: source.snapshot().simTimeS });
                   source.command(id, c.op, commandParams(c.op, body, altitudeM, radiusM));
                 }}
                 data-testid={`command-${c.op}`}

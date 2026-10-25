@@ -1,6 +1,6 @@
 import "./panels.css";
 import { formatBytes, isThemePreference, THEME_PREFERENCES, useTheme } from "@agentsim/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { applyAppearance, DEFAULT_APPEARANCE, loadAppearance, saveAppearance, type Appearance } from "../config/appearance.ts";
 import { readQuotaThreshold, writeQuotaThreshold } from "../config/environment.ts";
 import { useAppActions, useServices, useStorageStatus } from "../services.tsx";
@@ -8,8 +8,13 @@ import { useAppActions, useServices, useStorageStatus } from "../services.tsx";
 const KEYS: readonly (readonly [string, string])[] = [
   ["Space", "play or pause"],
   [".", "step one tick"],
-  ["1 – 5", "open configurations, scene, debug, data, settings"],
+  ["1 – 7", "open configurations, scene, debug, data, settings, experiments, analysis"],
   ["Ctrl+K", "command palette"],
+  ["Ctrl+R", "re-run the run live in lockstep"],
+  ["Ctrl+Shift+R", "re-run the run headless"],
+  ["Ctrl+Shift+L", "switch the theme between dark and light"],
+  ["Alt+L", "the next layout of the workspace"],
+  ["T", "the trace graph of the selected record (in the Debug)"],
   ["Alt+1 … 9", "focus the panel with that number"],
   ["↑ ↓ Home End", "move in the event list and the Explorer"],
   ["V B Z A O", "scenario editor tools: navigate, paint, zone, agent, object"],
@@ -43,6 +48,15 @@ export function SettingsPanel() {
   useEffect(() => {
     if (ready) void loadAppearance(storage.ports.userData).then(setAppearance, () => {});
   }, [ready, storage]);
+  // The jump row on top (U-011 section 7): a chip a section, ▲ on Storage while the data is not kept across sessions; it scrolls the form only.
+  const form = useRef<HTMLDivElement>(null);
+  const jumpTo = (id: string) => {
+    const f = form.current;
+    const sec = f?.querySelector<HTMLElement>(`section.fs[data-section="${id}"]`);
+    if (!f || !sec) return;
+    f.scrollTo({ top: Math.max(0, sec.getBoundingClientRect().top - f.getBoundingClientRect().top + f.scrollTop - 30) });
+  };
+  const notPersistent = ready && status.state === "ready" && status.mode === "memory-fallback";
   const set = (patch: Partial<Appearance>) => {
     const next = { ...appearance, ...patch };
     setAppearance(next);
@@ -53,7 +67,22 @@ export function SettingsPanel() {
   return (
     <div className="panel settings rc" data-testid="settings-panel">
       <div className="st-body">
-        <div className="rc-form">
+        <div className="rc-form" ref={form}>
+          <nav className="rc-jump mono" aria-label="Sections of the settings" data-testid="st-jump">
+            {[
+              ["appearance", "APPEARANCE"],
+              ["providers", "PROVIDERS AND KEYS"],
+              ["storage", "STORAGE"],
+              ["layouts", "LAYOUTS"],
+              ["keyboard", "KEYBOARD"],
+            ].map(([id, title]) => (
+              <button key={id} type="button" className="kt" onClick={() => jumpTo(id as string)} data-testid={`st-jump-${id}`}>
+                {title}
+                {id === "storage" && notPersistent ? <span className="st st-warn" title="The data is kept in memory only: it is gone when the page closes"> ▲</span> : null}
+              </button>
+            ))}
+          </nav>
+          <div className="rc-col">
           <section className="fs" data-section="appearance">
             <h4 className="sec">
               <b>1 · APPEARANCE</b>
@@ -167,6 +196,7 @@ export function SettingsPanel() {
               ))}
             </dl>
           </section>
+          </div>
         </div>
       </div>
     </div>

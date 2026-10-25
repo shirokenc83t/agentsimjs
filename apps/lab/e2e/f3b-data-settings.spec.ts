@@ -25,6 +25,11 @@ test("Settings: sections headed in place with no rail, the theme as a segmented 
   const panel = page.getByTestId("settings-panel");
   await expect(panel.getByRole("navigation", { name: "Settings sections" })).toHaveCount(0); // no rail: the sections are headed in one column
   await expect(panel.locator("section.fs > h4")).toHaveCount(5);
+  await expect(page.getByTestId("st-jump")).toContainText("KEYBOARD"); // a jump row stands in for the rail
+  await expect(panel).toContainText("Ctrl+Shift+L");
+  await expect(panel).toContainText("trace graph of the selected record");
+  await page.getByTestId("st-jump-keyboard").click();
+  await expect(panel.locator('section.fs[data-section="keyboard"] > h4')).toBeVisible();
   await expect(panel).toContainText("Minimum quota");
   await expect(panel).toContainText("play or pause");
   // A key is only ever “set” or “not set”: there is nothing to type here yet.
