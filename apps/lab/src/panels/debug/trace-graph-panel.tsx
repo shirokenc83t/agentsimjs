@@ -3,15 +3,15 @@ import { KIND_STYLE, useUiContext } from "@agentsim/ui";
 import type { TraceRecord } from "@agentsim/trace";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { usePolled, useServices, useSource } from "../../services.tsx";
-import { layoutTraceGraph, NODE_H, NODE_W, nodeLines, outcomeGlyph, PAGE, type GraphLayout, type GraphNode, type Side } from "./trace-graph-layout.ts";
+import { LANE_PAGE, layoutTraceGraph, NODE_W, nodeLines, outcomeGlyph, PAGE, RAIL_W, type GraphLayout, type GraphNode, type Side } from "./trace-graph-layout.ts";
 import { buildTraceTree, type TraceTree } from "./trace-tree.ts";
 import { useJump } from "./use-jump.ts";
 
 /**
- * The trace graph window (U-010 §2): the record picked in the log and what is around it as a layered graph, left to right: parents (solid edges) and causes (dashed) on the
- * left, children and effects on the right, ordered by time, never moved by a force. A click selects (the shared cursor and record: the Log, the Timeline and the Inspector follow),
- * a double click or Enter puts the graph around that record with a breadcrumb back (Backspace goes back), the arrows move between nodes, and a side panel has the record's
- * fields and its JSON. A column of many children shows the first few and a dashed group node that a click expands.
+ * The trace graph window: the record picked in the log and what is around it, left to right: parents (solid edges) and causes (dashed) on the left, the record, its children as one
+ * vertical time line (a lane: a dot a step, the time and the gaps on the left, runs of the same kind · op folded, a long middle collapsed, scrolling when it is long) and its effects
+ * (dashed) on the right, never moved by a force. A click selects (the shared cursor and record: the Log, the Timeline and the Inspector follow), a double click or Enter puts the graph
+ * around that record with a breadcrumb back (Backspace goes back), the arrows move between nodes, and a side panel has the record's fields and its JSON.
  */
 export function TraceGraphPanel() {
   const source = useSource();
@@ -27,7 +27,7 @@ export function TraceGraphPanel() {
   const [trail, setTrail] = useState<readonly number[]>([]);
   const [depth, setDepth] = useState<1 | 2 | 3>(1);
   const [sides, setSides] = useState<Record<Side, boolean>>({ parents: true, causes: true, children: true, effects: true });
-  const [groupByKind, setGroupByKind] = useState(false);
+  const [foldRuns, setFoldRuns] = useState(true);
   const [expanded, setExpanded] = useState<ReadonlyMap<string, number>>(new Map());
   const [tree, setTree] = useState<TraceTree | undefined | null>(null);
   const [zoom, setZoom] = useState<"fit" | number>("fit");
@@ -68,7 +68,7 @@ export function TraceGraphPanel() {
     });
   }, [storage, runId, center, depth, head]);
 
-  const layout = useMemo<GraphLayout | undefined>(() => (tree ? layoutTraceGraph(tree, { depth, sides, groupByKind, expanded }) : undefined), [tree, depth, sides, groupByKind, expanded]);
+  const layout = useMemo<GraphLayout | undefined>(() => (tree ? layoutTraceGraph(tree, { depth, sides, foldRuns, expanded }) : undefined), [tree, depth, sides, foldRuns, expanded]);
   useEffect(() => {
     layoutKeys.current = new Set((layout?.nodes ?? []).flatMap((n) => (n.record ? [n.record.seq] : [])));
   }, [layout]);
@@ -95,7 +95,8 @@ export function TraceGraphPanel() {
     setCenter(prev);
     setExpanded(new Map());
   };
-  const expand = (key: string) => setExpanded((m) => new Map([...m, [key, (m.get(key) ?? 0) + PAGE]]));
+  // A group of effects opens a page, the lane's middle a page of rows, a run all at once.
+  const expand = (g: NonNullable<GraphNode["group"]>) => setExpanded((m) => new Map([...m, [g.key, g.kind === "run" ? 1 : (m.get(g.key) ?? 0) + (g.kind === "gap" ? LANE_PAGE : PAGE)]]));
 
   const onKey = (e: KeyboardEvent<HTMLDivElement>, n: GraphNode) => {
     if (e.key === "Backspace") {
@@ -104,11 +105,11 @@ export function TraceGraphPanel() {
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (n.record) recentre(n.record.seq);
-      else if (n.group) expand(n.group.key);
+      else if (n.group) expand(n.group);
     } else if (e.key === " ") {
       e.preventDefault();
       if (n.record) select(n.record);
-      else if (n.group) expand(n.group.key);
+      else if (n.group) expand(n.group);
     } else if (e.key.startsWith("Arrow") && layout) {
       e.preventDefault();
       const next = neighbour(layout.nodes, n, e.key as "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown");
@@ -121,6 +122,7 @@ export function TraceGraphPanel() {
 
   const selectedRecord = layout?.nodes.find((n) => n.record?.seq === sharedSeq)?.record ?? (tree ? tree.selected.record : undefined);
   const centerRecord = tree ? tree.selected.record : undefined;
+  const centerNode = layout?.nodes.find((n) => n.center);
 
   if (center === undefined) {
     return (
@@ -147,7 +149,7 @@ export function TraceGraphPanel() {
             [
               ["parents", "↑ parents"],
               ["causes", "← causes"],
-              ["children", "↓ children"],
+              ["children", "↓ the lane"],
               ["effects", "→ effects"],
             ] as const
           ).map(([k, label]) => (
@@ -157,7 +159,7 @@ export function TraceGraphPanel() {
           ))}
         </span>
         <label className="tg-check">
-          <input type="checkbox" checked={groupByKind} onChange={(e) => setGroupByKind(e.target.checked)} data-testid="tg-group" /> group by kind · op
+          <input type="checkbox" checked={foldRuns} onChange={(e) => setFoldRuns(e.target.checked)} data-testid="tg-fold" /> fold runs of the same kind · op
         </label>
         <button type="button" className="kt" onClick={() => setZoom("fit")} data-testid="tg-fit" data-tip="Fit the graph to the window">
           fit
@@ -203,26 +205,85 @@ export function TraceGraphPanel() {
                     const b = layout.nodes.find((n) => n.key === e.to);
                     if (!a || !b) return null;
                     const x1 = a.x + NODE_W;
-                    const y1 = a.y + NODE_H / 2;
+                    const y1 = a.y + a.h / 2;
                     const x2 = b.x;
-                    const y2 = b.y + NODE_H / 2;
+                    const y2 = b.y + b.h / 2;
                     const mid = (x1 + x2) / 2;
                     return <path key={`${e.from}>${e.to}:${e.relation}`} d={`M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`} className={`tg-edge ${e.relation}${e.failed ? " failed" : ""}`} data-testid={`tg-edge-${e.relation}`} />;
                   })}
+                  {layout.lane &&
+                    centerNode &&
+                    (() => {
+                      // A bracket from the record to the lane: out of its right side to a vertical bar along the lane.
+                      const x1 = centerNode.x + NODE_W;
+                      const y1 = centerNode.y + centerNode.h / 2;
+                      const xb = layout.lane.x - GAP_BRACKET;
+                      const y0 = layout.lane.y + 6;
+                      const y2 = layout.lane.y + layout.lane.viewH - 6;
+                      return <path d={`M${x1},${y1} H${xb} M${xb},${y0} V${y2} M${xb},${y0} H${layout.lane.x - 2} M${xb},${y2} H${layout.lane.x - 2}`} className="tg-edge parent" data-testid="tg-bracket" />;
+                    })()}
                 </svg>
-                {layout.nodes.map((n) => (
-                  <GraphNodeView
-                    key={n.key}
-                    n={n}
-                    selected={n.record?.seq === sharedSeq}
-                    tabbable={focusKey === n.key || (focusKey === undefined && n.center)}
-                    onSelect={select}
-                    onRecentre={recentre}
-                    onExpand={expand}
-                    onKey={onKey}
-                    onFocus={() => setFocusKey(n.key)}
-                  />
-                ))}
+                {layout.nodes
+                  .filter((n) => !n.lane)
+                  .map((n) => (
+                    <GraphNodeView
+                      key={n.key}
+                      n={n}
+                      ox={0}
+                      oy={0}
+                      selected={n.record?.seq === sharedSeq}
+                      tabbable={focusKey === n.key || (focusKey === undefined && n.center)}
+                      onSelect={select}
+                      onRecentre={recentre}
+                      onExpand={expand}
+                      onKey={onKey}
+                      onFocus={() => setFocusKey(n.key)}
+                    />
+                  ))}
+                {layout.lane && (
+                  <div className="tg-lane" style={{ left: layout.lane.x, top: layout.lane.y, width: layout.lane.width, height: layout.lane.viewH }} data-testid="tg-lane" data-total={layout.lane.total} role="group" aria-label={`What it did: ${layout.lane.total} records in time order`}>
+                    <div className="tg-lane-content" style={{ height: layout.lane.contentH }}>
+                      <span className="tg-rail" style={{ left: RAIL_W - 14, height: layout.lane.contentH }} aria-hidden="true" />
+                      {layout.nodes
+                        .filter((n) => n.lane)
+                        .map((n) => {
+                          const top = n.y - (layout.lane as { y: number }).y;
+                          return (
+                            <span key={`t:${n.key}`}>
+                              {n.lane?.gap !== undefined && (
+                                <span className="tg-gap mono muted" style={{ top: top - 14, width: RAIL_W - 24 }} data-testid="tg-lane-gap">
+                                  {n.lane.gap}
+                                </span>
+                              )}
+                              {n.lane && n.lane.time !== "" && (
+                                <span className="tg-time mono muted" style={{ top: top + n.h / 2 - 8, width: RAIL_W - 24 }}>
+                                  {n.lane.time}
+                                </span>
+                              )}
+                              <span className={`tg-dot${n.failed ? " alm" : n.lane?.ok ? " ok" : ""}${n.group ? " hollow" : ""}`} style={{ left: RAIL_W - 14 - 4, top: top + n.h / 2 - 4 }} aria-hidden="true" />
+                            </span>
+                          );
+                        })}
+                      {layout.nodes
+                        .filter((n) => n.lane)
+                        .map((n) => (
+                          <GraphNodeView
+                            key={n.key}
+                            n={n}
+                            ox={layout.lane?.x ?? 0}
+                            oy={layout.lane?.y ?? 0}
+                            selected={n.record?.seq === sharedSeq}
+                            tabbable={focusKey === n.key}
+                            onSelect={select}
+                            onRecentre={recentre}
+                            onExpand={expand}
+                            onKey={onKey}
+                            onFocus={() => setFocusKey(n.key)}
+                          />
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -231,39 +292,45 @@ export function TraceGraphPanel() {
           {selectedRecord ? <RecordFields r={selectedRecord} center={centerRecord?.seq === selectedRecord.seq} /> : <p className="muted tt-empty">Nothing selected.</p>}
         </aside>
       </div>
-      <p className="muted tg-keys mono">↑ ↓ ← → move · ⏎ recentre · ⌫ back · space select · click a dashed group to show more</p>
+      <p className="muted tg-keys mono">↑ ↓ ← → move · ⏎ recentre · ⌫ back · space select · click a folded row to open it</p>
     </div>
   );
 }
 
+/** The room between the bracket of the lane and the lane. */
+const GAP_BRACKET = 40;
+
 function GraphNodeView(props: {
   n: GraphNode;
+  /** The origin the node's position is read from: the stage's, or the lane's for a step of the lane. */
+  ox: number;
+  oy: number;
   selected: boolean;
   tabbable: boolean;
   onSelect: (r: TraceRecord) => void;
   onRecentre: (seq: number) => void;
-  onExpand: (key: string) => void;
+  onExpand: (g: NonNullable<GraphNode["group"]>) => void;
   onKey: (e: KeyboardEvent<HTMLDivElement>, n: GraphNode) => void;
   onFocus: () => void;
 }) {
   const { n } = props;
-  const style = { left: n.x, top: n.y, width: NODE_W, height: NODE_H } as const;
+  const style = { left: n.x - props.ox, top: n.y - props.oy, width: NODE_W, height: n.h } as const;
   if (n.group) {
     return (
       <div
         role="button"
         tabIndex={props.tabbable ? 0 : -1}
-        className="tg-node group mono"
+        className={`tg-node group mono ${n.group.kind}`}
         style={style}
-        onClick={() => props.onExpand(n.group?.key ?? "")}
+        onClick={() => n.group && props.onExpand(n.group)}
         onKeyDown={(e) => props.onKey(e, n)}
         onFocus={props.onFocus}
         data-node={n.key}
-        data-testid="tg-group-node"
-        aria-label={`${n.group.label}: show ${Math.min(PAGE, n.group.hidden)} more`}
+        data-testid={n.group.kind === "run" ? "tg-run-node" : "tg-group-node"}
+        aria-label={n.group.kind === "run" ? `${n.group.label}: open the ${n.group.hidden} steps` : `${n.group.label}: show ${Math.min(n.group.kind === "gap" ? LANE_PAGE : PAGE, n.group.hidden)} more`}
       >
-        <span className="tg-l1">{n.group.label}</span>
-        <span className="tg-l2 muted">click to show {Math.min(PAGE, n.group.hidden)} more</span>
+        <span className="tg-l1">{n.group.kind === "gap" ? `${n.group.label} \u25b8` : n.group.label}</span>
+        {n.group.kind !== "gap" && <span className="tg-l2 muted">{n.group.kind === "run" ? n.group.detail : `click to show ${Math.min(PAGE, n.group.hidden)} more`}</span>}
       </div>
     );
   }
@@ -333,23 +400,19 @@ function RecordFields(props: { r: TraceRecord; center: boolean }) {
   );
 }
 
-/** The node nearest in a direction: in the next column to the right or left (or the same column above or below), the one whose centre is closest. */
+/** The node nearest in a direction: sideways, in the nearest column to the right or left (the one whose centre is closest in height); up and down, the same column. */
 export function neighbour(nodes: readonly GraphNode[], from: GraphNode, key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"): GraphNode | undefined {
-  const cx = from.x + NODE_W / 2;
-  const cy = from.y + NODE_H / 2;
+  const cy = from.y + from.h / 2;
   const candidates = nodes.filter((n) => {
     if (n.key === from.key) return false;
-    if (key === "ArrowRight") return n.x > from.x;
-    if (key === "ArrowLeft") return n.x < from.x;
-    if (key === "ArrowDown") return n.x === from.x && n.y > from.y;
-    return n.x === from.x && n.y < from.y;
+    if (key === "ArrowRight") return n.col > from.col;
+    if (key === "ArrowLeft") return n.col < from.col;
+    if (key === "ArrowDown") return n.col === from.col && n.y > from.y;
+    return n.col === from.col && n.y < from.y;
   });
   const dist = (n: GraphNode) => {
-    const dx = n.x + NODE_W / 2 - cx;
-    const dy = n.y + NODE_H / 2 - cy;
-    // Sideways, the column nearest first, then the row nearest; up and down stay in the column.
-    return key === "ArrowLeft" || key === "ArrowRight" ? Math.abs(dx) * 1000 + Math.abs(dy) : Math.abs(dy);
+    const dy = n.y + n.h / 2 - cy;
+    return key === "ArrowLeft" || key === "ArrowRight" ? Math.abs(n.col - from.col) * 100000 + Math.abs(dy) : Math.abs(dy);
   };
   return [...candidates].sort((a, b) => dist(a) - dist(b) || (a.key < b.key ? -1 : 1))[0];
 }
-

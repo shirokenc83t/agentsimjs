@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { countSimMessages, loadF2, openWorkspace, runCommand, setReplayCursor, simMessages, step, waitForStorageReady } from "./helpers.ts";
+import { countSimMessages, loadF2, openInspectorSections, openWorkspace, runCommand, setReplayCursor, simMessages, step, waitForStorageReady } from "./helpers.ts";
 
 // F3a M3 (acceptance 1): record a run, export it (JSON lines and per-run SQLite), delete it, reload the page, import the files: each is added as a new run
 // with a fresh ID (the deleted ID is not reused) and replays as the same run: the same Inspector state at moments of the run, the same events and the same
@@ -27,6 +27,7 @@ async function signature(page: Page, runId: string) {
   for (const t of [5, head]) {
     await setReplayCursor(page, t);
     await page.getByTestId(`explorer-row-${AGENT}`).click();
+    await openInspectorSections(page);
     await expect(page.getByTestId("inspector-state")).toContainText("position");
     // The panel is polled: wait until it shows the cursor's moment (its odometer settles), then read.
     await page.waitForTimeout(400);

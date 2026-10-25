@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loadDemo, runCommand, sendTo, step, stepUntilEnded } from "./helpers.ts";
+import { loadDemo, openInspectorSections, runCommand, sendTo, step, stepUntilEnded } from "./helpers.ts";
 
 // ADR-0015 addition of 2026-10-12: researcher commands (world scope, preconditions still apply) from the Inspector, the
 // palette and the Scene. A refusal shows its stable code.
@@ -10,6 +10,7 @@ test("takeoff, land, explore, hold and send-to from the UI; a command the agent 
   const label = page.getByTestId("inspector-action-label");
 
   await page.getByTestId("explorer-row-uav-001").click();
+  await openInspectorSections(page);
   // The scout (uav-001) starts on the ground: what needs flight is off before the click (explore, land, send-to), each with its reason and the step to do first; takeoff is on.
   for (const op of ["explore", "land"]) {
     await expect(page.getByTestId(`command-${op}`)).toHaveAttribute("aria-disabled", "true");
@@ -51,6 +52,6 @@ test("takeoff, land, explore, hold and send-to from the UI; a command the agent 
   await page.getByTestId("command-explore").click();
   await step(page, 1);
   await expect(result).toContainText("explore");
-  await expect(page.getByTestId("command-takeoff")).toHaveAttribute("aria-disabled", "true");
-  await expect(page.getByTestId("command-takeoff")).toHaveAttribute("title", /Takeoff is not for a ground vehicle/);
+  await expect(page.getByTestId("command-takeoff")).toHaveCount(0);
+  await expect(page.getByTestId("command-unsupported")).toContainText("Takeoff is not for a ground vehicle");
 });

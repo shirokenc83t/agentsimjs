@@ -6,8 +6,9 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePolled, useSource } from "../services.tsx";
 import type { RunFeature, RunSnapshot, RunSource } from "../sim/run-source.ts";
 import { pendingAt, queueCommand, useQueuedCommands } from "../queued-commands.ts";
-import { AGENT_COMMANDS, agentExploreRadius, agentFacts, batteryWarning, commandButtonState, commandHint, commandParams, DONE_MS, refusalWords } from "../commands.ts";
+import { AGENT_COMMANDS, agentExploreRadius, agentFacts, batteryWarning, commandButtonState, commandHint, commandParams, commandUnsupported, DONE_MS, refusalWords } from "../commands.ts";
 import { actionLabel, actionState, recoveryLabel, waypointsText, type AgentViews } from "./agent-views.ts";
+import { Fold, FoldAll, FoldProvider, useFolds } from "./inspector-fold.tsx";
 import { MindViewSection } from "./mind-view-section.tsx";
 import { PlanQueryTable, StrategyRow } from "./plan-query-table.tsx";
 import { querySelection, useQuerySelection } from "./query-selection.ts";
@@ -27,6 +28,15 @@ function Section(props: { title: string; testId?: string; children: ReactNode })
       <h4>{props.title}</h4>
       <dl className="kv">{props.children}</dl>
     </section>
+  );
+}
+
+/** A section of the agent Inspector folded to one line: its name and a summary, the key/value rows when opened. */
+function FoldSection(props: { id: string; title: string; summary: string; testId: string; children: ReactNode }) {
+  return (
+    <Fold id={props.id} title={props.title} summary={props.summary} testId={props.testId}>
+      <dl className="kv">{props.children}</dl>
+    </Fold>
   );
 }
 
@@ -125,7 +135,10 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
   const parsedRadius = Number(radius);
   const radiusM = radius.trim() !== "" && Number.isFinite(parsedRadius) && parsedRadius > 0 ? parsedRadius : undefined;
   const configuredRadius = agentExploreRadius(source.snapshot().run, id);
-  const hints = AGENT_COMMANDS.flatMap((c) => commandHint(c.op, c.title, facts) ?? []);
+  // A command this agent can never be given (not for its vehicle, or its body lacks what it needs) is not offered; one line says so. A condition that can change is a hint.
+  const unsupported = AGENT_COMMANDS.flatMap((c) => commandUnsupported(c.op, c.title, facts) ?? []);
+  const offered = AGENT_COMMANDS.filter((c) => commandUnsupported(c.op, c.title, facts) === undefined);
+  const hints = offered.flatMap((c) => commandHint(c.op, c.title, facts) ?? []);
   const batteryNote = batteryWarning(body, facts?.soc);
   return (
     <Section title="Commands (researcher, world scope)" testId="inspector-commands">
@@ -166,7 +179,7 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
       </Row>
       <Row k="run">
         {/* A command the agent cannot be given now stays on the row, focusable (aria-disabled, so its tooltip and its hint are read), with its reason and the step to do first. */}
-        {AGENT_COMMANDS.map((c) => {
+        {offered.map((c) => {
           const hint = commandHint(c.op, c.title, facts);
           const off = source.unavailable("commands");
           const st = commandButtonState(c.op, { action, command, reflex: props.views?.reflex }, { doneVisible: action !== undefined && doneFor === action.actionId, refusalAcked: command !== undefined && ackedAtS === command.atS, kind: facts?.kind, queued: queuedOps.has(c.op) });
@@ -204,6 +217,11 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
           );
         })}
       </Row>
+      {unsupported.length > 0 && (
+        <p className="muted pre-hint" data-testid="command-unsupported">
+          Not offered for this agent: {unsupported.join(" · ")}
+        </p>
+      )}
       {batteryNote !== undefined && (
         <p className="warn pre-hint" data-testid="command-battery-warning">
           ▲ {batteryNote}
@@ -247,7 +265,12 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
   const battery = body["battery"] as { criticalSoc?: number } | undefined;
   const ideal = cfg.beliefs?.idealized === true;
   const strategy = isStrategy(cfg.planning?.["strategy"]) ? cfg.planning["strategy"] : undefined;
+  const folds = useFolds();
+  const socText = st ? `${((st[o] ?? 0) * 100).toFixed(0)} %` : "—";
+  const configCount = Object.keys(cfg.planning ?? {}).length + bodyRows(body).length;
+  const cfgWarnings = (cfg.warnings ?? []).length;
   return (
+    <FoldProvider value={folds}>
     <div data-testid="inspector-agent">
       {/* The ID card: who this is and what it is doing, before any block. */}
       <div className="idcard" data-testid="inspector-idcard">
@@ -263,11 +286,15 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
           </span>
           {action && <span className="muted nowrap"> · since {action.startedAtS.toFixed(1)} s</span>}
         </div>
+        <FoldAll />
       </div>
+      <CommandsSection id={id} kind={agent.kind} body={body} source={source} views={v} facts={agentFacts(run, snap.agentStatus, snap.entityIds, id)} />
       <Unavailable source={source} feature="mindView" title="What the mind receives">
-        <MindViewSection source={source} agentId={id} runId={run.runId} />
+        <Fold id="mindView" title="What the mind receives" summary="the request the planner got and the plan it chose" bare>
+          <MindViewSection source={source} agentId={id} runId={run.runId} />
+        </Fold>
       </Unavailable>
-      <Section title="Beliefs (initial map)" testId="inspector-beliefs-init">
+      <FoldSection id="beliefs" title="Beliefs (initial map)" summary={ideal ? "ideal · plans on the ground truth" : beliefInit(cfg.beliefs?.init)} testId="inspector-beliefs-init">
         <Row k="initial map" testId="inspector-init">
           {ideal ? (
             <span className="st-warn">◆ ideal — plans on the ground truth (baseline)</span>
@@ -276,8 +303,8 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
           )}{" "}
           <span className="source-tag">{cfg.beliefsSource ?? "?"}</span>
         </Row>
-      </Section>
-      <Section title="State (last tick)" testId="inspector-state">
+      </FoldSection>
+      <FoldSection id="state" title="State (last tick)" summary={`${pose ? `${pose.x.toFixed(0)}, ${pose.y.toFixed(0)}` : "—"} · battery ${socText} · ${st ? (st[o + 1] ?? 0).toFixed(1) : "—"} m/s`} testId="inspector-state">
         <Row k="position">{pose ? `${m(pose.x)}, ${m(pose.y)}${agent.kind === "uav" ? `, ${m(pose.z)}` : ""}` : "—"}</Row>
         <Row k="heading">{pose ? `${deg(pose.headingRad)}°` : "—"}</Row>
         <Row k="speed">{st ? `${(st[o + 1] ?? 0).toFixed(2)} m/s` : "—"}</Row>
@@ -293,8 +320,8 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
         </Row>
         <Row k="odometer">{st ? m(st[o + 2] ?? 0, 1) : "—"}</Row>
         {agent.kind === "uav" && <Row k="airborne">{st && (st[o + 3] ?? 0) > 0.5 ? "yes" : "no"}</Row>}
-      </Section>
-      <Section title="Action" testId="inspector-action">
+      </FoldSection>
+      <FoldSection id="action" title="Action" summary={`${STATE_GLYPH[state]} ${actionLabel(action, v?.reflex)}`} testId="inspector-action">
         <Row k="action" testId="inspector-action-label">
           <span className={`mono st-${state}`}>
             {STATE_GLYPH[state]} {actionLabel(action, v?.reflex)}
@@ -314,9 +341,8 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
             </span>
           </Row>
         )}
-      </Section>
-      <CommandsSection id={id} kind={agent.kind} body={body} source={source} views={v} facts={agentFacts(run, snap.agentStatus, snap.entityIds, id)} />
-      <Section title="Last plan" testId="inspector-plan">
+      </FoldSection>
+      <FoldSection id="plan" title="Last plan" summary={v?.plan ? `${v.plan.algorithm} · ${v.plan.waypoints.length} waypoints · ${m(v.plan.lengthM, 1)}` : "none yet"} testId="inspector-plan">
         {v?.plan ? (
           <>
             <Row k="algorithm">{v.plan.algorithm}</Row>
@@ -334,12 +360,11 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
         ) : (
           <Row k="plan">none yet</Row>
         )}
-      </Section>
-      <section className="inspector-section" data-testid="inspector-queries">
-        <h4>Planning queries</h4>
+      </FoldSection>
+      <Fold id="queries" title="Planning queries" summary={queries.length === 0 ? "none yet" : `${queries.length} ${queries.length === 1 ? "query" : "queries"}`} testId="inspector-queries">
         <PlanQueryTable rows={queries} selected={selectedQuery} onSelect={(queryId) => querySelection.set({ agentId: id, queryId })} />
-      </section>
-      <Section title="Effective configuration" testId="inspector-config">
+      </Fold>
+      <FoldSection id="config" title="Effective configuration" summary={`${configCount} fields${strategy ? ` · strategy ${strategy.id}` : ""}${cfgWarnings > 0 ? ` · ${STATE_GLYPH.warn} ${cfgWarnings} warning${cfgWarnings === 1 ? "" : "s"}` : ""}`} testId="inspector-config">
         {strategy && <StrategyRow strategy={strategy} source={cfg.planningSources?.["algorithm"] ?? "?"} />}
         {(cfg.warnings ?? []).map((w) => (
           <Row key={w.code} k="warning" testId={`inspector-config-warning-${w.code}`}>
@@ -364,15 +389,19 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
             <span className="mono">{val}</span>
           </Row>
         ))}
-      </Section>
+      </FoldSection>
       <Unavailable source={source} feature="strategyTest" title="Strategy test">
-        <StrategyTestSection key={`${run.runId}/${id}`} source={source} agentId={id} />
+        <Fold id="strategyTest" title="Strategy test" summary="run the strategy on this state of the agent" bare>
+          <StrategyTestSection key={`${run.runId}/${id}`} source={source} agentId={id} />
+        </Fold>
       </Unavailable>
       <Unavailable source={source} feature="researcher" title="Beliefs versus ground truth">
-        <ResearcherSection source={source} agentId={id} runId={run.runId} />
+        <Fold id="researcher" title="Beliefs versus ground truth" summary="what the agent believes against the world · researcher view" bare>
+          <ResearcherSection source={source} agentId={id} runId={run.runId} />
+        </Fold>
       </Unavailable>
       {agent.warnings && agent.warnings.length > 0 && (
-        <Section title="Body warnings" testId="inspector-warnings">
+        <FoldSection id="warnings" title="Body warnings" summary={`${STATE_GLYPH.warn} ${agent.warnings.length} warning${agent.warnings.length === 1 ? "" : "s"}`} testId="inspector-warnings">
           {agent.warnings.map((w) => (
             <Row key={w.code} k={w.code}>
               <span className="st-warn">
@@ -380,9 +409,10 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
               </span>
             </Row>
           ))}
-        </Section>
+        </FoldSection>
       )}
     </div>
+    </FoldProvider>
   );
 }
 

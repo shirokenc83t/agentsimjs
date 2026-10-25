@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loadF2, sendTo, step, stepUntilEnded } from "./helpers.ts";
+import { loadF2, openInspectorSections, sendTo, step, stepUntilEnded } from "./helpers.ts";
 
 interface PlanRec {
   readonly kind: string;
@@ -33,6 +33,7 @@ test("send the rover across the hidden F1 wall: the plan changes when the lidar 
   await expect.poll(() => page.evaluate(() => window.__agentsim?.scene?.overlays().regions)).toBeGreaterThan(0);
 
   await stepUntilEnded(page, 30);
+  await openInspectorSections(page);
   await expect(page.getByTestId("inspector-action-label")).toContainText("goTo · succeeded");
 
   // The first plan was made on unknown space: it crosses the wall. The final plan goes around its north end.

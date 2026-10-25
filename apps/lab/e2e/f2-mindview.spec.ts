@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loadF2, runCommand, sendTo, stepUntilEnded } from "./helpers.ts";
+import { loadF2, openInspectorSections, runCommand, sendTo, stepUntilEnded } from "./helpers.ts";
 
 // ROADMAP F2 acceptance, from the Inspector's "What the mind receives": the decision request of the selected agent as
 // its mind gets it (the world's own builder, JSON text), never a UI-side reconstruction.
@@ -7,6 +7,7 @@ test("an object beyond sensor range is not in the mind's beliefs; after approach
   test.setTimeout(180_000);
   await loadF2(page, "discovery");
   await page.getByTestId("explorer-row-ugv-001").click();
+  await openInspectorSections(page);
   await expect(page.getByTestId("mind-request-status")).toContainText("would be sent now");
   await expect(page.getByTestId("mind-entities")).toHaveText("none");
   expect(await page.getByTestId("mind-request-json").textContent({ timeout: 1000 }).catch(() => "")).not.toContain("marker-1");
@@ -34,6 +35,7 @@ test("a grounded UAV has no allowed goTo until it takes off; the mind view says 
   test.setTimeout(120_000);
   await loadF2(page, "discovery");
   await page.getByTestId("explorer-row-uav-001").click();
+  await openInspectorSections(page);
   await expect(page.getByTestId("mind-allowed")).not.toContainText("goTo");
   await expect(page.getByTestId("mind-allowed")).toContainText("takeoff");
   await expect(page.getByTestId("mind-unavailable-goTo")).toContainText("precondition_failed");

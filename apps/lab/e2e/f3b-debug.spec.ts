@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loadF2, openWorkspace, runCommand, step } from "./helpers.ts";
+import { loadF2, openInspectorSections, openWorkspace, runCommand, step } from "./helpers.ts";
 
 // F3b: the Debug workspace as a console (UI-SPEC §4, §6): the log with a prompt filter, kind toggles with their tags, zebra rows, a key footer; the Timeline with its
 // legend in the title bar and the reflex and failure counts; the Inspector as an ID card and blocks.
@@ -70,6 +70,7 @@ test("the timeline has its legend in the title bar and counts the flags; the Ins
   await expect(card).toContainText(AGENT);
   await expect(page.getByTestId("inspector-idcard-state")).toContainText("explore");
   // Blocks have ruled titles (the title is followed by a rule).
+  await openInspectorSections(page);
   await expect(page.getByTestId("inspector-state").locator("h4")).toBeVisible();
   await expect(page.getByTestId("inspector-battery")).toContainText("%");
 });

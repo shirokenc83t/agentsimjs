@@ -192,3 +192,27 @@ test("the Log's title bar has a 1 col | 2 col switch between the two Debug layou
   await expect(page.getByTestId("cols-1")).toHaveAttribute("aria-pressed", "true");
   await expect.poll(async () => (await logW()) / (await dockW())).toBeGreaterThan(0.34);
 });
+
+test("the Scene Inspector opens on the ID card and the commands; every other section is one line that a click opens, with open all and fold all; what the vehicle cannot do is not offered", async ({ page }) => {
+  test.setTimeout(120_000);
+  await loadDemo(page);
+  await page.getByTestId("explorer-row-ugv-001").click();
+  await expect(page.getByTestId("inspector-idcard")).toBeVisible();
+  await expect(page.getByTestId("inspector-commands")).toBeVisible();
+  // A ground vehicle is not given takeoff: no button, one line says so.
+  await expect(page.getByTestId("command-takeoff")).toHaveCount(0);
+  await expect(page.getByTestId("command-unsupported")).toContainText("Takeoff is not for a ground vehicle");
+  // The other sections are folded to a summary.
+  await expect(page.getByTestId("inspector-state")).toContainText("battery");
+  await expect(page.getByTestId("inspector-battery")).toHaveCount(0);
+  await page.getByTestId("fold-head-state").click();
+  await expect(page.getByTestId("inspector-battery")).toBeVisible();
+  await page.getByTestId("fold-head-state").click();
+  await expect(page.getByTestId("inspector-battery")).toHaveCount(0);
+  await page.getByTestId("inspector-expand-all").click();
+  await expect(page.getByTestId("inspector-battery")).toBeVisible();
+  await expect(page.getByTestId("inspector-plan")).toBeVisible();
+  await page.getByTestId("inspector-collapse-all").click();
+  await expect(page.getByTestId("inspector-battery")).toHaveCount(0);
+  await expect(page.getByTestId("inspector-commands")).toBeVisible();
+});

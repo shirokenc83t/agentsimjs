@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { loadF2, openWorkspace, runCommand, step } from "./helpers.ts";
 
 // The trace graph window (U-010 section 2) on a real run: opened from the Trace panel, layered around the record picked in the Log; a click selects (the shared record), a double
-// click recentres with a breadcrumb back, Backspace goes back, the arrows move, a column of many children is a group node, and grouping by kind · op collapses a column.
+// click recentres with a breadcrumb back, Backspace goes back, the arrows move, the children are one lane in time order whose runs fold and whose long middle collapses.
 
 const AGENT = "ugv-001";
 
@@ -30,12 +30,13 @@ test("the trace graph: opened from the Trace panel, around the record, a click s
   const graph = page.getByTestId("trace-graph");
   await expect(graph).toBeVisible();
   await expect(page.getByRole("tab", { name: /\[5c\] Trace graph/ })).toBeVisible();
-  // The record is in the middle with its children on the right (depth 1), the parent edges solid.
+  // The record is in the middle with its children as a lane on the right (depth 1), linked to it by a bracket.
   const centre = page.getByTestId("tg-node-center");
   await expect(centre).toContainText("start");
   const startSeq = Number(await centre.getAttribute("data-seq"));
   await expect.poll(async () => await graph.locator('[data-testid^="tg-node-"]:not([data-testid="tg-node-center"])').count()).toBeGreaterThan(3);
-  expect(await graph.getByTestId("tg-edge-parent").count()).toBeGreaterThan(3);
+  await expect(graph.getByTestId("tg-lane")).toBeVisible();
+  await expect(graph.getByTestId("tg-bracket")).toHaveCount(1);
   await expect(page.getByTestId("tg-json")).toContainText(`"seq": ${startSeq}`);
 
   // A click selects the record: the shared record is that one (the Trace panel and the Log follow); the graph stays around the same centre.
@@ -65,30 +66,40 @@ test("the trace graph: opened from the Trace panel, around the record, a click s
   await expect(page.getByTestId("tg-center")).toHaveText(`#${focused}`);
 });
 
-test("a column of many children shows the first few and a dashed group node that a click expands; grouping by kind · op collapses it; depth and sides change the columns", async ({ page }) => {
+test("the children are a lane in time order: runs of the same kind and op fold, a long middle collapses and opens a page at a time, the lane scrolls; depth and sides change the columns", async ({ page }) => {
   test.setTimeout(240_000);
   await open(page, 8);
   await page.getByTestId("trace-open-graph").click();
   const graph = page.getByTestId("trace-graph");
   await expect(graph.getByTestId("tg-node-center")).toBeVisible();
-  const kids = () => graph.locator('[data-testid^="tg-node-"]:not([data-testid="tg-node-center"])').count();
-  await expect(page.getByTestId("tg-group-node")).toBeVisible({ timeout: 15_000 }); // an exploring rover's start has more than 12 children by now
-  const shown = await kids();
-  expect(shown).toBeLessThanOrEqual(6 + 1);
-  await expect(page.getByTestId("tg-group-node")).toContainText(/^\+ \d+ more · /);
-  await page.getByTestId("tg-group-node").click();
-  await expect.poll(kids).toBeGreaterThan(shown);
+  const lane = graph.getByTestId("tg-lane");
+  await expect(lane).toBeVisible({ timeout: 15_000 });
+  const steps = () => lane.locator("[data-node]").count();
+  // The times run down the rail in order.
+  const times = await lane.locator(".tg-time").allTextContents();
+  const secs = times.map((t) => Number.parseFloat(t));
+  expect(secs.length).toBeGreaterThan(2);
+  expect([...secs].sort((x, y) => x - y)).toEqual(secs);
+  // A long middle is one row that opens twenty rows at a time (the runs of the same kind and op are folded where there are any: the unit tests have them).
+  const gap = graph.getByTestId("tg-group-node");
+  await expect(gap).toContainText(/^… \d+ more · /);
+  const before = await steps();
+  await gap.click();
+  await expect.poll(steps).toBeGreaterThan(before);
+  await page.getByTestId("tg-fold").uncheck();
+  await expect(graph.getByTestId("tg-run-node")).toHaveCount(0);
+  expect(Number(await lane.getAttribute("data-total"))).toBeGreaterThan(24);
+  // The lane keeps its height and scrolls.
+  expect(await lane.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  await page.getByTestId("tg-fold").check();
 
-  await page.getByTestId("tg-group").check();
-  await expect(page.getByTestId("tg-group-node").first()).toContainText(/×\d+/);
-  await page.getByTestId("tg-group").uncheck();
-
-  // Depth: a second column of children, and a side turned off hides its column.
+  // Depth: grandchildren as indented steps, and a side turned off hides its column.
   const nodes = () => graph.locator("[data-node]").count();
   const one = await nodes();
   await page.getByTestId("tg-depth-2").click();
   await expect.poll(nodes).toBeGreaterThanOrEqual(one);
   await page.getByTestId("tg-side-children").click();
+  await expect(lane).toHaveCount(0);
   await expect.poll(nodes).toBeLessThan(one);
   await page.getByTestId("tg-fit").click();
   await expect(page.getByTestId("tg-scaled")).toHaveAttribute("data-scale", /^\d/);

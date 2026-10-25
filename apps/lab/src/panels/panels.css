@@ -632,3 +632,27 @@
 .sql-preview-note { display: inline-flex; align-items: center; gap: 6px; font-size: var(--type-label-size); white-space: nowrap; color: var(--fg2); }
 .sql-ix { color: var(--ac); }
 .sql-schema { width: 230px; }
+
+/* The agent Inspector's sections folded to one line: the name and a summary, opened by a click. */
+.inspector .fold-head { display: flex; align-items: baseline; gap: 8px; width: 100%; margin: 0; padding: 4px 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.inspector .fold-head:hover h4 { color: var(--fg); }
+.inspector .fold-head h4 { margin: 0; flex: none; overflow: visible; }
+.inspector .fold-head h4::after { display: none; }
+.inspector .fold-twist { flex: none; width: 1em; color: var(--fg3); }
+.inspector .fold-sum { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.inspector .fold.open > .fold-head { margin-bottom: 2px; }
+.inspector .fold-bare > .inspector-section { padding: 0; border: 0; }
+.inspector .fold-bare > .inspector-section > h4 { display: none; }
+.inspector .idcard .fold-all { display: flex; gap: 6px; }
+
+/* The trace graph's lane: the children of the record as one vertical time line. */
+.tg-lane { position: absolute; overflow-x: hidden; overflow-y: auto; background: var(--bg0); }
+.tg-lane-content { position: relative; }
+.tg-rail { position: absolute; top: 0; width: 0; border-left: 2px solid var(--ln2); }
+.tg-dot { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--fg3); box-sizing: border-box; }
+.tg-dot.hollow { background: var(--bg0); border: 2px solid var(--fg3); }
+.tg-dot.ok { background: var(--ok); }
+.tg-dot.alm { background: var(--alm); }
+.tg-time, .tg-gap { position: absolute; left: 0; text-align: right; font-size: var(--type-label-size); white-space: nowrap; }
+.tg-node.run { border-style: dashed; background: var(--bg1); }
+.tg-node.gap { border-style: dashed; background: transparent; justify-content: center; }

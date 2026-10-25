@@ -49,6 +49,19 @@ export function commandHint(op: string, title: string, facts: AgentFacts | undef
   return u ? `${title} ${describeUnavailable(u, facts.kind)}` : undefined;
 }
 
+/**
+ * Whether a command is one this agent can ever be given: not for its kind of vehicle, or needing something its body does not have (a base, a range sensor). Such a command is not
+ * offered at all (the Inspector says so in one line); a condition that can change (airborne, on the ground, the battery) is a hint on a command that is offered. The words are the
+ * action's name and why, `Takeoff is not for a ground vehicle`; undefined when it can be given, now or later.
+ */
+export function commandUnsupported(op: string, title: string, facts: AgentFacts | undefined): string | undefined {
+  if (!facts) return undefined;
+  const u = commandAvailability(toolsSchemaCapabilities, op, facts);
+  if (!u) return undefined;
+  const fixed = u.code === "vehicle_unsupported" || (u.code === "precondition_failed" && (u.requires === "hasBase" || u.requires === "hasRangeSensor"));
+  return fixed ? `${title} ${describeUnavailable(u, facts.kind)}` : undefined;
+}
+
 /** The facts of an agent of the run a source shows, at the panel cadence. */
 function factsOf(source: RunSource, id: string): AgentFacts | undefined {
   const s = source.snapshot();

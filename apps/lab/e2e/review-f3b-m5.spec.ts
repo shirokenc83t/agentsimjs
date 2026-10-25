@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, loadF2, openWorkspace, runCommand, sendTo, step, stepUntilEnded } from "./helpers.ts";
+import { loadDemo, loadF2, openInspectorSections, openWorkspace, runCommand, sendTo, step, stepUntilEnded } from "./helpers.ts";
 
 // F3b M5 review material: the screens of the maintainer's manual check and of the designer's proposals, shot at 1440 x 900 in both themes. Skipped unless AGENTSIM_REVIEW_DIR names
 // the folder the images go to (`AGENTSIM_REVIEW_DIR=../agentsimjs-docs/docs/ui/review/f3b-m5 pnpm exec playwright test review-f3b-m5`).
@@ -92,9 +92,9 @@ for (const theme of THEMES) {
       await page.getByTestId("trace-open-graph").click();
       await expect(page.getByTestId("tg-group-node")).toBeVisible({ timeout: 15_000 });
       await shot(page, "trace-graph", theme, false);
-      await page.getByTestId("tg-group").check();
-      await page.getByTestId("tg-depth-2").click();
-      await shot(page, "trace-graph-grouped", theme, false);
+      await page.getByTestId("tg-group-node").click();
+      await page.getByTestId("tg-lane").evaluate((el) => (el.scrollTop = el.scrollHeight / 3));
+      await shot(page, "trace-graph-opened", theme, false);
     });
 
     test("the two Debug layouts", async ({ page }) => {
@@ -153,6 +153,70 @@ for (const theme of THEMES) {
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await page.waitForTimeout(500);
       await shot(page, "analysis-after-switch", theme);
+    });
+
+    test("the Scene Inspector folded and open, and an action queued before Play", async ({ page }) => {
+      test.setTimeout(180_000);
+      await loadDemo(page);
+      await page.getByTestId("explorer-row-uav-001").click();
+      await expect(page.getByTestId("inspector-commands")).toBeVisible();
+      await shot(page, "inspector-folded", theme);
+      await openInspectorSections(page);
+      await expect(page.getByTestId("inspector-state")).toBeVisible();
+      await shot(page, "inspector-open", theme);
+      await page.getByTestId("inspector-collapse-all").click();
+      await loadF2(page, "discovery");
+      await page.getByTestId("explorer-row-ugv-001").click();
+      await expect(page.getByTestId("ready-start")).toBeVisible();
+      await page.getByTestId("command-explore").click();
+      await expect(page.getByTestId("command-explore")).toHaveAttribute("data-state", "queued");
+      await shot(page, "queued-before-play", theme);
+    });
+
+    test("the theme and graph buttons, the column switch and the Log row's menu", async ({ page }) => {
+      test.setTimeout(180_000);
+      await loadF2(page, "discovery");
+      await page.getByTestId(`explorer-row-${AGENT}`).click();
+      await runCommand(page, `Explore selected agent (${AGENT})`);
+      await step(page, 2);
+      await openWorkspace(page, "debug");
+      await page.getByTestId("log-filter").fill("kind:action");
+      await page.waitForTimeout(600);
+      await page.locator('[data-testid^="event-row-"]').first().click();
+      await expect(page.getByTestId("trace-open-graph")).toBeVisible();
+      await shot(page, "buttons-theme-graph-columns", theme);
+      await page.locator('[data-testid^="event-row-"]').first().click({ button: "right" });
+      await expect(page.getByTestId("log-menu")).toBeVisible();
+      await shot(page, "log-row-menu", theme);
+    });
+
+    test("the SQL tree with a table previewed, and Settings", async ({ page }) => {
+      test.setTimeout(180_000);
+      await loadDemo(page);
+      await step(page, 2);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 200", { timeout: 30_000 });
+      await openWorkspace(page, "data");
+      await page.getByTestId("sql-twist-trace_records").click();
+      await page.getByTestId("sql-table-trace_records").click();
+      await expect(page.getByTestId("sql-preview-note")).toBeVisible({ timeout: 15_000 });
+      await shot(page, "sql-tree-preview", theme);
+      await openWorkspace(page, "settings");
+      await expect(page.getByTestId("st-jump")).toBeVisible();
+      await shot(page, "settings", theme);
+    });
+
+    test("g02 at its critical battery: the reflex preempts and sends it home, and the commands say so before the click", async ({ page }) => {
+      test.setTimeout(180_000);
+      await loadDemo(page);
+      await sendTo(page, "ugv-002", 25, 60);
+      await openInspectorSections(page);
+      const label = page.getByTestId("inspector-action-label");
+      for (let k = 0; k < 20 && !(await page.getByTestId("inspector-reflex").isVisible()); k++) await step(page, 1);
+      await expect(page.getByTestId("inspector-reflex")).toBeVisible();
+      await shot(page, "g02-preempted", theme);
+      for (let k = 0; k < 20 && !/returnToBase · succeeded/.test((await label.textContent()) ?? ""); k++) await step(page, 1);
+      await expect(page.getByTestId("command-battery-warning")).toBeVisible();
+      await shot(page, "g02-critical-battery-warning", theme);
     });
   });
 }

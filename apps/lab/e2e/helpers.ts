@@ -133,6 +133,7 @@ export async function step(page: Page, hundreds: number, timeoutMs = 5_000) {
 export async function stepUntilEnded(page: Page, maxHundreds: number) {
   // A command applies at the next tick: step once before reading the action, or the previous one is read.
   await step(page, 1);
+  await openInspectorSections(page);
   for (let k = 1; k < maxHundreds; k++) {
     const label = (await page.getByTestId("inspector-action-label").textContent()) ?? "";
     if (/succeeded|failed|preempted/.test(label)) return;
@@ -214,4 +215,10 @@ export async function setReplayCursor(page: Page, seconds: number) {
 export async function layoutControls(page: Page): Promise<void> {
   const fold = page.getByTestId("layout-fold");
   if ((await fold.count()) > 0 && (await page.getByTestId("layout-menu").count()) === 0) await fold.click();
+}
+
+/** The agent Inspector's sections are folded to one line each; this opens all of them (the researcher's "▾ all"), for a spec that reads what is in them. */
+export async function openInspectorSections(page: Page): Promise<void> {
+  await expect(page.getByTestId("inspector-agent")).toBeVisible();
+  await page.getByTestId("inspector-expand-all").click();
 }

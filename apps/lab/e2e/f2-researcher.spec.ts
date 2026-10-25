@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, loadF2, step } from "./helpers.ts";
+import { loadDemo, loadF2, openInspectorSections, step } from "./helpers.ts";
 
 // ADR-0005 addition of 2026-10-12: beliefs-versus-truth is a researcher-only view, visibly apart from what the mind
 // receives, streamed only while the section is shown, and never sent back.
@@ -9,6 +9,7 @@ test("the researcher section is marked, separate from the mind view, and shows t
   test.setTimeout(120_000);
   await loadF2(page, "discovery");
   await page.getByTestId("explorer-row-ugv-001").click();
+  await openInspectorSections(page);
   const mind = page.getByTestId("inspector-mind-view");
   const researcher = page.getByTestId("inspector-researcher");
   await expect(researcher.getByTestId("researcher-banner")).toHaveText("◆ Researcher view — not visible to the mind");
@@ -34,6 +35,7 @@ test("an ideal agent has nothing to compare; collapsing the section stops its st
   test.setTimeout(60_000);
   await loadDemo(page);
   await page.getByTestId("explorer-row-ugv-001").click();
+  await openInspectorSections(page);
   await expect(page.getByTestId("researcher-ideal")).toContainText("ideal");
   await page.locator('[data-testid="inspector-researcher"] > summary').click();
   await expect(page.getByTestId("inspector-researcher")).not.toHaveAttribute("open", "");
