@@ -30,7 +30,7 @@ for (const width of [1440, 1000]) {
     expect((back?.x ?? 0) + (back?.width ?? 0), "Back to live").toBeLessThanOrEqual(width);
     // Nothing of the page is wider than the window (a bar that overflows is clipped, and what is in it is gone).
     const wide = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>("header.top, .player")).map((el) => el.scrollWidth - el.clientWidth));
-    expect(wide.every((w) => w <= 1)).toBe(true);
+    expect(wide.every((w) => w <= 1), `overflow of the top bar and the player: ${JSON.stringify(wide)}`).toBe(true);
     const seg = page.getByTestId("replay-segment");
     await expect(seg).toContainText("◇");
     await expect(seg).not.toContainText("matches");

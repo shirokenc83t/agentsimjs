@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, openPanelTab, openWorkspace, sendTo, step } from "./helpers.ts";
+import { loadDemo, openInspectorSections, openPanelTab, openWorkspace, sendTo, step } from "./helpers.ts";
 
 const astar = (extra: object = {}) => ({ kind: "algorithm", algorithm: "astar", ...extra });
 const hpa = { kind: "algorithm", algorithm: "hpa" };
@@ -29,6 +29,7 @@ test("the query table shows which branch a select took, with the condition value
   // The rover starts at (10, 10): 4 m is near, 40 m is far.
   await sendTo(page, "ugv-001", 14, 10);
   await step(page, 1);
+  await openInspectorSections(page);
   const rows = page.getByTestId(/^plan-query-row-/);
   await expect(rows).toHaveCount(1);
   await rows.first().click();
@@ -55,6 +56,7 @@ test("a fallback that runs out of budget shows both searches with their expansio
   await runWithStrategy(page, { kind: "fallback", stages: [astar({ stageBudget: 10 }), hpa] });
   await sendTo(page, "ugv-001", 50, 10);
   await step(page, 1);
+  await openInspectorSections(page);
   await page.getByTestId(/^plan-query-row-/).first().click();
   await expect(page.getByTestId("plan-query-search-0")).toContainText("astar");
   await expect(page.getByTestId("plan-query-search-0")).toContainText("budget_exceeded");

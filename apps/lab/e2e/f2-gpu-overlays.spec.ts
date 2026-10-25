@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { isSoftwareRenderer, RENDERER_PROBE, writeGpuRecord } from "../../../tools/test/gpu.ts";
-import { openPanelTab, openWorkspace, referenceSettled, runCommand, sendTo, waitForStorageReady } from "./helpers.ts";
+import { openInspectorSections, openPanelTab, openWorkspace, referenceSettled, runCommand, sendTo, waitForStorageReady } from "./helpers.ts";
 
 /** Hardware-GPU run (`pnpm test:e2e:gpu`, ADR-0022): only there are the display-rate thresholds gated. */
 const GPU = !!process.env["AGENTSIM_E2E_GPU"];
@@ -92,6 +92,7 @@ test("display rate on the 1 km² reference world with belief, difference, rays a
   await page.getByTestId("overlay-stages").click();
   // The run's own stages first: the scout's plan (an eager refine) is in the trace, and the overlay draws its coarse path and legs.
   await expect.poll(() => page.evaluate(() => window.__agentsim?.scene?.overlays().stages.legs), { timeout: 60_000 }).toBeGreaterThan(0);
+  await openInspectorSections(page);
   await page.getByTestId("st-strategy").selectOption("inline");
   await page.getByTestId("st-json").fill(
     JSON.stringify({ schemaVersion: 0, id: "gpu", version: 1, origin: "human", root: { kind: "refine", mode: "eager", coarse: { kind: "algorithm", algorithm: "hpa" }, local: { kind: "algorithm", algorithm: "astar" } } }),

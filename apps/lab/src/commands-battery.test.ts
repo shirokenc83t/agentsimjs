@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { batteryWarning } from "./commands.ts";
 import { actionLabel, reflexWords, type ActionView, type ReflexView } from "./panels/agent-views.ts";
 
-// A rover whose battery is at its critical level is sent home by the battery reflex: the controls and the activity say so (T-082).
+// A rover whose battery is at its critical level is sent home by the battery reflex: the controls and the activity say so.
 
 describe("the battery at its critical level", () => {
   const body = { battery: { criticalSoc: 0.15 } };

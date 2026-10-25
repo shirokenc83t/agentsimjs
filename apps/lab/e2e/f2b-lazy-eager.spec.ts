@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, openPanelTab, openWorkspace, runCommand, sendTo, step } from "./helpers.ts";
+import { loadDemo, openInspectorSections, openPanelTab, openWorkspace, runCommand, sendTo, step } from "./helpers.ts";
 
 const astar = { kind: "algorithm", algorithm: "astar" };
 const hpa = { kind: "algorithm", algorithm: "hpa" };
@@ -32,6 +32,7 @@ test("a lazy refine hands out its first leg earlier than the eager one finishes 
     await page.getByTestId("explorer-row-ugv-001").click();
     await sendTo(page, "ugv-001", 60, 58);
     await step(page, 2);
+    await openInspectorSections(page);
     const row = page.getByTestId(/^plan-query-row-/).first();
     await expect(row).toBeVisible();
     await row.click();
@@ -77,6 +78,7 @@ test("the stages overlay follows the query selected in the Inspector's table", a
   await step(page, 2);
   await sendTo(page, "ugv-001", 35, 35); // on screen clear of the scene overlay
   await step(page, 2);
+  await openInspectorSections(page);
   const rows = page.getByTestId(/^plan-query-row-/);
   await expect(rows).toHaveCount(2);
   await page.getByTestId("overlay-stages").click();

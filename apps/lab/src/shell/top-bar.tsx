@@ -40,15 +40,19 @@ export function TopBar(props: TopBarProps) {
   // width: what is in the bar (a derived replay's long segment, the name of the run) decides. It unfolds again when the room is back.
   const bar = useRef<HTMLElement>(null);
   const [folded, setFolded] = useState(false);
+  // When even the folded bar is too wide (a derived replay's long segment at a narrow window), the theme button gives up its word and keeps its glyph.
+  const [compact, setCompact] = useState(false);
   const needed = useRef(0);
-  useLayoutEffect(() => setFolded(false), [props.replaying, props.derived, props.runLabel, props.workspaces.length, props.layoutActive]);
+  useLayoutEffect(() => (setFolded(false), setCompact(false)), [props.replaying, props.derived, props.runLabel, props.workspaces.length, props.layoutActive]);
   useLayoutEffect(() => {
     const el = bar.current;
     if (!el) return;
     // The room the content wants: every segment at its own width, none shrunk or clipped (tooltips hang outside the flow and are not counted).
     const natural = (): number => {
       el.classList.add("nat");
-      const w = Array.from(el.children).reduce((n, c) => n + (c as HTMLElement).offsetWidth, 0);
+      const own = getComputedStyle(el);
+      const gaps = (Number.parseFloat(own.columnGap) || 0) * Math.max(0, el.children.length - 1);
+      const w = Array.from(el.children).reduce((n, c) => n + (c as HTMLElement).offsetWidth, 0) + gaps + (Number.parseFloat(own.paddingLeft) || 0) + (Number.parseFloat(own.paddingRight) || 0);
       el.classList.remove("nat");
       return w;
     };
@@ -59,7 +63,10 @@ export function TopBar(props: TopBarProps) {
           needed.current = want;
           setFolded(true);
         }
-      } else if (el.clientWidth >= needed.current) setFolded(false);
+      } else {
+        if (el.clientWidth >= needed.current) setFolded(false);
+        else if (natural() > el.clientWidth) setCompact(true);
+      }
     };
     fit();
     if (typeof ResizeObserver === "undefined") return;
@@ -68,7 +75,7 @@ export function TopBar(props: TopBarProps) {
     return () => ro.disconnect();
   }, [folded, props.replaying, props.derived, props.runLabel, props.layoutActive]);
   return (
-    <header className="top" aria-label="Workspaces and run" data-testid="topbar" ref={bar}>
+    <header className={`top${compact ? " compact" : ""}`} aria-label="Workspaces and run" data-testid="topbar" ref={bar}>
       <div className="seg brand">▣ AgentSimJS-NG</div>
       <nav className="seg ws-nav" aria-label="Workspaces">
         {props.workspaces.map((w, i) => (
@@ -228,7 +235,7 @@ function ThemeMenu(props: { onTheme: (preference: ThemePreference) => void }) {
         onClick={() => setOpen((o) => !o)}
         data-testid="theme-button"
       >
-        ◐ {theme.preference} <span className="k">▾</span>
+        ◐<span className="lbl"> {theme.preference} </span><span className="k">▾</span>
       </button>
       {open && (
         <div className="theme-pop" role="menu" aria-label="Theme" data-testid="theme-menu">
