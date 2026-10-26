@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadF2, openWorkspace, runCommand, step } from "./helpers.ts";
+import { loadF2, openTimelineLanes, openWorkspace, runCommand, step } from "./helpers.ts";
+import { LABEL_PX, LANE_PX, RULER_PX } from "../src/panels/debug/timeline-geometry.ts";
 
 // F3a M3: a click on a row of the event list moves the shared cursor: the Scene's agents and the belief overlay go to that instant. The overlay at the
 // instant equals that of a live run paused at the same tick (exact), and the agent's position equals the live one (a record of an action is also a pose
@@ -48,14 +49,24 @@ test("clicking an event moves the cursor: the belief overlay and the agent are w
   // The event list of the Debug workspace: the rover's actions, from storage.
   await openWorkspace(page, "debug");
   await page.getByTestId("event-filter-agent").selectOption(AGENT);
-  await page.getByTestId("event-filter-kind").selectOption("action");
+  await page.getByTestId("event-kind-action").click({ modifiers: ["Shift"] }); // that kind alone
   await expect(page.getByTestId("event-count")).toContainText("records");
   const rows = page.locator('[data-testid^="event-row-"][data-kind="action"]');
   await expect.poll(() => rows.count(), { timeout: 15_000 }).toBeGreaterThan(2);
   // An action record late enough that the rover has seen something: scroll the (virtualized) list to a later stretch and take a row from it.
-  await page.getByRole("listbox", { name: "Events" }).evaluate((el) => {
-    el.scrollTop = 4000;
-  });
+  const list = page.getByRole("listbox", { name: "Events" });
+  // A list that does not scroll has no "up" (under load fewer rows have arrived by now): wait until it does.
+  await expect.poll(() => list.evaluate((el) => el.scrollHeight - el.clientHeight), { timeout: 15_000 }).toBeGreaterThan(40);
+  // The console follows a live run to its end: this is a scroll up, to the middle of what is read (never past its end). A row that arrives before the scroll is seen takes the
+  // list back to its end (it is still following), so the scroll is made again until the tail has let go.
+  await expect
+    .poll(async () => {
+      await list.evaluate((el) => {
+        el.scrollTop = (el.scrollHeight - el.clientHeight) * 0.4;
+      });
+      return page.getByTestId("log-tail").getAttribute("data-state");
+    }, { timeout: 15_000, intervals: [100, 200, 400] })
+    .toBe("paused"); // the tail has let go of the end: the rows below stay where they are
   await expect.poll(async () => Number(((await rows.first().textContent()) ?? "").split(" s")[0]), { timeout: 10_000 }).toBeGreaterThanOrEqual(10);
   const candidates = await rows.evaluateAll((els) => els.map((el) => ({ testid: el.getAttribute("data-testid") ?? "", t: Number((el.textContent ?? "").split(" s")[0]) })));
   const target = [...candidates].reverse().find((c) => c.t >= 10 && c.t <= 50);
@@ -118,10 +129,11 @@ test("the Timeline of the Debug workspace has a lane per agent with the marks of
   await expect(page.getByTestId("timeline-canvas")).toBeVisible();
   await expect.poll(async () => Number(((await page.getByText(/^\d+ marks$/).textContent()) ?? "0").split(" ")[0]), { timeout: 15_000 }).toBeGreaterThan(10);
   await expect(page.getByTestId("timeline-gap")).toHaveCount(0); // everything is saved
+  await openTimelineLanes(page, 4); // the agents with no marks yet are one row until it is opened
   const box = await page.getByTestId("timeline-canvas").boundingBox();
   if (!box) throw new Error("no timeline");
   // A click on the rover's lane (run, uav-001, ugv-001, ugv-002: the third lane) at the middle of the run: the panels show the run from storage, at that moment.
-  await page.getByTestId("timeline-canvas").click({ position: { x: 84 + (box.width - 84) * 0.5, y: 2 * 20 + 10 } });
+  await page.getByTestId("timeline-canvas").click({ position: { x: LABEL_PX + (box.width - LABEL_PX) * 0.5, y: RULER_PX + 2 * LANE_PX + LANE_PX / 2 } });
   await expect(page.getByTestId("replay-bar")).toBeVisible({ timeout: 20_000 });
   const shown = Number(/^([\d.]+) s/.exec((await page.getByTestId("replay-time").textContent()) ?? "")?.[1]);
   expect(shown).toBeGreaterThan(5);

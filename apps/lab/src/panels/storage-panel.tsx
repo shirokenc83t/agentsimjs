@@ -11,9 +11,9 @@ export function StoragePanel() {
     return (
       <div className="panel muted" data-testid="storage-unavailable">
         {status.state === "waiting-lock"
-          ? "⏸ Storage is owned by another tab. It becomes available here when that tab is closed."
+          ? "❚❚ Storage is owned by another tab. It becomes available here when that tab is closed."
           : status.state === "failed"
-            ? `✗ Storage failed to open: ${status.error}`
+            ? `✕ Storage failed to open: ${status.error}`
             : "Opening storage…"}
       </div>
     );

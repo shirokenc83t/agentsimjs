@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { waitForStorageReady } from "./helpers.ts";
+import { openInspectorSections, waitForStorageReady } from "./helpers.ts";
 
 async function loadDemo(page: Page) {
   await page.goto("/?probe");
@@ -26,6 +26,7 @@ test("Explorer, Scene and Inspector stay in sync; the Inspector shows state, con
   const inspector = page.getByTestId("inspector-agent");
   await expect(inspector).toContainText("ugv-001");
   await expect(inspector).toContainText("rover");
+  await openInspectorSections(page);
   await expect(page.getByTestId("inspector-battery")).toContainText("100.0 %");
   // Each planning field shows the configuration level that supplied it (ADR-0028).
   await expect(page.getByTestId("inspector-config")).toContainText("algorithm");

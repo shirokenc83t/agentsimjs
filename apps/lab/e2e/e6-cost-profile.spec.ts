@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, openPanelTab, openWorkspace, sendTo, step } from "./helpers.ts";
+import { loadDemo, openInspectorSections, openPanelTab, openWorkspace, sendTo, step } from "./helpers.ts";
 
 /** The demo's marsh (f1-demo.ts): x ∈ [14, 22), y ∈ [0, 16), terrain cost 200. */
 const inMarsh = (x: number, y: number) => x >= 14 && x < 22 && y >= 0 && y < 16;
@@ -19,6 +19,7 @@ function crossesMarsh(wp: [number, number][]): boolean {
 async function planAcrossMarsh(page: Page): Promise<[number, number][]> {
   await sendTo(page, "ugv-001", 26, 8);
   await step(page, 1);
+  await openInspectorSections(page);
   const text = (await page.getByTestId("inspector-plan-waypoints").textContent()) ?? "";
   const wp = [...text.matchAll(/\((-?[\d.]+), (-?[\d.]+)\)/g)].map((m) => [Number(m[1]), Number(m[2])] as [number, number]);
   expect(wp.length, text).toBeGreaterThanOrEqual(2);
@@ -34,7 +35,7 @@ test("a terrain-weighted cost profile set in the run configuration moves the rov
   expect(crossesMarsh(direct), JSON.stringify(direct)).toBe(true);
   const firstRun = (await page.getByTestId("run-label").textContent()) ?? "";
 
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await expect(panel.getByTestId("rc-valid")).toBeVisible();
@@ -60,12 +61,13 @@ test("a terrain-weighted cost profile set in the run configuration moves the rov
   const detour = await planAcrossMarsh(page);
   expect(crossesMarsh(detour), JSON.stringify(detour)).toBe(false);
   expect(detour.length).toBeGreaterThan(direct.length);
+  await openInspectorSections(page);
   await expect(page.getByTestId("inspector-config")).toContainText("byAgent");
 });
 
 test("invalid run configurations show their stable codes and cannot be run", async ({ page }) => {
   await loadDemo(page);
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-per-tick").fill("0");

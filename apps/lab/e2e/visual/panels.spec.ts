@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, loadF2, openPanelTab, openWorkspace, sceneSettled, sendTo, step } from "../helpers.ts";
+import { loadDemo, loadF2, openInspectorSections, openPanelTab, openScenarioEditor, openWorkspace, runCommand, sceneSettled, sendTo, step } from "../helpers.ts";
 
 /**
  * Visual regression (ADR-0032 §9): a fixed set of panels in both themes, from the deterministic F1 demo at
@@ -24,24 +24,32 @@ for (const theme of THEMES) {
       // The boot mirror of the theme setting (ADR-0032 §2): the first paint is already in this theme.
       await page.addInitScript((t) => window.localStorage.setItem("agentsim.ui.theme", t), theme);
       await loadDemo(page);
+      // The floating Performance window sits over the panels' corners; these images are of the panels themselves.
+      await page.addStyleTag({ content: ".dv-resize-container { display: none !important; }" });
     });
 
     test("shell: toolbar and status line", async ({ page }) => {
       await settle(page);
-      await expect(page.getByRole("toolbar", { name: "Run control" })).toHaveScreenshot(`shell-toolbar-${theme}.png`);
+      // The top bar and the player; the telemetry tiles are measured values of the worker and change from run to run.
+      await expect(page.getByTestId("shell-header")).toHaveScreenshot(`shell-toolbar-${theme}.png`, { mask: [page.locator(".telem")] });
       // Storage sizes depend on the database file and the browser's quota; how far the run is saved depends on when the writer flushed.
-      await expect(page.getByTestId("statusline")).toHaveScreenshot(`shell-statusline-${theme}.png`, { mask: [page.getByTestId("status-storage-size"), page.getByTestId("status-recording-saved")] });
+      await expect(page.getByTestId("statusline")).toHaveScreenshot(`shell-statusline-${theme}.png`, { mask: [page.getByTestId("status-storage-size"), page.getByTestId("status-recording-saved"), page.getByTestId("status-frame")] });
     });
 
     test("Explorer and Inspector (agent)", async ({ page }) => {
       await page.getByTestId("explorer-row-ugv-001").click();
       await expect(page.getByTestId("inspector-agent")).toBeVisible();
-      // The streamed sections (what the mind receives, the researcher view) have their first data.
-      await expect(page.getByTestId("mind-request-status")).toBeVisible();
-      await expect(page.getByTestId("researcher-ideal")).toBeVisible();
       await settle(page);
       await expect(page.getByTestId("explorer")).toHaveScreenshot(`explorer-${theme}.png`);
+      // The Inspector as it opens: the ID card and the commands, every other section one line.
       await expect(page.getByTestId("inspector")).toHaveScreenshot(`inspector-agent-${theme}.png`);
+      // Opened: the streamed sections (what the mind receives, the researcher view) have their first data.
+      await openInspectorSections(page);
+      await expect(page.getByTestId("mind-request-status")).toBeVisible();
+      await expect(page.getByTestId("researcher-ideal")).toBeVisible();
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      await expect(page.getByTestId("inspector")).toHaveScreenshot(`inspector-agent-open-${theme}.png`);
     });
 
     // F2: the sections of an agent with an unknown map at tick 0 (the F2 discovery demo): what the mind receives, the
@@ -49,7 +57,9 @@ for (const theme of THEMES) {
     test("Inspector (F2: mind view, researcher view, commands)", async ({ page }) => {
       test.setTimeout(90_000);
       await loadF2(page, "discovery");
+      await page.addStyleTag({ content: ".dv-resize-container { display: none !important; }" });
       await page.getByTestId("explorer-row-ugv-001").click();
+      await openInspectorSections(page);
       await expect(page.getByTestId("mind-request-status")).toContainText("would be sent now");
       await expect(page.getByTestId("researcher-unknown")).toBeVisible();
       await page.locator("body").click({ position: { x: 1, y: 1 } });
@@ -68,7 +78,7 @@ for (const theme of THEMES) {
     });
 
     test("run configuration and cost-profile form", async ({ page }) => {
-      await openWorkspace(page, "author");
+      await openWorkspace(page, "configurations");
       await openPanelTab(page, "Run configuration");
       const panel = page.getByTestId("run-config-panel");
       await expect(panel.getByTestId("rc-valid")).toBeVisible();
@@ -92,7 +102,7 @@ for (const theme of THEMES) {
     // F2b: the planner choice of a planning entry: a shipped preset with its description and document, an inline strategy with
     // the resolver's code and path next to the editor, and the lazy-on-belief-map warning.
     test("run configuration: strategy picker, inline error and warning (F2b)", async ({ page }) => {
-      await openWorkspace(page, "author");
+      await openWorkspace(page, "configurations");
       await openPanelTab(page, "Run configuration");
       const panel = page.getByTestId("run-config-panel");
       await panel.getByTestId("rc-planner").selectOption("strategy");
@@ -122,7 +132,7 @@ for (const theme of THEMES) {
     // test (researcher tool) with a result on the agent's belief map. Everything is a count of sim ticks, so deterministic.
     test("Inspector: planning queries and Strategy test (F2b)", async ({ page }) => {
       test.setTimeout(120_000);
-      await openWorkspace(page, "author");
+      await openWorkspace(page, "configurations");
       await openPanelTab(page, "Run configuration");
       const panel = page.getByTestId("run-config-panel");
       await panel.getByTestId("rc-beliefs-init").selectOption("unknown");
@@ -134,6 +144,7 @@ for (const theme of THEMES) {
       await sceneSettled(page);
       await sendTo(page, "ugv-001", 50, 10);
       await step(page, 1);
+      await openInspectorSections(page);
       await page.getByTestId(/^plan-query-row-/).first().click();
       await page.getByTestId("st-strategy").selectOption("astar-then-hpa@1");
       await page.getByTestId("st-x").fill("50");
@@ -148,7 +159,7 @@ for (const theme of THEMES) {
 
     test("scenario editor (sidebar: document, brush, agent and body form, zones)", async ({ page }) => {
       test.setTimeout(90_000);
-      await openWorkspace(page, "author");
+      await openScenarioEditor(page);
       await page.getByTestId("ed-new").click();
       await page.getByTestId("ed-new-id").fill("visual-yard");
       await page.getByTestId("ed-new-x").fill("64");
@@ -182,7 +193,7 @@ for (const theme of THEMES) {
     // F2: prior maps in the scenario editor: made from the world, edited with the prior brush (the banner says which layer is painted).
     test("scenario editor (prior maps and the edit target)", async ({ page }) => {
       test.setTimeout(90_000);
-      await openWorkspace(page, "author");
+      await openScenarioEditor(page);
       await page.getByTestId("ed-open-select").selectOption("f1-demo");
       await page.getByTestId("ed-open").click();
       await sceneSettled(page);
@@ -195,6 +206,175 @@ for (const theme of THEMES) {
       await page.locator("body").click({ position: { x: 1, y: 1 } });
       await settle(page);
       await expect(page.getByTestId("ed-side")).toHaveScreenshot(`editor-priors-${theme}.png`);
+    });
+
+    test("replay: the player badge and the top bar's replay segment", async ({ page }) => {
+      test.setTimeout(120_000);
+      await page.getByTestId("run-label").click();
+      const id = (await page.getByTestId("run-id").textContent()) ?? "";
+      await page.keyboard.press("Escape");
+      await step(page, 1);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 15_000 });
+      await openWorkspace(page, "data");
+      await page.getByRole("button", { name: "Refresh" }).click();
+      await page.getByTestId(`replay-${id}`).click();
+      await expect(page.getByTestId("replay-bar")).toBeVisible({ timeout: 15_000 });
+      await openWorkspace(page, "scene");
+      await expect(page.getByTestId("replay-bar")).toBeVisible();
+      await settle(page);
+      await expect(page.getByTestId("player")).toHaveScreenshot(`replay-player-${theme}.png`, { mask: [page.getByTestId("replay-pose-rate")] });
+      await expect(page.getByTestId("shell-header")).toHaveScreenshot(`replay-toolbar-${theme}.png`, { mask: [page.locator(".telem")] });
+    });
+
+    // F3b M3: the Data workspace (the storage panel with the SQL console under it), the command palette and the run popover. What depends on the database file, the browser's
+    // quota or the wall clock is masked.
+    test("Data: storage and the SQL console", async ({ page }) => {
+      test.setTimeout(90_000);
+      await step(page, 1);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 15_000 });
+      await openWorkspace(page, "data");
+      await page.getByRole("button", { name: "Refresh" }).click();
+      await expect(page.getByTestId("sql-console")).toBeVisible();
+      await page.getByTestId("sql-editor").fill("SELECT kind, count(*) AS n FROM trace_records GROUP BY kind ORDER BY kind");
+      await page.getByTestId("sql-run").click();
+      await expect(page.getByTestId("sql-status")).toContainText("rows", { timeout: 15_000 });
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      // The tree's row counts and the database line depend on how far the writer had got and on the file.
+      const mask = [page.getByTestId("storage-info"), page.locator(".size-bar"), page.locator('[data-testid^="run-row-"]'), page.getByTestId("sql-status"), page.getByTestId("sql-grid"), page.locator('[data-testid^="sql-count-"]'), page.getByTestId("sql-db")];
+      await expect(page.getByTestId("workspace-data")).toHaveScreenshot(`data-workspace-${theme}.png`, { mask });
+    });
+
+    // F3b M4: the headless monitor of a finished run and the Analysis workspace of the same run (a headless run of the F1 demo, 60 sim seconds). The monitor's numbers are the
+    // machine's (wall time, speed, rates, bytes written, what the writer had left, the sampled stream): masked; the Analysis shows the deterministic recording.
+    test("Experiments: the headless monitor of a finished run", async ({ page }) => {
+      test.setTimeout(120_000);
+      await runCommand(page, "Run headless");
+      await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 60_000 });
+      await expect(page.getByTestId("hm-volume")).toContainText(/stored \d/, { timeout: 15_000 });
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      const mask = ["hm-wall", "hm-eta", "hm-snapshots", "hm-speed", "hm-tps", "hm-tickcost", "hm-written", "hm-volume", "hm-writer", "hm-stream", "hm-stream-note"].map((id) => page.getByTestId(id));
+      mask.push(page.locator(".hm-spark"), page.locator(".hm-bar"));
+      await expect(page.getByTestId("workspace-experiments")).toHaveScreenshot(`headless-monitor-${theme}.png`, { mask });
+    });
+
+    test("Analysis: trajectories, the timeline and the series of a headless run", async ({ page }) => {
+      test.setTimeout(120_000);
+      // The rover is sent somewhere first: a headless run re-applies what the run shown had been told, so the recording has a path and its events.
+      await sendTo(page, "ugv-001", 50, 10);
+      await step(page, 1);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 15_000 });
+      await runCommand(page, "Run headless");
+      await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 60_000 });
+      await page.getByTestId("hm-open-analysis").click();
+      await expect(page.getByTestId("analysis")).toHaveAttribute("data-status", "ready", { timeout: 60_000 });
+      await expect.poll(async () => Number(await page.getByTestId("map2d-canvas").getAttribute("data-trajectories")), { timeout: 15_000 }).toBeGreaterThanOrEqual(1);
+      await expect.poll(async () => Number(await page.getByTestId("map2d-canvas").getAttribute("data-markers")), { timeout: 15_000 }).toBeGreaterThan(0);
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await page.mouse.move(2, 2);
+      await settle(page);
+      await expect(page.getByTestId("workspace-analysis")).toHaveScreenshot(`analysis-${theme}.png`);
+    });
+
+
+    // F3b M5: the screens of the analysis side that had no baseline: the SQL console with its tree and a table previewed and with a result, the Debug panels (the Log, the Trace and
+    // the Timeline) of an exploring rover, the Log row's menu, and the trace graph with its time lane. All of them are the recording of a deterministic run: sim times, sequence numbers
+    // and records are the same every time; what is the machine's (row counts that depend on how far the writer had got, the size of the database, the wall time of a record) is masked.
+    test("Data: the SQL tree with a table previewed, and a result", async ({ page }) => {
+      test.setTimeout(90_000);
+      await step(page, 1);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 100", { timeout: 15_000 });
+      await openWorkspace(page, "data");
+      await expect(page.getByTestId("sql-console")).toBeVisible();
+      await page.getByTestId("sql-twist-trace_records").click();
+      await page.getByTestId("sql-table-trace_records").click();
+      await expect(page.getByTestId("sql-preview-note")).toBeVisible({ timeout: 15_000 });
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      // The counts and the database's size are the machine's; the preview's rows hold wall times.
+      const mask = [page.locator('[data-testid^="sql-count-"]'), page.getByTestId("sql-db"), page.getByTestId("sql-grid"), page.getByTestId("sql-preview-note")];
+      await expect(page.getByTestId("sql-console")).toHaveScreenshot(`sql-tree-preview-${theme}.png`, { mask });
+      await page.getByTestId("sql-editor").fill("SELECT seq, id, sim_time, kind, tier, detail FROM trace_records WHERE seq < 14 ORDER BY seq");
+      await page.getByTestId("sql-run").click();
+      await expect(page.getByTestId("sql-status").first()).toContainText("14 rows", { timeout: 15_000 });
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      await expect(page.getByTestId("sql-results")).toHaveScreenshot(`sql-results-${theme}.png`, { mask: [page.getByTestId("sql-status")] });
+    });
+
+    /** An exploring rover recorded to tick 800, in the Debug workspace with the Log filtered to its actions and its first `start` picked. */
+    async function exploringRover(page: Page) {
+      await loadF2(page, "discovery");
+      await page.addStyleTag({ content: ".dv-resize-container { display: none !important; }" });
+      await page.getByTestId("explorer-row-ugv-001").click();
+      await runCommand(page, "Explore selected agent (ugv-001)");
+      await step(page, 8);
+      await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 800", { timeout: 30_000 });
+      await openWorkspace(page, "debug");
+      await page.getByTestId("log-filter").fill("kind:action agent:ugv-001 text:start");
+      await expect.poll(async () => Number(await page.getByTestId("event-scroller").getAttribute("data-count")), { timeout: 15_000 }).toBeGreaterThan(0);
+      await page.getByTestId("event-scroller").evaluate((el) => {
+        el.scrollTop = 0;
+      });
+      await page.locator('[data-testid^="event-row-"]').filter({ hasText: "start" }).first().click();
+      await expect(page.getByTestId("trace-tree-selected")).toBeVisible();
+    }
+
+    test("Debug: the Log, the Trace and the Timeline of an exploring rover, and the Log row's menu", async ({ page }) => {
+      test.setTimeout(240_000);
+      await exploringRover(page);
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      // The Log's detail pane shows the selected record's JSON, which holds its wall time.
+      const mask = [page.locator(".telem"), page.getByTestId("status-recording-saved"), page.getByTestId("event-detail")];
+      await expect(page.getByTestId("event-list")).toHaveScreenshot(`log-${theme}.png`, { mask });
+      await expect(page.getByTestId("trace-tree")).toHaveScreenshot(`trace-${theme}.png`);
+      await expect(page.getByTestId("timeline")).toHaveScreenshot(`timeline-${theme}.png`);
+      await expect(page.getByTestId("workspace-debug")).toHaveScreenshot(`debug-workspace-${theme}.png`, { mask });
+      await page.locator('[data-testid^="event-row-"]').first().click({ button: "right" });
+      await expect(page.getByTestId("log-menu")).toBeVisible();
+      await settle(page);
+      await expect(page.getByTestId("event-list")).toHaveScreenshot(`log-menu-${theme}.png`, { mask });
+    });
+
+    test("Trace graph: the time lane of an exploring rover's start, and its collapsed middle opened", async ({ page }) => {
+      test.setTimeout(240_000);
+      await exploringRover(page);
+      await page.getByTestId("trace-open-graph").click();
+      // The graph is a floating window: show it alone.
+      await page.addStyleTag({ content: ".dv-resize-container:has([data-testid='trace-graph']) { display: block !important; }" });
+      await expect(page.getByTestId("tg-lane")).toBeVisible({ timeout: 15_000 });
+      await page.locator("body").click({ position: { x: 1, y: 1 } });
+      await settle(page);
+      const graph = page.getByTestId("trace-graph");
+      // The side panel's JSON holds the record's wall time.
+      const mask = [page.getByTestId("tg-json")];
+      await expect(graph).toHaveScreenshot(`trace-graph-${theme}.png`, { mask });
+      await page.getByTestId("tg-group-node").click();
+      await page.getByTestId("tg-lane").evaluate((el) => {
+        el.scrollTop = 240;
+      });
+      await settle(page);
+      await expect(graph).toHaveScreenshot(`trace-graph-opened-${theme}.png`, { mask });
+    });
+
+    test("command palette", async ({ page }) => {
+      await page.keyboard.press("Control+k");
+      const palette = page.getByRole("dialog", { name: "Command palette" });
+      await expect(palette.locator(".group-head").first()).toBeVisible();
+      await palette.getByRole("textbox", { name: "Command" }).fill("open panel");
+      await expect(palette.getByRole("option").first()).toBeVisible();
+      await settle(page);
+      await expect(palette).toHaveScreenshot(`palette-${theme}.png`);
+    });
+
+    test("run popover", async ({ page }) => {
+      await page.getByTestId("run-label").click();
+      await expect(page.getByTestId("run-id")).toBeVisible();
+      await settle(page);
+      // The run's number depends on the order the tests ran in, the simulator's version carries the commit it was built from, and the planning prep is a wall-clock time.
+      await expect(page.getByRole("dialog", { name: "Run" })).toHaveScreenshot(`run-popover-${theme}.png`, { mask: [page.getByTestId("run-id"), page.locator("dd", { hasText: /^\d+\.\d+\.\d+\+/ }), page.locator("dd", { hasText: / ms$/ })] });
     });
 
     test("Settings", async ({ page }) => {

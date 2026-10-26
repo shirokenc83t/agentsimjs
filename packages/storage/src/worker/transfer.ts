@@ -95,7 +95,7 @@ export function validateImport(sqlite3: Sqlite3Static, bytes: Uint8Array): Resul
 
 // Everything a run owns: its header, trace and snapshots, and its run inputs (researcher commands, replayed to reproduce it).
 // Blobs come before the rows that refer to them (foreign keys).
-const RUN_TABLES = ["runs", "run_inputs", "trace_records", "trace_causes", "blobs", "snapshots", "belief_frames"] as const;
+const RUN_TABLES = ["runs", "run_inputs", "trace_records", "trace_causes", "blobs", "snapshots", "belief_frames", "metrics"] as const;
 
 /** Copies one run into an in-memory database with the same DDL and serializes it (ADR-0020). */
 export function exportRun(sqlite3: Sqlite3Static, source: SqlDriver, runId: string): Result<Uint8Array, CodedError<"unknown_run">> {

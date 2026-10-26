@@ -1,7 +1,7 @@
 import { contentHash128Bytes, readSnapshot, SnapshotWriter, snapshotHash } from "@agentsim/core";
 import { RECORDING_PRESETS, recordingProfileHash, type RunHeader } from "@agentsim/trace";
 import { describe, expect, it } from "vitest";
-import type { BeliefFrame, StoragePorts, StoredBlob } from "../ports.ts";
+import type { BeliefFrame, StoragePorts, StoredBlob, StoredMetricSample } from "../ports.ts";
 
 /** The recording ports and header fields (ADR-0004 additions of 2026-10-17 and 2026-10-18, ADR-0035 items 6, 8 and 9), for every adapter. */
 
@@ -32,6 +32,8 @@ function snapshotWith(tick: number, sections: readonly number[]): { bytes: Uint8
 const frame = (agentId: string, seq: number, tick: number, extra: Partial<BeliefFrame> = {}): BeliefFrame => ({
   agentId, seq, tick, simTime: tick * 0.1, kind: "delta", chunks: [seq, seq + 4], data: Uint8Array.from([seq, tick]), ...extra,
 });
+
+const sample = (source: string, name: string, tick: number, value: number): StoredMetricSample => ({ source, name, tick, simTime: tick * 0.1, value });
 
 export function describeRecordingContract(getPorts: () => StoragePorts): void {
   const code = <T>(r: { ok: boolean; error?: { code: string } } & T): string | null => (r.ok ? null : (r.error?.code ?? "?"));
@@ -250,6 +252,74 @@ export function describeRecordingContract(getPorts: () => StoragePorts): void {
     });
   });
 
+  describe("recording: metrics", () => {
+    it("appends samples of registered series and returns them in series and tick order, exactly", async () => {
+      const p = getPorts();
+      await p.runs.create(stored());
+      const list = [
+        sample("world/sim", "sim.tickMs", 20, 1.5),
+        sample("uav-001/body", "agent.soc", 10, 0.9),
+        sample("world/sim", "sim.tickMs", 10, 1.25),
+        sample("uav-001/body", "agent.soc", 20, 0.8),
+      ];
+      expect((await p.metrics.append(RUN, list)).ok).toBe(true);
+      expect(await p.metrics.query({ runId: RUN, limit: 100 })).toEqual([
+        sample("uav-001/body", "agent.soc", 10, 0.9),
+        sample("uav-001/body", "agent.soc", 20, 0.8),
+        sample("world/sim", "sim.tickMs", 10, 1.25),
+        sample("world/sim", "sim.tickMs", 20, 1.5),
+      ]);
+      expect((await p.metrics.append(RUN, [sample("world/sim", "sim.tickMs", 30, 2)])).ok).toBe(true); // a later batch continues the series
+    });
+
+    it("filters by source, name and sim-time window, limits, and pages with a cursor", async () => {
+      const p = getPorts();
+      await p.runs.create(stored());
+      const all: StoredMetricSample[] = [];
+      for (let t = 10; t <= 50; t += 10) all.push(sample("world/sim", "sim.tickMs", t, t), sample("world/sim", "sim.senseMs", t, t / 2), sample("ugv-001/body", "agent.soc", t, 1 - t / 100));
+      await p.metrics.append(RUN, all);
+      expect((await p.metrics.query({ runId: RUN, name: "agent.soc", limit: 100 })).length).toBe(5);
+      expect((await p.metrics.query({ runId: RUN, source: "world/sim", limit: 100 })).length).toBe(10);
+      expect((await p.metrics.query({ runId: RUN, source: "world/sim", name: "sim.tickMs", fromS: 2, toS: 4, limit: 100 })).map((s) => s.tick)).toEqual([20, 30, 40]);
+      expect((await p.metrics.query({ runId: RUN, limit: 4 })).length).toBe(4);
+      const seen: StoredMetricSample[] = [];
+      for (let after: StoredMetricSample | undefined; ; ) {
+        const page = await p.metrics.query({ runId: RUN, ...(after === undefined ? {} : { after: { source: after.source, name: after.name, tick: after.tick } }), limit: 4 });
+        seen.push(...page);
+        if (page.length < 4) break;
+        after = page[page.length - 1];
+      }
+      expect(seen).toEqual(await p.metrics.query({ runId: RUN, limit: 100 }));
+      expect(seen.length).toBe(15);
+      expect(await p.metrics.query({ runId: "run-000404", limit: 10 })).toEqual([]);
+    });
+
+    it("refuses an unregistered name, a source that is not the series', bad numbers, a repeat and samples out of tick order, all or nothing", async () => {
+      const p = getPorts();
+      await p.runs.create(stored());
+      expect((await p.metrics.append(RUN, [sample("world/sim", "sim.tickMs", 10, 1)])).ok).toBe(true);
+      const cases: [string, StoredMetricSample[], string][] = [
+        ["unregistered name", [sample("world/sim", "sim.madeUp", 11, 1)], "invalid_metric"],
+        ["source of another component", [sample("uav-001/planner", "agent.soc", 11, 1)], "invalid_metric"],
+        ["world source for an agent series", [sample("world/sim", "agent.soc", 11, 1)], "invalid_metric"],
+        ["invalid source", [sample("not a source", "sim.tickMs", 11, 1)], "invalid_metric"],
+        ["NaN value", [sample("world/sim", "sim.tickMs", 11, Number.NaN)], "invalid_metric"],
+        ["fractional tick", [sample("world/sim", "sim.tickMs", 11.5, 1)], "invalid_metric"],
+        ["negative sim time", [{ ...sample("world/sim", "sim.tickMs", 11, 1), simTime: -1 }], "invalid_metric"],
+        ["twice in the batch", [sample("world/sim", "sim.tickMs", 12, 1), sample("world/sim", "sim.tickMs", 12, 2)], "invalid_metric"],
+        ["already stored", [sample("world/sim", "sim.tickMs", 10, 5)], "duplicate_metric"],
+        ["before the last stored tick of its series", [sample("world/sim", "sim.tickMs", 5, 5)], "non_monotonic_metric"],
+        ["sim time going backwards inside the batch", [sample("world/sim", "sim.tickMs", 20, 1), { ...sample("world/sim", "sim.tickMs", 21, 1), simTime: 0.5 }], "non_monotonic_metric"],
+      ];
+      for (const [what, list, expected] of cases) {
+        expect(code(await p.metrics.append(RUN, [sample("world/sim", "sim.senseMs", 99, 1), ...list])), what).toBe(expected);
+      }
+      expect(code(await p.metrics.append("run-000404", [sample("world/sim", "sim.tickMs", 1, 1)]))).toBe("unknown_run");
+      // Nothing of a refused batch was stored.
+      expect((await p.metrics.query({ runId: RUN, limit: 100 })).map((s) => `${s.name}@${s.tick}`)).toEqual(["sim.tickMs@10"]);
+    });
+  });
+
   describe("recording: sizes and deleting a run", () => {
     /** A run with everything a recorded run owns: records and causes, inputs, a snapshot with its blobs, belief frames. */
     async function fullRun(p: StoragePorts, runId: string) {
@@ -264,13 +334,14 @@ export function describeRecordingContract(getPorts: () => StoragePorts): void {
       const kf = s.blobs[0] as StoredBlob;
       const { data: _d, ...kfFrame } = frame("uav-001", 0, 0, { kind: "keyframe", chunks: [0], blobId: kf.id });
       await p.beliefFrames.append(runId, [kfFrame, frame("uav-001", 1, 1, { data: new Uint8Array(40) })]);
+      await p.metrics.append(runId, [sample("world/sim", "sim.tickMs", 10, 1), sample("world/sim", "sim.tickMs", 20, 2), sample("uav-001/body", "agent.soc", 10, 0.5)]);
       return { snapshot: s, kf };
     }
 
     it("reports what a run holds: records, blobs, snapshots and belief frames, with counts and bytes", async () => {
       const p = getPorts();
       await p.runs.create(header("run-000009"));
-      expect(await p.runs.sizes("run-000009")).toEqual({ records: { count: 0, bytes: 0 }, blobs: { count: 0, bytes: 0 }, snapshots: { count: 0, bytes: 0 }, beliefFrames: { count: 0, bytes: 0 } });
+      expect(await p.runs.sizes("run-000009")).toEqual({ records: { count: 0, bytes: 0 }, blobs: { count: 0, bytes: 0 }, snapshots: { count: 0, bytes: 0 }, beliefFrames: { count: 0, bytes: 0 }, metrics: { count: 0, bytes: 0 } });
       const { snapshot } = await fullRun(p, RUN);
       const sz = await p.runs.sizes(RUN);
       expect(sz?.records.count).toBe(2);
@@ -279,6 +350,8 @@ export function describeRecordingContract(getPorts: () => StoragePorts): void {
       expect(sz?.snapshots).toEqual({ count: 1, bytes: snapshot.bytes.length });
       expect(sz?.beliefFrames.count).toBe(2);
       expect(sz?.beliefFrames.bytes).toBeGreaterThanOrEqual(40);
+      expect(sz?.metrics.count).toBe(3);
+      expect(sz?.metrics.bytes).toBeGreaterThan(0);
       expect(await p.runs.sizes("run-000404")).toBeUndefined();
     });
 
@@ -295,11 +368,13 @@ export function describeRecordingContract(getPorts: () => StoragePorts): void {
       expect(await p.snapshots.list(RUN)).toEqual([]);
       expect(await p.snapshots.getBlob(RUN, other.kf.id)).toBeUndefined();
       expect(await p.beliefFrames.query({ runId: RUN, limit: 10 })).toEqual([]);
+      expect(await p.metrics.query({ runId: RUN, limit: 10 })).toEqual([]);
       expect(await p.runs.sizes(RUN)).toBeUndefined();
       // The other run is whole.
       expect(await p.trace.count("run-000002")).toBe(2);
       expect((await p.snapshots.list("run-000002")).length).toBe(1);
       expect((await p.beliefFrames.query({ runId: "run-000002", limit: 10 })).length).toBe(2);
+      expect((await p.metrics.query({ runId: "run-000002", limit: 10 })).length).toBe(3);
       expect((await p.snapshots.getBlob("run-000002", other.kf.id))?.bytes).toEqual(other.kf.bytes);
       // A deleted run's id is not reused: the next run gets a new one.
       expect(await p.runs.allocateRunId()).toBe("run-000003");

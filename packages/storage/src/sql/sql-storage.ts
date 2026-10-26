@@ -1,5 +1,5 @@
 import { err, isValid, ok, type Result } from "@agentsim/core";
-import { firstNonMonotonicRecord, formatRunId, isValidTraceRecord, RunHeader, type RunStatus, type TraceRecord } from "@agentsim/trace";
+import { firstNonMonotonicRecord, formatRunId, isValidTraceRecord, RunHeader, type DerivedRun, type RunStatus, type TraceRecord } from "@agentsim/trace";
 import type {
   CachedResponse,
   DocumentSummary,
@@ -23,9 +23,10 @@ import type {
 import { checkRunConfigPreset, checkScenarioEnvelope } from "../scenario-envelope.ts";
 import { checkRunInputs, RUN_INPUT_LIMITS, type RunInputError, type StoredRunInput } from "../run-inputs.ts";
 import { checkRunRecording } from "../recording.ts";
-import { checkRunReferences } from "../run-references.ts";
+import { checkRunDerived, checkRunReferences } from "../run-references.ts";
 import type { SqlDriver, SqlValue } from "./driver.ts";
-import { SqlBeliefFrameStore, SqlSnapshotStore } from "./recording-stores.ts";
+import { SqlBeliefFrameStore, SqlMetricStore, SqlSnapshotStore } from "./recording-stores.ts";
+import { parseQueryFilter } from "./filter-sql.ts";
 import { checkRecordFilter, compileSourceFilter } from "./source-filter.ts";
 import { buildTraceQuery, timeWindowToSeqRange, type SeqRange } from "./trace-query.ts";
 
@@ -40,7 +41,7 @@ type RunRow = {
   scenario: string | null; seed: number | null; status: string; record_count?: number;
   scenario_id: string | null; scenario_version: number | null; run_config: string | null;
   run_config_hash: string | null; effective_config_hash: string | null; simulator_version: string | null;
-  ideal_agents: string | null; recording: string | null; recording_profile: string | null; recording_profile_hash: string | null; imported_from: string | null;
+  ideal_agents: string | null; recording: string | null; recording_profile: string | null; recording_profile_hash: string | null; imported_from: string | null; derived: string | null;
 };
 
 const opt = <K extends string, V>(key: K, v: V | null | undefined): { [P in K]?: V } =>
@@ -70,6 +71,7 @@ function rowToRun(r: RunRow): RunHeader {
     ...opt("recordingProfile", r.recording_profile === null ? null : (JSON.parse(r.recording_profile) as unknown)),
     ...opt("recordingProfileHash", r.recording_profile_hash),
     ...opt("importedFrom", r.imported_from),
+    ...opt("derived", r.derived === null ? null : (JSON.parse(r.derived) as DerivedRun)),
   };
 }
 
@@ -149,6 +151,7 @@ class SqlTraceStore implements TraceStore {
       if (!r) {
         compileSourceFilter(q.source); // still reject a malformed filter
         checkRecordFilter(q);
+        if (q.filter !== undefined) parseQueryFilter(q.filter, "records");
         return [];
       }
       range = r;
@@ -187,6 +190,11 @@ class SqlRunStore implements RunStore {
     if (!isValid(RunHeader, header)) return err({ code: "invalid_header" as const, message: "invalid run header" });
     const refs = checkRunReferences(header);
     if (!refs.ok) return refs;
+    const derived = checkRunDerived(header);
+    if (!derived.ok) return derived;
+    if (header.derived !== undefined && header.importedFrom === undefined && !this.db.get("SELECT 1 AS x FROM runs WHERE run_id = ?", [header.derived.parentRunId])) {
+      return err({ code: "parent_run_not_found" as const, message: `parent run ${header.derived.parentRunId} not found` });
+    }
     const recording = checkRunRecording(header);
     if (!recording.ok) return recording;
     if (this.db.get("SELECT 1 AS x FROM runs WHERE run_id = ?", [header.runId])) {
@@ -201,15 +209,15 @@ class SqlRunStore implements RunStore {
     this.db.run(
       `INSERT INTO runs (run_id, schema_version, created_at_wall_ms, label, scenario, seed, status,
                          scenario_id, scenario_version, run_config, run_config_hash, effective_config_hash, simulator_version, ideal_agents,
-                         recording, recording_profile, recording_profile_hash, imported_from)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                         recording, recording_profile, recording_profile_hash, imported_from, derived)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         header.runId, header.schemaVersion, header.createdAtWallMs, header.label, header.scenario ?? null, header.seed ?? null, header.status,
         header.scenarioId ?? null, header.scenarioVersion ?? null, header.runConfig === undefined ? null : JSON.stringify(header.runConfig),
         header.runConfigHash ?? null, header.effectiveConfigHash ?? null, header.simulatorVersion ?? null,
         header.idealAgents === undefined ? null : JSON.stringify(header.idealAgents),
         header.recording ?? null, header.recordingProfile === undefined ? null : JSON.stringify(header.recordingProfile), header.recordingProfileHash ?? null,
-        header.importedFrom ?? null,
+        header.importedFrom ?? null, header.derived === undefined ? null : JSON.stringify(header.derived),
       ],
     );
     return ok(undefined);
@@ -263,6 +271,8 @@ class SqlRunStore implements RunStore {
       blobs: one("SELECT count(*) AS n, sum(length(data)) AS b FROM blobs WHERE run_id = ?"),
       snapshots: one("SELECT count(*) AS n, sum(length(data)) AS b FROM snapshots WHERE run_id = ?"),
       beliefFrames: one("SELECT count(*) AS n, sum(length(data)) AS b FROM belief_frames WHERE run_id = ?"),
+      // A row has no heavy column: its bytes are the fixed width of a sample.
+      metrics: one("SELECT count(*) AS n, count(*) * 40 AS b FROM metrics WHERE run_id = ?"),
     };
   }
 
@@ -270,7 +280,7 @@ class SqlRunStore implements RunStore {
     if (!this.db.get("SELECT 1 AS x FROM runs WHERE run_id = ?", [runId])) return err({ code: "unknown_run" as const, message: `unknown run ${runId}` });
     this.db.transaction(() => {
       // Frames name blobs, so they go first; the run's row goes last, and its ID stays behind so it is never handed out again.
-      for (const table of ["belief_frames", "blobs", "snapshots", "trace_causes", "trace_records", "run_inputs"]) this.db.run(`DELETE FROM ${table} WHERE run_id = ?`, [runId]);
+      for (const table of ["metrics", "belief_frames", "blobs", "snapshots", "trace_causes", "trace_records", "run_inputs"]) this.db.run(`DELETE FROM ${table} WHERE run_id = ?`, [runId]);
       this.db.run("DELETE FROM runs WHERE run_id = ?", [runId]);
       this.db.run("INSERT OR IGNORE INTO deleted_runs (run_id, deleted_at_wall_ms) VALUES (?, ?)", [runId, Date.now()]);
     });
@@ -456,5 +466,6 @@ export function createSqlPorts(db: SqlDriver, nowWallMs: () => number): StorageP
     runConfigs: new SqlRunConfigStore(db, nowWallMs),
     snapshots: new SqlSnapshotStore(db),
     beliefFrames: new SqlBeliefFrameStore(db),
+    metrics: new SqlMetricStore(db),
   };
 }

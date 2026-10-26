@@ -70,6 +70,31 @@ export function isValidTraceRecord(r: unknown): r is TraceRecord {
 export const RunStatus = Type.Union([Type.Literal("running"), Type.Literal("completed"), Type.Literal("aborted")]);
 export type RunStatus = Static<typeof RunStatus>;
 
+/**
+ * What a derived run says of itself (ADR-0035 section 3 and its addition of 2026-10-17, item 10): it re-executes a window of a parent run, and the checkpoints of the
+ * window were compared with the parent's. `startTick` is the tick the window's recording starts at (the state just before `t0S`); `matches` says every recorded
+ * checkpoint in the window was reproduced, `divergent` that the first one that was not is at `divergence.tick`.
+ */
+export const DerivedRun = Type.Object(
+  {
+    parentRunId: Type.String({ pattern: "^run-[0-9]{6}$" }),
+    t0S: Type.Number({ minimum: 0 }),
+    t1S: Type.Number({ minimum: 0 }),
+    startTick: Type.Integer({ minimum: 0 }),
+    endTick: Type.Integer({ minimum: 0 }),
+    status: Type.Union([Type.Literal("matches"), Type.Literal("divergent")]),
+    /** Checkpoints of the parent that fall in the re-executed span and were compared. */
+    checkpointsChecked: Type.Integer({ minimum: 0 }),
+    divergence: Type.Optional(
+      Type.Object({ tick: Type.Integer({ minimum: 0 }), expected: Type.String({ maxLength: 64 }), actual: Type.String({ maxLength: 64 }) }, { additionalProperties: false }),
+    ),
+    /** Records of the parent that the window refers to and that were re-emitted, marked as copies (reference integrity, ADR-0035 item 2(b)). */
+    copies: Type.Integer({ minimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+export type DerivedRun = Static<typeof DerivedRun>;
+
 export const RunHeader = Type.Object({
   runId: Type.String({ pattern: "^run-[0-9]{6}$" }),
   schemaVersion: Type.Integer({ minimum: 0 }),
@@ -101,6 +126,8 @@ export const RunHeader = Type.Object({
   recordingProfileHash: Type.Optional(Type.String({ pattern: "^[0-9a-f]{8}$" })),
   /** A run that was imported (ADR-0035 addition of 2026-10-17, item 11) keeps the ID it had where it was recorded; its own ID is a fresh one. */
   importedFrom: Type.Optional(Type.String({ pattern: "^run-[0-9]{6}$" })),
+  /** A run made by re-simulating a window of another run: its parent, the window and the verdict. Never set on a run that was started. */
+  derived: Type.Optional(DerivedRun),
 });
 export type RunHeader = Static<typeof RunHeader>;
 

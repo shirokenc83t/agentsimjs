@@ -2,7 +2,7 @@ import { TRAIL_MAX_POINTS, TRAIL_STRIDE, STATUS_STRIDE, err, ok, type CodedError
 import { poseWindowQuery, type ReplayClient, type StoragePorts } from "@agentsim/storage";
 import type { RecordingProfile, TraceRecord } from "@agentsim/trace";
 import { ChunkQueue, type GridSpec } from "@agentsim/ui";
-import { filterRecords, latestPlans, type CellView, type PanelWatch, type PlannedPath, type RecordQuery, type RunFeature, type RunPoses, type RunSnapshot, type RunSource, type RunStats } from "./run-source.ts";
+import { filterRecords, latestPlans, type CellView, type ReplayDerived, type PanelWatch, type PlannedPath, type RecordQuery, type RunFeature, type RunPoses, type RunSnapshot, type RunSource, type RunStats } from "./run-source.ts";
 import type { ExecutedPath } from "./trail-store.ts";
 
 // The run source of a recorded run (ADR-0016, ADR-0019 and ADR-0035 additions of 2026-10-17, item 9): everything a panel shows comes from storage, at the time
@@ -154,6 +154,8 @@ export class ReplayRunSource implements RunSource {
     truth: { coords: Uint16Array; data: Uint8Array; defaultObstacleHeightM: number | undefined },
     poseRate: string,
     headS: number,
+    /** A re-simulated window: its start (where scrubbing starts) and what it says of itself. */
+    private readonly window?: { readonly startS: number; readonly derived: ReplayDerived },
   ) {
     this.entityIds = run.agents.map((a) => a.id);
     this.trailIndex = new Map(this.entityIds.map((id, i) => [id, i]));
@@ -185,7 +187,7 @@ export class ReplayRunSource implements RunSource {
   }
 
   cursorNow(): number {
-    return Math.max(0, Math.min(this.headS, this.deps.cursor.get()));
+    return Math.max(this.window?.startS ?? 0, Math.min(this.headS, this.deps.cursor.get()));
   }
 
   /** The last sim time the recording has, in seconds. */
@@ -378,7 +380,7 @@ export class ReplayRunSource implements RunSource {
       error: null,
       simHeadTick: Math.max(Math.round(this.headS / dt), simHead ?? 0),
       persistedHeadTick: Math.round(this.headS / dt),
-      replay: { poseRate: this.poseRate, headS: this.headS, ...(simHead === undefined ? {} : { simHeadS: Math.max(this.headS, simHead * dt) }) },
+      replay: { poseRate: this.poseRate, headS: this.headS, ...(this.window ? { startS: this.window.startS, derived: this.window.derived } : {}), ...(simHead === undefined ? {} : { simHeadS: Math.max(this.headS, simHead * dt) }) },
     };
     this.cached = { key, view };
     return view;
@@ -398,6 +400,8 @@ export class ReplayRunSource implements RunSource {
         return "the decision request of a mind is not part of a recording";
       case "researcher":
         return "beliefs versus truth is computed from the live run";
+      case "cellBeliefs":
+        return "what every agent believes of a cell is read from the live run's maps, which a recording does not hold";
       case "rays":
         return "lidar rays are not recorded";
       case "topology":
@@ -581,7 +585,8 @@ export async function openReplaySource(deps: ReplayDeps): Promise<Result<ReplayR
   const agents = configs.map((r) => {
     const p = r.payload as { key?: string; body?: unknown; beliefs?: { idealized?: boolean } } & Record<string, unknown>;
     const id = r.agentId ?? "";
-    const { op: _op, key: _key, ...config } = p as Record<string, unknown>;
+    // `copyOf` marks a configuration record a derived run carries from its parent: not part of the configuration.
+    const { op: _op, key: _key, copyOf: _copyOf, ...config } = p as Record<string, unknown>;
     return { id, ...(p.key === undefined ? {} : { key: p.key }), kind: id.startsWith("uav") ? ("uav" as const) : ("ugv" as const), body: p.body, config };
   });
   const dtS = await dtOf(deps);
@@ -604,7 +609,9 @@ export async function openReplaySource(deps: ReplayDeps): Promise<Result<ReplayR
   const dims = { sizeX: w.sizeX, sizeY: w.sizeY, chunkSize: w.chunkSize, resolutionM: w.resolutionM };
   const grid: GridSpec = { dims, zones: w.zones.map((z) => ({ id: z.id, kind: z.kind, polygon: [...z.polygon] })) as GridSpec["zones"], queue: new ChunkQueue(Math.ceil(w.sizeX / w.chunkSize), true) };
   const head = await headOf(deps.ports, deps.runId);
-  return ok(new ReplayRunSource(deps, run, grid, { coords: w.coords, data: w.data, defaultObstacleHeightM: w.defaultObstacleHeightM }, describePoseRate(header.recordingProfile), head));
+  const d = header.derived;
+  const window = d === undefined ? undefined : { startS: d.startTick * dtS, derived: { parentRunId: d.parentRunId, t0S: d.t0S, t1S: d.t1S, status: d.status, ...(d.divergence === undefined ? {} : { divergenceTick: d.divergence.tick }) } };
+  return ok(new ReplayRunSource(deps, run, grid, { coords: w.coords, data: w.data, defaultObstacleHeightM: w.defaultObstacleHeightM }, describePoseRate(header.recordingProfile), head, window));
 }
 
 /** The tick period of the run: from its first checkpoint record (tick and sim time), else the lab's 10 Hz. */

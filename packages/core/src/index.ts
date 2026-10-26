@@ -40,6 +40,7 @@ export {
   type SimPreparedMessage,
   type SimAgentViewMessage,
   type SimResearcherDataMessage,
+  type SimCellBeliefsMessage,
   type SimBeliefChunksMessage,
   type SimRaysMessage,
   type SimBudgetMessage,
@@ -51,6 +52,7 @@ export {
   type SimChunksMessage,
   type SimStateMessage,
   type SimStatsMessage,
+  type SimProgressMessage,
   type SimLoadedMessage,
   type SimLoadMessage,
 } from "./worker-protocol/messages.ts";

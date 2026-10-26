@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, sendTo, step, stepUntilEnded } from "./helpers.ts";
+import { loadDemo, openInspectorSections, sendTo, step, stepUntilEnded } from "./helpers.ts";
 
 // F1 acceptance from the UI: goTo to a point behind obstacles succeeds along a planned path (both paths drawn);
 // a target inside a closed box fails unreachable. The command is a world-scope run input (ADR-0015).
@@ -8,6 +8,7 @@ test("send the rover behind the wall from the UI: planned and executed paths dra
   await sendTo(page, "ugv-001", 50, 10);
   // Around the wall's north end: ~120 m at 2 m/s, about 600 ticks.
   await stepUntilEnded(page, 15);
+  await openInspectorSections(page);
   await expect(page.getByTestId("inspector-action-label")).toContainText("goTo · succeeded");
   const paths = await page.evaluate(() => window.__agentsim?.scene?.paths("ugv-001"));
   expect(paths?.planned).toBeGreaterThan(2);

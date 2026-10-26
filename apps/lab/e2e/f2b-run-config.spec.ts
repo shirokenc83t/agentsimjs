@@ -1,12 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, openPanelTab, openWorkspace, sendTo, step } from "./helpers.ts";
+import { loadDemo, openInspectorSections, openPanelTab, openWorkspace, sendTo, step } from "./helpers.ts";
 
 const astar = { kind: "algorithm", algorithm: "astar" };
 const hpa = { kind: "algorithm", algorithm: "hpa" };
 const inline = (root: unknown) => JSON.stringify({ schemaVersion: 0, id: "mine", version: 1, origin: "human", root });
 
 async function openRunConfig(page: Page) {
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await expect(panel.getByTestId("rc-valid")).toBeVisible();
@@ -96,6 +96,7 @@ test("a lazy refine on agents with a belief map shows a warning in the run confi
 
   await openWorkspace(page, "scene");
   await page.getByTestId("explorer-row-ugv-001").click();
+  await openInspectorSections(page);
   await expect(page.getByTestId("inspector-config-warning-lazy_refine_on_belief_map")).toContainText("belief map");
   await expect(page.getByTestId("inspector-strategy")).toContainText("strategy:mine@1");
 });

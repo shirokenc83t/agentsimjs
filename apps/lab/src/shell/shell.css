@@ -1,0 +1,122 @@
+/* The shell (UI-SPEC §2, ADR-0042): top bar 28 px, player 56 px in every workspace, status bar 24 px. Colours only from token variables. */
+
+/* Row 1: the top bar. */
+.top { display: flex; align-items: stretch; height: 28px; background: var(--bg1); border-bottom: 1px solid var(--ln); white-space: nowrap; }
+.top .seg { display: flex; align-items: center; gap: 8px; padding: 0 8px; border-right: 1px solid var(--ln); min-width: 0; flex: 0 1 auto; }
+.top .seg.r { border-right: 0; border-left: 1px solid var(--ln); }
+.top .ws-nav { padding: 0; gap: 0; }
+.top .brand { background: var(--bg3); color: var(--fg); font-weight: 600; letter-spacing: 0.04em; }
+.top .k, .bot .k { color: var(--fg3); }
+.sp { flex: 1; }
+.ws { appearance: none; border: 0; background: transparent; color: var(--fg2); padding: 0 6px; height: 28px; cursor: pointer; font: inherit; }
+.ws b { color: var(--fg3); font-weight: 400; margin-right: 4px; }
+.ws:hover { color: var(--fg); background: var(--bg3); }
+.ws.on { background: var(--bg0); color: var(--fg); box-shadow: inset 0 2px 0 var(--ac); }
+.tb { appearance: none; font: inherit; font-size: var(--type-label-size); height: 20px; min-width: 22px; padding: 0 6px; border: 1px solid var(--ln2); background: var(--bg1); color: var(--fg); cursor: pointer; }
+.tb:hover { background: var(--bg3); border-color: var(--fg3); }
+.tb.runsel { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+.top .rpseg { overflow: hidden; text-overflow: ellipsis; }
+.rpseg { color: var(--fg); font-weight: 600; background: var(--bg3); border-left: 1px solid var(--fg2); }
+.rpseg .ok, .derived-mark .ok { color: var(--ok); }
+
+/* Row 2: the player. */
+.player { display: grid; grid-template-columns: auto 140px minmax(0, 1fr) auto; align-items: stretch; height: 56px; background: var(--bg2); border-bottom: 2px solid var(--ln2); }
+.player.rp { background-color: var(--bg3); background-image: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--fg) 6%, transparent) 9px 18px); border-top: 2px solid var(--fg2); border-bottom-color: var(--fg2); }
+.ply { display: flex; align-items: center; gap: 4px; padding: 0 12px; border-right: 1px solid var(--ln); }
+.pb { appearance: none; font: inherit; width: 32px; height: 32px; border: 1px solid var(--ln2); background: var(--bg1); color: var(--fg); cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.pb:hover { background: var(--bg3); border-color: var(--fg3); }
+.pb.pri { width: 40px; height: 40px; background: var(--ac); border-color: var(--ac); color: var(--acfg); font-size: 15px; }
+.pb.pri:hover { background: var(--ac); border-color: var(--fg); }
+.pb.sm { width: auto; height: 28px; padding: 0 8px; font-size: var(--type-label-size); }
+.pb.static { cursor: default; background: transparent; }
+.pb.static:hover { background: transparent; border-color: var(--ln2); }
+.pb.golive { border-color: var(--run); color: var(--run); }
+.pb[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.clock { display: flex; flex-direction: column; justify-content: center; padding: 0 14px; border-right: 1px solid var(--ln); }
+.clock .big { font-size: var(--type-clock-size); font-weight: var(--type-clock-weight); line-height: 1.1; white-space: nowrap; }
+.lbl { font-size: var(--type-label-size); letter-spacing: var(--type-label-tracking); color: var(--fg3); text-transform: uppercase; }
+.scrub { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 14px; border-right: 1px solid var(--ln); min-width: 0; overflow: hidden; }
+.scrub .row { display: flex; align-items: center; gap: 10px; font-size: var(--type-label-size); color: var(--fg3); min-width: 0; margin: 0; flex-wrap: nowrap; overflow: hidden; }
+.scrub .row > * { flex: none; }
+.scrub .row > .derived-mark { flex: 0 100 auto; min-width: 8ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scrub .row > .trunc { flex: 0 1 auto; min-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scrub .row .sp { flex: 1 1 0; }
+.track { position: relative; height: 14px; background: var(--bg0); border: 1px solid var(--ln); }
+.track.clickable { cursor: pointer; }
+.track .sv { position: absolute; left: 0; top: 0; bottom: 0; background: var(--bg3); }
+.track .gap { position: absolute; top: 0; bottom: 0; background-image: var(--hatch-pattern); }
+.track .tick { position: absolute; top: 2px; bottom: 2px; width: 2px; }
+.track .hd { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: var(--ac); }
+.track .cursor-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
+.track:has(.cursor-input:focus-visible) { outline: var(--focus-ring) solid var(--ac); outline-offset: 1px; }
+.live { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border: 1px solid var(--run); color: var(--run); font-weight: 600; font-size: var(--type-label-size); height: 16px; }
+.live.rp { border-color: var(--fg); color: var(--fg); background: var(--bg3); }
+.telem { display: flex; align-items: stretch; }
+.tile { display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: 0 12px; border-left: 1px solid var(--ln); min-width: 72px; }
+.tile .v { font-size: var(--type-telemetry-size); font-weight: var(--type-telemetry-weight); white-space: nowrap; }
+.tile .v small { font-size: var(--type-label-size); color: var(--fg3); font-weight: 400; }
+.attn-tile { appearance: none; font: inherit; color: inherit; background: transparent; border-top: 0; border-right: 0; border-bottom: 0; cursor: pointer; text-align: left; }
+.attn-tile:hover:not(:disabled) { background: var(--bg3); }
+.attn-tile:disabled { cursor: default; }
+/* A zero attention count is neutral: it must not borrow the colour of the level beside it. */
+.attn-zero { color: var(--fg3); }
+.meter { height: 3px; background: var(--bg3); position: relative; margin-top: 2px; }
+.meter i { position: absolute; left: 0; top: 0; bottom: 0; }
+
+/* Row 5: the status bar. */
+.bot { display: flex; align-items: stretch; height: 24px; background: var(--bg1); border-top: 1px solid var(--ln); white-space: nowrap; overflow: hidden; font-size: var(--type-label-size); color: var(--fg2); }
+.bot .seg { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-right: 1px solid var(--ln); flex: none; white-space: nowrap; }
+.bot [data-hid] { display: none; }
+.bot .more { color: var(--fg2); cursor: default; }
+.bot .seg.r, .bot .seg.pri { flex: none; }
+.bot .sp { flex: 1 1 0; min-width: 0; }
+.bot .seg.r { border-right: 0; border-left: 1px solid var(--ln); }
+.bot .warn { color: var(--warn); }
+.bot .danger { color: var(--alm); }
+
+/* Below 1500 px the less important parts give way: the telemetry tiles beyond the first two, the pose rate, the optional labels of the top bar. */
+@media (max-width: 1500px) {
+  .tile.opt, .hide-narrow, .top .k-opt { display: none; }
+}
+/* The top bar's own layout controls (they are palette commands too) give way before the replay segment and the palette key, which never leave the screen. */
+@media (max-width: 1240px) {
+  .top .layout-seg { display: none; }
+}
+
+/* Tooltips are nowrap pseudo-elements that count as overflow: near the right edge they would make the page scroll sideways. */
+.shell { overflow: clip; }
+
+/* Reduced motion: the viewer's setting, or the OS's. */
+[data-motion="reduce"] *, [data-motion="reduce"] *::before, [data-motion="reduce"] *::after { transition: none !important; animation: none !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+.bot .segbtn { appearance: none; font: inherit; color: inherit; background: transparent; border: 0; border-left: 1px solid var(--ln); cursor: pointer; }
+.bot .segbtn:hover { background: var(--bg3); color: var(--fg); }
+/* Measuring the bar: every segment at the width its content wants. */
+.top.nat .seg, .top.nat .ws-nav { flex-shrink: 0; }
+.top.nat .sp { flex: 0 0 0; }
+/* The layout select keeps one width whatever the layout is called: a long name is cut, never pushes the bar into folding. */
+.layout-seg select { max-width: 120px; text-overflow: ellipsis; }
+
+/* READY (U-010 section 4): the launch group takes the place of the play button until a run is started or stepped; the Re-run split button. */
+.ready-start { display: inline-flex; align-items: center; gap: 6px; padding-right: 4px; color: var(--fg2); white-space: nowrap; }
+.ready-start .pb.pri { background: var(--ac); color: var(--acfg); }
+.ready-sum { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; font-size: var(--type-label-size); }
+.rerun-split { position: relative; display: inline-flex; }
+.rerun-split .caret { padding: 0 6px; border-left: 0; }
+.rerun-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; display: flex; flex-direction: column; min-width: 260px; padding: 2px; background: var(--bg2); border: 1px solid var(--ln2); }
+.rerun-pop .tb { justify-content: flex-start; height: 26px; }
+.rerun-same { margin: 4px 8px 4px; font-size: var(--type-label-size); white-space: normal; }
+.ready-start .pb { width: auto; min-width: 0; padding: 0 10px; white-space: nowrap; }
+.ready-block { display: inline-flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
+.ready-block .ready-sum { max-width: 460px; }
+.pb { white-space: nowrap; }
+.ready-start .pb, .ready-start .pb.pri { height: 28px; font-size: var(--type-label-size); }
+/* The run selector keeps to a width: a long run label is cut (its whole text is the popover's), so the bar does not outgrow a 1280 px window. */
+.top .runsel { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.queued-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16em; font-size: var(--type-label-size); }
+.top.compact .theme-btn .lbl { display: none; }
+/* A narrow window: the launch row gives up the run's id (the summary under it has it), the time mode chip (it is in that summary too) and the words of "scrub back". */
+@media (max-width: 1100px) {
+  .ready-start .rid, .hide-1100, .ply .lbl-long { display: none; }
+}
+.top .theme-btn { text-transform: none; }

@@ -1,8 +1,69 @@
-import NativeSelect from "@mui/material/NativeSelect";
-import TextField from "@mui/material/TextField";
-import type { InputHTMLAttributes, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { errorKey } from "./model.ts";
 
-const inputProps = (testId: string, extra: InputHTMLAttributes<HTMLInputElement> = {}) => ({ "data-testid": testId, className: "mono", ...extra }) as InputHTMLAttributes<HTMLInputElement>;
+/** A resolver or schema error as the form got it: the stable code, the message and the path into the document. */
+export interface FieldError {
+  readonly code: string;
+  readonly message: string;
+  readonly path?: string | undefined;
+}
+
+/** The error the draft is in, so the field it points at can show the error state with its code. */
+const ErrorContext = createContext<FieldError | undefined>(undefined);
+export const FieldErrorProvider = ErrorContext.Provider;
+
+const inputProps = (testId: string, extra: InputHTMLAttributes<HTMLInputElement> = {}) =>
+  ({ "data-testid": testId, className: "mono", ...extra }) as InputHTMLAttributes<HTMLInputElement>;
+
+/** The error that points at the field `key` (the last segment of its path), if there is one. */
+function useFieldError(key: string | undefined): FieldError | undefined {
+  const e = useContext(ErrorContext);
+  return key !== undefined && e !== undefined && errorKey(e) === key ? e : undefined;
+}
+
+type InputState = "inh" | "set" | "err";
+
+/** A typed number: a dot or a comma as the decimal mark; nothing for an empty or a half-typed text ("-", "1e"). */
+function parseNumber(t: string): number | undefined {
+  const s = t.trim().replace(",", ".");
+  if (s === "") return undefined;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * One line: the label (with a short second line), the input, then the help: where the value comes from, or the error with its code
+ * and path. The input has three states: inherited (dashed, grey), set (accent edge), error (alarm tint).
+ */
+export function FieldRow(props: {
+  label: string;
+  sub?: string | undefined;
+  state: InputState;
+  help?: ReactNode;
+  error?: FieldError | undefined;
+  children: ReactNode;
+  testId?: string;
+}) {
+  return (
+    <label className={`rc-row ${props.state}`} data-state={props.state} data-testid={props.testId}>
+      <span className="rc-label">
+        {props.label}
+        {props.sub && <small>{props.sub}</small>}
+      </span>
+      <span className="rc-input">{props.children}</span>
+      <span className={`rc-help${props.error ? " st-alm" : ""}`}>
+        {props.error ? (
+          <>
+            <span className="code">✕ {props.error.code}</span> {props.error.message}
+            {props.error.path && <span className="muted"> · {props.error.path}</span>}
+          </>
+        ) : (
+          props.help
+        )}
+      </span>
+    </label>
+  );
+}
 
 /**
  * Optional number: empty means "not set here" (inherit from the lower precedence levels). Out-of-range values
@@ -16,22 +77,44 @@ export function NumberField(props: {
   integer?: boolean;
   step?: number;
   placeholder?: string;
+  /** The schema key of the field: an error whose path ends in it is shown on this row. */
+  fieldKey?: string;
+  sub?: string;
+  unit?: string;
+  help?: ReactNode;
 }) {
+  const error = useFieldError(props.fieldKey);
+  const state: InputState = error ? "err" : props.value === undefined ? "inh" : "set";
+  // The text as typed: a number input would show a comma in some locales and drop a decimal point typed last. A dot or a comma is read as the decimal mark.
+  const [text, setText] = useState(props.value === undefined ? "" : String(props.value));
+  useEffect(() => {
+    setText((cur) => (parseNumber(cur) === props.value ? cur : props.value === undefined ? "" : String(props.value)));
+  }, [props.value]);
   return (
-    <TextField
+    <FieldRow
       label={props.label}
-      type="number"
-      size="small"
-      value={props.value ?? ""}
-      placeholder={props.placeholder ?? "inherit"}
-      onChange={(e) => {
-        const t = e.target.value.trim();
-        if (t === "") return props.onChange(undefined);
-        const n = Number(t);
-        if (Number.isFinite(n)) props.onChange(props.integer ? Math.trunc(n) : n);
-      }}
-      slotProps={{ htmlInput: inputProps(props.testId, { step: props.step ?? (props.integer ? 1 : "any") }), inputLabel: { shrink: true } }}
-    />
+      sub={props.sub}
+      state={state}
+      error={error}
+      help={props.help ?? (props.value === undefined ? "inherited" : "set here")}
+    >
+      <input
+        type="text"
+        inputMode={props.integer ? "numeric" : "decimal"}
+        {...inputProps(props.testId)}
+        aria-label={props.label}
+        aria-invalid={error ? true : undefined}
+        value={text}
+        placeholder={props.placeholder ?? "inherit"}
+        onChange={(e) => {
+          setText(e.target.value);
+          const n = parseNumber(e.target.value);
+          if (e.target.value.trim() === "") props.onChange(undefined);
+          else if (n !== undefined) props.onChange(props.integer ? Math.trunc(n) : n);
+        }}
+      />
+      {props.unit && <span className="unit">{props.unit}</span>}
+    </FieldRow>
   );
 }
 
@@ -43,17 +126,29 @@ export function OptionField<T extends string>(props: {
   onChange: (v: T | undefined) => void;
   testId: string;
   inheritLabel?: string;
+  fieldKey?: string;
+  sub?: string;
+  help?: ReactNode;
 }) {
+  const error = useFieldError(props.fieldKey);
+  const state: InputState = error ? "err" : props.value === undefined ? "inh" : "set";
   return (
-    <label className="field">
-      <span className="field-label">{props.label}</span>
-      <NativeSelect
+    <FieldRow
+      label={props.label}
+      sub={props.sub}
+      state={state}
+      error={error}
+      help={props.help ?? (props.value === undefined ? "inherited" : "set here")}
+    >
+      <select
+        {...(inputProps(props.testId, {
+          "aria-label": props.label,
+        } as InputHTMLAttributes<HTMLInputElement>) as object)}
         value={props.value ?? ""}
         onChange={(e) => {
           const v = e.target.value;
           props.onChange(v === "" ? undefined : (props.options.find((o) => o === v) ?? undefined));
         }}
-        inputProps={inputProps(props.testId, { "aria-label": props.label } as InputHTMLAttributes<HTMLInputElement>) as object}
       >
         <option value="">{props.inheritLabel ?? "(inherit)"}</option>
         {props.options.map((o) => (
@@ -61,8 +156,8 @@ export function OptionField<T extends string>(props: {
             {o}
           </option>
         ))}
-      </NativeSelect>
-    </label>
+      </select>
+    </FieldRow>
   );
 }
 
@@ -70,7 +165,7 @@ export function OptionField<T extends string>(props: {
 export function Issue(props: { code: string; message: string; testId: string; children?: ReactNode }) {
   return (
     <p className="danger issue" role="alert" data-testid={props.testId}>
-      ✗ <span className="mono">{props.code}</span> {props.message}
+      ✕ <span className="mono">{props.code}</span> {props.message}
       {props.children}
     </p>
   );

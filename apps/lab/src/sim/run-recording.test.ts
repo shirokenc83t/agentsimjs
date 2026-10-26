@@ -76,7 +76,7 @@ describe("checkpoints and snapshots", () => {
   it("sends a section that has not changed once: no blob appears in two items", () => {
     const t = setup(profileOf("default-research", (p) => ({ ...p, checkpoints: { everyTicks: 100, snapshotEveryS: 2 } })));
     t.step(100); // nobody explores: the maps do not change between snapshots
-    const ids = t.items.flatMap((i) => i.blobs.map((b) => b.id));
+    const ids = t.items.flatMap((i) => (i.type === "metrics" ? [] : i.blobs).map((b) => b.id));
     expect(ids.length).toBeGreaterThan(0);
     expect(new Set(ids).size).toBe(ids.length);
     expect(snapshotsOf(t.items).length).toBeGreaterThan(3);

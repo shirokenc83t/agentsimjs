@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { countSimMessages, loadF2, openWorkspace, runCommand, setReplayCursor, simMessages, step, waitForStorageReady } from "./helpers.ts";
+import { countSimMessages, loadF2, openInspectorSections, openWorkspace, runCommand, setReplayCursor, simMessages, step, waitForStorageReady } from "./helpers.ts";
 
 // F3a M3 (acceptance 1): record a run, export it (JSON lines and per-run SQLite), delete it, reload the page, import the files: each is added as a new run
 // with a fresh ID (the deleted ID is not reused) and replays as the same run: the same Inspector state at moments of the run, the same events and the same
@@ -27,16 +27,20 @@ async function signature(page: Page, runId: string) {
   for (const t of [5, head]) {
     await setReplayCursor(page, t);
     await page.getByTestId(`explorer-row-${AGENT}`).click();
+    await openInspectorSections(page);
     await expect(page.getByTestId("inspector-state")).toContainText("position");
     // The panel is polled: wait until it shows the cursor's moment (its odometer settles), then read.
     await page.waitForTimeout(400);
     out[`state@${t}`] = (await page.getByTestId("inspector-state").textContent()) ?? "";
   }
   await openWorkspace(page, "debug");
-  await page.getByTestId("event-filter-kind").selectOption("event");
+  await page.getByTestId("event-kind-event").click({ modifiers: ["Shift"] }); // that kind alone
   await expect.poll(() => page.locator('[data-testid^="event-row-"]').count(), { timeout: 15_000 }).toBeGreaterThan(2);
   const rows = page.locator('[data-testid^="event-row-"]');
-  out["events"] = (await rows.evaluateAll((els) => els.slice(0, 12).map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim()))).join(" | ");
+  // The list reloads while the live run goes on in the background: read it until a read finds the rows.
+  await expect
+    .poll(async () => (out["events"] = (await rows.evaluateAll((els) => els.slice(0, 12).map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim()))).join(" | ")), { timeout: 15_000 })
+    .not.toBe("");
   const checkpoint = rows.filter({ hasText: "checkpoint" }).first();
   await checkpoint.click();
   out["checkpoint"] = ((await page.getByTestId("event-detail").textContent()) ?? "").replace(/"id": "run-\d{6}#/g, '"id": "run-X#').replace(/"runId": "run-\d{6}"/g, '"runId": "run-X"');

@@ -61,6 +61,9 @@ async function storeItem(client: StorageClient, runId: string, item: RecorderIte
   if (item.type === "snapshot") {
     const r = await client.ports.snapshots.write(runId, { seq: item.seq, simTime: item.simTimeS, tick: item.tick, bytes: item.bytes, blobs: item.blobs });
     if (!r.ok && r.error.code !== "duplicate_snapshot") throw new Error(r.error.message);
+  } else if (item.type === "metrics") {
+    const r = await client.ports.metrics.append(runId, item.samples);
+    if (!r.ok) throw new Error(r.error.message);
   } else {
     const p = await client.ports.snapshots.putBlobs(runId, item.blobs);
     if (!p.ok) throw new Error(p.error.message);
@@ -69,7 +72,7 @@ async function storeItem(client: StorageClient, runId: string, item: RecorderIte
   }
 }
 
-const itemTick = (i: RecorderItem | undefined): number => (i === undefined ? 0 : i.type === "snapshot" ? i.tick : (i.frames[0]?.tick ?? 0));
+const itemTick = (i: RecorderItem | undefined): number => (i === undefined ? 0 : i.type === "snapshot" ? i.tick : i.type === "metrics" ? (i.samples[0]?.tick ?? 0) : (i.frames[0]?.tick ?? 0));
 
 const reidentified = (b: RecorderBatch, runId: string) => b.records.map((x) => ({ ...x, runId, id: `${runId}#${x.seq}` }));
 

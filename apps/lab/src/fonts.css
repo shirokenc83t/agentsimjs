@@ -1,6 +1,6 @@
-/* Self-hosted fonts (ADR-0032 §4): IBM Plex Sans (UI) and JetBrains Mono, Latin subset, regular and semibold,
-   SIL OFL. Only woff2 is referenced, so the .woff fallbacks of @fontsource are never emitted. The UI regular
-   face is preloaded (vite.config.ts); the others load on first use (font-display: swap). */
+/* Self-hosted fonts (ADR-0042 §2): JetBrains Mono (the whole chrome) and IBM Plex Sans (running prose only), Latin subset, regular and
+   semibold, SIL OFL. Only woff2 is referenced, so the .woff fallbacks of @fontsource are never emitted. The Mono regular face is
+   preloaded (vite.config.ts); the others load on first use (font-display: swap). */
 @font-face {
   font-family: "IBM Plex Sans";
   font-style: normal;
@@ -28,4 +28,15 @@
   font-weight: 600;
   font-display: swap;
   src: url("../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff2") format("woff2");
+}
+
+/* The symbols of the chrome (✕ ▲ ▼ ▶ ❚ ◷ ○ ● ◆ ◇ ▪ ✓ │), drawn as outlines 600 units wide like JetBrains Mono: the Latin subset above does not hold them, and without this face
+   each would come from a system font that differs from one machine to the next. Made by tools/fonts/make-glyph-font.mjs, served from public/ (a file this small would be inlined as a data URI, which the font-src policy refuses). It follows JetBrains Mono in the font stacks. */
+@font-face {
+  font-family: "AgentSim Glyphs";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/agentsim-glyphs.ttf") format("truetype");
+  unicode-range: U+2502, U+25A0, U+25AA, U+25B2, U+25B6, U+25B7, U+25BC, U+25C6-25C7, U+25CB, U+25CE, U+25CF, U+25D0, U+25F7, U+2713, U+2715, U+29C9, U+275A;
 }

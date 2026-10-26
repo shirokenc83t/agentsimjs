@@ -54,6 +54,7 @@ export async function recorded(ticks: number, edit?: (records: TraceRecord[]) =>
   await ports.runs.create({ runId: "run-000001", schemaVersion: 0, createdAtWallMs: 1, label: "r", status: "completed", recording: "stored", recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile), scenarioId: saved.value.id, scenarioVersion: saved.value.version });
   for (const item of t.items) {
     if (item.type === "snapshot") await ports.snapshots.write(item.runId, { seq: item.seq, simTime: item.simTimeS, tick: item.tick, bytes: item.bytes, blobs: item.blobs });
+    else if (item.type === "metrics") await ports.metrics.append(item.runId, item.samples);
     else {
       await ports.snapshots.putBlobs(item.runId, item.blobs);
       await ports.beliefFrames.append(item.runId, item.frames);

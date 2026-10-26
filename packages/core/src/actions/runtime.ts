@@ -5,6 +5,7 @@ import { stepUavTowards, type UavState } from "../body/kinematics.ts";
 import { cos, sin } from "../numerics/detmath/index.ts";
 import { contentHash64 } from "../numerics/content-hash.ts";
 import type { AllowedAction, UnavailableAction } from "../world/mind-view.ts";
+import { stateAvailability, vehicleAvailability, type AgentFacts, type Unavailable } from "./availability.ts";
 
 
 import { err, ok, type CodedError, type Result } from "../result.ts";
@@ -17,7 +18,7 @@ import { predictTracking, type PredriveOutcome } from "./predrive.ts";
 export type ActionStatus = "running" | "succeeded" | "failed" | "preempted";
 
 /** A failure with a stable code from tools-schema (capability-specific or common). */
-export type ActionFailure = CodedError<string>;
+export type ActionFailure = CodedError<string> & { /** For `precondition_failed`: the precondition that does not hold. */ readonly requires?: string };
 
 export interface ActionInfo {
   readonly actionId: string;
@@ -41,15 +42,11 @@ export interface EndedAction {
   /** Failure or preemption code. */
   readonly code?: string;
   readonly result?: unknown;
+  /** The id of the trace record that ended it (`op: "end"`), which the event to the mind names as its cause. */
+  readonly recordId?: string;
 }
 
-/** Why an action cannot be started now, before its parameters matter (the single start-time availability predicate). */
-export interface Unavailable {
-  readonly code: string;
-  readonly message: string;
-  /** For `precondition_failed`: the precondition that does not hold. */
-  readonly requires?: string;
-}
+export type { Unavailable };
 
 export interface Caller {
   readonly scope: Scope;
@@ -77,7 +74,7 @@ type NamedTrigger = ReflexTrigger & { readonly reflex: string };
 type Step =
   | { readonly kind: "running" }
   | { readonly kind: "succeeded"; readonly result: unknown }
-  | { readonly kind: "failed"; readonly failure: ActionFailure }
+  | { readonly kind: "failed"; readonly failure: ActionFailure; /** The trace record that explains the failure (the planner's outcome). */ readonly cause?: string }
   | { readonly kind: "reflex"; readonly trigger: NamedTrigger };
 
 /** Asks the reflexes whether the body may move from `from` to `to`; a trigger vetoes the move. */
@@ -92,7 +89,37 @@ const MAX_RECOVERIES = 3;
 const BACKOFF_TOLERANCE_M = 0.05;
 /** Neighbour order of the escape search (E, NE, N, NW, W, SW, S, SE): fixed, so the search is deterministic. */
 const ESCAPE_DIRS: readonly (readonly [number, number])[] = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
-const fail = (code: string, message: string): Step => ({ kind: "failed", failure: { code, message } });
+const fail = (code: string, message: string, cause?: string): Step => ({ kind: "failed", failure: { code, message }, ...(cause === undefined ? {} : { cause }) });
+
+/**
+ * The trace the runtime and its behaviors write through: it gives the records of a running action their parent (the action's start) and notes a collision for the
+ * failure it causes. Links are assigned here, by trusted code, never by a behavior or a mind (ADR-0004).
+ */
+class LinkingTrace implements TraceSink {
+  /** The latest collision event of each agent: the cause of the `collision` failure that follows it. */
+  readonly collisions = new Map<string, string>();
+  constructor(
+    private readonly inner: TraceSink,
+    private readonly startOf: (agentId: string) => string | undefined,
+  ) {}
+
+  emit(r: Parameters<TraceSink["emit"]>[0]): string {
+    const p = r.payload;
+    const op = p !== null && typeof p === "object" ? (p as { op?: unknown }).op : undefined;
+    const ofAction = r.kind === "action" && op !== "start" && op !== "rejected";
+    const collision = r.kind === "event" && op === "collision";
+    const parent = r.parentId === undefined && (ofAction || collision || r.kind === "reflex") ? this.startOf(r.agentId) : r.parentId;
+    const id = this.inner.emit(parent === undefined ? r : { ...r, parentId: parent });
+    if (collision) this.collisions.set(r.agentId, id);
+    return id;
+  }
+
+  /** The id a record named by a snapshot has in the run being restored into (the same sequence number, this run's ID). */
+  rebase(id: string): string {
+    const seq = Number(id.slice(id.lastIndexOf("#") + 1));
+    return this.inner.idOf !== undefined && Number.isInteger(seq) ? this.inner.idOf(seq) : id;
+  }
+}
 
 interface TickCtx {
   readonly tick: number;
@@ -204,7 +231,7 @@ export type BehaviorSnapshot = HoldSnapshot | TakeoffSnapshot | LandSnapshot | G
 export interface RuntimeSnapshot {
   readonly nextAction: number;
   /** The running behaviour of each agent, by agent ID. */
-  readonly active: readonly { readonly agentId: string; readonly info: Active["info"]; readonly behavior: BehaviorSnapshot }[];
+  readonly active: readonly { readonly agentId: string; readonly info: Active["info"]; /** The trace record of the action's start, the parent of what it writes from now on. */ readonly startRecord?: string; readonly behavior: BehaviorSnapshot }[];
   /** Each agent's current or latest action, by agent ID. */
   readonly last: readonly ActionInfo[];
   readonly recovering: readonly string[];
@@ -272,6 +299,12 @@ class TakeoffBehavior implements Behavior {
 export class ActionRuntime {
   private nextAction = 1;
   private readonly active = new Map<string, Active>();
+  /** The trace record of each running action's start: the parent of what happens during it. Part of a snapshot, so a restored run links the same. */
+  private readonly startRecords = new Map<string, string>();
+  /** The record of each agent's latest refused start, for the event the world raises about it. */
+  private readonly rejectedRecords = new Map<string, string>();
+  private readonly links: LinkingTrace;
+  private readonly ports: RuntimePorts;
   private readonly last = new Map<string, ActionInfo>();
   private ended: EndedAction[] = [];
   private manifestHashCache: string | undefined;
@@ -279,9 +312,19 @@ export class ActionRuntime {
   private readonly recovering = new Set<string>();
 
   constructor(
-    private readonly ports: RuntimePorts,
+    ports: RuntimePorts,
     private readonly dtS: number,
-  ) {}
+  ) {
+    this.links = new LinkingTrace(ports.trace, (agentId) => this.startRecords.get(agentId));
+    this.ports = { ...ports, trace: this.links };
+  }
+
+  /** The record of the agent's latest refused start (`op: "rejected"`), once, for the world's event about it. */
+  takeRejectedRecord(agentId: string): string | undefined {
+    const id = this.rejectedRecords.get(agentId);
+    this.rejectedRecords.delete(agentId);
+    return id;
+  }
 
   /** Whether a researcher may inject `name` as a world-scope command (the closed set of ADR-0015's 2026-10-12 addition). */
   isInjectable(name: string): boolean {
@@ -293,8 +336,8 @@ export class ActionRuntime {
    * Base actions are `self` scope: any other caller gets `scope_denied` (ADR-0015). The researcher's world-scope
    * commands use `startInjected`, which only the world's input phase calls.
    */
-  start(agent: SimAgent, name: string, params: unknown, caller: Caller, tick: number, simTime: number): Result<string, ActionFailure> {
-    return this.begin(agent, name, params, caller, tick, simTime, undefined);
+  start(agent: SimAgent, name: string, params: unknown, caller: Caller, tick: number, simTime: number, cause?: string): Result<string, ActionFailure> {
+    return this.begin(agent, name, params, caller, tick, simTime, undefined, cause);
   }
 
   /**
@@ -307,15 +350,15 @@ export class ActionRuntime {
     return this.begin(agent, name, params, { scope: "world", id: "world" }, tick, simTime, inputId);
   }
 
-  private begin(agent: SimAgent, name: string, params: unknown, caller: Caller, tick: number, simTime: number, inputId: string | undefined): Result<string, ActionFailure> {
+  private begin(agent: SimAgent, name: string, params: unknown, caller: Caller, tick: number, simTime: number, inputId: string | undefined, cause?: string): Result<string, ActionFailure> {
     const rejected = this.checkStart(agent, name, params, caller, inputId !== undefined);
     if (rejected) {
-      this.emit(agent, simTime, "full", { op: "rejected", name, params, failure: rejected, ...(inputId === undefined ? {} : { caller: "world", inputId }) });
+      this.rejectedRecords.set(agent.id, this.emit(agent, simTime, "full", { op: "rejected", name, params, failure: rejected, ...(inputId === undefined ? {} : { caller: "world", inputId }) }, cause));
       return err(rejected);
     }
     const behavior = this.createBehavior(agent, name, params as Record<string, unknown>);
     if (!behavior.ok) {
-      this.emit(agent, simTime, "full", { op: "rejected", name, params, failure: behavior.error });
+      this.rejectedRecords.set(agent.id, this.emit(agent, simTime, "full", { op: "rejected", name, params, failure: behavior.error }, cause));
       return err(behavior.error);
     }
     // Replaced by the agent's own next decision: no event (it asked for it). A world command raises one.
@@ -324,7 +367,7 @@ export class ActionRuntime {
     this.active.set(agent.id, { info: { actionId, agentId: agent.id, name, startedTick: tick }, behavior: behavior.value });
     agent.odometerM = 0;
     this.last.set(agent.id, { actionId, agentId: agent.id, name, status: "running", phase: behavior.value.phase, startedTick: tick });
-    this.emit(agent, simTime, "full", { op: "start", actionId, name, params, ...(inputId === undefined ? {} : { caller: "world", inputId }) });
+    this.startRecords.set(agent.id, this.emit(agent, simTime, "full", { op: "start", actionId, name, params, ...(inputId === undefined ? {} : { caller: "world", inputId }) }, cause));
     return ok(actionId);
   }
 
@@ -340,7 +383,7 @@ export class ActionRuntime {
     if (this.ports.capabilities.kind(name) !== "action") return { code: "not_an_action", message: `${name} is not an action: it accompanies a decision` };
     if (injected && !this.ports.capabilities.injectable(name)) return { code: "not_injectable", message: `${name} cannot be injected as a researcher command` };
     const u = this.availability(agent, name, caller, injected);
-    return u ? { code: u.code, message: u.message } : undefined;
+    return u ? { code: u.code, message: u.message, ...(u.requires === undefined ? {} : { requires: u.requires }) } : undefined;
   }
 
   /** Validates the parameters of a bookkeeping capability (timers) from a mind's decision: the tools-schema schema. */
@@ -359,20 +402,16 @@ export class ActionRuntime {
    */
   availability(agent: SimAgent, name: string, caller: Caller, injected = false): Unavailable | undefined {
     const caps = this.ports.capabilities;
-    if (!caps.vehicles(name).includes(agent.kind)) return { code: "vehicle_unsupported", message: `${name} is not available to ${agent.kind}` };
+    const vehicle = vehicleAvailability(caps, name, agent.kind);
+    if (vehicle) return vehicle;
     const self = caps.scope(name) === "self" && caller.scope === "self" && caller.id === agent.id;
     // Injected: a self-scope base action started by the world on the agent's behalf (ADR-0015 clarification).
     const injectedBaseAction = injected && caller.scope === "world" && caps.scope(name) === "self";
     if (!self && !injectedBaseAction) {
       return { code: "scope_denied", message: `${name} can only be started by the agent itself` };
     }
-    if (agent.battery.soc <= 0) return { code: "battery_depleted", message: "battery is empty" };
-    for (const p of caps.preconditions(name)) {
-      if (p.vehicles && !p.vehicles.includes(agent.kind)) continue;
-      const holds = p.name === "airborne" ? agent.kind === "uav" && agent.state.airborne : p.name === "grounded" ? agent.kind === "uav" && !agent.state.airborne : p.name === "hasBase" ? agent.base !== undefined : p.name === "hasRangeSensor" ? (this.ports.frontiers?.hasRangeSensor(agent.id) ?? false) : false;
-      if (!holds) return { code: "precondition_failed", message: `${name} requires ${p.name}`, requires: p.name };
-    }
-    return undefined;
+    const facts: AgentFacts = { kind: agent.kind, airborne: agent.kind === "uav" && agent.state.airborne, soc: agent.battery.soc, hasBase: agent.base !== undefined, hasRangeSensor: this.ports.frontiers?.hasRangeSensor(agent.id) ?? false };
+    return stateAvailability(caps, name, facts);
   }
 
   /**
@@ -419,7 +458,7 @@ export class ActionRuntime {
       const prev = this.last.get(agent.id);
       if (prev && prev.status === "running") this.last.set(agent.id, { ...prev, phase: a.behavior.phase });
       if (s.kind === "succeeded") this.end(agent, tick, simTime, { kind: "succeeded", result: s.result });
-      else if (s.kind === "failed") this.end(agent, tick, simTime, { kind: "failed", failure: s.failure });
+      else if (s.kind === "failed") this.end(agent, tick, simTime, { kind: "failed", failure: s.failure, ...(s.cause === undefined ? {} : { cause: s.cause }) });
       else if (s.kind === "reflex") this.applyReflex(agent, s.trigger, tick, simTime);
     } else if (agent.kind === "ugv") {
       agent.state.speed = 0;
@@ -461,7 +500,7 @@ export class ActionRuntime {
    */
   private applyReflex(agent: SimAgent, t: NamedTrigger, tick: number, simTime: number): void {
     const running = this.active.get(agent.id)?.info.actionId;
-    this.ports.trace.emit({
+    const reflexId = this.ports.trace.emit({
       source: `${agent.id}/reflexes`,
       simTime,
       kind: "reflex",
@@ -469,8 +508,9 @@ export class ActionRuntime {
       detail: "full",
       payload: { reflex: t.reflex, code: t.code, message: t.message, ...(running ? { preemptedActionId: running } : {}), ...(t.then ? { then: t.then.name } : {}) },
     });
-    this.end(agent, tick, simTime, { kind: "preempted", reason: t.message, code: t.code });
-    if (t.then && this.start(agent, t.then.name, t.then.params, { scope: "self", id: agent.id }, tick, simTime).ok) this.recovering.add(agent.id);
+    // The reflex is what ended the action it preempted and what started its recovery.
+    this.end(agent, tick, simTime, { kind: "preempted", reason: t.message, code: t.code, cause: reflexId });
+    if (t.then && this.start(agent, t.then.name, t.then.params, { scope: "self", id: agent.id }, tick, simTime, reflexId).ok) this.recovering.add(agent.id);
   }
 
   /** Actions that ended since the last call, in order of ending (events for minds, ADR-0005 addition). */
@@ -498,7 +538,7 @@ export class ActionRuntime {
     agent: SimAgent,
     tick: number,
     simTime: number,
-    how: { kind: "succeeded"; result: unknown } | { kind: "failed"; failure: ActionFailure } | { kind: "preempted"; reason: string; code?: string; silent?: boolean },
+    how: { kind: "succeeded"; result: unknown } | { kind: "failed"; failure: ActionFailure; cause?: string } | { kind: "preempted"; reason: string; code?: string; silent?: boolean; cause?: string },
   ): void {
     const a = this.active.get(agent.id);
     if (!a) return;
@@ -514,6 +554,23 @@ export class ActionRuntime {
           ? { ...base, status: "failed", failure: how.failure }
           : { ...base, status: "preempted", failure: { code: how.code ?? "preempted", message: how.reason } };
     this.last.set(agent.id, info);
+    // What ended it, when a record says so: the reflex that preempted it, the collision it hit, the planner's outcome that failed it.
+    const cause = how.kind === "succeeded" ? undefined : (how.cause ?? (how.kind === "failed" && how.failure.code === "collision" ? this.links.collisions.get(agent.id) : undefined));
+    const recordId = this.emit(
+      agent,
+      simTime,
+      "full",
+      {
+        op: "end",
+        actionId: a.info.actionId,
+        name: a.info.name,
+        status: info.status,
+        ...(info.failure ? { failure: info.failure } : {}),
+        ...(how.kind === "succeeded" ? { result: how.result } : {}),
+      },
+      cause,
+    );
+    this.startRecords.delete(agent.id);
     if (!(how.kind === "preempted" && how.silent)) {
       this.ended.push({
         agentId: agent.id,
@@ -522,20 +579,14 @@ export class ActionRuntime {
         status: how.kind,
         ...(how.kind === "failed" ? { code: how.failure.code } : how.kind === "preempted" ? { code: how.code ?? "preempted" } : {}),
         ...(how.kind === "succeeded" ? { result: how.result } : {}),
+        recordId,
       });
     }
-    this.emit(agent, simTime, "full", {
-      op: "end",
-      actionId: a.info.actionId,
-      name: a.info.name,
-      status: info.status,
-      ...(info.failure ? { failure: info.failure } : {}),
-      ...(how.kind === "succeeded" ? { result: how.result } : {}),
-    });
   }
 
-  private emit(agent: SimAgent, simTime: number, detail: "full" | "transitions", payload: unknown): void {
-    this.ports.trace.emit({ source: `${agent.id}/actions`, simTime, kind: "action", agentId: agent.id, detail, payload });
+  /** Writes an action record; `cause` names the record that made it happen, when one exists. The parent (the action's start) is given by the trace the runtime writes through. */
+  private emit(agent: SimAgent, simTime: number, detail: "full" | "transitions", payload: unknown, cause?: string): string {
+    return this.ports.trace.emit({ source: `${agent.id}/actions`, simTime, kind: "action", agentId: agent.id, detail, payload, ...(cause === undefined ? {} : { causeIds: [cause] }) });
   }
 
   // ---- behaviors -------------------------------------------------------------------------------------
@@ -659,7 +710,7 @@ export class ActionRuntime {
 
   /** A goTo wired to this runtime's context: its trace notes, the reflex guard, and what to do when the target is unreachable. */
   private goToFor(agent: SimAgent, tx: number, ty: number, cruise: number, returning: boolean, onUnreachable: ((simTime: number) => void) | undefined, window?: PlanWindow): GoToBehavior {
-    return new GoToBehavior(this.ports, agent, tx, ty, cruise, returning, (t, payload) => this.emit(agent, t, "full", payload), (ctx, from, to, map) => this.guard(ctx, from, to, map, agent), onUnreachable, window);
+    return new GoToBehavior(this.ports, agent, tx, ty, cruise, returning, (t, payload, cause) => this.emit(agent, t, "full", payload, cause), (ctx, from, to, map) => this.guard(ctx, from, to, map, agent), onUnreachable, window);
   }
 
   /** A goTo towards a frontier group's point that is unreachable marks the group for this agent (ADR-0039 §1). */
@@ -680,7 +731,7 @@ export class ActionRuntime {
 
   /** The explore behaviour wired to this runtime's context; its goTo navigation keeps the cruise altitude the action started with. */
   private exploreFor(frontiers: FrontierPort, agent: SimAgent, region: string | undefined, strategy: "nearest" | "largest", cruise: number, radiusM: number, marginM: number): ExploreBehavior {
-    const note = (t: number, payload: unknown) => this.emit(agent, t, "full", payload);
+    const note = (t: number, payload: unknown, cause?: string) => this.emit(agent, t, "full", payload, cause);
     return new ExploreBehavior(
       frontiers,
       agent,
@@ -709,7 +760,7 @@ export class ActionRuntime {
     const byId = <T extends readonly [string, unknown]>(a: T, b: T): number => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
     return {
       nextAction: this.nextAction,
-      active: [...this.active].sort(byId).map(([agentId, a]) => ({ agentId, info: { ...a.info }, behavior: a.behavior.snapshot() })),
+      active: [...this.active].sort(byId).map(([agentId, a]) => ({ agentId, info: { ...a.info }, ...(this.startRecords.has(agentId) ? { startRecord: this.startRecords.get(agentId) as string } : {}), behavior: a.behavior.snapshot() })),
       last: [...this.last].sort(byId).map(([, i]) => ({ ...i })),
       recovering: [...this.recovering].sort(),
       reflexes,
@@ -725,7 +776,10 @@ export class ActionRuntime {
     const byId = new Map(agents.map((a) => [a.id, a]));
     this.nextAction = s.nextAction;
     this.active.clear();
+    this.startRecords.clear();
+    this.rejectedRecords.clear();
     for (const a of s.active) {
+      if (a.startRecord !== undefined) this.startRecords.set(a.agentId, this.links.rebase(a.startRecord));
       const agent = byId.get(a.agentId);
       if (!agent) throw new RangeError(`snapshot has an action of unknown agent ${a.agentId}`);
       this.active.set(a.agentId, { info: { ...a.info }, behavior: this.restoreBehavior(agent, a.behavior) });
@@ -846,7 +900,7 @@ class ExploreBehavior implements Behavior {
     /** The radius of an iteration and the margin of its windows, fixed when the action started. */
     private readonly radiusM: number,
     private readonly marginM: number,
-    private readonly note: (simTime: number, payload: unknown) => void,
+    private readonly note: (simTime: number, payload: unknown, cause?: string) => void,
     /** The agent's planning view as it is now (a cheap rejection asks it which cells the planner can use). */
     private readonly planMap: () => PlanMap,
     /** Builds the goTo towards a target with its search window; `cruiseOverride` is for a restore, which gives the inner goTo the cruise altitude it had. */
@@ -1225,7 +1279,7 @@ class GoToBehavior implements Behavior {
     private readonly ty: number,
     private readonly cruise: number,
     private readonly returning: boolean,
-    private readonly note: (simTime: number, payload: unknown) => void,
+    private readonly note: (simTime: number, payload: unknown, cause?: string) => void,
     private readonly guard: MoveGuard,
     /** Called when the target turns out unreachable for this vehicle: no path, or the pre-drive check failed. */
     private readonly onUnreachable?: (simTime: number) => void,
@@ -1380,9 +1434,9 @@ class GoToBehavior implements Behavior {
     this.queryId = undefined;
     if (r.status === "not_found") {
       this.onUnreachable?.(ctx.simTime);
-      return fail("unreachable", "no path to the target");
+      return fail("unreachable", "no path to the target", r.causeRecord);
     }
-    if (r.status === "budget_exceeded") return fail("planning_budget", `planning exceeded its budget (${r.expansionsCharged} expansions)`);
+    if (r.status === "budget_exceeded") return fail("planning_budget", `planning exceeded its budget (${r.expansionsCharged} expansions)`, r.causeRecord);
     return this.beginFollowing(r, ctx);
   }
 
@@ -1480,7 +1534,7 @@ class GoToBehavior implements Behavior {
       // The planner ended the query because the map changed after a leg was handed out: replan from where the vehicle is.
       // The legs already driven are kept (the new query starts here); the ones ahead are stale.
       this.replans++;
-      this.note(ctx.simTime, { op: "replan", reason: "map_changed", replans: this.replans, mapVersion: p.map.version, interrupted: true, ...(this.queryId === undefined ? {} : { queryId: this.queryId }) });
+      this.note(ctx.simTime, { op: "replan", reason: "map_changed", replans: this.replans, mapVersion: p.map.version, interrupted: true, ...(this.queryId === undefined ? {} : { queryId: this.queryId }) }, p.causeRecord);
       this.endHold(ctx.simTime, "interrupted");
       this.queryId = undefined;
       this.legsPending = false;

@@ -190,3 +190,111 @@ export function parseInlineStrategy(text: string): InlineStrategy {
     return { ok: false, code: "invalid_json", message: e instanceof Error ? e.message : "not valid JSON" };
   }
 }
+
+export type SectionId = "run" | "planning" | "drive" | "beliefs";
+export interface SectionStatus {
+  readonly errors: number;
+  readonly warnings: number;
+}
+
+/** The section of the form a path into the run configuration belongs to; a path into the resolved agents is a planning matter. */
+export function sectionOfPath(path: string | undefined): SectionId | undefined {
+  if (path === undefined) return undefined;
+  if (path.startsWith("/planning") || path.startsWith("/agents")) return "planning";
+  if (path.startsWith("/drive")) return "drive";
+  if (path.startsWith("/beliefs")) return "beliefs";
+  if (path.startsWith("/seed") || path.startsWith("/timeMode")) return "run";
+  return undefined;
+}
+
+/**
+ * The field an error is about: the last key of its path, or else the field the message names ("totalBudget must be…", also after the
+ * agent a resolver error is about: `ugv-001 (rover): totalBudget must be…`, whose path is the agent's, not the field's).
+ */
+export function errorKey(error: {
+  readonly path?: string | undefined;
+  readonly message?: string | undefined;
+}): string | undefined {
+  const fromPath = error.path?.startsWith("/agents/")
+    ? undefined
+    : error.path?.split("/").filter(Boolean).at(-1);
+  if (fromPath !== undefined) return fromPath;
+  return /(?:^|: )([A-Za-z]\w*) must\b/.exec(error.message ?? "")?.[1];
+}
+
+const DRIVE_KEYS = new Set([
+  "drive",
+  "reverseAllowed",
+  "maxReverseSpeedMps",
+  "maxYawRateRadps",
+  "wheelbaseM",
+  "maxSteeringAngleRad",
+  "maxSteeringRateRadps",
+]);
+
+/** The section an error belongs to: by its path, else by the field it names, else by what its code is about. */
+export function sectionOfError(error: {
+  readonly code?: string | undefined;
+  readonly path?: string | undefined;
+  readonly message?: string | undefined;
+}): SectionId | undefined {
+  const byPath = sectionOfPath(error.path);
+  if (byPath) return byPath;
+  const key = errorKey(error);
+  if (key === "seed" || key === "timeMode") return "run";
+  if (key !== undefined && DRIVE_KEYS.has(key)) return "drive";
+  if (error.code === "prior_not_found") return "beliefs";
+  if (
+    error.code === undefined ||
+    error.code === "invalid_document" ||
+    error.code === "too_large" ||
+    error.code === "invalid_json"
+  )
+    return undefined;
+  return "planning";
+}
+
+/** Errors and warnings per section, for the rail's glyphs. The resolver's warnings concern planning strategies. */
+export function sectionStatus(
+  error:
+    | {
+        readonly code?: string | undefined;
+        readonly path?: string | undefined;
+        readonly message?: string | undefined;
+      }
+    | undefined,
+  planningWarnings: number,
+): Record<SectionId, SectionStatus> {
+  const none: SectionStatus = { errors: 0, warnings: 0 };
+  const out: Record<SectionId, SectionStatus> = { run: none, planning: none, drive: none, beliefs: none };
+  const at = error ? sectionOfError(error) : undefined;
+  if (error && at) out[at] = { errors: 1, warnings: 0 };
+  out.planning = { errors: out.planning.errors, warnings: planningWarnings };
+  return out;
+}
+
+/** 1-based numbers of the lines of `draft` (JSON text) that are not among the lines of `base`: what changed against the current run's. */
+export function changedLines(base: string, draft: string): Set<number> {
+  const seen = new Map<string, number>();
+  for (const l of base.split("\n"))
+    seen.set(l.trim().replace(/,$/, ""), (seen.get(l.trim().replace(/,$/, "")) ?? 0) + 1);
+  const out = new Set<number>();
+  draft.split("\n").forEach((l, i) => {
+    const k = l.trim().replace(/,$/, "");
+    const n = seen.get(k) ?? 0;
+    if (n > 0) seen.set(k, n - 1);
+    else if (!/^[}\]]+$/.test(k)) out.add(i + 1); // a closing bracket on its own changes with its opening line
+  });
+  return out;
+}
+
+/** The line of `text` (JSON) that holds the last key of `path`, if there is one. */
+export function errorLine(
+  text: string,
+  error: { readonly path?: string | undefined; readonly message?: string | undefined } | undefined,
+): number | undefined {
+  const key = error === undefined ? undefined : errorKey(error);
+  if (key === undefined) return undefined;
+  const i = text.split("\n").findIndex((l) => l.trim().startsWith(`"${key}":`));
+  return i < 0 ? undefined : i + 1;
+}

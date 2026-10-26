@@ -1,9 +1,4 @@
 import "../panels.css";
-import Button from "@mui/material/Button";
-import NativeSelect from "@mui/material/NativeSelect";
-import TextField from "@mui/material/TextField";
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import {
   parseRunConfigValue,
   parseScenario,
@@ -18,6 +13,7 @@ import type { RunConfigSummary, ScenarioSummary } from "@agentsim/storage";
 import { downloadBytes, SceneView, type BeliefViewMode, type EditPointerPhase, type GridViewMode, type SceneRenderer } from "@agentsim/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type InputHTMLAttributes, type KeyboardEvent } from "react";
 import { attachRendererProbe } from "../../probe.ts";
+import { Button, NativeSelect, TextField } from "../controls.tsx";
 import { useAppActions, useCurrentRun, useServices, useStorageStatus } from "../../services.tsx";
 import { Issue, NumberField, OptionField } from "../run-config/fields.tsx";
 import { rebasePreset, validateDraft } from "../run-config/model.ts";
@@ -26,19 +22,20 @@ import { ExtrasValidation, ObjectForm, PriorList } from "./extras-forms.tsx";
 import { EditorView } from "./editor-view.ts";
 import { agentIdsOf, ScenarioDraft, type Brush, type PaintLayer, type PriorBrush, type PriorBrushValue } from "./model.ts";
 import { editorSession, type Tool } from "./session.ts";
+import { CollapseIcon, ExpandIcon } from "../../workspaces/window-icons.tsx";
 
-const TOOLS: readonly { id: Tool; label: string; hint: string }[] = [
-  { id: "navigate", label: "Navigate", hint: "drag to rotate, right-drag to pan, wheel to zoom" },
-  { id: "paint", label: "Paint", hint: "drag to paint the selected layer; Ctrl+Z undoes a stroke" },
-  { id: "zone", label: "Zone", hint: "drag a rectangle" },
-  { id: "agent", label: "Agent", hint: "click to place, drag an agent to move it" },
-  { id: "object", label: "Object", hint: "click to place an object (a thing sensors can see), drag to move it" },
+const TOOLS: readonly { id: Tool; label: string; key: string; glyph: string; hint: string }[] = [
+  { id: "navigate", label: "navigate", key: "V", glyph: "✥", hint: "drag to rotate, right-drag to pan, wheel to zoom" },
+  { id: "paint", label: "paint", key: "B", glyph: "▦", hint: "drag to paint the selected layer; Ctrl+Z undoes a stroke" },
+  { id: "zone", label: "zone", key: "Z", glyph: "▭", hint: "drag a rectangle" },
+  { id: "agent", label: "agent", key: "A", glyph: "▲", hint: "click to place, drag an agent to move it" },
+  { id: "object", label: "object", key: "O", glyph: "◆", hint: "click to place an object (a thing sensors can see), drag to move it" },
 ];
 const PRIOR_BRUSH_VALUES: readonly PriorBrushValue[] = ["unknown", "free", "occupied", "flip"];
-const LAYERS: readonly { id: PaintLayer; label: string; view: GridViewMode }[] = [
-  { id: "occupancy", label: "occupancy", view: "occupancy" },
-  { id: "terrainCost", label: "terrain cost", view: "terrain" },
-  { id: "heightDm", label: "height", view: "height" },
+const LAYERS: readonly { id: PaintLayer; label: string; view: GridViewMode; glyph: string }[] = [
+  { id: "occupancy", label: "occupancy", view: "occupancy", glyph: "■" },
+  { id: "terrainCost", label: "terrain cost", view: "terrain", glyph: "▤" },
+  { id: "heightDm", label: "height", view: "height", glyph: "▲" },
 ];
 const ZONE_KINDS = ["geofence", "base", "noFly"] as const;
 const AGENT_KINDS = ["ugv", "uav"] as const;
@@ -76,6 +73,12 @@ export function ScenarioEditorPanel() {
   /** A prior drawn over the world, the prior the paint tool edits (`undefined`: the world), and how it is drawn. */
   const [priorShown, setPriorShown] = useState<string | undefined>(undefined);
   const [priorEditing, setPriorEditing] = useState<string | undefined>(undefined);
+  // The brush window: folded to its title bar until opened (it starts at a corner and never over what is being painted), movable inside the map's area; the prior's brush opens it.
+  const [brushOpen, setBrushOpen] = useState(false);
+  const [brushAt, setBrushAt] = useState<{ x: number; y: number } | undefined>(undefined);
+  useEffect(() => {
+    if (priorEditing !== undefined) setBrushOpen(true);
+  }, [priorEditing]);
   const [priorMode, setPriorMode] = useState<BeliefViewMode>("belief");
   const [priorBrush, setPriorBrush] = useState<PriorBrush>({ value: "unknown", radiusCells: 3 });
   const [msg, setMsg] = useState<Msg | null>(null);
@@ -293,7 +296,13 @@ export function ScenarioEditorPanel() {
 
   const onKeyDown = (e: KeyboardEvent) => {
     const t = e.target as HTMLElement;
-    if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
+    if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT") return;
+    const byKey = !e.ctrlKey && !e.metaKey && !e.altKey ? TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase()) : undefined;
+    if (byKey && draft) {
+      e.preventDefault();
+      setTool(byKey.id);
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && draft && (priorEditing !== undefined ? draft.undoPrior(priorEditing) : draft.undo())) {
       e.preventDefault();
       view.sync();
@@ -302,51 +311,196 @@ export function ScenarioEditorPanel() {
   };
 
   return (
-    <div className="panel scenario-editor" data-testid="scenario-editor" tabIndex={-1} onKeyDown={onKeyDown}>
-      <div className="editor-view">
-        <SceneView interpolator={view.interpolator} onRenderer={onRenderer}>
+    <div className="panel scenario-editor se" data-testid="scenario-editor" tabIndex={-1} onKeyDown={onKeyDown}>
+      <div className="editor-main">
+        {draft && (
+          <div className="se-sub" role="toolbar" aria-label="Paint target and view">
+            {tool === "paint" ? (
+              <p className={priorEditing !== undefined ? "edit-target prior" : "edit-target"} role="status" data-testid="ed-edit-target">
+                {priorEditing !== undefined ? `◆ Painting PRIOR “${priorEditing}” — the world is not changed` : `■ Painting the WORLD (${brush.layer})`}
+              </p>
+            ) : (
+              <span className="muted">{TOOLS.find((t) => t.id === tool)?.hint}</span>
+            )}
+            <span className="sp" />
+            {drawnPrior !== undefined && (
+              <span className="se-chips" role="group" aria-label="Prior overlay">
+                <button type="button" className={`chip tip-right${priorMode === "belief" ? " on" : ""}`} aria-pressed={priorMode === "belief"} onClick={() => setPriorMode("belief")} data-testid="ed-prior-mode-belief" data-tip="What the prior knows (unknown is dark)">
+                  prior
+                </button>
+                <button type="button" className={`chip tip-right${priorMode === "difference" ? " on" : ""}`} aria-pressed={priorMode === "difference"} onClick={() => setPriorMode("difference")} data-testid="ed-prior-mode-difference" data-tip="Where the prior disagrees with the world">
+                  ◆ against the world
+                </button>
+              </span>
+            )}
+            {drawnPrior !== undefined && priorMode === "difference" && (
+              <p className="researcher-banner" role="note" data-testid="ed-researcher-marker">
+                ◆ Researcher view — not visible to the mind
+              </p>
+            )}
+            <button type="button" className="chip" onClick={() => renderer?.viewTopDown()} data-testid="ed-fit">
+              ⤢ fit
+            </button>
+          </div>
+        )}
+        <div className="se-stage">
           {draft && (
-            <div className="scene-overlay editor-tools" data-testid="ed-tools">
-              <ToggleButtonGroup size="small" exclusive value={tool} onChange={(_e, v: Tool | null) => v && setTool(v)} aria-label="Editor tool">
-                {TOOLS.map((t) => (
-                  <ToggleButton key={t.id} value={t.id} data-testid={`ed-tool-${t.id}`} title={t.hint}>
-                    {t.label}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-              <Button size="small" variant="outlined" color="inherit" onClick={() => renderer?.viewTopDown()} data-testid="ed-fit">
-                Fit view
-              </Button>
-              <span className="legend muted">{TOOLS.find((t) => t.id === tool)?.hint}</span>
-              {drawnPrior !== undefined && (
-                <ToggleButtonGroup size="small" exclusive value={priorMode} onChange={(_e, v: BeliefViewMode | null) => v && setPriorMode(v)} aria-label="Prior overlay">
-                  <ToggleButton value="belief" data-testid="ed-prior-mode-belief" title="What the prior knows (unknown is dark)">
-                    prior
-                  </ToggleButton>
-                  <ToggleButton value="difference" data-testid="ed-prior-mode-difference" title="Where the prior disagrees with the world">
-                    ◆ against the world
-                  </ToggleButton>
-                </ToggleButtonGroup>
-              )}
-              {drawnPrior !== undefined && priorMode === "difference" && (
-                <p className="researcher-banner" role="note" data-testid="ed-researcher-marker">
-                  ◆ Researcher view — not visible to the mind
-                </p>
-              )}
-              <ToggleButtonGroup size="small" exclusive value={viewMode} onChange={(_e, v: GridViewMode | null) => v && setViewMode(v)} aria-label="Layer view">
-                {LAYERS.map((l) => (
-                  <ToggleButton key={l.view} value={l.view} data-testid={`ed-view-${l.view}`}>
-                    {l.label}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-            </div>
+            <nav className="se-tools" data-testid="ed-tools" aria-orientation="vertical" aria-label="Editor tools">
+              {TOOLS.map((t) => (
+                <button key={t.id} type="button" className={`tool${tool === t.id ? " on" : ""}`} aria-pressed={tool === t.id} onClick={() => setTool(t.id)} data-testid={`ed-tool-${t.id}`} data-tip={t.hint}>
+                  <span className="g">{t.glyph}</span>
+                  {t.label}
+                  <span className="kb">{t.key}</span>
+                </button>
+              ))}
+              <hr />
+              {LAYERS.map((l) => (
+                <button key={l.view} type="button" className={`tool${viewMode === l.view ? " on" : ""}`} aria-pressed={viewMode === l.view} onClick={() => setViewMode(l.view)} data-testid={`ed-view-${l.view}`}>
+                  <span className="g">{l.glyph}</span>
+                  {l.label}
+                </button>
+              ))}
+              <hr />
+              <button
+                type="button"
+                className="tool"
+                disabled={!draft.canUndo}
+                onClick={() => {
+                  draft.undo();
+                  view.sync();
+                  bump();
+                }}
+                data-testid="ed-undo"
+              >
+                <span className="g">↶</span>undo stroke<span className="kb">^Z</span>
+              </button>
+            </nav>
           )}
-          {!draft && <p className="editor-empty muted">Open a stored scenario, import a file, or create a new one.</p>}
-        </SceneView>
+          <div className="editor-view">
+            <SceneView interpolator={view.interpolator} onRenderer={onRenderer}>
+              {!draft && (
+                <div className="editor-empty" data-testid="ed-empty">
+                  <p className="muted">No scenario open · the map you paint and the agents you place appear here.</p>
+                  <button type="button" className="btn pri" onClick={() => setNewForm(true)} data-testid="ed-empty-new">
+                    New scenario
+                  </button>
+                  <p className="muted">or open a stored one, or import a file, from the bar above.</p>
+                </div>
+              )}
+            </SceneView>
+            {draft && tool === "paint" && (
+              <div
+                className={`se-brush${brushOpen ? "" : " folded"}`}
+                role="dialog"
+                aria-label={priorEditing !== undefined ? "Prior brush" : "Brush"}
+                data-testid="ed-brush-window"
+                style={brushAt ? { left: brushAt.x, top: brushAt.y, right: "auto" } : undefined}
+              >
+                <div
+                  className="se-brush-bar"
+                  onPointerDown={(e) => {
+                    if ((e.target as HTMLElement).closest("button")) return;
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                  }}
+                  onPointerMove={(e) => {
+                    if (e.buttons !== 1) return;
+                    const win = e.currentTarget.parentElement;
+                    const area = win?.parentElement?.getBoundingClientRect();
+                    if (!win || !area) return;
+                    // Inside the map's area, whatever the pointer does.
+                    const x = Math.max(0, Math.min(area.width - win.offsetWidth, e.clientX - area.left - win.offsetWidth / 2));
+                    const y = Math.max(0, Math.min(area.height - 24, e.clientY - area.top - 12));
+                    setBrushAt({ x, y });
+                  }}
+                >
+                  <span>{priorEditing !== undefined ? "PRIOR BRUSH" : "BRUSH"}</span>
+                  <span className="sp" />
+                  <button type="button" className="wb" onClick={() => setBrushOpen((o) => !o)} aria-label={brushOpen ? "Collapse the brush" : "Open the brush"} aria-expanded={brushOpen} data-testid="ed-brush-toggle">
+                    {brushOpen ? <CollapseIcon /> : <ExpandIcon />}
+                  </button>
+                </div>
+                <div className="se-brush-body" hidden={!brushOpen}>
+                  {draft && tool === "paint" && priorEditing !== undefined && (
+          <div data-testid="ed-prior-brush">
+            
+            <div className="row wrap">
+              <OptionField label="paint" value={priorBrush.value} options={PRIOR_BRUSH_VALUES} inheritLabel="—" onChange={(v) => v && setPriorBrush({ ...priorBrush, value: v })} testId="ed-prior-brush-value" />
+              <NumberField label="radius (cells)" value={priorBrush.radiusCells} integer onChange={(v) => setPriorBrush({ ...priorBrush, radiusCells: Math.max(0, Math.min(64, v ?? 0)) })} testId="ed-prior-brush-radius" />
+              <Button
+                size="small"
+                variant="outlined"
+                color="inherit"
+                disabled={!draft.canUndoPrior(priorEditing)}
+                onClick={() => {
+                  draft.undoPrior(priorEditing);
+                  view.sync();
+                  bump();
+                }}
+                data-testid="ed-prior-undo"
+              >
+                Undo prior stroke
+              </Button>
+            </div>
+            <p className="muted hint">unknown hides cells from the prior; free / occupied set them; flip swaps free and occupied (a wrong map).</p>
+          </div>
+                  )}
+                  {draft && tool === "paint" && priorEditing === undefined && (
+          <div data-testid="ed-brush">
+            
+            <div className="row wrap">
+              <OptionField
+                label="layer"
+                value={brush.layer}
+                options={LAYERS.map((l) => l.id)}
+                inheritLabel="—"
+                onChange={(v) => {
+                  if (!v) return;
+                  setBrush({ ...brush, layer: v, value: v === "occupancy" ? 1 : v === "terrainCost" ? 30 : 50 });
+                  setViewMode(LAYERS.find((l) => l.id === v)?.view ?? "occupancy");
+                }}
+                testId="ed-brush-layer"
+              />
+              {brush.layer === "occupancy" ? (
+                <OptionField
+                  label="value"
+                  value={brush.value === 1 ? "blocked" : "free"}
+                  options={["blocked", "free"] as const}
+                  inheritLabel="—"
+                  onChange={(v) => v && setBrush({ ...brush, value: v === "blocked" ? 1 : 0 })}
+                  testId="ed-brush-occupancy"
+                />
+              ) : brush.layer === "terrainCost" ? (
+                <NumberField label="terrain cost (10 = nominal, 0 = impassable)" value={brush.value} integer onChange={(v) => setBrush({ ...brush, value: v ?? 10 })} testId="ed-brush-terrain" />
+              ) : (
+                <NumberField label="height (m)" value={brush.value / 10} step={0.1} onChange={(v) => setBrush({ ...brush, value: Math.round((v ?? 0) * 10) })} testId="ed-brush-height" />
+              )}
+              <NumberField label="radius (cells)" value={brush.radiusCells} integer onChange={(v) => setBrush({ ...brush, radiusCells: Math.max(0, Math.min(64, v ?? 0)) })} testId="ed-brush-radius" />
+            </div>
+            {brush.layer === "heightDm" && <p className="muted hint">On a blocked cell, height 0 means unknown height (hatched in the height view).</p>}
+          </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      <aside className="editor-side" data-testid="ed-side">
+      <aside className="editor-side se-side" data-testid="ed-side">
+        {draft && (
+          <div className="rc-acts se-acts" role="group" aria-label="Actions">
+            <Button variant="contained" disabled={!ready} onClick={() => void save()} data-testid="ed-save">
+              Save as new version
+            </Button>
+            <Button variant="outlined" color="inherit" onClick={exportJson} data-testid="ed-export">
+              Export JSON
+            </Button>
+            <Button variant="outlined" color="inherit" aria-disabled={!saved || dirty || current.busy} onClick={() => !current.busy && void run()} data-testid="ed-run-button">
+              ▶ Run saved version
+            </Button>
+          </div>
+        )}
+        <div className="se-props">
         <section data-testid="ed-document">
           <h4>Scenario</h4>
           <div className="row wrap">
@@ -430,25 +584,6 @@ export function ScenarioEditorPanel() {
                 {dirty ? " · unsaved changes" : ""}
               </p>
               <div className="row wrap">
-                <Button variant="contained" disabled={!ready} onClick={() => void save()} data-testid="ed-save">
-                  Save as new version
-                </Button>
-                <Button variant="outlined" color="inherit" onClick={exportJson} data-testid="ed-export">
-                  Export JSON
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="inherit"
-                  disabled={!draft.canUndo}
-                  onClick={() => {
-                    draft.undo();
-                    view.sync();
-                    bump();
-                  }}
-                  data-testid="ed-undo"
-                >
-                  Undo stroke
-                </Button>
                 {confirmDelete ? (
                   <Button variant="outlined" color="error" onClick={() => void deleteScenario()} data-testid="ed-delete-confirm">
                     Delete every version of {draft.meta.id}
@@ -471,70 +606,6 @@ export function ScenarioEditorPanel() {
             ))}
         </section>
 
-        {draft && tool === "paint" && (
-          <p className={priorEditing !== undefined ? "edit-target prior" : "edit-target"} role="status" data-testid="ed-edit-target">
-            {priorEditing !== undefined ? `◆ Painting PRIOR “${priorEditing}” — the world is not changed` : `■ Painting the WORLD (${brush.layer})`}
-          </p>
-        )}
-        {draft && tool === "paint" && priorEditing !== undefined && (
-          <section data-testid="ed-prior-brush">
-            <h4>Prior brush</h4>
-            <div className="row wrap">
-              <OptionField label="paint" value={priorBrush.value} options={PRIOR_BRUSH_VALUES} inheritLabel="—" onChange={(v) => v && setPriorBrush({ ...priorBrush, value: v })} testId="ed-prior-brush-value" />
-              <NumberField label="radius (cells)" value={priorBrush.radiusCells} integer onChange={(v) => setPriorBrush({ ...priorBrush, radiusCells: Math.max(0, Math.min(64, v ?? 0)) })} testId="ed-prior-brush-radius" />
-              <Button
-                size="small"
-                variant="outlined"
-                color="inherit"
-                disabled={!draft.canUndoPrior(priorEditing)}
-                onClick={() => {
-                  draft.undoPrior(priorEditing);
-                  view.sync();
-                  bump();
-                }}
-                data-testid="ed-prior-undo"
-              >
-                Undo prior stroke
-              </Button>
-            </div>
-            <p className="muted hint">unknown hides cells from the prior; free / occupied set them; flip swaps free and occupied (a wrong map).</p>
-          </section>
-        )}
-        {draft && tool === "paint" && priorEditing === undefined && (
-          <section data-testid="ed-brush">
-            <h4>Brush</h4>
-            <div className="row wrap">
-              <OptionField
-                label="layer"
-                value={brush.layer}
-                options={LAYERS.map((l) => l.id)}
-                inheritLabel="—"
-                onChange={(v) => {
-                  if (!v) return;
-                  setBrush({ ...brush, layer: v, value: v === "occupancy" ? 1 : v === "terrainCost" ? 30 : 50 });
-                  setViewMode(LAYERS.find((l) => l.id === v)?.view ?? "occupancy");
-                }}
-                testId="ed-brush-layer"
-              />
-              {brush.layer === "occupancy" ? (
-                <OptionField
-                  label="value"
-                  value={brush.value === 1 ? "blocked" : "free"}
-                  options={["blocked", "free"] as const}
-                  inheritLabel="—"
-                  onChange={(v) => v && setBrush({ ...brush, value: v === "blocked" ? 1 : 0 })}
-                  testId="ed-brush-occupancy"
-                />
-              ) : brush.layer === "terrainCost" ? (
-                <NumberField label="terrain cost (10 = nominal, 0 = impassable)" value={brush.value} integer onChange={(v) => setBrush({ ...brush, value: v ?? 10 })} testId="ed-brush-terrain" />
-              ) : (
-                <NumberField label="height (m)" value={brush.value / 10} step={0.1} onChange={(v) => setBrush({ ...brush, value: Math.round((v ?? 0) * 10) })} testId="ed-brush-height" />
-              )}
-              <NumberField label="radius (cells)" value={brush.radiusCells} integer onChange={(v) => setBrush({ ...brush, radiusCells: Math.max(0, Math.min(64, v ?? 0)) })} testId="ed-brush-radius" />
-            </div>
-            {brush.layer === "heightDm" && <p className="muted hint">On a blocked cell, height 0 means unknown height (hatched in the height view).</p>}
-          </section>
-        )}
         {draft && tool === "zone" && (
           <section>
             <h4>Zone tool</h4>
@@ -561,7 +632,7 @@ export function ScenarioEditorPanel() {
                       <span className="mono muted">
                         ({a.start.xM}, {a.start.yM})
                       </span>
-                      {blocked && <span className="danger"> ✗ start not free</span>}
+                      {blocked && <span className="danger"> ✕ start not free</span>}
                     </button>
                   </li>
                 );
@@ -702,13 +773,11 @@ export function ScenarioEditorPanel() {
                   </option>
                 ))}
               </NativeSelect>
-              <Button variant="contained" aria-disabled={!saved || dirty || current.busy} onClick={() => !current.busy && void run()} data-testid="ed-run-button">
-                Run saved version
-              </Button>
             </div>
             {(!saved || dirty) && <p className="muted hint">Save first: runs start from a stored version, so they can be re-simulated.</p>}
           </section>
         )}
+        </div>
       </aside>
     </div>
   );

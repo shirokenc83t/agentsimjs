@@ -1,6 +1,6 @@
 import { contentHash128Bytes, err, ok, readSnapshot, snapshotHash, type CodedError, type Result } from "@agentsim/core";
-import { parseRecordingProfile, recordingProfileHash, type RunHeader } from "@agentsim/trace";
-import type { BeliefFrame, BeliefFrameQuery, SnapshotWrite, StoredBlob } from "./ports.ts";
+import { isRegisteredSample, parseRecordingProfile, recordingProfileHash, type RunHeader } from "@agentsim/trace";
+import type { BeliefFrame, BeliefFrameQuery, MetricQuery, SnapshotWrite, StoredBlob, StoredMetricSample } from "./ports.ts";
 
 // What the recording ports accept (ADR-0035 addition of 2026-10-17, items 6, 8 and 9; ADR-0004 addition of 2026-10-18): checks shared by
 // every adapter, so that all of them refuse the same inputs with the same codes.
@@ -13,6 +13,8 @@ export const RECORDING_LIMITS = {
   maxFrameChunks: 1_000_000,
   maxFramesPerAppend: 10_000,
   maxFrameQueryLimit: 10_000,
+  maxMetricsPerAppend: 20_000,
+  maxMetricQueryLimit: 100_000,
 } as const;
 
 const HASH = /^[0-9a-f]{32}$/;
@@ -108,4 +110,42 @@ export function framesKeepOrder(frames: readonly BeliefFrame[], lastOfAgent: (ag
 
 export function checkFrameQuery(q: BeliefFrameQuery): BeliefFrameQuery {
   return { ...q, limit: Math.max(0, Math.min(Math.trunc(q.limit), RECORDING_LIMITS.maxFrameQueryLimit)) };
+}
+
+/** Shape of metric samples: registered name, the source trusted code gives that series, finite numbers. Ordering against stored samples is the adapter's. */
+export function checkMetricSamples(samples: readonly StoredMetricSample[]): Result<void, CodedError<"invalid_metric">> {
+  const bad = (message: string) => err({ code: "invalid_metric" as const, message });
+  if (samples.length > RECORDING_LIMITS.maxMetricsPerAppend) return bad(`at most ${RECORDING_LIMITS.maxMetricsPerAppend} metric samples per append`);
+  const seen = new Set<string>();
+  for (const s of samples) {
+    if (typeof s.source !== "string" || typeof s.name !== "string" || !isRegisteredSample(s)) return bad(`unregistered metric ${String(s.name).slice(0, 40)} from ${String(s.source).slice(0, 40)}`);
+    if (!Number.isInteger(s.tick) || s.tick < 0) return bad("metric tick must be a non-negative integer");
+    if (!(Number.isFinite(s.simTime) && s.simTime >= 0)) return bad("metric simTime must be a non-negative number");
+    if (typeof s.value !== "number" || !Number.isFinite(s.value)) return bad("metric value must be a finite number");
+    const key = `${s.source} ${s.name} ${s.tick}`;
+    if (seen.has(key)) return err({ code: "invalid_metric", message: `sample ${s.name} of ${s.source} at tick ${s.tick} appears twice in the batch` });
+    seen.add(key);
+  }
+  return ok(undefined);
+}
+
+/** Per series, tick order is sim-time order, and a sample is later than the last stored one of its series. */
+export function metricsKeepOrder(samples: readonly StoredMetricSample[], lastTickOfSeries: (source: string, name: string) => number | undefined): boolean {
+  const bySeries = new Map<string, StoredMetricSample[]>();
+  for (const s of samples) {
+    const k = `${s.source} ${s.name}`;
+    bySeries.set(k, [...(bySeries.get(k) ?? []), s]);
+  }
+  for (const list of bySeries.values()) {
+    list.sort((a, b) => a.tick - b.tick);
+    for (let i = 1; i < list.length; i++) if ((list[i] as StoredMetricSample).simTime < (list[i - 1] as StoredMetricSample).simTime) return false;
+    const first = list[0] as StoredMetricSample;
+    const last = lastTickOfSeries(first.source, first.name);
+    if (last !== undefined && first.tick < last) return false;
+  }
+  return true;
+}
+
+export function checkMetricQuery(q: MetricQuery): MetricQuery {
+  return { ...q, limit: Math.max(0, Math.min(Math.trunc(q.limit), RECORDING_LIMITS.maxMetricQueryLimit)) };
 }

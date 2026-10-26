@@ -12,6 +12,7 @@ import {
   type SimBudgetMessage,
   type SimRaysMessage,
   type SimTopologyMessage,
+  type SimCellBeliefsMessage,
   type SimResearcherDataMessage,
   type SimLoadedMessage,
   type SimTrailMessage,
@@ -19,10 +20,11 @@ import {
   type TickContext,
 } from "@agentsim/core";
 import { ATLAS_BYTES_PER_CELL, atlasScratch, encodeAtlasChunk, type GridSpace } from "@agentsim/spatial";
-import { startStrategyTest, type StrategyTestError, type StrategyTestRequest, type StrategyTestRun, agentWarnings, checkSensorNoise, checkSensorRates, createRun, idealAgentsOf, loadScenario, parseRunConfigValue, parseScenarioValue, preparePlanning, resolveRunConfig, type CreatedRun, type ResolvedRunConfig } from "@agentsim/scenarios";
+import { startStrategyTest, type StrategyTestError, type StrategyTestRequest, type StrategyTestRun, agentWarnings, checkSensorNoise, checkSensorRates, createRun, idealAgentsOf, loadScenario, parseRunConfigValue, parseScenarioValue, preparePlanning, resolveRunConfig, restoreRun, type CreatedRun, type ResolvedRunConfig } from "@agentsim/scenarios";
 import { TraceBuffer, type TraceRecord } from "@agentsim/trace";
 import { DUMMY_DT_S, DUMMY_ENTITY_IDS, DUMMY_POSE_FLOATS, writeDummyPoses } from "./dummy-world.ts";
-import type { RecordingTarget } from "./run-recording.ts";
+import type { HealthSample, RecordingTarget } from "./run-recording.ts";
+import { SCENARIO_DT_S } from "./sim-constants.ts";
 import { TrailRecorder } from "./trail-recorder.ts";
 
 /**
@@ -64,6 +66,8 @@ export interface HostedWorld extends Steppable {
   mindView(agentId: string): { tick: number; pending: boolean; request: string } | undefined;
   /** Researcher-only beliefs-vs-truth metrics of an agent, without changing the run (scenario runs only). */
   researcherData(agentId: string): Omit<SimResearcherDataMessage, "type" | "runId"> | undefined;
+  /** What every agent believes of one cell, without changing the run (scenario runs only). */
+  cellBeliefs(i: number, j: number): Omit<SimCellBeliefsMessage, "type" | "runId"> | undefined;
   /**
    * Belief-map chunks of the watched agent that changed since the previous call (all its materialized ones when the agent
    * changed), in batches; `null` stops and forgets (scenario runs only; `ideal` agents have none: their map is the truth).
@@ -141,6 +145,10 @@ export class DummyHostedWorld implements HostedWorld {
     return undefined;
   }
 
+  cellBeliefs(): undefined {
+    return undefined;
+  }
+
   drainBeliefChunks(): SimBeliefChunksMessage[] {
     return [];
   }
@@ -162,8 +170,7 @@ export class DummyHostedWorld implements HostedWorld {
   }
 }
 
-/** Fixed step of scenario runs in F1 (the tick rate only paces wall time). */
-export const SCENARIO_DT_S = 0.1;
+export { SCENARIO_DT_S };
 /** In-memory trace records kept per run until the F3 recorder persists them. */
 const TRACE_CAPACITY = 200_000;
 /** Ticks the HUD's budget figures average over. */
@@ -248,13 +255,26 @@ export class ScenarioHostedWorld implements HostedWorld {
     return { agentId, tick: r.tick, simTimeS: r.simTimeS, ideal: r.map === undefined, ...(r.map ? { map: { ...r.map } } : {}), entities: { ...r.entities } };
   }
 
+  cellBeliefs(i: number, j: number): Omit<SimCellBeliefsMessage, "type" | "runId"> | undefined {
+    const obs = this.run.observer;
+    if (!obs) return undefined;
+    return { i, j, tick: this.run.world.tick, agents: obs.beliefAt(i, j) };
+  }
+
   drainTrail(): SimTrailMessage | undefined {
     const t = this.trail.drain();
     return t && { type: "trail", runId: this.runId, ...t };
   }
 
-  /** Validates both documents (untrusted: they may come from an imported database) and assembles the run. */
-  static load(m: { runId: string; scenario: unknown; scenarioVersion: number; runConfig: unknown }, nowWallMs: () => number): Result<ScenarioHostedWorld, CodedError> {
+  /**
+   * Validates both documents (untrusted: they may come from an imported database) and assembles the run. With `restore` the run skips genesis and takes the state
+   * of a snapshot of a recording (a re-simulated window starts there); a snapshot that does not fit the run is a typed error, not a throw.
+   */
+  static load(
+    m: { runId: string; scenario: unknown; scenarioVersion: number; runConfig: unknown },
+    nowWallMs: () => number,
+    options: { readonly restore?: { readonly bytes: Uint8Array; readonly resolve: (hash: string) => Uint8Array | undefined } } = {},
+  ): Result<ScenarioHostedWorld, CodedError> {
     const doc = parseScenarioValue(m.scenario);
     if (!doc.ok) return doc;
     const loaded = loadScenario(doc.value);
@@ -268,7 +288,14 @@ export class ScenarioHostedWorld implements HostedWorld {
     const noise = checkSensorNoise(resolved.value, loaded.value.grid.resolutionM);
     if (!noise.ok) return noise;
     const trace = new TraceBuffer(m.runId, nowWallMs, TRACE_CAPACITY);
-    const run = createRun(loaded.value, resolved.value, trace, { dtS: SCENARIO_DT_S, beliefVsTruth: {} });
+    const run = createRun(loaded.value, resolved.value, trace, { dtS: SCENARIO_DT_S, beliefVsTruth: {}, ...(options.restore ? { genesis: false } : {}) });
+    if (options.restore) {
+      try {
+        restoreRun({ ...run, trace }, options.restore.bytes, { resolve: options.restore.resolve });
+      } catch (e) {
+        return { ok: false, error: { code: "snapshot_not_restorable", message: e instanceof Error ? e.message : String(e) } };
+      }
+    }
     const r = resolved.value;
     const info: SimLoadedMessage = {
       type: "loaded",
@@ -302,6 +329,11 @@ export class ScenarioHostedWorld implements HostedWorld {
     return { ok: true, value: new ScenarioHostedWorld(run, r, trace, m.runId, info) };
   }
 
+  /** Every run input the world holds, in input-ID order: after a restore, the ones the snapshot carried. */
+  get inputs(): readonly RunInput[] {
+    return this.run.world.inputs;
+  }
+
   get tick(): number {
     return this.run.world.tick;
   }
@@ -332,13 +364,25 @@ export class ScenarioHostedWorld implements HostedWorld {
       trace: this.trace,
       dtS: this.dtS,
       idealAgents: new Set(this.resolved.agents.filter((a) => a.beliefs.idealized).map((a) => a.agentId)),
+      health: () => this.healthSample(),
     };
   }
 
+  /** Wall time of the last tick (the world's step and the trail; the recording's own work after it is not in it), for the `sim.tickMs` metric. */
+  private lastTickMs = 0;
+
   step(ctx: TickContext): void {
+    const t0 = performance.now();
     this.run.world.step(ctx);
     this.recordTrail();
+    this.lastTickMs = performance.now() - t0;
     this.tickHook?.();
+  }
+
+  /** What the metrics channel reads of the last tick: its wall time, the sensing phase's and the planner's spending (diagnostics: nothing here reaches a hash). */
+  healthSample(): HealthSample {
+    const service = this.run.planner.service;
+    return { tickMs: this.lastTickMs, senseMs: this.senseMs[this.senseMs.length - 1] ?? 0, planExpansions: service.lastTick.expansions, planBudget: service.lastTick.budget };
   }
 
   decide(): Promise<void> {

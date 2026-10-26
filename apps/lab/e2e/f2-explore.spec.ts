@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadF2, step } from "./helpers.ts";
+import { loadF2, openInspectorSections, step } from "./helpers.ts";
 
 const pct = async (page: Page, id: string) => Number(((await page.getByTestId(id).textContent()) ?? "").match(/[\d.]+/)?.[0]);
 const frontierCounts = (page: Page) => page.evaluate(() => window.__agentsim?.scene?.overlays());
@@ -11,6 +11,7 @@ const frontierCounts = (page: Page) => page.evaluate(() => window.__agentsim?.sc
 async function exploreUntilConverged(page: Page, warmupHundreds: number) {
   await loadF2(page, "discovery");
   await page.getByTestId("explorer-row-ugv-001").click();
+  await openInspectorSections(page);
   await page.getByTestId("overlay-frontiers").click();
   const before = await pct(page, "researcher-unknown");
   expect(before).toBeGreaterThan(90); // at tick 0 the rover knows nothing
@@ -19,6 +20,7 @@ async function exploreUntilConverged(page: Page, warmupHundreds: number) {
   await page.getByTestId("command-explore").click();
   await step(page, 1);
   await expect.poll(async () => (await frontierCounts(page))?.frontiers).toBeGreaterThan(0);
+  await openInspectorSections(page);
   const label = page.getByTestId("inspector-action-label");
   for (let k = 0; k < 40 && !/explore · (succeeded|failed)/.test((await label.textContent()) ?? ""); k++) await step(page, 1);
   await expect(label).toContainText("explore · succeeded");

@@ -71,6 +71,30 @@ export function describeStorageContract(name: string, create: () => Promise<Cont
         params,
       });
 
+      it("stores a derived run with its parent, window and verdict, and refuses one that is inconsistent or has no stored parent", async () => {
+        const derived = { parentRunId: "run-000001", t0S: 5, t1S: 8, startTick: 49, endTick: 80, status: "matches" as const, checkpointsChecked: 4, copies: 2 };
+        expect((await h.ports.runs.create(header("run-000001"))).ok).toBe(true);
+        expect((await h.ports.runs.create(header("run-000002", { derived }))).ok).toBe(true);
+        expect((await h.ports.runs.get("run-000002"))?.derived).toEqual(derived);
+        const diverged = { ...derived, status: "divergent" as const, divergence: { tick: 60, expected: "aaaaaaaa", actual: "bbbbbbbb" } };
+        expect((await h.ports.runs.create(header("run-000003", { derived: diverged }))).ok).toBe(true);
+        expect((await h.ports.runs.list()).find((r) => r.runId === "run-000003")?.derived).toEqual(diverged);
+        const code = async (id: string, d: unknown) => {
+          const r = await h.ports.runs.create(header(id, { derived: d as never }));
+          return r.ok ? "ok" : r.error.code;
+        };
+        expect(await code("run-000004", { ...derived, parentRunId: "run-000099" })).toBe("parent_run_not_found");
+        expect(await code("run-000004", { ...derived, parentRunId: "run-000004" })).toBe("invalid_header");
+        expect(await code("run-000004", { ...derived, t1S: 1 })).toBe("invalid_header");
+        expect(await code("run-000004", { ...derived, status: "divergent" })).toBe("invalid_header"); // divergent without its divergence
+        expect(await code("run-000004", { ...derived, divergence: diverged.divergence })).toBe("invalid_header"); // a divergence on a run that matches
+        expect(await code("run-000004", { ...diverged, divergence: { ...diverged.divergence, tick: 500 } })).toBe("invalid_header"); // outside its ticks
+        expect(await code("run-000004", { ...derived, extra: 1 })).toBe("invalid_header");
+        expect(await h.ports.runs.get("run-000004")).toBeUndefined();
+        // Imported from another database, a derived run names a parent that is not here.
+        expect((await h.ports.runs.create(header("run-000005", { derived: { ...derived, parentRunId: "run-000042" }, importedFrom: "run-000007" }))).ok).toBe(true);
+      });
+
       it("stores run inputs append-only, in input order, with an exact round trip of their params", async () => {
         await h.ports.runs.create(header("run-000001"));
         expect((await h.ports.runs.appendInputs("run-000001", [input(1, 6), input(2, 6)])).ok).toBe(true);

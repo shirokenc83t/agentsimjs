@@ -1,6 +1,6 @@
 import "./fonts.css";
 import "@agentsim/ui/theme.css";
-import { initTheme, UiThemeProvider, useUiContext } from "@agentsim/ui";
+import { initTheme, initTooltips, UiThemeProvider, useUiContext } from "@agentsim/ui";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
@@ -15,6 +15,7 @@ import { loadLiveSource } from "./workspaces/registry.tsx";
 
 // Theme before first render, from the localStorage mirror of ui.theme (ADR-0032 §2); no inline script (§10).
 initTheme();
+initTooltips();
 
 const env = resolveEnvironment(import.meta.env["VITE_AGENTSIM_ENV"] as string | undefined);
 const storage = env.createStorage();

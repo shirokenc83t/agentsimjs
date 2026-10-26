@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, sendTo, step } from "./helpers.ts";
+import { loadDemo, openInspectorSections, sendTo, step } from "./helpers.ts";
 
 interface Rec {
   readonly seq: number;
@@ -19,6 +19,7 @@ test("critical battery during goTo: the reflex preempts it and the agent returns
 
   // `low` (ugv-002) starts at 17 % with a 15 % critical level and its base at (5, 5).
   await sendTo(page, "ugv-002", 25, 60);
+  await openInspectorSections(page);
   const label = page.getByTestId("inspector-action-label");
   for (let k = 0; k < 20 && !/returnToBase · succeeded/.test((await label.textContent()) ?? ""); k++) await step(page, 1);
 

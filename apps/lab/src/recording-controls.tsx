@@ -1,5 +1,6 @@
 import { RECORDING_PRESETS, type RecordingPresetName } from "@agentsim/trace";
 import { useSyncExternalStore } from "react";
+import { headlessButton, headlessTip } from "./sim/headless-names.ts";
 import { getRecordingSelection, isHeavyProfile, profileOfSelection, setRecordingSelection, subscribeRecordingSelection } from "./sim/recording-choice.ts";
 
 /**
@@ -7,17 +8,22 @@ import { getRecordingSelection, isHeavyProfile, profileOfSelection, setRecording
  * and "Don't record this run", the researcher's explicit opt-out for the next run only (never a default). Warns before a realtime run with a
  * heavy profile: a slow writer can make a realtime run fall behind, and each such wait is a traced degradation.
  */
-export function RecordingControls({ realtime }: { realtime: boolean }) {
+export function RecordingControls({ realtime, onRunHeadless, headlessDisabled, headlessCommands = 0, headlessOf }: { realtime: boolean; onRunHeadless?: () => void; headlessDisabled?: boolean; headlessCommands?: number; headlessOf?: string | undefined }) {
   const sel = useSyncExternalStore(subscribeRecordingSelection, getRecordingSelection);
   const parsed = profileOfSelection(sel);
   const heavy = parsed.ok && isHeavyProfile(parsed.profile);
   return (
-    <fieldset className="recording-controls" data-testid="recording-controls">
-      <legend className="muted">Recording</legend>
+    <section className="recording-controls" data-testid="recording-controls">
+      <h4 className="sec">
+        <b>RECORDING</b>
+        <span className="rule" />
+      </h4>
+      <p className="prose muted">A recorded run is saved while it runs: it can be replayed, scrubbed and exported. The profile says what is kept.</p>
       <div className="row">
-        <label>
-          profile{" "}
+        <label className="rec-field">
+          <span className="muted">profile</span>
           <select
+            className="rc-select mono"
             aria-label="Recording profile"
             data-testid="recording-preset"
             value={sel.preset}
@@ -32,7 +38,7 @@ export function RecordingControls({ realtime }: { realtime: boolean }) {
             <option value="custom">custom (JSON)</option>
           </select>
         </label>
-        <label>
+        <label className="rc-check">
           <input type="checkbox" checked={sel.optOut} onChange={(e) => setRecordingSelection({ optOut: e.target.checked })} data-testid="recording-opt-out" /> Don't record this run
         </label>
       </div>
@@ -53,16 +59,40 @@ export function RecordingControls({ realtime }: { realtime: boolean }) {
           />
           {!parsed.ok && (
             <p className="danger" role="alert" data-testid="recording-custom-error">
-              ✗ {parsed.message}
+              ✕ {parsed.message}
             </p>
           )}
         </>
       )}
-      {realtime && heavy && !sel.optOut && (
-        <p className="warn" data-testid="recording-heavy-warning">
-          ⚠ A realtime run with this profile writes a lot: if the writer falls behind, the run waits and each wait is traced as a storage_backpressure degradation.
+      {onRunHeadless && (
+        <div className="row" data-testid="headless-controls">
+          <label className="rec-field">
+            <span className="muted">headless: run for</span>
+            <input
+              className="log-filter mono rc-num"
+              value={String(sel.headlessUntilS)}
+              inputMode="decimal"
+              aria-label="Headless run length in sim seconds"
+              data-testid="headless-until"
+              onChange={(e) => setRecordingSelection({ headlessUntilS: Number(e.target.value) })}
+            />
+            <span className="muted">sim s</span>
+          </label>
+          <button type="button" className="btn" disabled={headlessDisabled || !parsed.ok} onClick={onRunHeadless} data-testid="run-headless-popover" data-tip={`${headlessTip(headlessCommands, headlessOf)} (with this profile)`}>
+            {headlessButton(headlessCommands)}
+          </button>
+        </div>
+      )}
+      {onRunHeadless && sel.optOut && (
+        <p className="muted" data-testid="headless-opt-out-note">
+          ○ A headless run is always recorded: the opt-out above applies to the next live run only.
         </p>
       )}
-    </fieldset>
+      {realtime && heavy && !sel.optOut && (
+        <p className="warn" data-testid="recording-heavy-warning">
+          ▲ A realtime run with this profile writes a lot: if the writer falls behind, the run waits and each wait is traced as a storage_backpressure degradation.
+        </p>
+      )}
+    </section>
   );
 }

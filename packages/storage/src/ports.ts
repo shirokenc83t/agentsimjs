@@ -27,6 +27,11 @@ export interface TraceQuery {
   readonly kinds?: readonly string[];
   /** Records whose payload `op` is this one (a post-filter on top of the others: pose samples are `observation` + `pose`). */
   readonly op?: string;
+  /**
+   * A filter of the log console's language (UI-SPEC section 5.2), as typed: the store parses it (a bad one is a bad request), compiles it to parameterized SQL, and
+   * ANDs it with the other fields. A filter with a `metric:` term selects samples, not records: it goes to the metrics query.
+   */
+  readonly filter?: string;
 }
 
 export interface TraceStore {
@@ -49,8 +54,11 @@ export interface RunSummary extends RunHeader {
 export interface RunStore {
   /** Next unused run ID (`run-NNNNNN`), derived from stored runs; never reused. */
   allocateRunId(): Promise<string>;
-  /** A header naming a scenario must name a stored, not deleted, version of it (ADR-0028). */
-  create(header: RunHeader): Promise<Result<void, CodedError<"duplicate_run" | "invalid_header" | "scenario_version_not_found">>>;
+  /**
+   * A header naming a scenario must name a stored, not deleted, version of it (ADR-0028). A derived run names a parent that is stored (it may be deleted later: the
+   * link then stays as what the run says it was made from); a derived run that was imported names a run of the database it came from, which is not here.
+   */
+  create(header: RunHeader): Promise<Result<void, CodedError<"duplicate_run" | "invalid_header" | "scenario_version_not_found" | "parent_run_not_found">>>;
   get(runId: string): Promise<RunHeader | undefined>;
   list(): Promise<RunSummary[]>;
   setStatus(runId: string, status: RunStatus): Promise<Result<void, CodedError<"unknown_run">>>;
@@ -79,6 +87,8 @@ export interface SizeEntry {
 
 export interface RunSizes {
   readonly records: SizeEntry;
+  /** Metric samples (the count; the bytes are the fixed width of a row). */
+  readonly metrics: SizeEntry;
   readonly blobs: SizeEntry;
   readonly snapshots: SizeEntry;
   readonly beliefFrames: SizeEntry;
@@ -247,6 +257,40 @@ export interface BeliefFrameStore {
   keyframeAtOrBefore(runId: string, agentId: string, tick: number): Promise<BeliefFrame | undefined>;
 }
 
+/** One point of a metric series (ADR-0035 section 4): `name` is in the trusted registry and `source` is the one the registry gives that series. */
+export interface StoredMetricSample {
+  readonly source: string;
+  readonly name: string;
+  /** The tick the sample was taken after. Unique per series, and the series' order. */
+  readonly tick: number;
+  readonly simTime: number;
+  readonly value: number;
+}
+
+export interface MetricQuery {
+  readonly runId: string;
+  /** Exactly this source (a `source:` filter with `*` is the filter language's). */
+  readonly source?: string;
+  readonly name?: string;
+  /** Inclusive sim-time window. */
+  readonly fromS?: number;
+  readonly toS?: number;
+  /** Continues after this sample, in (source, name, tick) order: the cursor of a paged read. */
+  readonly after?: { readonly source: string; readonly name: string; readonly tick: number };
+  /** A filter with a `metric:` term (the log console's language), ANDed with the other fields. */
+  readonly filter?: string;
+  readonly limit: number;
+}
+
+export type MetricError = CodedError<"unknown_run" | "invalid_metric" | "duplicate_metric" | "non_monotonic_metric">;
+
+export interface MetricStore {
+  /** Appends samples; all or nothing. Each series (source, name) keeps tick order, and a tick holds one sample of it. */
+  append(runId: string, samples: readonly StoredMetricSample[]): Promise<Result<void, MetricError>>;
+  /** Samples in (source, name, tick) order, filtered. */
+  query(q: MetricQuery): Promise<StoredMetricSample[]>;
+}
+
 export interface StoragePorts {
   readonly trace: TraceStore;
   readonly runs: RunStore;
@@ -256,4 +300,5 @@ export interface StoragePorts {
   readonly runConfigs: RunConfigStore;
   readonly snapshots: SnapshotStore;
   readonly beliefFrames: BeliefFrameStore;
+  readonly metrics: MetricStore;
 }

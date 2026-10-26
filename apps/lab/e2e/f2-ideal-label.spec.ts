@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { loadDemo, loadF2, openPanelTab, openWorkspace } from "./helpers.ts";
+import { loadDemo, loadF2, openInspectorSections, openPanelTab, openWorkspace } from "./helpers.ts";
 
 // ADR-0028 addition of 2026-10-09: `ideal` agents plan on the ground truth and are labelled wherever they appear.
 test("ideal agents are labelled in the Explorer and the Inspector; the F2 demos start unknown; the run configuration sets the initial map", async ({ page }) => {
@@ -9,6 +9,7 @@ test("ideal agents are labelled in the Explorer and the Inspector; the F2 demos 
   await loadDemo(page);
   for (const id of ["ugv-001", "ugv-002", "uav-001"]) await expect(page.getByTestId(`explorer-ideal-${id}`)).toBeVisible();
   await page.getByTestId("explorer-row-ugv-001").click();
+  await openInspectorSections(page);
   await expect(page.getByTestId("inspector-init")).toContainText("ideal");
 
   // The F2 discovery demo starts every agent from an unknown map: no label, the Inspector says so.
@@ -18,7 +19,7 @@ test("ideal agents are labelled in the Explorer and the Inspector; the F2 demos 
   await expect(page.getByTestId("inspector-init")).toContainText("unknown");
 
   // Run configuration → Beliefs: make only the rover ideal; the effective table shows it; the new run labels it.
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-beliefs-scope").selectOption("byAgent.rover");

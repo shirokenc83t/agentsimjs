@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, openPanelTab, openWorkspace, step } from "./helpers.ts";
+import { loadDemo, openInspectorSections, openPanelTab, openWorkspace, step } from "./helpers.ts";
 
 /** A new run of the demo whose agents plan on `unknown` belief maps (the F1 demo's own agents are `ideal`). */
 async function runWithUnknownMaps(page: Page) {
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-beliefs-init").selectOption("unknown");
@@ -13,6 +13,7 @@ async function runWithUnknownMaps(page: Page) {
   await openWorkspace(page, "scene");
   await expect.poll(() => page.evaluate(() => window.__agentsim?.scene?.stats().chunksPending)).toBe(0);
   await page.getByTestId("explorer-row-ugv-001").click();
+  await openInspectorSections(page);
   await expect(page.getByTestId("inspector-strategy-test")).toBeVisible();
 }
 
@@ -39,6 +40,7 @@ test("the Strategy test plans on the belief map by default and on the ground tru
   await runWithUnknownMaps(page);
 
   // The demo's closed box at (50, 40): an unknown map has no wall there, the ground truth has.
+  await openInspectorSections(page);
   await page.getByTestId("st-strategy").selectOption("astar-then-hpa@1");
   await testTo(page, 50, 40);
   await expect(page.getByTestId("st-status")).toContainText("✓ found");
@@ -64,6 +66,7 @@ test("the Strategy test plans on the belief map by default and on the ground tru
 test("refusals show their stable code and path, and nothing is drawn", async ({ page }) => {
   await loadDemo(page);
   await runWithUnknownMaps(page);
+  await openInspectorSections(page);
   await page.getByTestId("st-strategy").selectOption("inline");
   await page.getByTestId("st-json").fill(
     JSON.stringify({ schemaVersion: 0, id: "bad", version: 1, origin: "human", root: { kind: "select", branches: [{ when: "nonsense > 1", then: { kind: "algorithm", algorithm: "astar" } }], else: { kind: "algorithm", algorithm: "hpa" } } }),
@@ -80,6 +83,7 @@ test("refusals show their stable code and path, and nothing is drawn", async ({ 
 test("the target can be picked on the map: the next ground click fills it, and is not a command", async ({ page }) => {
   await loadDemo(page);
   await runWithUnknownMaps(page);
+  await openInspectorSections(page);
   await page.getByTestId("st-pick").click();
   await expect(page.getByTestId("scene-sandbox-picking")).toBeVisible();
   const p = await page.evaluate(() => window.__agentsim?.scene?.screenOfGround(30, 30));
@@ -98,6 +102,7 @@ test("running Strategy tests during a run does not change the run's state hash",
   await runWithUnknownMaps(page);
   await step(page, 1);
   for (const map of ["belief", "truth"] as const) {
+    await openInspectorSections(page);
     await page.getByTestId("st-map").selectOption(map);
     await testTo(page, 50, 10);
     await expect(page.getByTestId("st-status")).toBeVisible();

@@ -210,6 +210,7 @@ export function driveWithRuntime(c: Corridor, body: ResolvedUgvBody): RuntimeOut
       if (r.kind === "reflex") reflexes++;
       const p = r.payload as { op?: unknown; ok?: unknown } | null;
       if (p?.op === "recovery" && p.ok !== false) recoveries++;
+      return "corridor";
     },
   };
   const dt = 0.1;

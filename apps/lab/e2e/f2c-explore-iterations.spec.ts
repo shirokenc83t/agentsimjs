@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadF2, openWorkspace, setReplayCursor, step } from "./helpers.ts";
+import { loadF2, openInspectorSections, openWorkspace, setReplayCursor, step } from "./helpers.ts";
 
 // F2c M1 (ADR-0040): explore works in iterations of a radius. The Inspector's Explore command takes an optional radius (its placeholder is the agent's
 // configured one) and the Scene's exploration overlay draws the iteration in progress, live and from a stored run.
@@ -13,6 +13,7 @@ test("explore with a radius from the Inspector: the iteration area is drawn, liv
   await page.getByTestId(`explorer-row-${AGENT}`).click();
 
   // The Inspector names the vehicle's current or last recovery (ADR-0041), from the records: none before it ever needed one.
+  await openInspectorSections(page);
   await expect(page.getByTestId("inspector-recovery")).toHaveText("none");
 
   // The radius field shows the agent's configured radius (a ground vehicle's built-in default) and takes another.

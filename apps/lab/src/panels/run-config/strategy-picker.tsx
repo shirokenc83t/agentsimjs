@@ -1,9 +1,6 @@
-import Button from "@mui/material/Button";
-import NativeSelect from "@mui/material/NativeSelect";
-import TextField from "@mui/material/TextField";
 import { PLANNING_STRATEGY_PRESETS, type PlanningEntry, type PlanningStrategy, type StrategyRef } from "@agentsim/scenarios";
-import { useMemo, useState, type InputHTMLAttributes } from "react";
-import { Issue } from "./fields.tsx";
+import { useMemo, useState } from "react";
+import { FieldRow, Issue } from "./fields.tsx";
 import { parseInlineStrategy, strategyRefOf } from "./model.ts";
 
 const INLINE = "inline";
@@ -37,24 +34,26 @@ export function StrategyPicker(props: { value: NonNullable<PlanningEntry["strate
   };
   return (
     <div data-testid="rc-strategy">
-      <div className="row wrap">
-        <label className="field">
-          <span className="field-label">strategy</span>
-          <NativeSelect value={selected} onChange={(e) => choose(e.target.value)} inputProps={{ "aria-label": "Strategy", "data-testid": "rc-strategy-preset" } as object}>
-            {PLANNING_STRATEGY_PRESETS.map((p) => (
-              <option key={refKey(p)} value={refKey(p)}>
-                {p.id} · v{p.version}
-              </option>
-            ))}
-            <option value={INLINE}>inline JSON…</option>
-          </NativeSelect>
-        </label>
-        {preset && (
-          <Button variant="outlined" color="inherit" onClick={() => props.onChange(asInline(preset))} data-testid="rc-strategy-edit-inline">
-            Edit as inline
-          </Button>
-        )}
-      </div>
+      <FieldRow
+        label="strategy"
+        state="set"
+        help={
+          preset && (
+            <button type="button" className="btn" onClick={() => props.onChange(asInline(preset))} data-testid="rc-strategy-edit-inline">
+              Edit as inline
+            </button>
+          )
+        }
+      >
+        <select className="mono" value={selected} onChange={(e) => choose(e.target.value)} aria-label="Strategy" data-testid="rc-strategy-preset">
+          {PLANNING_STRATEGY_PRESETS.map((p) => (
+            <option key={refKey(p)} value={refKey(p)}>
+              {p.id} · v{p.version}
+            </option>
+          ))}
+          <option value={INLINE}>inline JSON…</option>
+        </select>
+      </FieldRow>
       {ref && !preset && <Issue code="strategy_unknown_ref" message={`no shipped strategy ${ref.ref} v${ref.version}`} testId="rc-strategy-error" />}
       {preset ? (
         <>
@@ -86,12 +85,13 @@ function InlineEditor(props: { value: NonNullable<PlanningEntry["strategy"]>; on
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   return (
     <>
-      <TextField
-        multiline
-        fullWidth
-        minRows={8}
-        maxRows={24}
+      <textarea
+        className="mono rc-textarea"
+        rows={10}
         value={text}
+        spellCheck={false}
+        aria-label="Strategy JSON"
+        data-testid="rc-strategy-json"
         onChange={(e) => {
           const t = e.target.value;
           setText(t);
@@ -100,7 +100,6 @@ function InlineEditor(props: { value: NonNullable<PlanningEntry["strategy"]>; on
           setError(null);
           if (r.value) props.onChange(r.value);
         }}
-        slotProps={{ htmlInput: { "data-testid": "rc-strategy-json", className: "mono", spellCheck: false, "aria-label": "Strategy JSON" } as InputHTMLAttributes<HTMLTextAreaElement> }}
       />
       {error && <Issue code={error.code} message={error.message} testId="rc-strategy-json-error" />}
     </>

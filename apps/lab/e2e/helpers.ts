@@ -27,7 +27,7 @@ export async function waitForStorageReady(page: Page): Promise<void> {
   await expect(page.getByTestId("status-storage")).toHaveText(/db: (opfs-sahpool|memory-fallback)/, { timeout: 30_000 });
 }
 
-export async function openWorkspace(page: Page, id: "scene" | "debug" | "author" | "data" | "settings"): Promise<void> {
+export async function openWorkspace(page: Page, id: "scene" | "debug" | "configurations" | "data" | "settings" | "experiments" | "analysis"): Promise<void> {
   await page.getByTestId(`tab-${id}`).click();
   await expect(page.getByTestId(`workspace-${id}`)).toBeVisible();
 }
@@ -133,6 +133,7 @@ export async function step(page: Page, hundreds: number, timeoutMs = 5_000) {
 export async function stepUntilEnded(page: Page, maxHundreds: number) {
   // A command applies at the next tick: step once before reading the action, or the previous one is read.
   await step(page, 1);
+  await openInspectorSections(page);
   for (let k = 1; k < maxHundreds; k++) {
     const label = (await page.getByTestId("inspector-action-label").textContent()) ?? "";
     if (/succeeded|failed|preempted/.test(label)) return;
@@ -140,8 +141,20 @@ export async function stepUntilEnded(page: Page, maxHundreds: number) {
   }
 }
 
+/**
+ * Closes the Scene's floating windows (Overview, Legend, Performance). They sit inside the map, so they can cover the ground point a spec is about to click;
+ * a spec that clicks the map closes them first (the palette opens one again).
+ */
+export async function closeFloats(page: Page) {
+  for (const id of ["overview", "legend", "perf"]) {
+    const close = page.getByTestId(`wb-close-${id}`);
+    if (await close.isVisible()) await close.click();
+  }
+}
+
 /** Selects an agent in the Explorer and sends it to (x, y) m with the "send to" mode. */
 export async function sendTo(page: Page, agentId: string, x: number, y: number) {
+  await closeFloats(page);
   await page.getByTestId(`explorer-row-${agentId}`).click();
   await page.getByTestId("send-to").click();
   await expect(page.getByTestId("send-to")).toHaveAttribute("aria-pressed", "true");
@@ -150,10 +163,18 @@ export async function sendTo(page: Page, agentId: string, x: number, y: number) 
   await expect(page.getByTestId("send-to")).toHaveAttribute("aria-pressed", "false");
 }
 
-/** Activates a dockview panel tab (e.g. "Run configuration" next to the scenario editor in Author). */
+/** Activates a dockview panel tab (e.g. "Run configuration" next to the scenario editor in Author); the tab's name is `[n] Title`. */
 export async function openPanelTab(page: Page, title: string) {
-  await page.getByRole("tab", { name: title, exact: true }).click();
-  await expect(page.getByRole("tab", { name: title, exact: true })).toHaveAttribute("aria-selected", "true");
+  const tab = page.getByRole("tab", { name: new RegExp(String.raw`^(\[\d+\] )?${title}$`) });
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+}
+
+/** Opens the Performance window (a floating window, collapsed to its title bar until it is opened). */
+export async function openPerf(page: Page) {
+  const hud = page.getByTestId("perf-hud");
+  if (!(await hud.isVisible())) await page.getByTestId("wb-collapse-perf").click();
+  await expect(hud).toBeVisible();
 }
 
 /** Counts what the main thread posts to the sim worker (`window.__simMsgs`): install before the page loads. */
@@ -189,3 +210,38 @@ export async function setReplayCursor(page: Page, seconds: number) {
   await expect(page.getByTestId("replay-time")).toContainText(`${seconds.toFixed(1)} s /`);
 }
 
+
+/** The layout controls of the top bar: when the bar is too narrow for them they are folded into `layout ▾`; this opens that menu (and does nothing when they are in the bar). */
+export async function layoutControls(page: Page): Promise<void> {
+  const fold = page.getByTestId("layout-fold");
+  if ((await fold.count()) > 0 && (await page.getByTestId("layout-menu").count()) === 0) await fold.click();
+}
+
+/** The agent Inspector's sections are folded to one line each; this opens all of them (the researcher's "▾ all"), for a spec that reads what is in them. */
+export async function openInspectorSections(page: Page): Promise<void> {
+  await expect(page.getByTestId("inspector-agent")).toBeVisible();
+  await page.getByTestId("inspector-expand-all").click();
+}
+
+/**
+ * The Timeline folds the agents with no marks into one row; a spec that clicks the lane of an agent by its place opens them first (the last row is the fold row when there are fewer
+ * lanes than the run has entities).
+ */
+export async function openTimelineLanes(page: Page, lanes: number): Promise<void> {
+  const canvas = page.getByTestId("timeline-canvas");
+  // The lanes fold by the marks the run has: read them first, or the lanes are all folded until they arrive.
+  await expect.poll(async () => Number(((await page.getByText(/^\d+ marks$/).first().textContent()) ?? "0").split(" ")[0]), { timeout: 20_000 }).toBeGreaterThan(5);
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("no timeline");
+  const RULER = 18;
+  const LANE = 19;
+  const shown = Math.round((box.height - RULER) / LANE);
+  if (shown < lanes) await canvas.click({ position: { x: 40, y: RULER + (shown - 1) * LANE + LANE / 2 } });
+  await expect.poll(async () => Math.round(((await canvas.boundingBox())?.height ?? 0) - RULER) / LANE, { message: `lanes shown before the click: ${shown}` }).toBeGreaterThanOrEqual(lanes);
+}
+
+/** Configurations opens on the Run configuration; the Scenario editor is its second tab. */
+export async function openScenarioEditor(page: Page): Promise<void> {
+  await openWorkspace(page, "configurations");
+  await page.getByRole("tab", { name: /Scenario editor/ }).click();
+}

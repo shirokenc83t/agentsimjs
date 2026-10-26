@@ -1,8 +1,10 @@
 import { err, type CodedError, type Result } from "@agentsim/core";
-import type { RecorderItem, RunHeader, RunStatus, TraceRecord } from "@agentsim/trace";
+import type { MetricSample, RecorderItem, RunHeader, RunStatus, TraceRecord } from "@agentsim/trace";
 import type { Database, SAHPoolUtil, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { openWasmSqlDriver, SecondConnectionError } from "../drivers/wasm-sql-driver.ts";
-import type { BeliefFrame, BeliefFrameQuery, CachedResponse, SnapshotWrite, StoragePorts, StoredBlob, StoredRunInput } from "../ports.ts";
+import { LiveSubscriptions } from "../live-subscriptions.ts";
+import { SqlConsole, type SqlJobSignal, type SqlRunLimits } from "../sql-console.ts";
+import type { BeliefFrame, BeliefFrameQuery, CachedResponse, MetricQuery, SnapshotWrite, StoragePorts, StoredBlob, StoredMetricSample, StoredRunInput } from "../ports.ts";
 import type { ReplayHandlers, ReplayView, StorageExtensions } from "../replay.ts";
 import type { SqlDriver } from "../sql/driver.ts";
 import { LATEST_SCHEMA_VERSION, migrate } from "../sql/migrations.ts";
@@ -144,6 +146,7 @@ class Engine {
     } else {
       this.driver = openWasmSqlDriver(null, () => (this.raw = new this.sqlite3.oo1.DB(":memory:", "c")));
     }
+    this.console = undefined;
     this.driver.exec("PRAGMA temp_store = MEMORY");
     migrate(this.driver, now);
     this.ports = createSqlPorts(this.driver, now);
@@ -151,6 +154,12 @@ class Engine {
 
   get storage(): StoragePorts {
     return this.ports;
+  }
+
+  private console: SqlConsole | undefined;
+  /** The SQL console's executor for the current connection (one per connection: a replaced connection gets its own). */
+  get sqlConsole(): SqlConsole {
+    return (this.console ??= new SqlConsole({ sqlite3: this.sqlite3, db: this.raw }));
   }
 
   /** Executes `fn` in one transaction (batched appends; each append is its own savepoint). */
@@ -274,9 +283,26 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
   let flushDue = false;
   let draining = false;
+  /** The live subscriptions (ADR-0035 section 5): offered everything this worker stores, after it is stored; they push matches to the UI at most 10 times a second. */
+  const live = new LiveSubscriptions({
+    emit: (batch) => scope.postMessage({ type: "live", batch }),
+    now,
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+  });
 
   /** Set once storage can no longer serve requests (closed or failed to open); never cleared. */
   let terminal: { code: "closed" | "open_failed"; message: string } | undefined;
+
+  /** The SQL console's statement that is running, if any: it runs beside the queue (the recorder's batches are stored between its slices), never inside it. */
+  let sqlJob: { readonly jobId: string; readonly signal: SqlJobSignal; readonly done: Promise<void> } | undefined;
+  /** Stops the statement that is running and waits until it has let go of the connection (before anything that replaces or closes it). */
+  async function stopSqlJob(): Promise<void> {
+    const job = sqlJob;
+    if (!job) return;
+    job.signal.cancelled = true;
+    await job.done;
+  }
 
   const status = (s: StorageStatus) => scope.postMessage(s);
   const respond = (r: StorageResponse, transfer?: Transferable[]) => scope.postMessage(r, transfer);
@@ -327,7 +353,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
   }
 
   /** A snapshot or belief frames of the run, stored in order with the batches around them; a refusal is reported to the recorder. */
-  async function storeRecorderItem(item: RecorderItem): Promise<void> {
+  async function storeRecorderItem(item: RecorderItem, stored?: { runId: string; samples: MetricSample[] }[]): Promise<void> {
     const e = engine;
     if (!e) return;
     const refuse = (code: string, message: string) => recorderPort?.postMessage({ type: "rejected", runId: item.runId, code, message });
@@ -336,6 +362,10 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         const r = await e.storage.snapshots.write(item.runId, { seq: item.seq, simTime: item.simTimeS, tick: item.tick, bytes: item.bytes, blobs: item.blobs });
         // The same state twice (a pause where nothing ran since the last snapshot) is the same snapshot: nothing to refuse.
         if (!r.ok && r.error.code !== "duplicate_snapshot") refuse(r.error.code, r.error.message);
+      } else if (item.type === "metrics") {
+        const r = await e.storage.metrics.append(item.runId, item.samples);
+        if (!r.ok) refuse(r.error.code, r.error.message);
+        else stored?.push({ runId: item.runId, samples: [...item.samples] });
       } else {
         const stored = await e.storage.snapshots.putBlobs(item.runId, item.blobs);
         if (!stored.ok) return refuse(stored.error.code, stored.error.message);
@@ -449,14 +479,18 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
     if (!e) return;
     const answers: { id: number; value: unknown }[] = [];
     const recorded: { batch: RecorderAppend["recorder"]; result: Result<void, CodedError> }[] = [];
+    // What the transaction stored, to offer to the live subscriptions once it has committed.
+    const storedRecords: TraceRecord[] = [];
+    const storedSamples: { runId: string; samples: MetricSample[] }[] = [];
     try {
       await e.batch(async () => {
         for (const req of run) {
           if (req.op === "recorder.item") {
-            await storeRecorderItem((req as RecorderSide).recorderItem);
+            await storeRecorderItem((req as RecorderSide).recorderItem, storedSamples);
             continue;
           }
           const result = await e.storage.trace.append(req.args[0] as TraceRecord[]);
+          if (result.ok) storedRecords.push(...(req.args[0] as TraceRecord[]));
           if ("recorder" in req) recorded.push({ batch: (req as RecorderAppend).recorder, result });
           else answers.push({ id: req.id, value: result });
         }
@@ -471,6 +505,9 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
       return;
     }
     for (const a of answers) respond({ type: "response", id: a.id, ok: true, value: a.value });
+    // The transaction committed: what it stored goes to the subscriptions (the recording is never sampled; only the display is).
+    live.offerRecords(storedRecords);
+    for (const s of storedSamples) live.offerSamples(s.runId, s.samples);
     // The transaction committed: the head moves as far as the batches before the first refusal.
     if (recorded.length > 0) reportCommit(recorded, recorderPort, (m) => scope.postMessage(m));
   }
@@ -484,6 +521,33 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
       let value: unknown;
       let transfer: Transferable[] | undefined;
       switch (req.op) {
+        case "sql.run": {
+          // Not answered here: the statement is sliced and yields to the queue, so it must not be awaited by it.
+          const jobId = String(a);
+          const signal: SqlJobSignal = { cancelled: false };
+          const limits = (req.args[2] ?? undefined) as Partial<SqlRunLimits> | undefined;
+          const wasBusy = e.sqlConsole.busy; // another statement is running: this one is refused as busy, and is not the job
+          const done = e.sqlConsole
+            .run(String(b), limits, signal)
+            .then((result) => respond({ type: "response", id: req.id, ok: true, value: result }))
+            .catch((err: unknown) => fail(req.id, "storage_error", err instanceof Error ? err.message : String(err)))
+            .finally(() => {
+              if (sqlJob?.jobId === jobId) sqlJob = undefined;
+            });
+          if (wasBusy || !e.sqlConsole.busy) return void (await done); // refused before it started (busy, a write, a bad limit): answered already
+          sqlJob = { jobId, signal, done };
+          return;
+        }
+        case "sql.cancel": {
+          const job = sqlJob;
+          if (job !== undefined && job.jobId === String(a)) job.signal.cancelled = true;
+          value = job !== undefined && job.jobId === String(a);
+          break;
+        }
+        case "sql.schema": value = e.sqlConsole.schema(); break;
+        case "live.subscribe": value = live.subscribe(String(a), String(b), String(req.args[2] ?? "")); break;
+        case "live.change": value = live.change(String(a), String(b ?? "")); break;
+        case "live.unsubscribe": value = live.unsubscribe(String(a)); break;
         case "trace.flush": value = await s.trace.flush(); break;
         case "trace.query": value = await s.trace.query(a as { runId: string; limit: number }); break;
         case "trace.count": value = await s.trace.count(String(a)); break;
@@ -505,7 +569,8 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "runs.sizes": value = await s.runs.sizes(String(a)); break;
         case "admin.compact": {
           // Only when nothing is recording: a VACUUM stalls the queue the recorder writes through.
-          const recording = recordedRunId !== undefined && now() - lastBatchAt < RECORDING_QUIET_MS;
+          // A VACUUM cannot run while a statement of the SQL console holds a read either.
+          const recording = (recordedRunId !== undefined && now() - lastBatchAt < RECORDING_QUIET_MS) || e.sqlConsole.busy;
           value = { freedBytes: recording ? 0 : e.compactIfWorth(), skipped: recording };
           break;
         }
@@ -540,6 +605,8 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "snapshots.read": value = await s.snapshots.read(String(a), String(b)); break;
         case "beliefFrames.append": value = await s.beliefFrames.append(String(a), Array.isArray(b) ? (b as BeliefFrame[]) : []); break;
         case "beliefFrames.query": value = await s.beliefFrames.query(a as BeliefFrameQuery); break;
+        case "metrics.append": value = await s.metrics.append(String(a), Array.isArray(b) ? (b as StoredMetricSample[]) : []); break;
+        case "metrics.query": value = await s.metrics.query(a as MetricQuery); break;
         case "beliefFrames.keyframeAtOrBefore": value = await s.beliefFrames.keyframeAtOrBefore(String(a), String(b), Number(req.args[2])); break;
         case "replay.beliefAt":
         case "replay.world": {
@@ -578,10 +645,13 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         }
         case "admin.importDb": {
           if (!(a instanceof Uint8Array)) return fail(req.id, "invalid_args", "expected Uint8Array");
+          await stopSqlJob(); // the connection is replaced: no statement may hold the old one
           value = await e.importDb(a);
           break;
         }
         case "admin.close": {
+          live.dispose();
+          await stopSqlJob();
           e.close();
           release?.();
           respond({ type: "response", id: req.id, ok: true, value: undefined });
@@ -615,7 +685,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         queue.push(recorderAppend(msg.batch));
         pendingAppendRecords += msg.batch.records.length;
         void drain();
-      } else if (msg?.type === "snapshot" || msg?.type === "frames") {
+      } else if (msg?.type === "snapshot" || msg?.type === "frames" || msg?.type === "metrics") {
         lastBatchAt = now();
         queue.push(recorderSide(msg));
         pendingAppendRecords += ITEM_WEIGHT;

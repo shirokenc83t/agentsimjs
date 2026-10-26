@@ -1,9 +1,11 @@
 import { err, isValid, ok } from "@agentsim/core";
 import { firstNonMonotonicRecord, formatRunId, isValidTraceRecord, RunHeader, type RunStatus, type TraceRecord } from "@agentsim/trace";
+import { matchesRecord } from "@agentsim/trace";
+import { parseQueryFilter } from "../sql/filter-sql.ts";
 import { checkRecordFilter, checkSourceFilter, recordFilterMatches, sourceFilterMatches } from "../sql/source-filter.ts";
 import type { CachedResponse, DocumentSummary, RunSummary, StoragePorts, StoredDocument, TraceQuery } from "../ports.ts";
 import { checkRunRecording } from "../recording.ts";
-import { checkRunReferences } from "../run-references.ts";
+import { checkRunDerived, checkRunReferences } from "../run-references.ts";
 import { memoryRecordingStores } from "./memory-recording.ts";
 import { checkRunInputs, type StoredRunInput } from "../run-inputs.ts";
 import { checkRunConfigPreset, checkScenarioEnvelope } from "../scenario-envelope.ts";
@@ -72,6 +74,7 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
   return {
     snapshots: recording.snapshots,
     beliefFrames: recording.beliefFrames,
+    metrics: recording.metrics,
     scenarios: {
       list: async () => scenarios.list(),
       get: async (id, version) => scenarios.get(id, version),
@@ -128,13 +131,14 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
       async query(q: TraceQuery) {
         checkSourceFilter(q.source);
         checkRecordFilter(q);
+        const filter = q.filter === undefined ? undefined : parseQueryFilter(q.filter, "records");
         const after = q.afterSeq ?? -1;
         const limit = Math.max(0, Math.min(q.limit, 10_000));
         const from = q.simTime?.from ?? Number.NEGATIVE_INFINITY;
         const to = q.simTime?.to ?? Number.POSITIVE_INFINITY;
         const inWindow = (t: number) => t >= from && t <= to; // NaN bounds match nothing, like the SQL mapping
         return clone(
-          (records.get(q.runId) ?? []).filter((r) => r.seq > after && inWindow(r.simTime) && sourceFilterMatches(q.source, r.source) && recordFilterMatches(q, r)).slice(0, limit),
+          (records.get(q.runId) ?? []).filter((r) => r.seq > after && inWindow(r.simTime) && sourceFilterMatches(q.source, r.source) && recordFilterMatches(q, r) && (filter === undefined || matchesRecord(filter, r))).slice(0, limit),
         );
       },
       async count(runId) {
@@ -153,6 +157,9 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
         if (!refs.ok) return refs;
         const recorded = checkRunRecording(header);
         if (!recorded.ok) return recorded;
+        const derived = checkRunDerived(header);
+        if (!derived.ok) return derived;
+        if (header.derived !== undefined && header.importedFrom === undefined && !runs.has(header.derived.parentRunId)) return err({ code: "parent_run_not_found" as const, message: `parent run ${header.derived.parentRunId} not found` });
         if (runs.has(header.runId)) return err({ code: "duplicate_run" as const, message: `run ${header.runId} exists` });
         if (header.scenarioId !== undefined && !scenarios.get(header.scenarioId, header.scenarioVersion)) {
           return err({ code: "scenario_version_not_found" as const, message: `scenario ${header.scenarioId} v${header.scenarioVersion ?? "?"} not found` });

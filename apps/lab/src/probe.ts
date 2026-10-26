@@ -1,4 +1,5 @@
 import type { SceneRenderer } from "@agentsim/ui";
+import type { DockviewApi } from "dockview-react";
 
 /**
  * Read-only test probe, installed only with `?probe` in the URL (e2e and benchmarks).
@@ -32,8 +33,12 @@ export interface LabProbe {
   executedPath?: (agentId: string) => readonly number[];
   /** The run's trace records as received from the worker (read-only; capped by the client). */
   records?: () => readonly unknown[];
+  /** The dock of the open workspace, read-only: each panel with its title, where it is and its state. */
+  dock?: () => { id: string; title: string; location: string; maximized: boolean; collapsed: boolean; active: boolean; height: number }[];
   /** The shared UI context's selection (read-only). */
   selection?: () => { kind: string; id: string } | undefined;
+  /** Wall ms of each draw of a top-down map (the Scene's 2D tab, the Analysis workspace), newest last; written by the map, cleared by the bench. */
+  map2dMs?: number[];
 }
 
 declare global {
@@ -85,4 +90,24 @@ export function markWorkspaceVisible(): void {
   workspaceMarked = true;
   performance.mark("agentsim:workspace-visible");
   if (window.__agentsim) window.__agentsim.loadMarks["workspaceVisible"] = performance.now();
+}
+
+/** Points the probe at the dock of the open workspace (cleared when it goes). */
+export function attachDockProbe(api: DockviewApi | undefined, collapsed: (groupHeight: number, floating: boolean) => boolean): void {
+  const p = window.__agentsim;
+  if (!p) return;
+  if (!api) {
+    delete p.dock;
+    return;
+  }
+  p.dock = () =>
+    api.panels.map((panel) => ({
+      id: panel.id,
+      title: panel.title ?? panel.id,
+      location: panel.api.location.type,
+      maximized: panel.api.isMaximized(),
+      collapsed: collapsed(panel.group.height, panel.api.location.type === "floating"),
+      active: api.activePanel?.id === panel.id,
+      height: panel.group.height,
+    }));
 }

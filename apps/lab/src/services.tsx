@@ -3,6 +3,7 @@ import { isThemePreference, setThemePreference, type ThemePreference } from "@ag
 import { createContext, useContext, useEffect, useState } from "react";
 import type { LabRun } from "./sim/run-controller.ts";
 import type { WorkspaceId } from "./workspaces/presets.ts";
+import type { PanelId } from "./workspaces/registry.tsx";
 import type { RunSource } from "./sim/run-source.ts";
 import type { SimClient } from "./sim/sim-client.ts";
 
@@ -43,8 +44,19 @@ export interface AppActions {
   openWorkspace(id: WorkspaceId): void;
   /** Shows a recorded run from storage in the panels (nothing goes to the sim worker); `undefined` goes back to the live run. */
   openReplay(runId: string | undefined): void;
+  /** Re-simulates a window of the run shown into a derived run: the Timeline's selection when there is one, else the cursor with a few seconds either side. */
+  resimulateWindow(): void;
+  /** Leaves the Debug's "debug · logs" layout and puts the dock back as it was. */
+  backToDebug(): void;
+  /** Opens a window of the open workspace's dock that is in no preset or was closed (the trace graph from the Trace panel): where the preset has it, or as a floating window. */
+  openPanel(id: PanelId): void;
+  /** The layout that ships with the open workspace that is on (its name; the first when none was chosen), and a way to put another on: the Log's `1 col | 2 col` switch. */
+  layoutVariant?: string | undefined;
+  selectLayout?(name: string): void;
+  /** A new headless run of the run shown (the player's Re-run menu, Ctrl+Shift+R). */
+  rerunHeadless?(): void;
 }
-const AppActionsContext = createContext<AppActions>({ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {} });
+const AppActionsContext = createContext<AppActions>({ resetLayouts: () => {}, setTheme: () => {}, openWorkspace: () => {}, openReplay: () => {}, resimulateWindow: () => {}, backToDebug: () => {}, openPanel: () => {} });
 export const AppActionsProvider = AppActionsContext.Provider;
 export const useAppActions = (): AppActions => useContext(AppActionsContext);
 
@@ -53,9 +65,13 @@ export interface CurrentRun {
   readonly run: LabRun | undefined;
   readonly busy: boolean;
   readonly error: string | null;
+  /** How many commands the run shown has recorded: a headless run applies them again (the buttons say "re-run" when there are some). */
+  readonly rerunCommands?: number;
   loadDemo(): void;
   /** A new run of the current run's scenario version with another run configuration (new ID, new header). */
   runWithConfig(runConfig: unknown): void;
+  /** A new headless run (ADR-0029) of the current run's scenario version with another run configuration: lockstep, always recorded, for the duration chosen. */
+  runHeadlessWithConfig(runConfig: unknown): void;
   /** A new run of a stored scenario version (scenario editor "Run"); the documents are validated by the worker. */
   startScenarioRun(scenario: unknown, scenarioVersion: number, runConfig: unknown, label: string): void;
 }
@@ -63,8 +79,10 @@ const CurrentRunContext = createContext<CurrentRun>({
   run: undefined,
   busy: false,
   error: null,
+  rerunCommands: 0,
   loadDemo: () => {},
   runWithConfig: () => {},
+  runHeadlessWithConfig: () => {},
   startScenarioRun: () => {},
 });
 export const CurrentRunProvider = CurrentRunContext.Provider;

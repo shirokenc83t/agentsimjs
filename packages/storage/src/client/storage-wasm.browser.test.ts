@@ -240,6 +240,144 @@ describe("storage worker (browser)", () => {
     simEnd.close();
   });
 
+  it("live subscriptions in the storage worker: matches are pushed after they are stored, the history query with the same filter returns the same, and a closed view leaves nothing behind", async () => {
+    const run = "run-000001";
+    const profile = RECORDING_PRESETS["default-research"];
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    const channel = new MessageChannel();
+    const simEnd = channel.port1;
+    const fromStorage: { type: string }[] = [];
+    simEnd.onmessage = (ev) => fromStorage.push(ev.data as { type: string });
+    c.attachRecorderPort(channel.port2);
+    const until = async (cond: () => boolean) => {
+      for (let i = 0; i < 300 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
+      expect(cond()).toBe(true);
+    };
+    expect((await c.ports.runs.create({ ...header(run), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) })).ok).toBe(true);
+    await until(() => fromStorage.some((m) => m.type === "header"));
+
+    const records: { seq: number; simTime: number }[] = [];
+    const samples: { tick: number }[] = [];
+    const rejected = await c.live.subscribe("bad", run, "kind:nonsense", () => undefined);
+    expect(rejected).toMatchObject({ ok: false, error: { code: "invalid_filter" } });
+    expect((await c.live.subscribe("tail", run, "kind:event t:>=2", (b) => records.push(...b.records))).ok).toBe(true);
+    expect((await c.live.subscribe("tail", run, "kind:event", () => undefined)).ok).toBe(false); // one subscription per view
+    expect((await c.live.subscribe("soc", run, "metric:agent.soc source:uav-001/body", (b) => samples.push(...b.samples))).ok).toBe(true);
+
+    simEnd.postMessage({ type: "batch", batch: { runId: run, records: [0, 1, 2, 3].map((n) => rec(run, n)), throughSeq: 3, tick: 3, simTimeS: 0.3 } });
+    simEnd.postMessage({ type: "metrics", runId: run, samples: [{ source: "uav-001/body", name: "agent.soc", tick: 1, simTime: 0.1, value: 0.9 }, { source: "ugv-001/body", name: "agent.soc", tick: 1, simTime: 0.1, value: 0.8 }, { source: "uav-001/body", name: "agent.soc", tick: 2, simTime: 0.2, value: 0.89 }] });
+    // A batch of the main thread's own (an append through the client) is offered too.
+    await c.ports.trace.append([rec(run, 4)]);
+    await until(() => records.length >= 3 && samples.length >= 2);
+    expect(records.map((r) => r.seq)).toEqual([2, 3, 4]);
+    expect(samples.map((s) => s.tick)).toEqual([1, 2]);
+    // The history query with the same filter is the same set.
+    expect((await c.ports.trace.query({ runId: run, limit: 10, filter: "kind:event t:>=2" })).map((r) => r.seq)).toEqual(records.map((r) => r.seq));
+    expect((await c.ports.metrics.query({ runId: run, limit: 10, filter: "metric:agent.soc source:uav-001/body" })).map((s) => s.tick)).toEqual(samples.map((s) => s.tick));
+    await expect(c.ports.trace.query({ runId: run, limit: 10, filter: "kind:event'; DROP TABLE trace_records; --" })).rejects.toThrow(/invalid filter/);
+    expect(await c.ports.trace.count(run)).toBe(5);
+
+    // Changing the filter takes effect for what is stored next; closing the view stops everything and leaves nothing: the same view can open again.
+    expect((await c.live.change("tail", "kind:event t:>=100")).ok).toBe(true);
+    await c.live.unsubscribe("soc");
+    const before = records.length;
+    simEnd.postMessage({ type: "batch", batch: { runId: run, records: [rec(run, 5)], throughSeq: 5, tick: 5, simTimeS: 0.5 } });
+    simEnd.postMessage({ type: "metrics", runId: run, samples: [{ source: "uav-001/body", name: "agent.soc", tick: 3, simTime: 0.3, value: 0.88 }] });
+    await until(() => fromStorage.some((m) => m.type === "persisted" && (m as unknown as { head: { throughSeq: number } }).head.throughSeq >= 5));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(records.length).toBe(before);
+    expect(samples.map((s) => s.tick)).toEqual([1, 2]);
+    await c.live.unsubscribe("tail");
+    expect((await c.live.subscribe("soc", run, "metric:agent.soc", () => undefined)).ok).toBe(true);
+    await c.live.unsubscribe("soc");
+    simEnd.close();
+  });
+
+  it("the SQL console in the real worker: it reads, every write is refused, user_data is not read, and a long statement is stopped while the recorder's batches go on being saved", async () => {
+    const run = "run-000001";
+    const profile = RECORDING_PRESETS["default-research"];
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    const channel = new MessageChannel();
+    const simEnd = channel.port1;
+    const fromStorage: { type: string; head?: { throughSeq: number } }[] = [];
+    const at: number[] = [];
+    simEnd.onmessage = (ev) => {
+      const m = ev.data as { type: string; head?: { throughSeq: number } };
+      fromStorage.push(m);
+      if (m.type === "persisted") at.push(performance.now());
+    };
+    c.attachRecorderPort(channel.port2);
+    const until = async (cond: () => boolean, ms = 3000) => {
+      for (let i = 0; i < ms / 10 && !cond(); i++) await new Promise((r) => setTimeout(r, 10));
+      expect(cond()).toBe(true);
+    };
+    expect((await c.ports.runs.create({ ...header(run), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) })).ok).toBe(true);
+    await until(() => fromStorage.some((m) => m.type === "header"));
+    simEnd.postMessage({ type: "batch", batch: { runId: run, records: [0, 1, 2].map((n) => rec(run, n)), throughSeq: 2, tick: 2, simTimeS: 0.2 } });
+    await until(() => fromStorage.some((m) => m.type === "persisted"));
+    await c.ports.userData.set("ui", "secret", "hunter2");
+
+    // It reads.
+    const read = await c.sql.run("SELECT count(*) AS n FROM trace_records WHERE run_id = 'run-000001'").result;
+    expect(read).toMatchObject({ ok: true, value: { columns: ["n"], rows: [[3]] } });
+    expect((await c.sql.schema()).tables.map((x) => x.name)).toEqual(expect.arrayContaining(["trace_records", "metrics", "runs"]));
+    // Every write is refused, and the database is as it was.
+    for (const w of ["DELETE FROM trace_records", "DROP TABLE trace_records", "INSERT INTO runs (run_id) VALUES ('x')", "UPDATE runs SET label = 'x'", "ATTACH DATABASE ':memory:' AS o", "VACUUM", "PRAGMA writable_schema = 1", "SELECT 1; DELETE FROM runs", "SELECT load_extension('x')"]) {
+      const r = await c.sql.run(w).result;
+      expect(r.ok, w).toBe(false);
+    }
+    expect(await c.ports.trace.count(run)).toBe(3);
+    expect((await c.sql.run("SELECT value FROM user_data").result)).toMatchObject({ ok: false, error: { code: "denied" } });
+    expect(await c.ports.userData.get("ui", "secret")).toBe("hunter2");
+    // A long statement is stopped, and the recorder's batches are saved all the while: no gap of the persisted head is longer than the console may hold the writer.
+    const before = at.length;
+    const batchesFrom = 3;
+    let seq = batchesFrom;
+    const feeder = setInterval(() => {
+      simEnd.postMessage({ type: "batch", batch: { runId: run, records: [rec(run, seq)], throughSeq: seq, tick: seq, simTimeS: seq * 0.1 } });
+      seq++;
+    }, 15);
+    // The recorder is saving before the statement starts: wait until it has stored a number of batches, not for a time (a slow runner takes longer for the same number).
+    await until(() => at.length - before >= 5, 15_000);
+    const t0 = performance.now();
+    const long = await c.sql.run("WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM x) SELECT count(*) FROM x", { maxRows: 10, timeoutMs: 5000 }).result;
+    const took = performance.now() - t0;
+    expect(long).toMatchObject({ ok: false, error: { code: "too_slow" } });
+    expect(took).toBeLessThan(2000);
+    // After it, the recorder saves again: wait for a number of batches more (bounded), then stop feeding.
+    await until(() => at.filter((x) => x > t0 + took).length >= 5, 15_000);
+    clearInterval(feeder);
+    await until(() => (fromStorage.at(-1)?.head?.throughSeq ?? 0) >= seq - 1, 5000);
+    expect(fromStorage.filter((m) => m.type === "rejected")).toEqual([]);
+    // The persisted head moved before the statement, and again after it, and the longest wait between two moves is about the step cap of the console, not the statement.
+    const all = at.slice(before);
+    const gaps = all.slice(1).map((x, i) => x - (all[i] as number));
+    expect(all.filter((x) => x < t0).length).toBeGreaterThanOrEqual(5);
+    expect(all.filter((x) => x > t0 + took).length).toBeGreaterThanOrEqual(5);
+    // The head moved before, and after: nothing in between was held longer than a step of the console (500 ms) and a slice, with a margin for a slow runner.
+    expect(Math.max(...gaps, 0)).toBeLessThan(500 + 20 + 700);
+    expect(await c.ports.trace.count(run)).toBe(seq); // every batch is there
+    simEnd.close();
+  });
+
+  it("the SQL console behaves the same in the in-memory fallback (no OPFS): it reads, refuses a write, does not read user_data and stops a long statement", async () => {
+    const c = spawn({ simulateNoOpfs: true });
+    const ready = await c.ready();
+    expect(ready.mode).toBe("memory-fallback");
+    await c.ports.runs.create(header("run-000001"));
+    await c.ports.trace.append([rec("run-000001", 0), rec("run-000001", 1)]);
+    await c.ports.userData.set("ui", "secret", "hunter2");
+    expect(await c.sql.run("SELECT count(*) AS n FROM trace_records").result).toMatchObject({ ok: true, value: { rows: [[2]] } });
+    expect(await c.sql.run("DELETE FROM trace_records").result).toMatchObject({ ok: false, error: { code: "not_read_only" } });
+    expect(await c.sql.run("WITH x AS (SELECT 1) DELETE FROM trace_records").result).toMatchObject({ ok: false, error: { code: "denied" } });
+    expect(await c.sql.run("SELECT value FROM user_data").result).toMatchObject({ ok: false, error: { code: "denied" } });
+    expect(await c.sql.run("WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM x) SELECT count(*) FROM x", { maxRows: 10, timeoutMs: 300 }).result).toMatchObject({ ok: false, error: { code: "timeout" } });
+    expect(await c.ports.trace.count("run-000001")).toBe(2);
+    expect(await c.ports.userData.get("ui", "secret")).toBe("hunter2");
+  });
+
   it("flow control: a slow writer saves every batch, in order, only later (nothing is dropped, nothing reordered)", async () => {
     const profile = RECORDING_PRESETS["default-research"];
     const recorded = { ...header("run-000001"), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) };

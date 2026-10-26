@@ -31,7 +31,8 @@ pnpm bench              # benchmarks, checked against bench/thresholds.json
 - **F1, spatial model, body, base actions and path planning:** chunked grids, vehicle kinematics, A\* and HPA\* planning with cost profiles, one agent without a mind.
 - **F2, sensors, belief maps, discovery and events:** lidar and proximity sensing, per-agent belief maps, exploration, decision requests, researcher views.
 - **F2b, planning strategies:** composable planners (selection, fallback, coarse-to-fine refinement, anytime), traced per query, with a sandbox to try them.
-- **F3, trace recorder and debugger:** in progress.
+- **F3a, trace recorder and replay:** recording profiles, snapshots and belief frames written by a recorder channel between the workers, replay of a stored run in the panels, a storage browser.
+- **F3b, observation and analysis:** a metrics channel, a filter language for the trace (log console with a live tail, trace tree, multi-log inspector, read-only SQL console), re-simulation of a window of a recorded run, headless runs with a monitor (as fast as lockstep allows, always recorded), and an Analysis workspace (trajectories, events, per-agent series, exports) next to a top-down 2D view of the Scene. The UI has a new chrome: numbered dockable panels, named layouts, light and dark themes.
 
 ## License
 

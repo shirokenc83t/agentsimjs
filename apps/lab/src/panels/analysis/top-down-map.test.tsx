@@ -1,0 +1,134 @@
+import { setThemePreference } from "@agentsim/ui";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mapTransform, type MapModel } from "./analysis-model.ts";
+import { niceLength, TopDownMap } from "./top-down-map.tsx";
+
+// What a click or a hover on the map picks: an event first, then an agent, then a sample of a trajectory; nothing where there is nothing.
+
+const model: MapModel = {
+  widthM: 100,
+  heightM: 100,
+  blocked: undefined,
+  trajectories: [{ agentId: "ugv-001", colorIndex: 0, points: [{ x: 10, y: 10, t: 0 }, { x: 50, y: 10, t: 5 }, { x: 50, y: 50, t: 10 }] }],
+  positions: [{ agentId: "ugv-001", colorIndex: 0, x: 50, y: 50 }],
+  markers: [{ seq: 7, t: 5, agentId: "ugv-001", kind: "action", glyph: "✕", role: "alarm", x: 50, y: 10, label: "5.0 s ugv-001 action end failed" }],
+};
+// The map is 80 × 80 px when jsdom measures nothing: the world fits with the margin.
+const tf = mapTransform(model, 80, 80);
+
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} unobserve() {} });
+  vi.spyOn(HTMLCanvasElement.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, right: 80, bottom: 80, width: 80, height: 80, x: 0, y: 0, toJSON: () => ({}) });
+});
+afterEach(() => vi.unstubAllGlobals());
+
+const at = (x: number, y: number) => ({ clientX: tf.px(x), clientY: tf.py(y) });
+
+describe("TopDownMap picks", () => {
+  it("an event is picked by its record, with its moment and its agent, in preference to the line under it", () => {
+    const onPick = vi.fn();
+    render(<TopDownMap model={model} onPick={onPick} label="map" />);
+    fireEvent.click(screen.getByTestId("map2d-canvas"), at(50, 10));
+    expect(onPick).toHaveBeenCalledWith({ seq: 7, t: 5, agentId: "ugv-001" });
+  });
+
+  it("an agent is picked where it is; a sample of a trajectory is a moment; empty map is nothing", () => {
+    const onPick = vi.fn();
+    render(<TopDownMap model={model} onPick={onPick} label="map" />);
+    const c = screen.getByTestId("map2d-canvas");
+    fireEvent.click(c, at(50, 50));
+    expect(onPick).toHaveBeenLastCalledWith({ agentId: "ugv-001" });
+    fireEvent.click(c, at(10, 10));
+    expect(onPick).toHaveBeenLastCalledWith({ t: 0, agentId: "ugv-001" });
+    onPick.mockClear();
+    fireEvent.click(c, at(90, 90));
+    expect(onPick).not.toHaveBeenCalled();
+  });
+
+  it("a hover names what is under the pointer, and goes away when the pointer leaves or there is nothing", () => {
+    render(<TopDownMap model={model} label="map" />);
+    const c = screen.getByTestId("map2d-canvas");
+    fireEvent.pointerMove(c, at(50, 10));
+    expect(screen.getByTestId("map2d-tip")).toHaveTextContent("5.0 s ugv-001 action end failed");
+    fireEvent.pointerMove(c, at(90, 90));
+    expect(screen.queryByTestId("map2d-tip")).toBeNull();
+    fireEvent.pointerMove(c, at(10, 10));
+    expect(screen.getByTestId("map2d-tip")).toHaveTextContent("ugv-001 at 0.0 s");
+    fireEvent.pointerLeave(c);
+    expect(screen.queryByTestId("map2d-tip")).toBeNull();
+  });
+
+  it("lists the agents as buttons, for the keyboard and a screen reader; each picks its agent", () => {
+    const onPick = vi.fn();
+    render(<TopDownMap model={model} onPick={onPick} label="map" />);
+    const b = screen.getByTestId("map2d-agent-ugv-001");
+    expect(b).toHaveTextContent("ugv-001 at 50.0 m, 50.0 m");
+    fireEvent.click(b);
+    expect(onPick).toHaveBeenCalledWith({ agentId: "ugv-001" });
+  });
+
+  it("says what it holds as attributes of its canvas, and has an accessible name", () => {
+    render(<TopDownMap model={model} label="Top-down map of run-000001" />);
+    const c = screen.getByRole("img", { name: "Top-down map of run-000001" });
+    expect(c).toHaveAttribute("data-markers", "1");
+    expect(c).toHaveAttribute("data-trajectories", "1");
+  });
+});
+
+describe("TopDownMap markers and scale", () => {
+  it("a marker that is not drawn (the chip is off) is not picked either", () => {
+    const onPick = vi.fn();
+    render(<TopDownMap model={model} markers={false} onPick={onPick} label="map" />);
+    fireEvent.click(screen.getByTestId("map2d-canvas"), at(50, 10));
+    expect(onPick.mock.calls.at(-1)?.[0]).not.toHaveProperty("seq"); // the line under it is picked: a moment, not the record
+  });
+
+  it("the scale bar is a round length: 1, 2 or 5 times a power of ten, at most the length asked for", () => {
+    expect(niceLength(137)).toBe(100);
+    expect(niceLength(250)).toBe(200);
+    expect(niceLength(740)).toBe(500);
+    expect(niceLength(9.9)).toBe(5);
+    expect(niceLength(0.34)).toBe(0.2);
+    expect(niceLength(0)).toBe(1);
+  });
+});
+
+describe("TopDownMap and the theme", () => {
+  it("draws again with the new tokens when the theme changes: the background and the obstacle colour follow", () => {
+    const fills: string[] = [];
+    const strokes: string[] = [];
+    const ctx = new Proxy(
+      {} as Record<string, unknown>,
+      {
+        get: (t, k: string) => (k in t ? t[k] : () => undefined),
+        set: (t, k: string, v) => {
+          t[k] = v;
+          if (k === "fillStyle") fills.push(String(v));
+          if (k === "strokeStyle") strokes.push(String(v));
+          return true;
+        },
+      },
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
+    const root = document.documentElement;
+    const tokens = (bg: string, ln: string) => {
+      root.style.setProperty("--bg0", bg);
+      root.style.setProperty("--ln2", ln);
+    };
+    tokens("#101010", "#303030");
+    act(() => setThemePreference("dark"));
+    render(<TopDownMap model={model} label="map" />);
+    expect(fills[0]).toBe("#101010"); // the background of the first draw
+    expect(strokes).toContain("#303030"); // the extent of the world, in the obstacle colour
+    fills.length = 0;
+    strokes.length = 0;
+    // The theme changes: the tokens are the other theme's, and the map draws again with them.
+    tokens("#f0f0f0", "#c0c0c0");
+    act(() => setThemePreference("light"));
+    expect(fills[0]).toBe("#f0f0f0");
+    expect(strokes).toContain("#c0c0c0");
+    root.style.removeProperty("--bg0");
+    root.style.removeProperty("--ln2");
+  });
+});

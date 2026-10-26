@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
-import { loadReference, openPanelTab, openWorkspace, referenceSettled, sendTo, step } from "./helpers.ts";
+import { loadReference, openInspectorSections, openPanelTab, openWorkspace, referenceSettled, sendTo, step } from "./helpers.ts";
 
 /** Golden world hash of buildReferenceWorld(), shared with the Node test of the preset. */
 const GOLDEN = JSON.parse(readFileSync("packages/scenarios/src/presets/f1-reference-world.golden.json", "utf8")) as { worldHash: string };
@@ -22,7 +22,7 @@ test("HPA* set from the run configuration plans a cross-map path on the 1 km² w
   const firstRun = (await page.getByTestId("run-id").textContent()) ?? "";
   await page.keyboard.press("Escape");
 
-  await openWorkspace(page, "author");
+  await openWorkspace(page, "configurations");
   await openPanelTab(page, "Run configuration");
   const panel = page.getByTestId("run-config-panel");
   await panel.getByTestId("rc-algorithm").selectOption("hpa");
@@ -38,6 +38,7 @@ test("HPA* set from the run configuration plans a cross-map path on the 1 km² w
   await sendTo(page, "ugv-001", 950, 500);
   // The abstract graph was prepared before tick 0 (F2 M1a); the generous timeout is for slow CI runners.
   await step(page, 1, 60_000);
+  await openInspectorSections(page);
   await expect(page.getByTestId("inspector-plan")).toContainText("hpa", { timeout: 30_000 });
   const expansions = Number((await page.getByTestId("inspector-plan-expansions").textContent())?.replace(/\D/g, ""));
   const budget = Number((await page.getByTestId("inspector-config").textContent())?.match(/totalBudget\s*(\d+)/)?.[1]);
