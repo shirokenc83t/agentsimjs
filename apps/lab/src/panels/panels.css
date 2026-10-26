@@ -721,16 +721,16 @@
 .ms-row:first-child { border-top-width: 1px; }
 .ms-row.sel { outline: 1px solid var(--ac); outline-offset: -1px; background: var(--acbg); }
 .ms-row:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
-.ms-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ms-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
 .ms-grip { color: var(--fg3); cursor: grab; letter-spacing: -2px; }
 .ms-i { width: 1.6em; text-align: right; color: var(--fg3); }
 .ms-action { min-width: 8ch; }
-.ms-args { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1; min-width: 0; }
+.ms-args { display: inline-flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; flex: 1 1 12em; min-width: 0; }
 .ms-arg { display: inline-flex; align-items: center; gap: 4px; font-size: var(--type-label-size); }
-.ms-arg input { width: 6em; height: 20px; padding: 0 4px; background: var(--bg0); color: var(--fg); border: 1px solid var(--ln2); font: inherit; border-radius: 0; text-align: right; }
+.ms-arg input { flex: none; width: 5em; height: 20px; padding: 0 4px; background: var(--bg0); color: var(--fg); border: 1px solid var(--ln2); font: inherit; border-radius: 0; text-align: right; }
 .ms-arg.bad input { border-color: var(--alm); background: var(--almbg); }
-.ms-after { flex: none; font-size: var(--type-label-size); }
-.ms-btns { display: inline-flex; gap: 2px; flex: none; }
+.ms-after { order: 5; flex: 1 0 100%; margin-left: 34px; font-size: var(--type-label-size); }
+.ms-btns { display: inline-flex; gap: 2px; flex: none; margin-left: auto; }
 .ms-hint { margin: 2px 0 2px 34px; font-size: var(--type-label-size); }
 .ms-hint .kt { margin-left: 8px; }
 .ms-add { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
@@ -757,8 +757,9 @@
 .mp-seg.mp-refused, .mp-seg.mp-failed { background: var(--alm); }
 .mp-seg.mp-skipped { background: transparent; border: 1px dashed var(--ln); }
 .mp-rows { list-style: none; margin: 0; padding: 0; }
-.mp-row { display: grid; grid-template-columns: 16px 16px minmax(0, auto) minmax(0, 1fr) auto auto; gap: 6px; width: 100%; padding: 2px 4px; border: 0; background: none; color: inherit; font-size: 11.5px; text-align: left; cursor: pointer; }
+.mp-row { display: grid; grid-template-columns: 16px 16px max-content minmax(0, 1fr) max-content max-content; gap: 6px; width: 100%; padding: 2px 4px; border: 0; background: none; color: inherit; font-size: 11.5px; text-align: left; cursor: pointer; }
 .mp-row:disabled { cursor: default; opacity: 0.8; }
 .mp-row:hover:not(:disabled) { background: var(--bg3); }
-.mp-args, .mp-state { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-args { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-state { white-space: nowrap; }
 .mp-dur { white-space: nowrap; }
