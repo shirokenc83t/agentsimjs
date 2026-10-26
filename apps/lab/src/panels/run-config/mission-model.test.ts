@@ -68,7 +68,8 @@ describe("whether each step can run, along the list", () => {
     expect(rows.map((r) => r.ok)).toEqual([true, true, true, true, false]);
     expect(rows.map((r) => r.after)).toEqual(["airborne", "airborne", "airborne", "grounded", "grounded"]);
     const last = rows[4];
-    expect(last?.hint).toBe("land needs airborne · take off first");
+    expect(last?.hint).toBe("returnToBase already lands the UAV · remove this step");
+    expect(last?.removeAt).toBe(4);
     expect(last?.because).toContain("returnToBase");
   });
 

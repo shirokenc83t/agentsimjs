@@ -67,6 +67,7 @@ test("a step that cannot run is flagged in the editor with its reason and one-cl
   await add(page, "returnToBase");
   await expect(panel.getByTestId("ms-hint-0")).toContainText("explore needs airborne · take off first");
   await expect(panel.getByTestId("ms-fix-0")).toBeVisible();
+  await expect(panel.getByTestId("rc-mission-stop")).toContainText("the mission will stop at step 1 (uav-001)");
   await runMission(page);
 
   const mission = page.getByTestId("inspector-mission");

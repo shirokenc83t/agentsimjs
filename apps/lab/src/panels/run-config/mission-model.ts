@@ -126,6 +126,8 @@ export interface StepRow {
   readonly hint?: string;
   /** The one-click fix: a step to insert before this one. */
   readonly fix?: Fix | undefined;
+  /** The step is the one to remove (a `land` after the return home, which already landed the UAV). */
+  readonly removeAt?: number;
   /** What an earlier step did that makes this one impossible (`returnToBase landed the UAV at step 4`). */
   readonly because?: string;
   /** The state a UAV is in after this step (undefined for a ground vehicle, which has none). */
@@ -160,7 +162,8 @@ export function alongList(steps: readonly MissionStep[], start: AgentFacts): Ste
         const hint = `${s.action} ${describeUnavailable(u, kind)}`;
         const fix: Fix | undefined = u.requires === "airborne" && kind === "uav" ? { insert: { action: "takeoff", args: defaultArgs("takeoff") }, at: i } : u.requires === "grounded" && kind === "uav" ? { insert: { action: "land" }, at: i } : undefined;
         const because = u.requires === "airborne" && leftOnGround ? `${leftOnGround.action} left the UAV on the ground at step ${leftOnGround.step}` : undefined;
-        row = { ok: false, hint, fix, ...(because === undefined ? {} : { because }) };
+        if (s.action === "land" && leftOnGround?.action === "returnToBase") row = { ok: false, hint: "returnToBase already lands the UAV · remove this step", fix: undefined, removeAt: i, because: `returnToBase left the UAV on the ground at step ${leftOnGround.step}` };
+        else row = { ok: false, hint, fix, ...(because === undefined ? {} : { because }) };
       }
     }
     // What the step leaves behind, for the rows after it (a UAV only).

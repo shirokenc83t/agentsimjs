@@ -265,6 +265,11 @@ export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: 
                     <p className="ms-hint st-warn" data-testid={`ms-hint-${i}`}>
                       ▲ {r.hint}
                       {r.because ? ` · ${r.because}` : ""}
+                      {r.removeAt !== undefined && (
+                        <button type="button" className="kt" onClick={() => (commit(removeStep(steps, r.removeAt as number)), setSelected(undefined))} data-testid={`ms-fix-${i}`}>
+                          − remove step {i + 1}
+                        </button>
+                      )}
                       {r.fix && (
                         <button type="button" className="kt" onClick={() => add(r.fix?.insert.action ?? "takeoff", r.fix?.at)} data-testid={`ms-fix-${i}`}>
                           + insert {r.fix.insert.action === "takeoff" ? "take off" : r.fix.insert.action} before step {i + 1}
@@ -301,6 +306,7 @@ export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: 
               {menu.map((m) => (
                 <option key={m.name} value={m.name} disabled={!m.supported}>
                   {m.name}
+                  {m.name === "returnToBase" && agent.kind === "uav" ? " · flies home and lands" : ""}
                   {m.needs ? ` · ${m.needs}` : ""}
                   {m.why ? ` · ${m.why}` : ""}
                 </option>

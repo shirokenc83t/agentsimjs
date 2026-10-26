@@ -38,7 +38,7 @@ import {
 } from "./model.ts";
 import { headlessButton, headlessTip } from "../../sim/headless-names.ts";
 import { missionAgentsOf, MissionSection } from "./mission-section.tsx";
-import { missionOf, missionStatus } from "./mission-model.ts";
+import { alongList, missionOf, missionStatus } from "./mission-model.ts";
 import { StrategyPicker } from "./strategy-picker.tsx";
 
 const ALGORITHMS = ["dijkstra", "astar", "hpa", "weighted-astar"] as const;
@@ -208,6 +208,14 @@ function RunConfigEditor(props: { loaded: Loaded }) {
       }, 0),
     [missions, draft],
   );
+  // The first step expected to be refused, so that running a list that will stop is a choice: `▲ 2 warnings · the mission will stop at step 3 (uav-001)`.
+  const missionStop = useMemo(() => {
+    for (const a of missions.agents) {
+      const k = alongList(missionOf(draft, a.key), a.facts).findIndex((r) => !r.ok);
+      if (k >= 0) return { agent: a.id, step: k + 1 };
+    }
+    return undefined;
+  }, [missions, draft]);
   const missionSteps = missions.agents.reduce((n, a) => n + missionOf(draft, a.key).length, 0);
   const sameAsRun = validation.ok && validation.resolved.runConfigHash === run.header.runConfigHash;
   const error = validation.ok ? undefined : validation.error;
@@ -467,6 +475,11 @@ function RunConfigEditor(props: { loaded: Loaded }) {
         >
           {headlessButton(current.rerunCommands ?? 0)}
         </button>
+        {missionFix > 0 && missionStop !== undefined && (
+          <span className="st-warn mono" role="status" data-testid="rc-mission-stop">
+            ▲ {missionFix} warning{missionFix === 1 ? "" : "s"} · the mission will stop at step {missionStop.step} ({missionStop.agent})
+          </span>
+        )}
         <button type="button" className="btn" onClick={() => setDraft(props.loaded.initial)} data-testid="rc-revert">
           Revert to the current run
         </button>

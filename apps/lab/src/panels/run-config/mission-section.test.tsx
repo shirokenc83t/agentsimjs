@@ -61,9 +61,12 @@ describe("the mission step editor", () => {
     expect(screen.getByTestId("ms-valid")).toHaveTextContent("✓ valid");
   });
 
-  it("says that a land after the return home needs airborne, because the return home landed the UAV", async () => {
+  it("says that a land after the return home is not needed, the return home already landed the UAV, and one click removes it", async () => {
     render(<Harness initial={RETURN_THEN_LAND} />);
-    expect(screen.getByTestId("ms-hint-2")).toHaveTextContent("land needs airborne · take off first · returnToBase left the UAV on the ground at step 2");
+    expect(screen.getByTestId("ms-hint-2")).toHaveTextContent("returnToBase already lands the UAV · remove this step · returnToBase left the UAV on the ground at step 2");
+    await userEvent.click(screen.getByTestId("ms-fix-2"));
+    expect(steps()).toEqual(["takeoff", "returnToBase"]);
+    expect(screen.getByTestId("ms-valid")).toHaveTextContent("✓ valid");
   });
 
   it("moves a step with its buttons and with Alt+Up, removes it with its button and with Delete, and undoes with Ctrl+Z", async () => {
