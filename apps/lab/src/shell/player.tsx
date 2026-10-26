@@ -6,7 +6,10 @@ import { gapLabel, resolveGapClick } from "../sim/gap-click.ts";
 import type { RunSnapshot } from "../sim/run-source.ts";
 import type { SimClient, SimSnapshot } from "../sim/sim-client.ts";
 import { LazyAttentionTile, LazyMissionNote, LazyPlayerMarks } from "../workspaces/registry.tsx";
+import { KnowledgeBandView } from "./knowledge-band-view.tsx";
+import { knowledgeAt, knowledgeWords, type KnowledgeBand } from "./knowledge-band.ts";
 import { trackLayout } from "./track.ts";
+import { useKnowledgeBand } from "./use-knowledge.ts";
 
 export const SPEEDS = [
   { label: "×0.5", hz: 5 },
@@ -161,6 +164,7 @@ function LiveScrub(props: { snap: SimSnapshot; view: RunSnapshot | undefined; dt
   const { snap, view, dtS, recorded } = props;
   const savedS = (view?.persistedHeadTick ?? 0) * dtS;
   const t = trackLayout({ headS: Math.min(savedS, snap.simTimeS), simHeadS: snap.simTimeS, shownS: snap.simTimeS, dtS });
+  const band = useKnowledgeBand(recorded ? view?.runId : undefined, savedS);
   return (
     <div className="scrub">
       <div className="row">
@@ -168,9 +172,11 @@ function LiveScrub(props: { snap: SimSnapshot; view: RunSnapshot | undefined; dt
           {snap.headless ? `${GLYPH.running} HEADLESS` : "● LIVE"}
         </span>
         <span data-testid="player-tick">tick {snap.tick}</span>
+        <KnowledgeLabel band={band} atS={snap.simTimeS} />
       </div>
-      <div className="track" role="img" aria-label="Run so far">
+      <div className={`track${band.points.length > 0 ? " kbt" : ""}`} role="img" aria-label="Run so far">
         {recorded && <div className="sv" style={{ width: `${t.savedPct}%` }} />}
+        {band.points.length > 0 && <KnowledgeBandView band={band} startS={0} scaleS={t.scaleS} atS={snap.simTimeS} />}
         {recorded && view?.runId && (
           <Suspense fallback={null}>
             <LazyPlayerMarks runId={view.runId} headS={savedS} scaleS={t.scaleS} />
@@ -201,6 +207,7 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
   const shown = Math.max(startS, Math.min(simTime, head));
   const derived = replay.derived;
   const t = trackLayout({ headS: head, simHeadS: simHead, shownS: shown, dtS, startS });
+  const band = useKnowledgeBand(view.runId, head);
 
   // Following the persisted head: the cursor goes to it now and every time it moves.
   useEffect(() => {
@@ -233,6 +240,7 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
         <span className="muted hide-narrow" data-testid="replay-pose-rate">
           {replay.poseRate}
         </span>
+        <KnowledgeLabel band={band} atS={shown} />
         <span className="sp" />
         {label !== undefined && (
           <span className="warn" data-testid="replay-gap">
@@ -256,8 +264,9 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
           → {live ? "LIVE" : "Back to live"}
         </button>
       </div>
-      <div className="track clickable" ref={track} onClick={onTrackClick} data-testid="replay-track" role="presentation">
+      <div className={`track clickable${band.points.length > 0 ? " kbt" : ""}`} ref={track} onClick={onTrackClick} data-testid="replay-track" role="presentation">
         <div className="sv" style={{ width: `${t.savedPct}%` }} />
+        {band.points.length > 0 && <KnowledgeBandView band={band} startS={startS} scaleS={t.scaleS} atS={shown} />}
         {label !== undefined && <div className="gap" data-testid="replay-gap-area" style={{ left: `${t.gapLeftPct}%`, width: `${t.gapWidthPct}%` }} />}
         <Suspense fallback={null}>
           <LazyPlayerMarks runId={view.runId as string} headS={head} scaleS={t.scaleS} />
@@ -281,6 +290,17 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
         />
       </div>
     </div>
+  );
+}
+
+/** The band's values at the cursor in the row above the track, labelled as observer data; its full definition, rate and gaps are in the tooltip. Nothing when the run has no sample. */
+function KnowledgeLabel(props: { band: KnowledgeBand; atS: number }) {
+  const p = knowledgeAt(props.band, props.atS);
+  if (props.band.points.length === 0) return null;
+  return (
+    <span className="kb-label mono hide-narrow" data-testid="player-knowledge" title={knowledgeWords(props.band, props.atS)}>
+      swarm knows {p === undefined ? "–" : `${p.knownPct.toFixed(0)} %`} · matches {p === undefined ? "–" : `${p.matchPct.toFixed(0)} %`} <span className="muted">· observer data</span>
+    </span>
   );
 }
 

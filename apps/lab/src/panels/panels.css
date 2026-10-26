@@ -768,3 +768,6 @@
 .mp-state { white-space: nowrap; }
 .mp-dur { white-space: nowrap; }
 .mp-why { margin: 0 4px 3px 38px; font-size: var(--type-label-size); }
+
+/* The findings line under the title of the Analysis workspace (ADR-0043). */
+.an-findings { margin: 0; padding: 4px 10px; font-size: var(--type-body-size); color: var(--fg2); border-bottom: 1px solid var(--ln); }

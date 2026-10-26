@@ -1,5 +1,7 @@
 import "../panels.css";
 import { downloadBytes, identityOf, subjectColor, useUiContext } from "@agentsim/ui";
+import { useKnowledgeBand } from "../../shell/use-knowledge.ts";
+import { findingsOf } from "./findings.ts";
 import { parseFilter, type FilterAst, type TraceRecord } from "@agentsim/trace";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePolled, useServices, useSource } from "../../services.tsx";
@@ -87,6 +89,7 @@ export function AnalysisPanel() {
     for (const r of data.events) t = Math.max(t, r.simTime);
     return Math.max(t, snap.run === undefined ? 0 : (snap.persistedHeadTick ?? 0) * (snap.run.dtS ?? 0.1), 1);
   }, [data.trajectories, data.events, snap.run, snap.persistedHeadTick]);
+  const knowledge = useKnowledgeBand(runId, spanS);
   const dims = snap.grid?.dims;
   const blocked = useBlockedGrid(source, dims, runId);
   const widthM = dims ? dims.sizeX * dims.resolutionM : Math.max(10, ...[...data.trajectories.values()].flatMap((t) => t.samples.map((s) => s.x)));
@@ -166,6 +169,7 @@ export function AnalysisPanel() {
     );
   }
   const kindsShown = shownChoices(text, "kind", EVENT_KINDS);
+  const findings = findingsOf({ band: knowledge, events: data.events, endS: spanS });
   const agentsOn = shownChoices(text, "agent", allAgents);
   return (
     <div className="panel an" data-testid="analysis" data-status={data.status}>
@@ -189,6 +193,11 @@ export function AnalysisPanel() {
           ⟳
         </button>
       </div>
+      {findings.length > 0 && (
+        <p className="an-findings" data-testid="an-findings">
+          {findings.join(" ")}
+        </p>
+      )}
       {error && (
         <div className="log-error mono" role="alert" data-testid="an-error">
           <span className="danger">✕ {error}</span>
