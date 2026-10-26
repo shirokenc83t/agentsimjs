@@ -298,7 +298,7 @@ function KnowledgeLabel(props: { band: KnowledgeBand; atS: number }) {
   const p = knowledgeAt(props.band, props.atS);
   if (props.band.points.length === 0) return null;
   return (
-    <span className="kb-label mono hide-narrow" data-testid="player-knowledge" title={knowledgeWords(props.band, props.atS)}>
+    <span className="kb-label mono" data-testid="player-knowledge" title={knowledgeWords(props.band, props.atS)}>
       swarm knows {p === undefined ? "–" : `${p.knownPct.toFixed(0)} %`} · matches {p === undefined ? "–" : `${p.matchPct.toFixed(0)} %`} <span className="muted">· observer data</span>
     </span>
   );

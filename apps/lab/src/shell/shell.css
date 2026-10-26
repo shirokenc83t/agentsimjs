@@ -49,8 +49,8 @@
 .track.kbt { height: 28px; }
 .track.kbt .sv { background: var(--bg0) var(--hatch-pattern); opacity: 0.55; }
 .track .kb { position: absolute; inset: 0; width: 100%; height: 100%; }
-.track .kb-known { fill: var(--fg3); fill-opacity: 0.35; stroke: none; }
-.track .kb-match { fill: var(--fg2); fill-opacity: 0.85; stroke: none; }
+.track .kb-known { fill: var(--fg3); fill-opacity: 0.5; stroke: none; }
+.track .kb-match { fill: var(--fg2); fill-opacity: 0.9; stroke: none; }
 .kb-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg2); }
 .track .gap { position: absolute; top: 0; bottom: 0; background-image: var(--hatch-pattern); }
 .track .tick { position: absolute; top: 2px; bottom: 2px; width: 2px; z-index: 1; }
