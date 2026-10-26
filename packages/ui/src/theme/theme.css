@@ -7,7 +7,7 @@
   --type-title-size: 13px;
   --type-title-weight: 600;
   --type-title-tracking: 0.06em;
-  --type-body-size: 12px;
+  --type-body-size: 12.5px;
   --type-body-weight: 400;
   --type-label-size: 11px;
   --type-label-weight: 600;
@@ -18,7 +18,7 @@
   --type-telemetry-weight: 600;
   --type-prose-size: 12.5px;
   --type-prose-weight: 400;
-  --type-mono-size: 12px;
+  --type-mono-size: 12.5px;
   --type-mono-weight: 400;
   --type-monoState-size: 11px;
   --type-monoState-weight: 600;
@@ -44,19 +44,19 @@
 
 :root, :root[data-theme="dark"] {
   color-scheme: dark;
-  --dock: #06080a;
-  --bg0: #0e1115;
-  --bg1: #14181d;
-  --bg2: #1a1f26;
-  --bg3: #232a32;
-  --ln: #262d36;
-  --ln2: #68737f;
-  --hatch: #7d8a99;
+  --dock: #19191c;
+  --bg0: #0b0b0d;
+  --bg1: #121214;
+  --bg2: #1c1c20;
+  --bg3: #27272c;
+  --ln: #3e3e45;
+  --ln2: #6d6e75;
+  --hatch: #8e9096;
   --float: 0 6px 24px rgba(0, 0, 0, 0.6);
-  --scrim: rgba(14, 17, 21, 0.72);
-  --fg: #d5dbe3;
-  --fg2: #9ba6b3;
-  --fg3: #87919c;
+  --scrim: rgba(11, 11, 13, 0.72);
+  --fg: #ececee;
+  --fg2: #a9aaaf;
+  --fg3: #8e9096;
   --ac: #5aa4ea;
   --acfg: #0b1520;
   --acbg: rgba(90, 164, 234, 0.14);
@@ -91,19 +91,19 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --dock: #d3d9df;
-  --bg0: #e8ebee;
-  --bg1: #f7f8fa;
-  --bg2: #eef1f4;
-  --bg3: #e1e5ea;
-  --ln: #d3d9df;
-  --ln2: #81878e;
-  --hatch: #5f6c7b;
-  --float: 0 6px 20px rgba(25, 32, 42, 0.3);
-  --scrim: rgba(232, 235, 238, 0.72);
-  --fg: #19202a;
-  --fg2: #465261;
-  --fg3: #5c6775;
+  --dock: #d3d3d7;
+  --bg0: #e9e9eb;
+  --bg1: #f7f7f8;
+  --bg2: #efeff1;
+  --bg3: #e6e6e9;
+  --ln: #cfcfd4;
+  --ln2: #7d7e85;
+  --hatch: #5f6067;
+  --float: 0 6px 20px rgba(27, 27, 31, 0.3);
+  --scrim: rgba(233, 233, 235, 0.72);
+  --fg: #1b1b1f;
+  --fg2: #47474d;
+  --fg3: #5a5b62;
   --ac: #1b67b7;
   --acfg: #ffffff;
   --acbg: rgba(28, 105, 187, 0.11);
@@ -145,9 +145,9 @@ html, body, #root { height: 100%; margin: 0; }
 /* JetBrains Mono for the whole chrome (ADR-0042 §2); `.prose` (IBM Plex Sans) is for running text only: help, dialog body, descriptions. */
 body { background: var(--bg0); color: var(--fg); font: var(--type-body-size)/1.4 var(--font-mono); font-variant-numeric: tabular-nums; }
 .prose { font-family: var(--font-prose); font-size: var(--type-prose-size); font-weight: var(--type-prose-weight); line-height: 1.5; }
-/* Titles and labels: uppercase, tracked (ADR-0042 §2). */
+/* Panel titles are uppercase and tracked; labels and section heads are sentence case in fg3 (ADR-0043 §5). */
 .title { font-size: var(--type-title-size); font-weight: var(--type-title-weight); letter-spacing: var(--type-title-tracking); text-transform: uppercase; }
-.label { font-size: var(--type-label-size); font-weight: var(--type-label-weight); letter-spacing: var(--type-label-tracking); text-transform: uppercase; color: var(--fg2); }
+.label { font-size: var(--type-label-size); font-weight: var(--type-label-weight); color: var(--fg3); }
 .clock { font-size: var(--type-clock-size); font-weight: var(--type-clock-weight); }
 .telemetry { font-size: var(--type-telemetry-size); font-weight: var(--type-telemetry-weight); }
 button, select, input { font: inherit; color: inherit; }
@@ -155,12 +155,12 @@ button, select, input { font: inherit; color: inherit; }
 /* MUI inputs set their own font: the two-class selector wins, so `mono` inputs (numbers, JSON) stay monospace. */
 .MuiInputBase-input.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .muted { color: var(--fg2); }
-/* Interaction states, one set for every selectable thing (ADR-0042 §6): hover is a neutral fill and edge (never the accent), selection an accent tint with a
-   1 px accent outline (no coloured side bars), keyboard focus the 2 px accent outline. The three are told apart by fill, edge colour and width. */
+/* Interaction states, one set for every selectable thing (ADR-0042 §6): hover is a neutral fill and edge (never the accent), selection a neutral fill with a 1 px accent line at the start of the row (ADR-0043 §2: the accent is a line,
+   it fills nothing), keyboard focus the 2 px accent outline. The three are told apart by edge: a grey outline, an accent line, a 2 px outline. */
 :focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: 1px; }
 .selectable { cursor: pointer; }
 .selectable:hover { background: var(--bg3); outline: 1px solid var(--fg3); outline-offset: -1px; }
-.selectable[aria-selected="true"], .selectable.selected { background: var(--acbg); outline: 1px solid var(--ac); outline-offset: -1px; }
+.selectable[aria-selected="true"], .selectable.selected { background: var(--bg2); box-shadow: inset 1px 0 0 var(--ac); }
 .selectable:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -2px; }
 /* Floating windows, popovers and dialogs carry the one shadow; a modal dialog sits on the scrim. */
 .floating { box-shadow: var(--float); }
@@ -186,7 +186,7 @@ button, select, input { font: inherit; color: inherit; }
 .banner { display: flex; gap: 10px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--ln); border-left: 3px solid transparent; color: var(--fg); }
 .banner.warn { background: color-mix(in srgb, var(--warn) 14%, var(--bg1)); border-left-color: var(--warn); }
 .banner.danger { background: var(--almbg); border-left-color: var(--alm); }
-.banner.info { background: var(--acbg); border-left-color: var(--ac); }
+.banner.info { background: var(--bg2); border-left-color: var(--ac); }
 
 .panel { height: 100%; overflow: auto; padding: 10px; }
 .panel h3 { margin: 0 0 8px; font-size: var(--type-title-size); font-weight: var(--type-title-weight); letter-spacing: var(--type-title-tracking); text-transform: uppercase; }
@@ -244,7 +244,7 @@ table.grid td.holds { white-space: normal; overflow-wrap: anywhere; min-width: 1
 .btn.danger { border-color: var(--alm); color: var(--alm); }
 
 /* Grouped results: a heading per group, the letters the query matched marked (an underline and the full-strength colour, not the accent), the key at the right. */
-.palette .group-head { display: block; padding: 8px 10px 2px; color: var(--fg3); font-size: var(--type-label-size); letter-spacing: var(--type-label-tracking); text-transform: uppercase; }
+.palette .group-head { display: block; padding: 8px 10px 2px; color: var(--fg3); font-size: var(--type-label-size);   }
 .palette mark { background: transparent; color: var(--fg); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .palette kbd { font: inherit; font-size: var(--type-label-size); color: var(--fg2); border: 1px solid var(--ln2); padding: 0 5px; }
 .danger { color: var(--alm); }

@@ -90,7 +90,7 @@ export function SettingsPanel() {
           <div className="rc-col">
           <section className="fs" data-section="appearance">
             <h4 className="sec">
-              <b>1 · APPEARANCE</b>
+              <b>1 · Appearance</b>
               <span className="rule" />
             </h4>
             <div className="st-row">
@@ -117,7 +117,7 @@ export function SettingsPanel() {
 
           <section className="fs" data-section="providers">
             <h4 className="sec">
-              <b>2 · PROVIDERS AND KEYS</b>
+              <b>2 · Providers and keys</b>
               <span className="rule" />
             </h4>
             <p className="prose">
@@ -127,7 +127,7 @@ export function SettingsPanel() {
 
           <section className="fs" data-section="storage">
             <h4 className="sec">
-              <b>3 · STORAGE</b>
+              <b>3 · Storage</b>
               <span className="rule" />
             </h4>
             <div className="st-row">
@@ -173,7 +173,7 @@ export function SettingsPanel() {
 
           <section className="fs" data-section="layouts">
             <h4 className="sec">
-              <b>4 · LAYOUTS</b>
+              <b>4 · Layouts</b>
               <span className="rule" />
             </h4>
             <div className="st-row">
@@ -187,7 +187,7 @@ export function SettingsPanel() {
 
           <section className="fs" data-section="keyboard">
             <h4 className="sec">
-              <b>5 · KEYBOARD</b>
+              <b>5 · Keyboard</b>
               <span className="rule" />
             </h4>
             <dl className="kv st-keys">

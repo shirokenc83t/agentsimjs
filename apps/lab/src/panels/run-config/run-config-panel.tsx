@@ -144,13 +144,13 @@ function StatusGlyph(props: { status: SectionStatus | undefined }) {
 
 /** The jump row on top of the form: one chip a section, with its validation glyph. */
 const JUMPS = [
-  { id: "run", title: "RUN" },
-  { id: "planning", title: "PLANNING" },
-  { id: "drive", title: "DRIVE" },
-  { id: "beliefs", title: "BELIEFS" },
-  { id: "effective", title: "EFFECTIVE" },
-  { id: "mission", title: "MISSION" },
-  { id: "presets", title: "PRESETS" },
+  { id: "run", title: "Run" },
+  { id: "planning", title: "Planning" },
+  { id: "drive", title: "Drive" },
+  { id: "beliefs", title: "Beliefs" },
+  { id: "effective", title: "Effective" },
+  { id: "mission", title: "Mission" },
+  { id: "presets", title: "Presets" },
 ] as const;
 const JUMP_ROW_PX = 30;
 
@@ -278,7 +278,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
             </p>
             <section className={`fs${folded.has("run") ? " folded" : ""}`} data-section="run">
               <h4 className="sec">
-                <b>1 · RUN</b>
+                <b>1 · Run</b>
                 <span className="rule" />
                 <span data-testid="rc-status-run"><StatusGlyph status={status.run} /></span>
                 {draft.seed === undefined && draft.timeMode === undefined && (rowCounts["run"] ?? 0) > 0 && (
@@ -309,7 +309,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
 
             <section className={`fs${folded.has("planning") ? " folded" : ""}`} data-testid="rc-planning" data-section="planning">
               <h4 className="sec">
-                <b>2 · PLANNING</b>
+                <b>2 · Planning</b>
                 <span className="rule" />
                 <span data-testid="rc-status-planning"><StatusGlyph status={status.planning} /></span>
                 {countSet(getEntry(draft, "planning", pScope)) === 0 && (rowCounts["planning"] ?? 0) > 0 && (
@@ -352,7 +352,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
 
             <section className={`fs${folded.has("drive") ? " folded" : ""}`} data-testid="rc-drive" data-section="drive">
               <h4 className="sec">
-                <b>3 · GROUND DRIVE</b>
+                <b>3 · Ground drive</b>
                 <span className="rule" />
                 <span data-testid="rc-status-drive"><StatusGlyph status={status.drive} /></span>
                 {countSet(getEntry(draft, "drive", dScope)) === 0 && (rowCounts["drive"] ?? 0) > 0 && (
@@ -380,7 +380,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
 
             <section className={`fs${folded.has("beliefs") ? " folded" : ""}`} data-testid="rc-beliefs" data-section="beliefs">
               <h4 className="sec">
-                <b>4 · BELIEFS</b>
+                <b>4 · Beliefs</b>
                 <span className="rule" />
                 <span data-testid="rc-status-beliefs"><StatusGlyph status={status.beliefs} /></span>
                 {countSet(getEntry(draft, "beliefs", bScope)) === 0 && (rowCounts["beliefs"] ?? 0) > 0 && (
@@ -534,7 +534,7 @@ function EffectiveTable(props: { agents: readonly EffectiveAgentConfig[] }) {
   return (
     <section className="fs" data-testid="rc-effective" data-section="effective">
       <h4 className="sec">
-        <b>5 · EFFECTIVE CONFIGURATION</b>
+        <b>5 · Effective configuration</b>
         <span className="rule" />
       </h4>
       <table className="effective-table">
@@ -620,7 +620,7 @@ function Presets(props: { draft: RunConfigDocument; scenario: RunConfigDocument[
   return (
     <section className="fs" data-testid="rc-presets" data-section="presets">
       <h4 className="sec">
-        <b>6 · PRESETS</b>
+        <b>6 · Presets</b>
         <span className="rule" />
       </h4>
       <div className="rc-inline">

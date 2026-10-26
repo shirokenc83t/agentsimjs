@@ -118,33 +118,33 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
 
       <section className="hm-grid" aria-label="Speed and cost">
         <div className="hm-cell">
-          <span className="lbl">SPEED{rate.average ? " · AVERAGE" : ""}</span>
+          <span className="lbl">Speed{rate.average ? " · average" : ""}</span>
           <b className="mono" data-testid="hm-speed">
             {speedLabel(rate.simSecondsPerSecond)}
           </b>
         </div>
         <div className="hm-cell">
-          <span className="lbl">TICKS / S{rate.average ? " · AVERAGE" : ""}</span>
+          <span className="lbl">Ticks / s{rate.average ? " · average" : ""}</span>
           <b className="mono" data-testid="hm-tps">
             {rate.ticksPerSecond > 0 ? grouped(rate.ticksPerSecond) : "—"}
           </b>
         </div>
         <div className="hm-cell">
-          <span className="lbl">TICK COST</span>
+          <span className="lbl">Tick cost</span>
           <b className="mono" data-testid="hm-tickcost">
             {p.tickTimeMeanMs.toFixed(2)} <small>ms mean · {p.tickTimeP95Ms.toFixed(2)} p95</small>
           </b>
         </div>
         {p.done ? (
           <div className="hm-cell wide">
-            <span className="lbl">{stoppedEarly ? "STOPPED" : "ENDED"}</span>
+            <span className="lbl">{stoppedEarly ? "Stopped" : "Ended"}</span>
             <b data-testid="hm-ended" data-stopped={stoppedEarly}>
               {stoppedEarly ? "▲ stopped" : "✓ ended"} · tick {grouped(p.tick)} · {endCondition(p, stoppedEarly)}
             </b>
           </div>
         ) : (
           <div className="hm-cell wide">
-            <span className="lbl">WAITING FOR</span>
+            <span className="lbl">Waiting for</span>
             <b data-testid="hm-waiting" data-waiting={p.running ? p.waiting : "none"}>
               {waitingLabel(p.waiting, p.running, p.done)}
             </b>

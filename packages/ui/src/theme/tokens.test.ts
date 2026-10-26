@@ -10,6 +10,19 @@ function paths(o: unknown, prefix = ""): string[] {
 }
 
 describe("design tokens (ADR-0032)", () => {
+  it("the dark theme is the neutral dark of ADR-0043 §1 (no hue in the surfaces and the text); the one value that differs is named", () => {
+    const d = COLORS.dark;
+    expect({ dock: d.dock, bg0: d.bg0, bg1: d.bg1, bg2: d.bg2, bg3: d.bg3, fg: d.fg, fg2: d.fg2 }).toEqual({ dock: "#19191c", bg0: "#0b0b0d", bg1: "#121214", bg2: "#1c1c20", bg3: "#27272c", fg: "#ececee", fg2: "#a9aaaf" });
+    // The ADR's `ln2` (#3e3e45) is the hairline of frames and dividers, which is `ln` here; `ln2` stays the boundary of controls and must meet 3:1 (WCAG 1.4.11, ADR-0032): a neutral grey at that contrast. `fg3` is the ADR's, lifted
+    // by 4 lightness steps so it reads at 4.5:1 also on hover (bg3), the rule of every text pair above.
+    expect(d.ln).toBe("#3e3e45");
+    expect(d.ac).toBe("#5aa4ea"); // the accent hue is unchanged
+    for (const t of THEME_NAMES) for (const k of ["dock", "bg0", "bg1", "bg2", "bg3", "ln", "ln2", "fg", "fg2", "fg3", "hatch"] as const) {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(COLORS[t][k].slice(i, i + 2), 16)) as [number, number, number];
+      expect(Math.max(r, g, b) - Math.min(r, g, b), `${t}.${k} is a neutral grey`).toBeLessThanOrEqual(8);
+    }
+  });
+
   it("dark and light define the same token names", () => {
     expect(paths(COLORS.light).sort()).toEqual(paths(COLORS.dark).sort());
   });
@@ -126,7 +139,7 @@ describe("design tokens (ADR-0032)", () => {
     expect(FONT.mono.startsWith("'JetBrains Mono'")).toBe(true);
     expect(FONT.sans.startsWith("'IBM Plex Sans'")).toBe(true);
     expect(TYPE.title).toEqual({ size: 13, weight: 600, letterSpacingEm: 0.06 });
-    expect(TYPE.body).toEqual({ size: 12, weight: 400 });
+    expect(TYPE.body).toEqual({ size: 12.5, weight: 400 }); // long-session lists: 12.5 px (ADR-0043 §5); 11 px is for meta only
     expect(TYPE.label).toEqual({ size: 11, weight: 600, letterSpacingEm: 0.1 });
     expect(TYPE.clock).toEqual({ size: 22, weight: 600 });
     expect(TYPE.telemetry).toEqual({ size: 15, weight: 600 });

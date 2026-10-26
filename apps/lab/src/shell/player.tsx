@@ -55,7 +55,7 @@ export function Player(props: PlayerProps) {
     <section className={`player${replay ? " rp" : ""}`} aria-label={replay ? "Player, replay of a stored run" : "Player, live run"} data-testid="player">
       <Transport {...props} replay={replay} />
       <div className="clock">
-        <span className="lbl">{replay ? "REPLAY" : "SIM TIME"}</span>
+        <span className="lbl">{replay ? "Replay" : "Sim time"}</span>
         <ClockValue replay={replay} simTimeS={snap.simTimeS} />
         <Suspense fallback={null}>
           <LazyMissionNote />
@@ -301,7 +301,7 @@ function Telemetry(props: { snap: SimSnapshot; recorded: boolean }) {
   return (
     <div className="telem">
       <div className="tile">
-        <span className="lbl">RATE</span>
+        <span className="lbl">Rate</span>
         <span className="v mono">
           {snap.headless ? (
             <>
@@ -315,7 +315,7 @@ function Telemetry(props: { snap: SimSnapshot; recorded: boolean }) {
         </span>
       </div>
       <div className="tile">
-        <span className="lbl">TICK COST</span>
+        <span className="lbl">Tick cost</span>
         <span className="v mono">
           {snap.tickTimeP95Ms.toFixed(1)} <small>/{budgetMs.toFixed(0)} ms</small>
         </span>
@@ -329,11 +329,11 @@ function Telemetry(props: { snap: SimSnapshot; recorded: boolean }) {
         </Suspense>
       )}
       <div className="tile opt">
-        <span className="lbl">AGENTS</span>
+        <span className="lbl">Agents</span>
         <span className="v mono">{snap.entityIds.length}</span>
       </div>
       <div className="tile opt">
-        <span className="lbl">REC</span>
+        <span className="lbl">Rec</span>
         <span className={`v mono ${recorded ? "ok" : "muted"}`}>{recorded ? "● stored" : "○ none"}</span>
       </div>
     </div>

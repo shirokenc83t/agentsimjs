@@ -369,10 +369,10 @@ describe("RunConfigPanel: the planner choice (ADR-0037, F2b M4)", () => {
 
   it("has a jump row of the sections with their validation glyphs, and a section whose fields are all inherited folds to one line", async () => {
     setup();
-    expect(screen.getByTestId("rc-jump-planning")).toHaveTextContent("PLANNING ✓");
+    expect(screen.getByTestId("rc-jump-planning")).toHaveTextContent("Planning ✓");
     await userEvent.type(screen.getByTestId("rc-per-tick"), "0");
-    expect(screen.getByTestId("rc-jump-planning")).toHaveTextContent("PLANNING ✕ 1");
-    expect(screen.getByTestId("rc-jump-drive")).toHaveTextContent("DRIVE ✓");
+    expect(screen.getByTestId("rc-jump-planning")).toHaveTextContent("Planning ✕ 1");
+    expect(screen.getByTestId("rc-jump-drive")).toHaveTextContent("Drive ✓");
     // Something set at this level: the section cannot be said to be all inherited, so it has no fold; the drive section is all inherited and has one.
     expect(screen.queryByTestId("rc-fold-planning")).toBeNull();
     const fold = screen.getByTestId("rc-fold-drive");

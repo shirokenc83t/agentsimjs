@@ -52,7 +52,7 @@ export const muiTheme = createTheme({
     // Map objects, timeline marks and icon-only buttons explain themselves after 400 ms (ADR-0042 §6).
     MuiTooltip: { defaultProps: { disableInteractive: true, enterDelay: TOOLTIP_DELAY_MS, enterNextDelay: TOOLTIP_DELAY_MS } },
     // Hover is a neutral fill, not the accent (ADR-0042 §6); selection is the accent tint.
-    MuiMenuItem: { styleOverrides: { root: { "&:hover": { backgroundColor: "var(--bg3)" }, "&.Mui-selected": { backgroundColor: "var(--acbg)" }, "&.Mui-selected:hover": { backgroundColor: "var(--acbg)" } } } },
+    MuiMenuItem: { styleOverrides: { root: { "&:hover": { backgroundColor: "var(--bg3)" }, "&.Mui-selected": { backgroundColor: "var(--bg2)", boxShadow: "inset 1px 0 0 var(--ac)" }, "&.Mui-selected:hover": { backgroundColor: "var(--bg3)" } } } },
   },
 });
 

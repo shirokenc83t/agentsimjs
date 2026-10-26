@@ -76,7 +76,12 @@ export function TopBar(props: TopBarProps) {
   }, [folded, props.replaying, props.derived, props.runLabel, props.layoutActive]);
   return (
     <header className={`top${compact ? " compact" : ""}`} aria-label="Workspaces and run" data-testid="topbar" ref={bar}>
-      <div className="seg brand">▣ AgentSimJS-NG</div>
+      <div className="seg brand">
+        <span className="mark" aria-hidden="true">
+          {""}
+        </span>{" "}
+        AgentSimJS-NG
+      </div>
       <nav className="seg ws-nav" aria-label="Workspaces">
         {props.workspaces.map((w, i) => (
           <button

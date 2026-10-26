@@ -18,7 +18,7 @@ export function AttentionTile() {
   };
   return (
     <button type="button" className="tile attn-tile" onClick={go} disabled={worst === "none"} aria-label={`Attention: ${counts.alarm} alarms, ${counts.warning} warnings`} data-testid="attention-tile" data-level={worst}>
-      <span className="lbl">ATTENTION</span>
+      <span className="lbl">Attention</span>
       <span className={`v mono${worst === "none" ? " muted" : ""}`}>{worst === "none" ? "none" : <AttentionCounts alarm={counts.alarm} warning={counts.warning} />}</span>
     </button>
   );
