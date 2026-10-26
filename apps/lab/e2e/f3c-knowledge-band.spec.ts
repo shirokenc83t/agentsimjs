@@ -15,7 +15,8 @@ test("the player draws the swarm knowledge band from the recorded observer sampl
   await expect(band).toBeVisible({ timeout: 30_000 });
   await expect.poll(async () => Number(await band.getAttribute("data-points"))).toBeGreaterThan(2);
   const label = page.getByTestId("player-knowledge");
-  await expect(label).toContainText("observer data");
+  await expect(label).toContainText("observer");
+  await expect(label).toContainText("belief matches truth");
   await expect(label).toContainText("swarm knows");
   // The tooltip carries the facts of the definition: that it is observer data and the rate of the samples.
   const tip = (await label.getAttribute("title")) ?? "";

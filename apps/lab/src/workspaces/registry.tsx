@@ -55,9 +55,6 @@ export const LazyAttentionTile = lazy(() => import("../shell/attention-tile.tsx"
 /** The mission of the selected agent under the player's clock; its trace reading loads with it, not in the initial chunk. */
 export const LazyMissionNote = lazy(() => import("../shell/mission-note.tsx").then((m) => ({ default: m.MissionNote })));
 
-/** Flag markers on the player's scrub track, loaded when a stored run is shown. */
-export const LazyPlayerMarks = lazy(() => import("../shell/player-marks.tsx").then((m) => ({ default: m.PlayerMarks })));
-
 /** The run header popover, loaded on first open (the toolbar keeps only the run label). */
 export const LazyRunPopover = lazy(() => import("../run-info.tsx").then((m) => ({ default: m.RunPopover })));
 

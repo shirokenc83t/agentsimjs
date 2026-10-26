@@ -27,7 +27,7 @@ function sharedVars(): string[] {
     `--focus-ring: ${FOCUS_RING_PX}px;`,
     // Patterns built from the theme's own tokens: the dot grid of the dock (from `ln`) and the hatch of what the map does not know.
     `--dock-pattern: radial-gradient(var(--ln) 1px, transparent 1px) 0 0 / ${DOCK_DOT_PX}px ${DOCK_DOT_PX}px;`,
-    `--hatch-pattern: repeating-linear-gradient(135deg, var(--hatch) 0 1px, transparent 1px ${HATCH_PITCH_PX}px);`,
+    `--hatch-pattern: repeating-linear-gradient(45deg, var(--hatch) 0 2px, transparent 2px ${HATCH_PITCH_PX}px);`,
   ];
 }
 

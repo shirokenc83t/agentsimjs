@@ -118,14 +118,15 @@ describe("design tokens (ADR-0032)", () => {
     for (const t of THEME_NAMES) expect(contrastRatio(COLORS[t].dock, COLORS[t].bg1)).toBeGreaterThan(contrastRatio(COLORS[t].bg0, COLORS[t].bg1));
   });
 
-  it("the map's unknown area is told from the known one by its hatch (3:1 on free cells and on the ground), in both themes", () => {
+  it("the map's unknown area is told from the known one by its hatch (ADR-0043 section 4: a faint material, decorative, never the only signal), in both themes", () => {
     for (const t of THEME_NAMES) {
       const s = sceneTokens(t);
       expect(s.beliefHatch).toBe(COLORS[t].hatch);
-      expect(contrastRatio(s.beliefHatch, s.beliefFree), `${t}: hatch on believed-free cells`).toBeGreaterThanOrEqual(3);
-      expect(contrastRatio(s.beliefHatch, s.ground), `${t}: hatch on the ground`).toBeGreaterThanOrEqual(3);
+      // Faint, but seen: the lines of the hatch tell from the surface they are drawn on.
+      expect(contrastRatio(s.beliefHatch, COLORS[t].bg0), `${t}: hatch on the well`).toBeGreaterThanOrEqual(1.15);
+      expect(contrastRatio(s.beliefHatch, COLORS[t].bg1), `${t}: hatch on the panel`).toBeGreaterThanOrEqual(1.15);
     }
-    expect(CONTRAST_PAIRS.find((p) => p.fg === "hatch")?.role).toBe("control");
+    expect(CONTRAST_PAIRS.find((p) => p.fg === "hatch")?.role).toBe("decorative");
   });
 
   it("the shadow of floating windows and the scrim of dialogs exist in both themes", () => {

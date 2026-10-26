@@ -20,7 +20,7 @@
 .rpseg .ok, .derived-mark .ok { color: var(--ok); }
 
 /* Row 2: the player. */
-.player { display: grid; grid-template-columns: auto 140px minmax(0, 1fr) auto; align-items: stretch; height: 56px; background: var(--bg2); border-bottom: 2px solid var(--ln2); }
+.player { display: grid; grid-template-columns: auto 140px minmax(200px, 1fr) auto; align-items: stretch; height: 56px; background: var(--bg2); border-bottom: 2px solid var(--ln2); }
 .player.rp { background-color: var(--bg3); background-image: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--fg) 6%, transparent) 9px 18px); border-top: 2px solid var(--fg2); border-bottom-color: var(--fg2); }
 .ply { display: flex; align-items: center; gap: 4px; padding: 0 12px; border-right: 1px solid var(--ln); }
 .pb { appearance: none; font: inherit; width: 32px; height: 32px; border: 1px solid var(--ln2); background: var(--bg1); color: var(--fg); cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
@@ -40,18 +40,30 @@
 .scrub .row { display: flex; align-items: center; gap: 10px; font-size: var(--type-label-size); color: var(--fg3); min-width: 0; margin: 0; flex-wrap: nowrap; overflow: hidden; }
 .scrub .row > * { flex: none; }
 .scrub .row > .derived-mark { flex: 0 100 auto; min-width: 8ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scrub .row > .trunc { flex: 0 1 auto; min-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scrub .row > .kb-label { flex: 0 30 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scrub .row > .trunc { flex: 0 60 auto; min-width: 8ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scrub .row .sp { flex: 1 1 0; }
 .track { position: relative; height: 14px; background: var(--bg0); border: 1px solid var(--ln); }
 .track.clickable { cursor: pointer; }
 .track .sv { position: absolute; left: 0; top: 0; bottom: 0; background: var(--bg3); }
-/* The swarm knowledge band (ADR-0043 section 7): the track is taller, what the swarm does not know is the hatch of the saved span, what it knows an area over it. */
-.track.kbt { height: 28px; }
-.track.kbt .sv { background: var(--bg0) var(--hatch-pattern); opacity: 0.55; }
-.track .kb { position: absolute; inset: 0; width: 100%; height: 100%; }
-.track .kb-known { fill: var(--fg3); fill-opacity: 0.5; stroke: none; }
-.track .kb-match { fill: var(--fg2); fill-opacity: 0.9; stroke: none; }
-.kb-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg2); }
+/* The swarm knowledge strip (ADR-0043 section 7, U-015): 22 px on the well and under it the saved range as a line; the hatch is what was not sampled or not saved. */
+.track.kbt { height: 24px; background: var(--bg0); }
+.track.kbt .sv { top: auto; height: 2px; background: var(--fg3); }
+.track.kbt .gap { top: auto; height: 2px; }
+.track.kbt .hd { width: 1px; margin-left: 0; }
+.kbs { position: absolute; left: 0; right: 0; top: 0; height: 22px; }
+.kbs svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.kb-hatch { position: absolute; top: 0; bottom: 0; background-image: var(--hatch-pattern); }
+.kb-rule { stroke: var(--ln); stroke-width: 1; }
+.kb-known { fill: var(--fg3); fill-opacity: 0.38; stroke: none; }
+.kb-warn { fill: var(--warn); fill-opacity: 0.85; stroke: none; }
+.kb-top { fill: none; stroke: var(--fg2); stroke-width: 1; }
+.kb-mark { position: absolute; top: 0; margin: 0; padding: 0; width: 9px; height: 9px; transform: translateX(-4px); border: 0; background: transparent; cursor: pointer; z-index: 1; }
+.kb-mark svg { display: block; width: 9px; height: 9px; }
+.kb-mark.reflex { color: var(--warn); }
+.kb-mark.reflex path { fill: currentColor; }
+.kb-mark.failure { color: var(--alm); }
+.kb-mark.failure path { fill: none; stroke: currentColor; stroke-width: 1.6; }
 .track .gap { position: absolute; top: 0; bottom: 0; background-image: var(--hatch-pattern); }
 .track .tick { position: absolute; top: 2px; bottom: 2px; width: 2px; z-index: 1; }
 .track .hd { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: var(--ac); }
