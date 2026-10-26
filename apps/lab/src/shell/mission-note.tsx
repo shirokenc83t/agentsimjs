@@ -1,6 +1,7 @@
 import { useUiContext } from "@agentsim/ui";
 import { useEffect, useState } from "react";
-import { missionLine, missionViews } from "../panels/mission-view.ts";
+import { missionLine } from "../panels/mission-view.ts";
+import { missionViewsOf } from "../panels/use-mission-views.ts";
 import { useSource } from "../services.tsx";
 
 /** The mission of the selected agent (else of the first that has one), in words, under the clock: `uav-001 mission 3 / 5 · explore`. Nothing when no agent has a mission. */
@@ -10,7 +11,7 @@ export function MissionNote() {
   const [text, setText] = useState("");
   useEffect(() => {
     const read = () => {
-      const all = missionViews(source.records());
+      const all = missionViewsOf(source);
       const id = (selection?.kind === "agent" && all.has(selection.id) ? selection.id : undefined) ?? [...all.keys()][0];
       setText(id === undefined ? "" : missionLine(all.get(id), id));
     };
