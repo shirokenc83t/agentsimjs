@@ -1,5 +1,5 @@
 import type { RunConfigDocument } from "@agentsim/scenarios";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
@@ -81,6 +81,8 @@ describe("the mission step editor", () => {
     expect(steps()).toEqual(["takeoff", "explore", "goTo"]);
     await userEvent.keyboard("{Delete}"); // the moved step is the selected one
     expect(steps()).toEqual(["takeoff", "goTo"]);
+    // The list takes the focus back on the next frame (the deleted row had it): undo is a key of the list.
+    await waitFor(() => expect(screen.getByTestId("ms-steps")).toHaveFocus());
     await userEvent.keyboard("{Control>}z{/Control}");
     expect(steps()).toEqual(["takeoff", "explore", "goTo"]);
     await userEvent.click(screen.getByTestId("ms-remove-0"));
