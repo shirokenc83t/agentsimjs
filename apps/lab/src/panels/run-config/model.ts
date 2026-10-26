@@ -191,7 +191,7 @@ export function parseInlineStrategy(text: string): InlineStrategy {
   }
 }
 
-export type SectionId = "run" | "planning" | "drive" | "beliefs";
+export type SectionId = "run" | "planning" | "drive" | "beliefs" | "mission";
 export interface SectionStatus {
   readonly errors: number;
   readonly warnings: number;
@@ -203,6 +203,7 @@ export function sectionOfPath(path: string | undefined): SectionId | undefined {
   if (path.startsWith("/planning") || path.startsWith("/agents")) return "planning";
   if (path.startsWith("/drive")) return "drive";
   if (path.startsWith("/beliefs")) return "beliefs";
+  if (path.startsWith("/minds")) return "mission";
   if (path.startsWith("/seed") || path.startsWith("/timeMode")) return "run";
   return undefined;
 }
@@ -244,6 +245,7 @@ export function sectionOfError(error: {
   if (key === "seed" || key === "timeMode") return "run";
   if (key !== undefined && DRIVE_KEYS.has(key)) return "drive";
   if (error.code === "prior_not_found") return "beliefs";
+  if (error.code === "invalid_mission") return "mission";
   if (
     error.code === undefined ||
     error.code === "invalid_document" ||
@@ -266,7 +268,7 @@ export function sectionStatus(
   planningWarnings: number,
 ): Record<SectionId, SectionStatus> {
   const none: SectionStatus = { errors: 0, warnings: 0 };
-  const out: Record<SectionId, SectionStatus> = { run: none, planning: none, drive: none, beliefs: none };
+  const out: Record<SectionId, SectionStatus> = { run: none, planning: none, drive: none, beliefs: none, mission: none };
   const at = error ? sectionOfError(error) : undefined;
   if (error && at) out[at] = { errors: 1, warnings: 0 };
   out.planning = { errors: out.planning.errors, warnings: planningWarnings };

@@ -37,6 +37,8 @@ import {
   type SectionStatus,
 } from "./model.ts";
 import { headlessButton, headlessTip } from "../../sim/headless-names.ts";
+import { missionAgentsOf, MissionSection } from "./mission-section.tsx";
+import { missionOf, missionStatus } from "./mission-model.ts";
 import { StrategyPicker } from "./strategy-picker.tsx";
 
 const ALGORITHMS = ["dijkstra", "astar", "hpa", "weighted-astar"] as const;
@@ -147,6 +149,7 @@ const JUMPS = [
   { id: "drive", title: "DRIVE" },
   { id: "beliefs", title: "BELIEFS" },
   { id: "effective", title: "EFFECTIVE" },
+  { id: "mission", title: "MISSION" },
   { id: "presets", title: "PRESETS" },
 ] as const;
 const JUMP_ROW_PX = 30;
@@ -195,6 +198,17 @@ function RunConfigEditor(props: { loaded: Loaded }) {
     e.preventDefault();
   };
   const validation = useMemo(() => validateDraft(draft, view, version), [draft, view, version]);
+  // The missions: who can have one, what each says of itself (valid, or how many steps to fix), and what the run buttons say of them.
+  const missions = useMemo(() => missionAgentsOf(run.loaded.agents, run.scenario), [run]);
+  const missionFix = useMemo(
+    () =>
+      missions.agents.reduce((n, a) => {
+        const st = missionStatus(missionOf(draft, a.key), a.facts);
+        return n + st.errors + st.warnings;
+      }, 0),
+    [missions, draft],
+  );
+  const missionSteps = missions.agents.reduce((n, a) => n + missionOf(draft, a.key).length, 0);
   const sameAsRun = validation.ok && validation.resolved.runConfigHash === run.header.runConfigHash;
   const error = validation.ok ? undefined : validation.error;
   const warnings = validation.ok ? validation.resolved.warnings : [];
@@ -231,7 +245,15 @@ function RunConfigEditor(props: { loaded: Loaded }) {
             <nav className="rc-jump mono" aria-label="Sections of the run configuration" data-testid="rc-jump">
               {JUMPS.map((j) => (
                 <button key={j.id} type="button" className="kt" onClick={() => jumpTo(j.id)} data-testid={`rc-jump-${j.id}`}>
-                  {j.title} {j.id === "effective" ? <span className="muted">{validation.ok ? validation.resolved.agents.length : ""}</span> : j.id === "presets" ? null : <StatusGlyph status={status[j.id]} />}
+                  {j.title} {j.id === "effective" ? (
+                    <span className="muted">{validation.ok ? validation.resolved.agents.length : ""}</span>
+                  ) : j.id === "presets" ? null : j.id === "mission" ? (
+                    <span className={missionFix > 0 || status.mission.errors > 0 ? "st st-warn" : "st st-ok"} data-testid="rc-jump-mission-state">
+                      {missionFix > 0 || status.mission.errors > 0 ? `▲ ${missionFix + status.mission.errors}` : `✓ ${missionSteps}`}
+                    </span>
+                  ) : (
+                    <StatusGlyph status={status[j.id]} />
+                  )}
                 </button>
               ))}
             </nav>
@@ -373,6 +395,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
             </section>
 
             {validation.ok && <EffectiveTable agents={validation.resolved.agents} />}
+            <MissionSection draft={draft} onChange={setDraft} agents={missions.agents} world={missions.world} pointedError={!validation.ok && validation.error.code === "invalid_mission" ? `${validation.error.code}: ${validation.error.message}` : undefined} />
             <Presets draft={draft} scenario={draft.scenario} onLoad={setDraft} />
             </div>
           </div>
@@ -429,6 +452,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
           className="btn pri"
           onClick={() => validation.ok && !current.busy && current.runWithConfig(validation.resolved.document)}
           aria-disabled={!validation.ok || current.busy}
+          title={missionFix > 0 ? `${missionFix} mission step${missionFix === 1 ? "" : "s"} cannot run where the list puts ${missionFix === 1 ? "it" : "them"}: the mission stops there, with the reason` : undefined}
           data-testid="rc-run"
         >
           ▶ Run with this configuration

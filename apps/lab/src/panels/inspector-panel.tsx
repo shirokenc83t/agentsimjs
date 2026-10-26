@@ -15,7 +15,9 @@ import { querySelection, useQuerySelection } from "./query-selection.ts";
 import { asResearcherCellBeliefs } from "./researcher-data.ts";
 import { RESEARCHER_BANNER, ResearcherSection } from "./researcher-section.tsx";
 import { useSimStream } from "./use-sim-stream.ts";
+import { MissionProgress } from "./mission-progress.tsx";
 import { useAgentViews } from "./use-agent-views.ts";
+import { useMissionViews } from "./use-mission-views.ts";
 import { usePlanQueries } from "./use-plan-queries.ts";
 import { StrategyTestSection } from "./strategy-test-section.tsx";
 
@@ -258,6 +260,7 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
   const st = snap.agentStatus;
   const o = index * STATUS_STRIDE;
   const v = views.get(id);
+  const mission = useMissionViews(source).get(id);
   const action = v?.action;
   const state = actionState(action);
   const cfg = (agent.config ?? {}) as AgentConfig;
@@ -288,6 +291,7 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
         </div>
         <FoldAll />
       </div>
+      {mission !== undefined && <MissionProgress agentId={id} runId={run.runId} view={mission} />}
       <CommandsSection id={id} kind={agent.kind} body={body} source={source} views={v} facts={agentFacts(run, snap.agentStatus, snap.entityIds, id)} />
       <Unavailable source={source} feature="mindView" title="What the mind receives">
         <Fold id="mindView" title="What the mind receives" summary="the request the planner got and the plan it chose" bare>

@@ -52,6 +52,9 @@ export const LazyReplayHost = lazy(() => import("../panels/replay-host.tsx").the
 /** The attention tile of the player: the attention rules load with it, when a run is there. */
 export const LazyAttentionTile = lazy(() => import("../shell/attention-tile.tsx").then((m) => ({ default: m.AttentionTile })));
 
+/** The mission of the selected agent under the player's clock; its trace reading loads with it, not in the initial chunk. */
+export const LazyMissionNote = lazy(() => import("../shell/mission-note.tsx").then((m) => ({ default: m.MissionNote })));
+
 /** Flag markers on the player's scrub track, loaded when a stored run is shown. */
 export const LazyPlayerMarks = lazy(() => import("../shell/player-marks.tsx").then((m) => ({ default: m.PlayerMarks })));
 

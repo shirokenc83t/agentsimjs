@@ -120,3 +120,4 @@
   .ready-start .rid, .hide-1100, .ply .lbl-long { display: none; }
 }
 .top .theme-btn { text-transform: none; }
+.clock .mission-note { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }

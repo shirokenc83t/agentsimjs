@@ -7,6 +7,7 @@ import { actionLabel, actionState } from "./agent-views.ts";
 import { AttentionCounts } from "../shell/attention-counts.tsx";
 import { useAttention } from "./attention-store.ts";
 import { useAgentViews } from "./use-agent-views.ts";
+import { useMissionViews } from "./use-mission-views.ts";
 
 /**
  * Explorer (UI-SPEC §4): the run's entities, agents only in F1. Virtualized (ADR-0016: long lists are, and
@@ -20,6 +21,7 @@ export function ExplorerPanel() {
   const source = useSource();
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const views = useAgentViews(source);
+  const missions = useMissionViews(source);
   const attn = useAttention(source);
   const [attnFilter, setAttnFilter] = useState<"all" | "alarm" | "warning">("all");
   const [attnOpen, setAttnOpen] = useState(true);
@@ -134,6 +136,12 @@ export function ExplorerPanel() {
                 <span className="kind-tag mono">{a.kind.toUpperCase()}</span>
                 <span className={`mono st-${state}`} data-testid={`explorer-state-${a.id}`}>
                   {STATE_GLYPH[state]} {actionLabel(action, views.get(a.id)?.reflex)}
+                  {missions.has(a.id) && (
+                    <span className="muted" data-testid={`explorer-mission-${a.id}`} title="mission: the step it is at, of all its steps">
+                      {" · step "}
+                      {missions.get(a.id)?.current}/{missions.get(a.id)?.of}
+                    </span>
+                  )}
                   {ideal.has(a.id) && (
                     <span className="kind-tag" data-testid={`explorer-ideal-${a.id}`} title="ideal: plans on the ground truth (baseline), not on its own map">
                       {" "}

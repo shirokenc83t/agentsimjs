@@ -5,7 +5,7 @@ import { useSource } from "../services.tsx";
 import { gapLabel, resolveGapClick } from "../sim/gap-click.ts";
 import type { RunSnapshot } from "../sim/run-source.ts";
 import type { SimClient, SimSnapshot } from "../sim/sim-client.ts";
-import { LazyAttentionTile, LazyPlayerMarks } from "../workspaces/registry.tsx";
+import { LazyAttentionTile, LazyMissionNote, LazyPlayerMarks } from "../workspaces/registry.tsx";
 import { trackLayout } from "./track.ts";
 
 export const SPEEDS = [
@@ -57,6 +57,9 @@ export function Player(props: PlayerProps) {
       <div className="clock">
         <span className="lbl">{replay ? "REPLAY" : "SIM TIME"}</span>
         <ClockValue replay={replay} simTimeS={snap.simTimeS} />
+        <Suspense fallback={null}>
+          <LazyMissionNote />
+        </Suspense>
       </div>
       {replay && view ? <ReplayScrub view={view} dtS={dtS} onBackToLive={props.onBackToLive} /> : <LiveScrub snap={snap} view={view} dtS={dtS} recorded={recorded} />}
       <Telemetry snap={snap} recorded={recorded} />
