@@ -333,6 +333,8 @@ const esc = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;"
 
 /** Colours the SVG needs as values (a file has no stylesheet): the page resolves its tokens and passes them. */
 export interface MapPalette {
+  /** The grey of the agents that are not the subject (ADR-0043 §3); the map on screen uses it, the exported SVG does not. */
+  readonly muted?: string;
   readonly background: string;
   readonly obstacle: string;
   readonly text: string;

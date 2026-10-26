@@ -168,7 +168,8 @@
 .event-row.open { height: auto; align-items: start; row-gap: 2px; padding-bottom: 6px; overflow: visible; white-space: normal; }
 .event-row .log-payload { grid-column: 1 / -1; margin: 0; padding: 4px 8px; background: var(--bg0); border: 1px solid var(--ln); font-size: var(--type-label-size); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; cursor: text; }
 /* The filter as a prompt, the kind chips under it, the key footer under the log (Console, UI-SPEC section 6). */
-.prompt { flex: none; display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 10px; background: var(--bg0); border-bottom: 1px solid var(--ln); white-space: nowrap; overflow: hidden; }
+/* The prompt of the Log wraps in a narrow column (two-column Debug, 1000 px): the filter keeps its row and the rest goes under it, nothing is cut. */
+.prompt { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; min-height: 28px; padding: 2px 10px; background: var(--bg0); border-bottom: 1px solid var(--ln); white-space: nowrap; }
 .prompt .ps { color: var(--ok); }
 .prompt .pf { color: var(--fg3); }
 /* A key state quoted in prose ("●●●● set"): an inline mono chip, like code in prose, so the symbols are drawn at the chrome's size and not at the sans text's (one glyph size). */

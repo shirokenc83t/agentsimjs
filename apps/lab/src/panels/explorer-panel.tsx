@@ -1,6 +1,6 @@
 import "./panels.css";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { GLYPH, identityOf, KIND_STYLE, STATE_GLYPH, useUiContext } from "@agentsim/ui";
+import { GLYPH, identityOf, KIND_STYLE, STATE_GLYPH, subjectColor, useUiContext } from "@agentsim/ui";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { usePolled, useSource } from "../services.tsx";
 import { actionLabel, actionState } from "./agent-views.ts";
@@ -93,7 +93,7 @@ export function ExplorerPanel() {
                   onClick={() => useUiContext.getState().select({ kind: "agent", id: a.id })}
                   onKeyDown={(e) => e.key === "Enter" && useUiContext.getState().select({ kind: "agent", id: a.id })}
                 >
-                  <span className={`agent-swatch ${idn.style}`} style={{ ["--swatch" as string]: `var(--agent-${idn.colorIndex})` }} />
+                  <span className={`agent-swatch ${idn.style}`} style={{ ["--swatch" as string]: subjectColor(idn.colorIndex, selection?.kind === "agent" ? selection.id : undefined, a.id) }} />
                   <span className="mono">{a.id}</span>
                   <span className={`mono ${c.level === "alarm" ? "st-alm" : "st-warn"}`}>
                     {c.glyph} {c.label}
@@ -131,7 +131,7 @@ export function ExplorerPanel() {
                 onClick={() => select(row.index)}
                 style={{ position: "absolute", top: 0, left: 0, right: 0, height: row.size, transform: `translateY(${row.start}px)` }}
               >
-                <span className={`agent-swatch ${identityOf(row.index).style}`} style={{ ["--swatch" as string]: `var(--agent-${identityOf(row.index).colorIndex})` }} />
+                <span className={`agent-swatch ${identityOf(row.index).style}`} style={{ ["--swatch" as string]: subjectColor(identityOf(row.index).colorIndex, selection?.kind === "agent" ? selection.id : undefined, a.id) }} />
                 <span className="mono">{a.id}</span>
                 <span className="muted">{a.key ?? ""}</span>
                 <span className="kind-tag mono">{a.kind.toUpperCase()}</span>

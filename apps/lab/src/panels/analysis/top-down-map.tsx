@@ -1,5 +1,5 @@
 import "../panels.css";
-import { identityOf, KIND_STYLE, shortLabel, useTheme } from "@agentsim/ui";
+import { identityOf, isMuted, KIND_STYLE, shortLabel, useTheme } from "@agentsim/ui";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { mapTransform, thinMarkers, type MapMarker, type MapModel, type MapPalette } from "./analysis-model.ts";
 
@@ -40,7 +40,7 @@ export function niceLength(m: number): number {
 }
 
 /** System colours, for a page that has no theme loaded (a test): the tokens are the colours. */
-const FALLBACK: MapPalette = { background: "Canvas", obstacle: "GrayText", text: "CanvasText", alarm: "CanvasText", warning: "CanvasText", agent: ["CanvasText"] };
+const FALLBACK: MapPalette = { background: "Canvas", obstacle: "GrayText", muted: "GrayText", text: "CanvasText", alarm: "CanvasText", warning: "CanvasText", agent: ["CanvasText"] };
 
 /** The page's colours as values: tokens of the active theme (the canvas has no stylesheet either). */
 function readPalette(el: Element): MapPalette {
@@ -50,7 +50,7 @@ function readPalette(el: Element): MapPalette {
   for (let i = 0; i < 8; i++) agent.push(c(`--agent-${i}`, "currentColor"));
   const kind: Record<string, string> = {};
   for (const s of Object.values(KIND_STYLE)) kind[s.family] ??= c(`--kind-${s.family}`, "currentColor");
-  return { background: c("--bg0", FALLBACK.background), obstacle: c("--ln2", FALLBACK.obstacle), text: c("--fg", FALLBACK.text), alarm: c("--alm", FALLBACK.alarm), warning: c("--warn", FALLBACK.warning), agent, kind };
+  return { background: c("--bg0", FALLBACK.background), obstacle: c("--ln2", FALLBACK.obstacle), muted: c("--fg3", "GrayText"), text: c("--fg", FALLBACK.text), alarm: c("--alm", FALLBACK.alarm), warning: c("--warn", FALLBACK.warning), agent, kind };
 }
 
 /**
@@ -126,7 +126,7 @@ export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function
     // Trajectories.
     for (const t of model.trajectories) {
       if (t.points.length < 2) continue;
-      ctx.strokeStyle = pal.agent[t.colorIndex % pal.agent.length] ?? pal.text;
+      ctx.strokeStyle = isMuted(props.selectedAgent, t.agentId) ? (pal.muted ?? pal.text) : (pal.agent[t.colorIndex % pal.agent.length] ?? pal.text);
       ctx.lineWidth = t.agentId === props.selectedAgent ? 2.5 : 1.25;
       ctx.beginPath();
       t.points.forEach((p, i) => (i === 0 ? ctx.moveTo(tf.px(p.x), tf.py(p.y)) : ctx.lineTo(tf.px(p.x), tf.py(p.y))));
@@ -138,7 +138,7 @@ export const TopDownMap = forwardRef<TopDownMapHandle, TopDownMapProps>(function
     // Where the agents are: the marker style of their identity (solid, outline, dashed), the short label beside it.
     for (const a of model.positions) {
       const id = identityOf(a.colorIndex);
-      const col = pal.agent[id.colorIndex % pal.agent.length] ?? pal.text;
+      const col = isMuted(props.selectedAgent, a.agentId) ? (pal.muted ?? pal.text) : (pal.agent[id.colorIndex % pal.agent.length] ?? pal.text);
       const x = tf.px(a.x);
       const y = tf.py(a.y);
       ctx.beginPath();

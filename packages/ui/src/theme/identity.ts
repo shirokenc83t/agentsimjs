@@ -24,6 +24,19 @@ export function identityOf(index: number): Identity {
   return { colorIndex: k % IDENTITY_COLOURS, style: STYLES[Math.floor(k / IDENTITY_COLOURS)] as MarkerStyle };
 }
 
+/** The grey of every agent that is not the subject (ADR-0043 §3): `fg3` in the stylesheets. */
+export const SUBJECT_NEUTRAL = "var(--fg3)";
+
+/** One subject, one hue: the selected agent keeps its identity colour, the others are neutral; with no agent selected every agent keeps its own. */
+export function isMuted(selectedId: string | undefined, id: string): boolean {
+  return selectedId !== undefined && selectedId !== id;
+}
+
+/** The CSS colour of the agent `id` with identity colour `colorIndex`, given the selected agent (if any). */
+export function subjectColor(colorIndex: number, selectedId: string | undefined, id: string): string {
+  return isMuted(selectedId, id) ? SUBJECT_NEUTRAL : `var(--agent-${colorIndex})`;
+}
+
 /**
  * The short label of the map: `g07` for `ugv-007`, `a07` for `uav-007` (g for ground, a for aerial); any other ID is shown whole up to six characters. The full ID is in
  * the tooltip, the Explorer and the Inspector.

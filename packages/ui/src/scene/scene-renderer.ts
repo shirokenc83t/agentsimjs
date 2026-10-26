@@ -504,7 +504,11 @@ export class SceneRenderer {
 
   /** Highlights the selected agent (or none). */
   setSelection(agentId: string | undefined): void {
-    this.selectedIndex = agentId === undefined ? -1 : this.entityIds.indexOf(agentId);
+    const next = agentId === undefined ? -1 : this.entityIds.indexOf(agentId);
+    if (next === this.selectedIndex) return;
+    this.selectedIndex = next;
+    // One subject, one hue (ADR-0043 §3): the colours of the agents depend on which one is selected.
+    this.paintAgents();
   }
 
   /** The identity of the agent at `i`: the one the panel gave, else the one its place in the run gives. */
@@ -514,6 +518,8 @@ export class SceneRenderer {
   }
 
   private agentColor(i: number): string {
+    // With an agent selected the others are drawn in a neutral grey; with none, every agent keeps its own colour.
+    if (this.selectedIndex >= 0 && i !== this.selectedIndex) return this.tokens.pathPlannedDim;
     return this.tokens.agent[this.identity(i).colorIndex] ?? this.tokens.selection;
   }
 

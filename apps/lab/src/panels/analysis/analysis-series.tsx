@@ -1,5 +1,5 @@
 import "../panels.css";
-import { identityOf, shortLabel } from "@agentsim/ui";
+import { identityOf, shortLabel, subjectColor } from "@agentsim/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { stackedLabelYs, valueAtTime, type AnalysisSeries } from "./analysis-model.ts";
 
@@ -109,7 +109,7 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
                   {" "}
                   · at {hv?.toFixed(1)} s:
                   {readout.map((r) => (
-                    <span key={r.agentId} style={{ color: `var(--agent-${identityOf(props.indexOf(r.agentId)).colorIndex})` }}>
+                    <span key={r.agentId} style={{ color: subjectColor(identityOf(props.indexOf(r.agentId)).colorIndex, props.selectedAgent, r.agentId) }}>
                       {" "}
                       {shortLabel(r.agentId)} {fmt(r.v)}
                     </span>
@@ -154,14 +154,14 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
                     key={l.key}
                     className={`line${props.selectedAgent === l.agentId ? " sel" : ""}${dim ? " dim" : ""}`}
                     data-agent={l.agentId}
-                    style={{ stroke: `var(--agent-${identityOf(props.indexOf(l.agentId)).colorIndex})` }}
+                    style={{ stroke: subjectColor(identityOf(props.indexOf(l.agentId)).colorIndex, props.selectedAgent, l.agentId) }}
                     points={l.points.map((p) => `${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ")}
                   />
                 );
               })}
               {ends.map((e, i) => (
                 <g key={e.line.key} className={`end${props.selectedAgent !== undefined && props.selectedAgent !== e.line.agentId ? " dim" : ""}`} data-testid={`series-end-${testName}-${e.line.agentId}`}>
-                  <rect x={w - PAD.r + 6} y={(labelYs[i] as number) - 4} width={7} height={7} style={{ fill: `var(--agent-${identityOf(props.indexOf(e.line.agentId)).colorIndex})` }} />
+                  <rect x={w - PAD.r + 6} y={(labelYs[i] as number) - 4} width={7} height={7} style={{ fill: subjectColor(identityOf(props.indexOf(e.line.agentId)).colorIndex, props.selectedAgent, e.line.agentId) }} />
                   <text className="tick" x={w - PAD.r + 16} y={(labelYs[i] as number) + 3}>{shortLabel(e.line.agentId)} {fmt(e.v)}</text>
                 </g>
               ))}
@@ -172,7 +172,7 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
               <ul className="asv-legend mono" data-testid={`series-legend-${testName}`} aria-label={`${name}: every agent and its last value`}>
                 {allEnds.map((e) => (
                   <li key={e.line.key} className={props.selectedAgent === e.line.agentId ? "sel" : undefined}>
-                    <span className="sw" style={{ background: `var(--agent-${identityOf(props.indexOf(e.line.agentId)).colorIndex})` }} /> {shortLabel(e.line.agentId)} <span className="muted">{fmt(e.v)}</span>
+                    <span className="sw" style={{ background: subjectColor(identityOf(props.indexOf(e.line.agentId)).colorIndex, props.selectedAgent, e.line.agentId) }} /> {shortLabel(e.line.agentId)} <span className="muted">{fmt(e.v)}</span>
                   </li>
                 ))}
               </ul>

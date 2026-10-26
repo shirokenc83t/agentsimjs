@@ -1,5 +1,5 @@
 import "../panels.css";
-import { downloadBytes, identityOf, useUiContext } from "@agentsim/ui";
+import { downloadBytes, identityOf, subjectColor, useUiContext } from "@agentsim/ui";
 import { parseFilter, type FilterAst, type TraceRecord } from "@agentsim/trace";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePolled, useServices, useSource } from "../../services.tsx";
@@ -205,7 +205,7 @@ export function AnalysisPanel() {
             data-tip="click to show or hide this agent, shift+click to show it alone"
             onClick={(e) => setFilter(toggleChoice(text, "agent", id, allAgents, e.shiftKey))}
           >
-            <span className="agent-swatch" style={{ ["--swatch" as string]: `var(--agent-${identityOf(indexOf(id)).colorIndex})` }} /> {id}
+            <span className="agent-swatch" style={{ ["--swatch" as string]: subjectColor(identityOf(indexOf(id)).colorIndex, selected?.kind === "agent" ? selected.id : undefined, id) }} /> {id}
           </button>
         ))}
         <span className="sep" aria-hidden="true" />

@@ -49,4 +49,17 @@ describe("the series charts", () => {
     expect(screen.queryByTestId("series-legend-speed")).toBeNull();
     expect(screen.getAllByTestId(/^series-end-speed-/)).toHaveLength(2);
   });
+
+  it("one subject, one hue: with an agent selected its line keeps its colour and the others are neutral; with none every line has its own", () => {
+    const series = [line("ugv-001", "battery", "%", [100, 90, 80]), line("ugv-002", "battery", "%", [100, 70, 60]), line("ugv-003", "battery", "%", [100, 95, 92])];
+    const idx = (id: string) => Number(id.replace(/\D/g, "")) || 0;
+    const stroke = (c: HTMLElement, id: string) => (c.querySelector(`polyline[data-agent="${id}"]`) as SVGElement).style.stroke;
+    const none = render(<AnalysisSeriesView series={series} indexOf={idx} span={{ t0: 0, t1: 10 }} cursorS={0} onSeek={() => {}} />).container;
+    expect(stroke(none, "ugv-001")).toBe("var(--agent-1)");
+    expect(stroke(none, "ugv-002")).toBe("var(--agent-2)");
+    const picked = render(<AnalysisSeriesView series={series} indexOf={idx} span={{ t0: 0, t1: 10 }} cursorS={0} selectedAgent="ugv-002" onSeek={() => {}} />).container;
+    expect(stroke(picked, "ugv-002")).toBe("var(--agent-2)");
+    expect(stroke(picked, "ugv-001")).toBe("var(--fg3)");
+    expect(stroke(picked, "ugv-003")).toBe("var(--fg3)");
+  });
 });
