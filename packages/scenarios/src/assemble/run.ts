@@ -1,4 +1,4 @@
-import { Scheduler, World, type AgentEvent, type Brain } from "@agentsim/core";
+import { Scheduler, SequenceBrain, World, type AgentEvent, type Brain } from "@agentsim/core";
 import { TRACE_SCHEMA_VERSION, type RunHeader, type TraceBuffer } from "@agentsim/trace";
 import type { LoadedScenario } from "../load.ts";
 import type { ResolvedRunConfig } from "../run-config/resolve.ts";
@@ -37,6 +37,12 @@ export function createRun(loaded: LoadedScenario, resolved: ResolvedRunConfig, t
     if (!agent) throw new Error(`brain for unknown agent "${ref}"`);
     if (brains.has(agent.id)) throw new Error(`two brains for ${agent.id}`);
     brains.set(agent.id, brain);
+  }
+  // The minds the run configuration gives (a mission, ADR-0036 addition of 2026-10-26): a brain of the options for the same agent would be a second mind.
+  for (const a of resolved.agents) {
+    if (a.mind === undefined) continue;
+    if (brains.has(a.agentId)) throw new Error(`${a.agentId} has a mind in the run configuration and a brain in the options`);
+    brains.set(a.agentId, new SequenceBrain(`mission-${a.agentId}`, a.mind.s1.script.params.steps));
   }
   const observer = opts.beliefVsTruth
     ? new BeliefVsTruth(loaded.grid, assembled.agents, loaded.objects, assembled.sensing, resolved, new TraceBufferSink(trace), opts.beliefVsTruth.everyS)

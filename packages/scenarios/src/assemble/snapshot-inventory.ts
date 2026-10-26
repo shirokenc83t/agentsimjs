@@ -66,6 +66,13 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     steps: r(WIRING),
     cursor: c("steps already returned"),
   },
+  SequenceBrain: {
+    tier: r("constant"),
+    id: r(WIRING),
+    steps: r("run configuration (the mission)"),
+    cursor: c("steps decided so far (one number with the phase: position)"),
+    phase: c("ready, running, stopped or done (one number with the cursor: position)"),
+  },
   Clock: {
     dtS: r("run configuration"),
     t: c("the tick count (setTick restores it)"),

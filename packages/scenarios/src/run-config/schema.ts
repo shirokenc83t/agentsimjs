@@ -80,6 +80,22 @@ export type TopologyEntry = Static<typeof TopologyEntry>;
 export const DriveEntry = Type.Object({ ...DriveFields }, { additionalProperties: false });
 export type DriveEntry = Static<typeof DriveEntry>;
 
+/**
+ * A mind profile of the `s1` shape that is a script (ADR-0036 section 3, and its addition of 2026-10-26): the `sequence` script, a list of actions with arguments. The steps are checked
+ * against the capability manifest at resolution (their own error names the step), not by this schema, which only bounds what a document can hold.
+ */
+export const MissionStep = Type.Object({ action: Type.String({ minLength: 1, maxLength: 64 }), args: Type.Optional(Type.Record(Type.String({ maxLength: 64 }), Type.Unknown(), { maxProperties: 16 })) }, { additionalProperties: false });
+export const MindEntry = Type.Object(
+  {
+    s1: Type.Object(
+      { script: Type.Object({ name: Type.Literal("sequence"), params: Type.Object({ steps: Type.Array(MissionStep, { maxItems: 256 }) }, { additionalProperties: false }) }, { additionalProperties: false }) },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+export type MindEntry = Static<typeof MindEntry>;
+
 export const RunConfigDocument = Type.Object(
   {
     schemaVersion: Type.Literal(RUN_CONFIG_SCHEMA_VERSION),
@@ -120,6 +136,17 @@ export const RunConfigDocument = Type.Object(
           default: Type.Optional(BeliefsEntry),
           byKind: Type.Optional(Type.Object({ uav: Type.Optional(BeliefsEntry), ugv: Type.Optional(BeliefsEntry) }, { additionalProperties: false })),
           byAgent: Type.Optional(Type.Record(AgentKey, BeliefsEntry, { maxProperties: 1024, additionalProperties: false })),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    /** The mind of an agent (ADR-0036 section 6; only the `s1` script `sequence` so far): default → byKind → byAgent, an entry replaces the one before it. Absent: the agent has no mind. */
+    minds: Type.Optional(
+      Type.Object(
+        {
+          default: Type.Optional(MindEntry),
+          byKind: Type.Optional(Type.Object({ uav: Type.Optional(MindEntry), ugv: Type.Optional(MindEntry) }, { additionalProperties: false })),
+          byAgent: Type.Optional(Type.Record(AgentKey, MindEntry, { maxProperties: 1024, additionalProperties: false })),
         },
         { additionalProperties: false },
       ),

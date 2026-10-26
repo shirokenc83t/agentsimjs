@@ -1,7 +1,6 @@
 import type { PlanningService, PlanningSnapshot, PlanOutcome, PlanRestart, SearchSpace } from "@agentsim/algorithms";
-import { err, ok, type CapabilityPort, type CodedError, type KnownSpace, type PlanMap, type PlannerPort, type PlanProgress, type PlanQuery, type PlanResult, type Result, type Scope, type SpatialPort, type TraceSink } from "@agentsim/core";
+import { err, type CodedError, type KnownSpace, type PlanMap, type PlannerPort, type PlanProgress, type PlanQuery, type PlanResult, type Result, type SpatialPort, type TraceSink } from "@agentsim/core";
 import { OCCUPANCY_FREE, TERRAIN_IMPASSABLE, type BeliefGrid, type GridSpace, type PlanningGrid } from "@agentsim/spatial";
-import { capabilityManifest, getCapability, isInjectable, validateParams } from "@agentsim/tools-schema";
 import type { TraceBuffer } from "@agentsim/trace";
 import { EXPLORE_BUILTIN, toPlanningConfig, type EffectiveAgentConfig } from "../run-config/resolve.ts";
 import { traversalFor } from "../traversal.ts";
@@ -402,26 +401,7 @@ export class GridSpatialAdapter implements SpatialPort {
   }
 }
 
-/** The capabilities and their parameter schemas, from the generated manifest (built once: it never changes at run time). */
-let menu: readonly { readonly name: string; readonly kind: "action" | "bookkeeping"; readonly paramsSchema: Readonly<Record<string, unknown>> }[] | undefined;
-function capabilityMenu(): NonNullable<typeof menu> {
-  menu ??= capabilityManifest().capabilities.map((c) => ({ name: c.name, kind: c.kind, paramsSchema: c.params }));
-  return menu;
-}
-
-/** CapabilityPort over tools-schema (ADR-0007): the only source of capability definitions. */
-export const toolsSchemaCapabilities: CapabilityPort = {
-  list: () => capabilityMenu(),
-  kind: (name) => getCapability(name)?.kind ?? "action",
-  injectable: (name) => isInjectable(name),
-  validate: (name, params) => {
-    const r = validateParams(name, params);
-    return r.ok ? ok(r.value) : err({ code: r.error.code, message: r.error.message });
-  },
-  vehicles: (name) => getCapability(name)?.vehicles ?? [],
-  scope: (name): Scope => getCapability(name)?.scope ?? "self",
-  preconditions: (name) => getCapability(name)?.preconditions ?? [],
-};
+export { toolsSchemaCapabilities } from "./capabilities.ts";
 
 /** TraceSink over the run's TraceBuffer, through tracer handles bound to each source (ADR-0031). */
 export class TraceBufferSink implements TraceSink {

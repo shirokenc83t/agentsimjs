@@ -17,10 +17,12 @@ import {
 import { err, ok, validate, type CodedError, type Result } from "@agentsim/core";
 import { BUILTIN_BODY_DEFAULTS, resolveBody, type BodyDefaults, type ResolvedUavBody, type ResolvedUgvBody } from "../body-defaults.ts";
 import { DEFAULT_TOPOLOGY, TOPOLOGY_LIMITS, type TopologyConfig } from "@agentsim/spatial";
+import { validateSequence } from "@agentsim/core";
+import { toolsSchemaCapabilities } from "../assemble/capabilities.ts";
 import { canonicalJson, hash32Hex } from "../canonical.ts";
 import type { ScenarioAgentsView } from "../load.ts";
 import { utf8Length } from "../validate.ts";
-import { PlanningEntry, RUN_CONFIG_MAX_BYTES, RUN_CONFIG_SCHEMA_VERSION, RunConfigDocument, type AlgorithmSpec, type BeliefInit } from "./schema.ts";
+import { PlanningEntry, type MindEntry, RUN_CONFIG_MAX_BYTES, RUN_CONFIG_SCHEMA_VERSION, RunConfigDocument, type AlgorithmSpec, type BeliefInit } from "./schema.ts";
 
 /** Stable codes (ADR-0028), plus document-level ones and the cost-profile codes of ADR-0014/0026. */
 export type RunConfigErrorCode =
@@ -42,6 +44,7 @@ export type RunConfigErrorCode =
   | "region_size_out_of_range"
   | "strategy_not_found"
   | "strategy_and_algorithm_both_set"
+  | "invalid_mission"
   | StrategyErrorCode;
 
 export type RunConfigError = CodedError<RunConfigErrorCode> & { readonly path?: string };
@@ -105,6 +108,8 @@ export interface EffectiveAgentConfig {
   readonly beliefsSource: ConfigLevel;
   /** Topological layer (ADR-0039 §3), resolved field by field: built-in → default → byKind → byAgent. */
   readonly topology: TopologyConfig;
+  /** The agent's mind when the run configuration gives it one (a mission, validated against the capability manifest); absent otherwise, and then in no hash. */
+  readonly mind?: MindEntry;
 }
 
 /**
@@ -305,7 +310,7 @@ export function resolveRunConfig(
     return fail("scenario_version_not_found", `run configuration names ${doc.scenario.id} v${doc.scenario.version}, got ${sdoc.id} v${scenario.version}`, "/scenario");
   }
   const keys = new Set(scenario.loaded.agents.flatMap((a) => (a.key === undefined ? [] : [a.key])));
-  for (const [section, entries] of [["planning", doc.planning?.byAgent], ["drive", doc.drive?.byAgent], ["beliefs", doc.beliefs?.byAgent], ["topology", doc.topology?.byAgent]] as const) {
+  for (const [section, entries] of [["planning", doc.planning?.byAgent], ["drive", doc.drive?.byAgent], ["beliefs", doc.beliefs?.byAgent], ["topology", doc.topology?.byAgent], ["minds", doc.minds?.byAgent]] as const) {
     for (const k of Object.keys(entries ?? {}).sort()) {
       if (!keys.has(k)) return fail("unknown_agent_key", `no agent with key "${k}" in scenario ${sdoc.id}`, `/${section}/byAgent/${k}`);
     }
@@ -377,6 +382,13 @@ export function resolveRunConfig(
     if (topology.regionChunks < rcMin || topology.regionChunks > rcMax) {
       return fail("region_size_out_of_range", `${a.id}: topology.regionChunks must be in [${rcMin}, ${rcMax}], got ${topology.regionChunks}`, "/topology");
     }
+    // The mind (ADR-0036 section 6): an entry replaces the one before it (default → byKind → byAgent); a mission is checked against the capability manifest for this kind of vehicle.
+    const mind: MindEntry | undefined = (a.key === undefined ? undefined : doc.minds?.byAgent?.[a.key]) ?? doc.minds?.byKind?.[a.kind] ?? doc.minds?.default;
+    if (mind !== undefined) {
+      const path = a.key !== undefined && doc.minds?.byAgent?.[a.key] !== undefined ? `/minds/byAgent/${a.key}` : doc.minds?.byKind?.[a.kind] !== undefined ? `/minds/byKind/${a.kind}` : "/minds/default";
+      const v = validateSequence(mind.s1.script.params.steps, toolsSchemaCapabilities, a.kind);
+      if (!v.ok) return fail("invalid_mission", `${a.id}: ${v.error.message}`, `${path}/s1/script/params/steps${v.error.step === undefined ? "" : `/${v.error.step - 1}`}`);
+    }
     const eff: EffectiveAgentConfig = {
       agentId: a.id,
       ...(a.key === undefined ? {} : { key: a.key }),
@@ -387,6 +399,7 @@ export function resolveRunConfig(
       beliefs: { init, idealized: init === "ideal", ...(priorHash === undefined ? {} : { priorHash }) },
       beliefsSource,
       topology,
+      ...(mind === undefined ? {} : { mind }),
     };
     const c = checkAgent(eff);
     if (!c.ok) return c;
@@ -429,7 +442,7 @@ export function agentWarnings(a: Pick<EffectiveAgentConfig, "agentId" | "plannin
 
 /** xxHash32 over the resolved per-agent configurations, agents in ID order (sources are not hashed). */
 export function effectiveConfigHash(agents: readonly EffectiveAgentConfig[], minDecisionIntervalS = 1): string {
-  return hash32Hex(canonicalJson({ minDecisionIntervalS, agents: agents.map((a) => ({ agentId: a.agentId, key: a.key, kind: a.kind, planning: a.planning, body: a.body, beliefs: a.beliefs, topology: a.topology })) }));
+  return hash32Hex(canonicalJson({ minDecisionIntervalS, agents: agents.map((a) => ({ agentId: a.agentId, key: a.key, kind: a.kind, planning: a.planning, body: a.body, beliefs: a.beliefs, topology: a.topology, ...(a.mind === undefined ? {} : { mind: a.mind }) })) }));
 }
 
 /**
