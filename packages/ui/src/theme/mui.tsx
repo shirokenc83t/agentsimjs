@@ -7,7 +7,8 @@ function palette(t: ThemeName) {
   const c = COLORS[t];
   return {
     mode: t,
-    primary: { main: c.ac, contrastText: c.acfg },
+    // The accent fills nothing (ADR-0043 section 2): a contained primary button is drawn by inversion, like Play.
+    primary: { main: c.fg, contrastText: c.bg0 },
     error: { main: c.alm },
     warning: { main: c.warn },
     success: { main: c.ok },
