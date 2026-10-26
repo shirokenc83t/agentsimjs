@@ -1,10 +1,11 @@
 import type { RunConfigDocument } from "@agentsim/scenarios";
+import { f2DiscoveryScenario } from "@agentsim/scenarios";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { missionOf } from "./mission-model.ts";
-import { missionAgentsOf, MissionSection, type MissionAgent } from "./mission-section.tsx";
+import { missionAgentsOf, MissionSection, type MissionAgent, type MissionWorld } from "./mission-section.tsx";
 
 // The step editor (F3c M1): add, reorder, remove and undo steps; whether each can run along the list with the one-click fix; arguments checked in words; a point picked on the map.
 
@@ -18,10 +19,10 @@ const RETURN_THEN_LAND = {
 } as unknown as RunConfigDocument;
 
 let latest: RunConfigDocument = DOC;
-function Harness(props: { initial?: RunConfigDocument; agents?: MissionAgent[] }) {
+function Harness(props: { initial?: RunConfigDocument; agents?: MissionAgent[]; world?: MissionWorld }) {
   const [draft, setDraft] = useState(props.initial ?? DOC);
   latest = draft;
-  return <MissionSection draft={draft} onChange={setDraft} agents={props.agents ?? [SCOUT, ROVER]} world={WORLD} pointedError={undefined} />;
+  return <MissionSection draft={draft} onChange={setDraft} agents={props.agents ?? [SCOUT, ROVER]} world={props.world ?? WORLD} />;
 }
 const steps = () => missionOf(latest, "scout").map((s) => s.action);
 const add = (name: string) => userEvent.selectOptions(screen.getByTestId("ms-add"), name);
@@ -37,7 +38,9 @@ describe("the mission step editor", () => {
     expect(latest.minds?.byAgent?.["scout"]?.s1.script.name).toBe("sequence");
     expect(screen.getByTestId("ms-valid")).toHaveTextContent("✓ valid · 3 steps · uav-001");
     expect(screen.getByTestId("ms-glyph-0")).toHaveTextContent("✓");
-    expect(screen.getByTestId("ms-after-1")).toHaveTextContent("→ airborne · does not resume after a preemption");
+    expect(screen.getByTestId("ms-after-1")).toHaveTextContent("→ airborne");
+    expect(screen.getByTestId("ms-after-1")).not.toHaveTextContent("resume"); // the rule is said once, in the section's head
+    expect(screen.getByTestId("rc-mission")).toHaveTextContent("no step resumes after a preemption");
   });
 
   it("lists an action the vehicle does not support greyed with the reason", async () => {
@@ -53,7 +56,8 @@ describe("the mission step editor", () => {
     await add("goTo");
     expect(screen.getByTestId("ms-hint-0")).toHaveTextContent("goTo needs airborne · take off first");
     expect(screen.getByTestId("ms-glyph-0")).toHaveTextContent("▲");
-    expect(screen.getByTestId("ms-valid")).toHaveTextContent("1 to fix");
+    expect(screen.getByTestId("ms-valid")).toHaveTextContent("▲ 1 · 1 step");
+    expect(screen.getByTestId("rc-status-mission")).toHaveTextContent("▲ 1"); // the header and the footer count the same
     await userEvent.click(screen.getByTestId("ms-fix-0"));
     expect(steps()).toEqual(["takeoff", "goTo"]);
     expect(screen.queryByTestId("ms-hint-0")).toBeNull();
@@ -97,8 +101,9 @@ describe("the mission step editor", () => {
     await add("explore");
     const radius = screen.getByTestId("ms-arg-1-radiusM");
     await userEvent.type(radius, "0");
-    expect(screen.getByTestId("ms-error-1")).toHaveTextContent("✕ step 2 · explore · radiusM 0 must be above 0");
-    expect(screen.getByTestId("ms-valid")).toHaveTextContent("1 to fix");
+    expect(screen.getByTestId("ms-error-1")).toHaveTextContent("✕ step 2 · explore radius must be above 0 m");
+    expect(screen.getByTestId("ms-valid")).toHaveTextContent("✕ 1 · 2 steps");
+    expect(screen.getByTestId("rc-status-mission")).toHaveTextContent("✕ 1");
     await userEvent.clear(radius);
     await userEvent.type(radius, "25");
     expect(screen.queryByTestId("ms-error-1")).toBeNull();
@@ -140,7 +145,7 @@ describe("the mission step editor", () => {
     await userEvent.clear(screen.getByTestId("ms-arg-1-durationS"));
     expect(screen.getByTestId("ms-note-1")).toHaveTextContent("never ends");
     expect(screen.getByTestId("ms-note-2")).toHaveTextContent("does not run");
-    expect(screen.getByTestId("ms-valid")).toHaveTextContent("to fix");
+    expect(screen.getByTestId("ms-valid")).toHaveTextContent("▲");
   });
 
   it("offers nothing to an agent with no key and says why", () => {
@@ -171,5 +176,22 @@ describe("the agents a mission can be given", () => {
     expect(scout.cruiseAltitudeM).toBe(25);
     expect(scout.base).toEqual({ x: 3, y: 3 });
     expect(missionAgentsOf(loaded, undefined).world).toBeUndefined();
+  });
+
+  it("reads the walls of the stored scenario for the map (runs of blocked cells), and marks what the agent does not know at the start", () => {
+    const doc = f2DiscoveryScenario();
+    const r = missionAgentsOf([{ id: "uav-001", key: "scout", kind: "uav" as const, config: { beliefs: { init: "unknown" } } }], doc);
+    expect(r.world?.walls?.cellsX).toBe(doc.world.sizeCells.x);
+    expect(r.world?.walls?.path).toMatch(/^M\d+ \d+h\d+v1h-\d+z/);
+    expect(r.agents[0]?.beliefInit).toBe("unknown");
+    expect(missionAgentsOf([{ id: "uav-001", key: "scout", kind: "uav" as const }], { not: "a scenario" }).world?.walls).toBeUndefined();
+  });
+
+  it("draws the walls under the pins, a hatch over what an agent with an unknown map does not know, a pin per go to point and the home", () => {
+    const walls = { cellsX: 4, cellsY: 4, path: "M1 1h2v1h-2z" };
+    render(<Harness agents={[{ ...SCOUT, beliefInit: "unknown" }]} world={{ ...WORLD, walls }} />);
+    expect(screen.getByTestId("ms-walls")).toHaveAttribute("d", walls.path);
+    expect(screen.getByTestId("ms-unknown")).toBeInTheDocument();
+    expect(screen.getByTestId("ms-map")).toHaveTextContent("hatched: unknown to the agent at the start");
   });
 });

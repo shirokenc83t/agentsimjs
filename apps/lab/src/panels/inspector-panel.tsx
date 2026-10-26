@@ -16,6 +16,7 @@ import { asResearcherCellBeliefs } from "./researcher-data.ts";
 import { RESEARCHER_BANNER, ResearcherSection } from "./researcher-section.tsx";
 import { useSimStream } from "./use-sim-stream.ts";
 import { MissionProgress } from "./mission-progress.tsx";
+import type { MissionView } from "./mission-view.ts";
 import { useAgentViews } from "./use-agent-views.ts";
 import { useMissionViews } from "./use-mission-views.ts";
 import { usePlanQueries } from "./use-plan-queries.ts";
@@ -109,7 +110,7 @@ function bodyRows(body: Record<string, unknown>): [string, string][] {
  * Researcher commands (ADR-0015 addition of 2026-10-12): world scope, recorded as run inputs. Every button is always
  * available: preconditions still apply, so a command the agent cannot run now is refused with its code, shown here.
  */
-function CommandsSection(props: { id: string; kind: string; body: Record<string, unknown>; source: RunSource; views: AgentViews | undefined; facts: AgentFacts | undefined }) {
+function CommandsSection(props: { id: string; kind: string; body: Record<string, unknown>; source: RunSource; views: AgentViews | undefined; facts: AgentFacts | undefined; mission?: MissionView | undefined }) {
   const { id, kind, body, source, facts } = props;
   const command = props.views?.command;
   const action = props.views?.action;
@@ -144,6 +145,11 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
   const batteryNote = batteryWarning(body, facts?.soc);
   return (
     <Section title="Commands (researcher, world scope)" testId="inspector-commands">
+      {props.mission !== undefined && (props.mission.status === "ready" || props.mission.status === "running") && (
+        <p className="muted pre-hint" data-testid="command-mission-note">
+          ◇ a command stops the mission: the step it is at is preempted and the mission does not go on
+        </p>
+      )}
       <Row k="send">
         <span className="muted">Send to… (G) in the Scene</span>
       </Row>
@@ -292,7 +298,7 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
         <FoldAll />
       </div>
       {mission !== undefined && <MissionProgress agentId={id} runId={run.runId} view={mission} />}
-      <CommandsSection id={id} kind={agent.kind} body={body} source={source} views={v} facts={agentFacts(run, snap.agentStatus, snap.entityIds, id)} />
+      <CommandsSection id={id} kind={agent.kind} body={body} source={source} views={v} facts={agentFacts(run, snap.agentStatus, snap.entityIds, id)} mission={mission} />
       <Unavailable source={source} feature="mindView" title="What the mind receives">
         <Fold id="mindView" title="What the mind receives" summary="the request the planner got and the plan it chose" bare>
           <MindViewSection source={source} agentId={id} runId={run.runId} />

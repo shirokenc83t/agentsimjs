@@ -119,6 +119,22 @@ describe("a mission on the F2 scene", () => {
     expect(starts(run).map((r) => payloadOf(r).name)).not.toContain("land");
   });
 
+  it("a researcher command during a step preempts it like a reflex and stops the mission: the command, the preempted end and the stop with its step are all in the trace, and nothing starts after", async () => {
+    const run = buildPresetRun({ preset: "f2-discovery", scripts: {}, runConfig: withMission(MISSION) });
+    // Until the explore step has begun, then a command to hold.
+    for (let t = 0; t < 6000 && !starts(run).some((r) => payloadOf(r).name === "explore"); t += 10) await runLockstep(run.world, run.scheduler, 10);
+    await runLockstep(run.world, run.scheduler, 20);
+    run.world.inject({ agentId: "uav-001", name: "hold", params: { durationS: 3 } });
+    await runLockstep(run.world, run.scheduler, 40);
+    const command = mine(run).find((r) => r.kind === "injected" && payloadOf(r).op === "command");
+    expect(payloadOf(command as TraceRecord)).toMatchObject({ name: "hold", ok: true });
+    expect(ends(run).find((r) => payloadOf(r).name === "explore")).toMatchObject({ payload: { status: "preempted" } });
+    const stop = decisions(run).find((d) => payloadOf(d).stop !== undefined) as TraceRecord;
+    expect(payloadOf(stop)).toMatchObject({ step: 3, of: 4, stop: { status: "preempted", action: "explore" } });
+    // The command's own action (hold) is the only start after the mission stopped; the return home never starts.
+    expect(starts(run).map((r) => payloadOf(r).name)).toEqual(["takeoff", "goTo", "explore", "hold"]);
+  });
+
   it("is refused at load when a step is not valid, naming the step, and is part of the effective configuration (hashed)", () => {
     const loaded = loadScenario(f2DiscoveryScenario());
     if (!loaded.ok) throw new Error(loaded.error.message);

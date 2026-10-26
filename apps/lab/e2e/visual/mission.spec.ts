@@ -19,8 +19,9 @@ async function settle(page: Page) {
 }
 
 /** A baseline and, for the review, the same image unmasked. */
-async function shot(page: Page, target: Locator, name: string, mask: Locator[] = []) {
+async function shot(page: Page, target: Locator, name: string, mask: Locator[] = [], hideCanvas = false) {
   if (REVIEW !== undefined) await target.screenshot({ path: `${REVIEW}/${name}.png`, animations: "disabled", caret: "hide" });
+  if (hideCanvas) await page.addStyleTag({ content: "canvas { visibility: hidden !important; }" });
   if (process.env["AGENTSIM_VISUAL_IMAGE"] === "1") await expect(target).toHaveScreenshot(`${name}.png`, { mask });
 }
 
@@ -56,19 +57,19 @@ for (const theme of THEMES) {
       await expect(panel.getByTestId("ms-empty")).toBeVisible();
       await section.scrollIntoViewIfNeeded();
       await settle(page);
-      await shot(page, section, `mission-editor-empty-${theme}`);
+      await shot(page, panel, `mission-editor-empty-${theme}`);
       await compose(page, panel);
       await expect(panel.getByTestId("ms-valid")).toContainText("✓ valid");
       await section.scrollIntoViewIfNeeded();
       await settle(page);
-      await shot(page, section, `mission-editor-full-${theme}`);
+      await shot(page, panel, `mission-editor-full-${theme}`);
       // An error in words (a radius of 0) and a step that cannot run where it is (a go to before the take off).
       await panel.getByTestId("ms-arg-2-radiusM").fill("0");
       await panel.getByTestId("ms-up-1").click();
       await expect(panel.getByTestId("ms-error-2")).toBeVisible();
       await expect(panel.getByTestId("ms-hint-0")).toBeVisible();
       await settle(page);
-      await shot(page, section, `mission-editor-error-${theme}`);
+      await shot(page, panel, `mission-editor-error-${theme}`);
     });
 
     test("a mission running: the Inspector, the Explorer and the Scene, and the Log with the decision records", async ({ page }) => {
@@ -83,10 +84,27 @@ for (const theme of THEMES) {
       await expect(page.getByTestId("inspector-mission")).toHaveAttribute("data-status", "running");
       await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 200", { timeout: 30_000 });
       await settle(page);
-      const mask = [page.locator(".telem"), page.getByTestId("status-recording-saved"), page.locator("canvas")];
-      await shot(page, page.getByTestId("inspector-mission"), `mission-inspector-running-${theme}`);
+      const mask = [page.locator(".telem"), page.getByTestId("status-recording-saved")];
+      await shot(page, page.getByTestId("inspector"), `mission-inspector-running-${theme}`);
       await shot(page, page.getByTestId("explorer"), `mission-explorer-${theme}`);
-      await shot(page, page.getByTestId("workspace-scene"), `mission-scene-${theme}`, mask);
+      await settle(page);
+      // The Scene with the tooltip of the UAV: its steps and their states. The baseline hides the canvas (WebGL is not compared) and keeps the labels and the tooltip.
+      // The pointer goes to where the UAV is drawn now (the scene eases toward the sim state): a hover is retried until the tooltip shows.
+      await expect
+        .poll(
+          async () => {
+            const at = await page.evaluate(() => window.__agentsim?.scene?.screenOf("uav-001"));
+            if (at !== undefined) {
+              await page.mouse.move(at.x + 1, at.y + 1);
+              await page.mouse.move(at.x, at.y);
+            }
+            return page.getByTestId("map-tooltip-mission").isVisible();
+          },
+          { timeout: 15_000 },
+        )
+        .toBe(true);
+      await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+      await shot(page, page.getByTestId("workspace-scene"), `mission-scene-${theme}`, mask, true);
       await openWorkspace(page, "debug");
       await page.getByTestId("log-filter").fill("kind:thought agent:uav-001 text:decision");
       await expect.poll(async () => Number(await page.getByTestId("event-scroller").getAttribute("data-count")), { timeout: 15_000 }).toBeGreaterThan(0);
@@ -109,7 +127,7 @@ for (const theme of THEMES) {
       await step(page, 1);
       await expect(page.getByTestId("inspector-mission")).toHaveAttribute("data-status", "stopped");
       await settle(page);
-      await shot(page, page.getByTestId("inspector-mission"), `mission-inspector-stopped-${theme}`);
+      await shot(page, page.getByTestId("inspector"), `mission-inspector-stopped-${theme}`);
     });
   });
 }

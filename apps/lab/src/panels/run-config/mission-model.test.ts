@@ -113,9 +113,10 @@ describe("whether each step can run, along the list", () => {
 
 describe("the arguments of a step", () => {
   it("are checked against the action's schema in words: a number below its minimum, a missing required field, an unknown field", () => {
-    expect(fieldIssues({ action: "explore", args: { radiusM: 0 } })).toEqual([expect.stringContaining("radiusM")]);
-    expect(fieldIssues({ action: "takeoff", args: {} })[0]).toContain("altitudeM");
-    expect(fieldIssues({ action: "goTo", args: { xM: 3 } })[0]).toContain("yM");
+    expect(fieldIssues({ action: "explore", args: { radiusM: 0 } })).toEqual(["radius must be above 0 m"]);
+    expect(fieldIssues({ action: "takeoff", args: {} })).toEqual(["altitude is required"]);
+    expect(fieldIssues({ action: "goTo", args: { xM: 3 } })).toEqual(["y is required"]);
+    expect(fieldIssues({ action: "explore", args: { radiusM: 0 } }).join(" ")).not.toContain("radiusM"); // never the key
     expect(fieldIssues({ action: "land", args: { z: 1 } })).not.toEqual([]);
     expect(fieldIssues({ action: "explore", args: { radiusM: 20 } })).toEqual([]);
   });

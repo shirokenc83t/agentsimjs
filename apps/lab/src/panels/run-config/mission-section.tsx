@@ -1,8 +1,8 @@
 import "../panels.css";
 import type { AgentFacts } from "@agentsim/core";
-import type { RunConfigDocument } from "@agentsim/scenarios";
+import { loadScenario, parseScenarioValue, type RunConfigDocument } from "@agentsim/scenarios";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { actionMenu, alongList, defaultArgs, fieldIssues, insertStep, missionOf, missionStatus, moveStep, removeStep, withMission, type MissionStep } from "./mission-model.ts";
+import { actionMenu, alongList, countsWords, defaultArgs, fieldProblems, insertStep, missionOf, missionStatus, moveStep, removeStep, withMission, type MissionStep } from "./mission-model.ts";
 
 /** One agent a mission can be given: only an agent with a key can have one (the run configuration names agents by key). */
 export interface MissionAgent {
@@ -11,6 +11,8 @@ export interface MissionAgent {
   readonly kind: "uav" | "ugv";
   /** The state it starts in, for the availability of the first steps. */
   readonly facts: AgentFacts;
+  /** What the agent knows of the map at the start (`unknown`, `prior`, `ideal`), when the run says. */
+  readonly beliefInit?: string | undefined;
   readonly cruiseAltitudeM: number | undefined;
   readonly start: { readonly x: number; readonly y: number } | undefined;
   readonly base: { readonly x: number; readonly y: number } | undefined;
@@ -20,6 +22,8 @@ export interface MissionAgent {
 export interface MissionWorld {
   readonly wM: number;
   readonly hM: number;
+  /** The walls of the world as one path in cell units (a rectangle per run of blocked cells, y up), with the size of the grid: what the map draws under the pins. */
+  readonly walls?: { readonly cellsX: number; readonly cellsY: number; readonly path: string };
 }
 
 const ARGS: Readonly<Record<string, readonly { key: string; label: string; unit: string }[]>> = {
@@ -71,7 +75,7 @@ const GLYPH = { ok: "✓", warn: "▲", err: "✕" } as const;
  * the run configuration (`minds.byAgent`), so it is in the run's hash and in the JSON view next to it. Keys: Insert adds after the selected step, Alt+Up and Alt+Down move it, Delete removes
  * it, Ctrl+Z undoes.
  */
-export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: RunConfigDocument) => void; agents: readonly MissionAgent[]; world: MissionWorld | undefined; pointedError: string | undefined }) {
+export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: RunConfigDocument) => void; agents: readonly MissionAgent[]; world: MissionWorld | undefined }) {
   const { draft, agents } = props;
   const withMissions = agents.filter((a) => missionOf(draft, a.key).length > 0);
   const [agentKey, setAgentKey] = useState(() => (withMissions[0] ?? agents[0])?.key ?? "");
@@ -162,7 +166,7 @@ export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: 
         <b>7 · MISSION</b>
         <span className="rule" />
         <span data-testid="rc-status-mission">
-          {status.errors > 0 ? <span className="st st-alm">✕ {status.errors}</span> : status.warnings > 0 ? <span className="st st-warn">▲ {status.warnings}</span> : <span className="st st-ok">✓</span>}
+          <span className={`st ${status.errors > 0 ? "st-alm" : status.warnings > 0 ? "st-warn" : "st-ok"}`}>{countsWords(status)}</span>
         </span>
       </h4>
       <div className="ms-head">
@@ -173,7 +177,9 @@ export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: 
             </option>
           ))}
         </select>
-        <span className="muted mono">sequence script · in the run config hash</span>
+        <span className="muted mono">
+          sequence script · in the run config hash · {rows.every((r) => !r.resume.startsWith("resumes")) ? "no step resumes after a preemption" : "a step marked ↻ resumes after a preemption"}
+        </span>
         <span className="sp" />
         {others.length > 0 && steps.length > 0 && (
           <select
@@ -209,7 +215,8 @@ export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: 
             {steps.map((s, i) => {
               const r = rows[i];
               if (!r) return null;
-              const issues = fieldIssues(s);
+              const problems = fieldProblems(s);
+              const issues = problems.map((p) => p.words);
               const glyph = issues.length > 0 ? GLYPH.err : r.ok && !r.blocked ? GLYPH.ok : GLYPH.warn;
               const tone = issues.length > 0 ? "alm" : r.ok && !r.blocked ? "ok" : "warn";
               return (
@@ -237,7 +244,7 @@ export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: 
                     <span className="ms-args">
                       {(ARGS[s.action] ?? []).map((a) => {
                         const v = (s.args as Record<string, unknown> | undefined)?.[a.key];
-                        return <ArgInput key={a.key} label={a.label} unit={a.unit} value={typeof v === "number" ? v : undefined} onChange={(n) => setArg(i, a.key, n)} testId={`ms-arg-${i}-${a.key}`} invalid={issues.some((m) => m.startsWith(a.key))} />;
+                        return <ArgInput key={a.key} label={a.label} unit={a.unit} value={typeof v === "number" ? v : undefined} onChange={(n) => setArg(i, a.key, n)} testId={`ms-arg-${i}-${a.key}`} invalid={problems.some((p) => p.key === a.key)} />;
                       })}
                       {s.action === "goTo" && (
                         <button type="button" className={`kt${picking === i ? " on" : ""}`} aria-pressed={picking === i} onClick={() => setPicking(picking === i ? undefined : i)} data-testid={`ms-pick-${i}`} data-tip="Pick the point on the map">
@@ -247,7 +254,7 @@ export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: 
                       {s.action === "returnToBase" && <span className="muted mono">H home{agent.base ? ` (${agent.base.x}, ${agent.base.y})` : ""}</span>}
                     </span>
                     <span className="ms-after muted mono" data-testid={`ms-after-${i}`}>
-                      {r.after === undefined ? "" : `→ ${r.after}`} · {r.resume}
+                      {[r.after === undefined ? "" : `→ ${r.after}`, r.resume.startsWith("resumes") ? "↻ resumes after a preemption" : ""].filter((x) => x !== "").join(" · ")}
                     </span>
                     <span className="ms-btns">
                       <button type="button" className="kt" disabled={i === 0} onClick={() => (commit(moveStep(steps, i, -1)), setSelected(i - 1))} aria-label={`Move step ${i + 1} up`} data-testid={`ms-up-${i}`}>
@@ -279,7 +286,7 @@ export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: 
                   )}
                   {issues.map((m) => (
                     <p key={m} className="ms-hint st-alm" data-testid={`ms-error-${i}`}>
-                      ✕ step {i + 1} · {s.action} · {m}
+                      ✕ step {i + 1} · {s.action} {m}
                     </p>
                   ))}
                   {r.note && (
@@ -321,11 +328,10 @@ export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: 
               </span>
             ) : (
               <span className={`st ${status.errors > 0 ? "st-alm" : "st-warn"}`}>
-                {status.errors > 0 ? "✕" : "▲"} {status.errors + status.warnings} to fix · {status.steps} steps · {agent.id}
+                {countsWords(status)} · {status.steps} step{status.steps === 1 ? "" : "s"} · {agent.id}
               </span>
             )}
             <span className="muted"> · {others.length === 0 ? "no other agent" : `${others.map((a) => a.id).join(", ")} keep their minds`}</span>
-            {props.pointedError && <span className="st st-alm"> · {props.pointedError}</span>}
           </p>
         </div>
         <MissionMap
@@ -362,6 +368,7 @@ function MissionMap(props: { world: MissionWorld | undefined; agent: MissionAgen
     <div className="ms-map" data-testid="ms-map">
       <p className="muted mono">
         {picking ? `click to set the point of step ${(props.picking as number) + 1} · Esc cancels` : "map of the world · pick a point with ⌖ on a go to step"}
+        {world.walls ? (agent.beliefInit === "unknown" ? " · walls as they are; hatched: unknown to the agent at the start" : " · walls as they are") : ""}
       </p>
       <svg
         viewBox={`0 0 ${W} ${H}`}
@@ -379,7 +386,14 @@ function MissionMap(props: { world: MissionWorld | undefined; agent: MissionAgen
         }}
         data-testid="ms-map-svg"
       >
+        <defs>
+          <pattern id="ms-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="6" className="ms-hatch-line" />
+          </pattern>
+        </defs>
         <rect className="ms-world" x={0} y={0} width={W} height={H} />
+        {world.walls && <path className="ms-wall" data-testid="ms-walls" d={world.walls.path} transform={`translate(0 ${H}) scale(${W / world.walls.cellsX} ${-H / world.walls.cellsY})`} />}
+        {agent.beliefInit === "unknown" && <rect className="ms-unknown" data-testid="ms-unknown" x={0} y={0} width={W} height={H} fill="url(#ms-hatch)" />}
         {path.length > 1 && <polyline className="ms-path" points={path.map((p) => `${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(" ")} />}
         {agent.base && (
           <text className="ms-pin" x={sx(agent.base.x)} y={sy(agent.base.y)} textAnchor="middle" dominantBaseline="middle">
@@ -400,6 +414,29 @@ function MissionMap(props: { world: MissionWorld | undefined; agent: MissionAgen
   );
 }
 
+/** The walls of a stored scenario document as the map draws them: the document is read with the scenario loader (so a document it refuses has no walls shown), runs of blocked cells row by row. */
+function wallsOf(scenario: unknown): MissionWorld["walls"] {
+  const parsed = parseScenarioValue(scenario);
+  if (!parsed.ok) return undefined;
+  const loaded = loadScenario(parsed.value);
+  if (!loaded.ok) return undefined;
+  const g = loaded.value.grid;
+  let path = "";
+  for (let j = 0; j < g.sizeY; j++) {
+    let i = 0;
+    while (i < g.sizeX) {
+      if (!g.isBlocked(i, j)) {
+        i++;
+        continue;
+      }
+      const from = i;
+      while (i < g.sizeX && g.isBlocked(i, j)) i++;
+      path += `M${from} ${j}h${i - from}v1h${from - i}z`;
+    }
+  }
+  return { cellsX: g.sizeX, cellsY: g.sizeY, path };
+}
+
 interface ScenarioView {
   readonly world?: { readonly sizeCells?: { readonly x: number; readonly y: number }; readonly resolutionM?: number };
   readonly agents?: readonly { readonly key?: string; readonly start?: { readonly xM: number; readonly yM: number; readonly zM?: number }; readonly base?: { readonly xM: number; readonly yM: number } }[];
@@ -413,7 +450,9 @@ export function missionAgentsOf(
   const doc = (scenario ?? {}) as ScenarioView;
   const res = doc.world?.resolutionM;
   const size = doc.world?.sizeCells;
-  const world = res !== undefined && size !== undefined ? { wM: size.x * res, hM: size.y * res } : undefined;
+  const baseWorld = res !== undefined && size !== undefined ? { wM: size.x * res, hM: size.y * res } : undefined;
+  const walls = baseWorld === undefined ? undefined : wallsOf(scenario);
+  const world = baseWorld === undefined ? undefined : { ...baseWorld, ...(walls === undefined ? {} : { walls }) };
   return {
     world,
     agents: agents.flatMap((a): MissionAgent[] => {
@@ -426,6 +465,7 @@ export function missionAgentsOf(
           key: a.key,
           kind: a.kind,
           facts: { kind: a.kind, airborne: a.kind === "uav" && (spec?.start?.zM ?? 0) > 0, soc: 1, hasBase: true, hasRangeSensor: (body?.sensors ?? []).some((x) => x.type !== "camera") },
+          beliefInit: (a.config as { beliefs?: { init?: unknown } } | undefined)?.beliefs?.init as string | undefined,
           cruiseAltitudeM: body?.cruiseAltitudeM,
           start: spec?.start ? { x: spec.start.xM, y: spec.start.yM } : undefined,
           base: spec?.base ? { x: spec.base.xM, y: spec.base.yM } : undefined,

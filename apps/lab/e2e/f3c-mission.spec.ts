@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadF2, openPanelTab, openWorkspace, step } from "./helpers.ts";
+import { loadF2, openPanelTab, openWorkspace, runCommand, step } from "./helpers.ts";
 
 // F3c M1: a mission composed in the run configuration from the UI for the F2 UAV, run, and followed in the Inspector, Explorer and player; a refused step says why.
 
@@ -37,7 +37,7 @@ test("composes the mission of the F2 UAV from the editor, runs it, and shows eac
 
   const mission = page.getByTestId("inspector-mission");
   await expect(mission).toBeVisible();
-  await expect(page.getByTestId("explorer-mission-uav-001")).toContainText("step 0/4");
+  await expect(page.getByTestId("explorer-mission-uav-001")).toContainText("0/4");
   await step(page, 1);
   await expect(page.getByTestId("mp-glyph-0")).toHaveText(/[✓▶]/);
   await expect(page.getByTestId("player-mission")).toContainText("uav-001 mission");
@@ -53,7 +53,7 @@ test("composes the mission of the F2 UAV from the editor, runs it, and shows eac
   expect(sawRunningThird).toBe(true);
   for (let i = 0; i < 4; i++) await expect(page.getByTestId(`mp-row-${i}`)).toHaveAttribute("data-state", "done");
   await expect(page.getByTestId("mp-stop")).toHaveCount(0);
-  await expect(page.getByTestId("explorer-mission-uav-001")).toContainText("step 4/4");
+  await expect(page.getByTestId("explorer-mission-uav-001")).toContainText("done · 4/4");
   await expect(page.getByTestId("player-mission")).toContainText("uav-001 mission 4 / 4 · done");
   await expect.poll(async () => (await page.evaluate(() => window.__agentsim?.scene?.overlays()))?.mission.coarseDashes).toBe(0);
 });
@@ -73,7 +73,30 @@ test("a step that cannot run is flagged in the editor with its reason and one-cl
   const mission = page.getByTestId("inspector-mission");
   await step(page, 1);
   await expect(mission).toHaveAttribute("data-status", "stopped");
-  await expect(page.getByTestId("mp-stop")).toContainText("Mission stopped at step 1 of 2 · explore refused: precondition_failed · step 2 not run");
+  await expect(page.getByTestId("mp-stop")).toContainText("Mission stopped at step 1 of 2 · explore needs airborne · uav-001 is on the ground · step 2 not run");
+  await expect(page.getByTestId("mp-stop")).not.toContainText("precondition_failed"); // words, never the code
+  await expect(page.getByTestId("mp-why-0")).toHaveAttribute("title", "precondition_failed"); // the code is in the tooltip
   await expect(page.getByTestId("mp-row-0")).toHaveAttribute("data-state", "refused");
   await expect(page.getByTestId("mp-row-1")).toHaveAttribute("data-state", "skipped");
+});
+
+test("a command from the researcher stops the mission: the Inspector says so before, and after it the step is preempted by the command, in words", async ({ page }) => {
+  test.setTimeout(120_000);
+  await loadF2(page, "discovery");
+  const panel = await openRunConfig(page);
+  await panel.getByTestId("ms-agent").selectOption("scout");
+  for (const a of ["takeoff", "goTo", "returnToBase"]) await add(page, a);
+  await panel.getByTestId("ms-arg-1-xM").fill("50");
+  await panel.getByTestId("ms-arg-1-yM").fill("20");
+  await runMission(page);
+  await expect(page.getByTestId("command-mission-note")).toContainText("a command stops the mission");
+  await step(page, 1);
+  await expect(page.getByTestId("inspector-mission")).toHaveAttribute("data-status", "running");
+  await runCommand(page, "Hold selected agent (uav-001)");
+  await step(page, 1);
+  const mission = page.getByTestId("inspector-mission");
+  await expect(mission).toHaveAttribute("data-status", "stopped");
+  await expect(page.getByTestId("mp-stop")).toContainText("stopped by a command from the researcher");
+  await expect(page.getByTestId("mp-stop")).not.toContainText("preempted:"); // words, not the code
+  await expect(page.getByTestId("command-mission-note")).toHaveCount(0); // nothing left to stop
 });

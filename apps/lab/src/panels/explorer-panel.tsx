@@ -6,6 +6,7 @@ import { usePolled, useSource } from "../services.tsx";
 import { actionLabel, actionState } from "./agent-views.ts";
 import { AttentionCounts } from "../shell/attention-counts.tsx";
 import { useAttention } from "./attention-store.ts";
+import { missionActivity, type MissionView } from "./mission-view.ts";
 import { useAgentViews } from "./use-agent-views.ts";
 import { useMissionViews } from "./use-mission-views.ts";
 
@@ -135,12 +136,14 @@ export function ExplorerPanel() {
                 <span className="muted">{a.key ?? ""}</span>
                 <span className="kind-tag mono">{a.kind.toUpperCase()}</span>
                 <span className={`mono st-${state}`} data-testid={`explorer-state-${a.id}`}>
-                  {STATE_GLYPH[state]} {actionLabel(action, views.get(a.id)?.reflex)}
-                  {missions.has(a.id) && (
-                    <span className="muted" data-testid={`explorer-mission-${a.id}`} title="mission: the step it is at, of all its steps">
-                      {" · step "}
-                      {missions.get(a.id)?.current}/{missions.get(a.id)?.of}
+                  {missions.has(a.id) ? (
+                    <span data-testid={`explorer-mission-${a.id}`} title={`mission: ${actionLabel(action, views.get(a.id)?.reflex)}`}>
+                      {missionActivity(missions.get(a.id) as MissionView, actionLabel(action, views.get(a.id)?.reflex))}
                     </span>
+                  ) : (
+                    <>
+                      {STATE_GLYPH[state]} {actionLabel(action, views.get(a.id)?.reflex)}
+                    </>
                   )}
                   {ideal.has(a.id) && (
                     <span className="kind-tag" data-testid={`explorer-ideal-${a.id}`} title="ideal: plans on the ground truth (baseline), not on its own map">

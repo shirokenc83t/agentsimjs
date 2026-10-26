@@ -14,7 +14,8 @@ import { useAttention } from "./attention-store.ts";
 import { sandboxTarget, useSandboxTarget, useSandboxView } from "./sandbox-store.ts";
 import { publishScene } from "./scene-handle.ts";
 import { publishSceneView } from "./scene-view-store.ts";
-import { missionBadge, missionLine, missionPoints } from "./mission-view.ts";
+import { MissionTooltip } from "./mission-progress.tsx";
+import { missionBadge, missionPoints, type MissionView } from "./mission-view.ts";
 import { useAgentViews } from "./use-agent-views.ts";
 import { useMissionViews } from "./use-mission-views.ts";
 import { useSandboxOverlay } from "./use-sandbox-overlay.ts";
@@ -211,6 +212,7 @@ export function ScenePanel() {
 
   // The tooltip of the agent under the pointer: the whole ID, its identity and what it is doing.
   const views = useAgentViews(source);
+  const areaRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | undefined>(undefined);
   useEffect(() => {
     if (!renderer) return;
@@ -334,7 +336,7 @@ export function ScenePanel() {
           )}
         </>
       )}
-      <div className={`scene-area${view === "2d" ? " view-2d" : ""}`} data-view={view}>
+      <div className={`scene-area${view === "2d" ? " view-2d" : ""}`} data-view={view} ref={areaRef}>
         <SceneView interpolator={source.poses} onRenderer={onRenderer} />
         {view === "2d" && (
           <div className="scene-2d" data-testid="scene-2d">
@@ -342,16 +344,12 @@ export function ScenePanel() {
           </div>
         )}
         {hover && hoverAgent && (
-          <div className="map-tooltip mono" style={{ left: hover.x + 14, top: hover.y + 14 }} role="tooltip" data-testid="map-tooltip">
+          <div className="map-tooltip mono" style={tooltipPlace(hover, areaRef.current)} role="tooltip" data-testid="map-tooltip">
             <div>
               {hoverAgent.id} · {shortLabel(hoverAgent.id)} · {hoverAgent.kind.toUpperCase()}
             </div>
             <div className="muted">{actionLabel(views.get(hoverAgent.id)?.action, views.get(hoverAgent.id)?.reflex)}</div>
-            {missions.has(hoverAgent.id) && (
-              <div className="muted" data-testid="map-tooltip-mission">
-                {missionLine(missions.get(hoverAgent.id), hoverAgent.id).replace(`${hoverAgent.id} `, "")}
-              </div>
-            )}
+            {missions.has(hoverAgent.id) && <MissionTooltip view={missions.get(hoverAgent.id) as MissionView} />}
             {hoverCondition && (
               <div className={hoverCondition.level === "alarm" ? "danger" : "warn"}>
                 {hoverCondition.glyph} {hoverCondition.label}
@@ -363,4 +361,20 @@ export function ScenePanel() {
       </div>
     </div>
   );
+}
+
+/**
+ * Where the tooltip of the agent under the pointer goes. The renderer reports the pointer in client coordinates, the tooltip is placed inside the Scene area: the area's own offset is taken off.
+ * It sits right of and below the pointer, and goes to its left or above when it would run out of the area (a mission's tooltip is tall and wide).
+ */
+function tooltipPlace(hover: { x: number; y: number }, area: HTMLElement | null): { left?: number; right?: number; top?: number; bottom?: number } {
+  const box = area?.getBoundingClientRect();
+  const x = hover.x - (box?.left ?? 0);
+  const y = hover.y - (box?.top ?? 0);
+  const w = box?.width ?? Infinity;
+  const h = box?.height ?? Infinity;
+  return {
+    ...(x > w - 300 ? { right: w - x + 14 } : { left: x + 14 }),
+    ...(y > h - 280 ? { bottom: h - y + 14 } : { top: y + 14 }),
+  };
 }

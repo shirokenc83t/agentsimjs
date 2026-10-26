@@ -1,6 +1,6 @@
 import type { TraceRecord } from "@agentsim/trace";
 import { describe, expect, it } from "vitest";
-import { missionBadge, missionLine, missionPoints, missionViewOf, missionViews } from "./mission-view.ts";
+import { argsWords, missionActivity, missionBadge, missionLine, missionPoints, missionViewOf, missionViews } from "./mission-view.ts";
 
 // The progress of a mission, derived from the run's trace records alone (F3c M1): the steps from the config record, each step's state from the decision that began it, the action it
 // started and how that ended; a stop with its step, cause and the rule after a preemption.
@@ -22,7 +22,7 @@ const STEPS = [{ action: "takeoff", args: { altitudeM: 20 } }, { action: "goTo",
 const config = () => rec("lifecycle", { op: "config", mind: { s1: { script: { name: "sequence", params: { steps: STEPS } } } } }, 0);
 const decision = (step: number, t: number, more: object = {}) => rec("thought", { op: "decision", step, of: STEPS.length, ...more }, t);
 const start = (id: string, name: string, t: number, cause: string) => rec("action", { op: "start", actionId: id, name }, t, { causeIds: [cause] });
-const end = (id: string, status: string, t: number, failure?: string) => rec("action", { op: "end", actionId: id, status, ...(failure ? { failure: { code: failure } } : {}) }, t);
+const end = (id: string, status: string, t: number, failure?: string, message?: string) => rec("action", { op: "end", actionId: id, status, ...(failure ? { failure: { code: failure, ...(message ? { message } : {}) } } : {}) }, t);
 
 /** Takes off (0 to 4 s) and goes to the point (4 s on, still running). */
 function running(): TraceRecord[] {
@@ -86,32 +86,34 @@ describe("the progress of a mission", () => {
 
   it("stops at a refused step: the step ✕ with the code, the later ones not run, and a line in words", () => {
     const d1 = decision(1, 0);
-    const rejected = rec("action", { op: "rejected", name: "takeoff", failure: "precondition_failed" }, 0, { causeIds: [d1.id] });
+    const rejected = rec("action", { op: "rejected", name: "takeoff", failure: { code: "precondition_failed", requires: "grounded", message: "takeoff requires grounded" } }, 0, { causeIds: [d1.id] });
     const stop = decision(1, 0.1, { stop: { status: "refused", action: "takeoff", code: "precondition_failed" } });
     const v = missionViewOf([config(), d1, rejected, stop], "uav-001");
     expect(v?.status).toBe("stopped");
     expect(v?.steps.map((s) => s.state)).toEqual(["refused", "skipped", "skipped", "skipped"]);
-    expect(v?.steps[0]?.detail).toBe("precondition_failed");
-    expect(v?.stop?.line).toBe("Mission stopped at step 1 of 4 · takeoff refused: precondition_failed · steps 2–4 not run");
+    expect(v?.steps[0]).toMatchObject({ words: "takeoff needs to be on the ground · uav-001 is airborne", code: "precondition_failed" });
+    expect(v?.stop?.line).toBe("Mission stopped at step 1 of 4 · takeoff needs to be on the ground · uav-001 is airborne · steps 2–4 not run");
+    expect(v?.stop?.line).not.toContain("precondition_failed"); // the code is in the tooltip and the trace, not in the line
     expect(missionBadge(v)).toBe("■ 1/4");
   });
 
   it("stops at a preempted step with the reflex that took the agent over, and says the action does not resume", () => {
     const records = running();
-    records.push(rec("reflex", { reflex: "battery", code: "battery_critical", then: "returnToBase" }, 38), end("a2", "preempted", 38, "preempted"));
+    records.push(rec("reflex", { reflex: "battery", code: "battery_critical", message: "battery at 15.0 % (critical 15 %)", then: "returnToBase" }, 38), end("a2", "preempted", 38, "preempted"));
     records.push(decision(2, 38.1, { stop: { status: "preempted", action: "goTo", code: "preempted" } }));
     const v = missionViewOf(records, "uav-001");
     expect(v?.steps.map((s) => s.state)).toEqual(["done", "preempted", "skipped", "skipped"]);
     expect(v?.steps[1]?.endedAtS).toBe(38);
-    expect(v?.stop?.line).toBe("Mission stopped at step 2 of 4 · goTo preempted at 38.0 s by battery critical · goTo does not resume after a preemption · steps 3–4 not run");
+    expect(v?.steps[1]?.words).toBe("preempted by the battery reflex · battery at 15.0 % (critical 15 %)");
+    expect(v?.stop?.line).toBe("Mission stopped at step 2 of 4 · goTo preempted at 38.0 s by the battery reflex · battery at 15.0 % (critical 15 %) · goTo does not resume · steps 3–4 not run");
   });
 
   it("stops at a failed step with its failure code; the last step has no later steps to name", () => {
     const records = running();
-    records.push(end("a2", "failed", 9, "unreachable"), decision(2, 9.1, { stop: { status: "failed", action: "goTo", code: "unreachable" } }));
+    records.push(end("a2", "failed", 9, "unreachable", "no path to the target"), decision(2, 9.1, { stop: { status: "failed", action: "goTo", code: "unreachable" } }));
     const v = missionViewOf(records, "uav-001");
-    expect(v?.steps[1]).toMatchObject({ state: "failed", detail: "unreachable" });
-    expect(v?.stop?.line).toBe("Mission stopped at step 2 of 4 · goTo failed at 9.0 s: unreachable · steps 3–4 not run");
+    expect(v?.steps[1]).toMatchObject({ state: "failed", words: "no path to the target", code: "unreachable" });
+    expect(v?.stop?.line).toBe("Mission stopped at step 2 of 4 · goTo failed at 9.0 s: no path to the target · steps 3–4 not run");
   });
 
   it("keeps the agents apart", () => {
@@ -130,5 +132,35 @@ describe("the progress of a mission", () => {
     expect(missionPoints(missionViewOf([config()], "uav-001"), { x: 0, y: 0 })).toBeDefined();
     const stopped = missionViewOf([...records, decision(2, 9, { stop: { status: "failed", action: "goTo", code: "unreachable" } })], "uav-001");
     expect(missionPoints(stopped, { x: 10, y: 10 })).toBeUndefined();
+  });
+
+  it("says a researcher command stopped the mission: the command's record sits in the step's time and no reflex does", () => {
+    const records = running();
+    records.push(rec("injected", { op: "command", name: "hold", ok: true }, 12), end("a2", "preempted", 12, "preempted", "replaced"), decision(2, 12.1, { stop: { status: "preempted", action: "goTo", code: "preempted" } }));
+    const v = missionViewOf(records, "uav-001");
+    expect(v?.steps[1]?.words).toBe("stopped by a command from the researcher");
+    expect(v?.stop?.line).toBe("Mission stopped at step 2 of 4 · goTo stopped by a command from the researcher at 12.0 s · goTo does not resume · steps 3–4 not run");
+  });
+
+  it("writes a step's arguments with their units and no keys", () => {
+    expect(argsWords("takeoff", { altitudeM: 20 })).toBe("20 m");
+    expect(argsWords("goTo", { xM: 50, yM: 20 })).toBe("(50, 20) m");
+    expect(argsWords("explore", { radiusM: 15 })).toBe("r 15 m");
+    expect(argsWords("hold", { durationS: 5 })).toBe("5 s");
+    expect(argsWords("hold", undefined)).toBe("until stopped");
+    expect(argsWords("returnToBase", undefined)).toBe("");
+  });
+
+  it("writes the Explorer's cell: the step's action and its number, the end, the stop with what the agent does now", () => {
+    expect(missionActivity(missionViewOf(running(), "uav-001") as never, "goTo · following")).toBe("▶ goTo · 2/4");
+    expect(missionActivity(missionViewOf([config()], "uav-001") as never, "idle")).toBe("○ not started · 0/4");
+    const stopped = missionViewOf([...running(), end("a2", "failed", 9, "unreachable", "no path"), decision(2, 9.1, { stop: { status: "failed", action: "goTo", code: "unreachable" } })], "uav-001");
+    expect(missionActivity(stopped as never, "idle")).toBe("■ stopped · 2/4 · idle");
+  });
+
+  it("finds the command even when its record comes after the end it caused (the runtime ends the step, then records the command)", () => {
+    const records = running();
+    records.push(end("a2", "preempted", 12, "preempted", "replaced"), rec("injected", { op: "command", name: "hold", ok: true }, 12), decision(2, 12.1, { stop: { status: "preempted", action: "goTo", code: "preempted" } }));
+    expect(missionViewOf(records, "uav-001")?.steps[1]?.words).toBe("stopped by a command from the researcher");
   });
 });

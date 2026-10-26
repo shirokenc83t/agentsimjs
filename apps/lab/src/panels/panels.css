@@ -30,7 +30,7 @@
 .cluster-chip { pointer-events: auto; cursor: pointer; padding: 0 6px; font-size: var(--type-label-size); color: var(--fg); background: var(--bg1); border: 1px solid var(--ln2); white-space: nowrap; }
 .cluster-chip:hover { background: var(--bg3); border-color: var(--fg2); }
 .cluster-chip[hidden] { display: none; }
-.map-tooltip { position: absolute; z-index: 5; pointer-events: none; padding: 4px 8px; background: var(--bg3); color: var(--fg); border: 1px solid var(--fg3); box-shadow: var(--float); font-size: var(--type-label-size); }
+.map-tooltip { position: absolute; width: max-content; max-width: 320px; z-index: 5; pointer-events: none; padding: 4px 8px; background: var(--bg3); color: var(--fg); border: 1px solid var(--fg3); box-shadow: var(--float); font-size: var(--type-label-size); }
 
 /* The Scene panel: its controls are a toolbar row under the title bar, a hint line when there is something to say, then the map. */
 .scene-col { position: absolute; inset: 0; display: flex; flex-direction: column; }
@@ -739,6 +739,8 @@
 .ms-map svg { display: block; background: var(--bg0); border: 1px solid var(--ln2); }
 .ms-map svg.picking { cursor: crosshair; outline: 1px solid var(--ac); }
 .ms-world { fill: none; }
+.ms-wall { fill: var(--fg3); opacity: 0.8; }
+.ms-hatch-line { stroke: var(--fg3); stroke-width: 1; opacity: 0.45; }
 .ms-path { fill: none; stroke: var(--fg3); stroke-width: 1; stroke-dasharray: 3 3; }
 .ms-dot { fill: var(--bg2); stroke: var(--ac); stroke-width: 1; }
 .ms-start { fill: var(--fg2); }
@@ -763,3 +765,4 @@
 .mp-args { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-state { white-space: nowrap; }
 .mp-dur { white-space: nowrap; }
+.mp-why { margin: 0 4px 3px 38px; font-size: var(--type-label-size); }

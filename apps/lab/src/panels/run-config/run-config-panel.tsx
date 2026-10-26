@@ -38,7 +38,7 @@ import {
 } from "./model.ts";
 import { headlessButton, headlessTip } from "../../sim/headless-names.ts";
 import { missionAgentsOf, MissionSection } from "./mission-section.tsx";
-import { alongList, missionOf, missionStatus } from "./mission-model.ts";
+import { alongList, countsWords, missionOf, missionStatus } from "./mission-model.ts";
 import { StrategyPicker } from "./strategy-picker.tsx";
 
 const ALGORITHMS = ["dijkstra", "astar", "hpa", "weighted-astar"] as const;
@@ -200,14 +200,18 @@ function RunConfigEditor(props: { loaded: Loaded }) {
   const validation = useMemo(() => validateDraft(draft, view, version), [draft, view, version]);
   // The missions: who can have one, what each says of itself (valid, or how many steps to fix), and what the run buttons say of them.
   const missions = useMemo(() => missionAgentsOf(run.loaded.agents, run.scenario), [run]);
-  const missionFix = useMemo(
+  const missionCounts = useMemo(
     () =>
-      missions.agents.reduce((n, a) => {
-        const st = missionStatus(missionOf(draft, a.key), a.facts);
-        return n + st.errors + st.warnings;
-      }, 0),
+      missions.agents.reduce(
+        (n, a) => {
+          const st = missionStatus(missionOf(draft, a.key), a.facts);
+          return { steps: n.steps + st.steps, errors: n.errors + st.errors, warnings: n.warnings + st.warnings, valid: n.valid && st.valid };
+        },
+        { steps: 0, errors: 0, warnings: 0, valid: true },
+      ),
     [missions, draft],
   );
+  const missionFix = missionCounts.errors + missionCounts.warnings;
   // The first step expected to be refused, so that running a list that will stop is a choice: `▲ 2 warnings · the mission will stop at step 3 (uav-001)`.
   const missionStop = useMemo(() => {
     for (const a of missions.agents) {
@@ -216,7 +220,6 @@ function RunConfigEditor(props: { loaded: Loaded }) {
     }
     return undefined;
   }, [missions, draft]);
-  const missionSteps = missions.agents.reduce((n, a) => n + missionOf(draft, a.key).length, 0);
   const sameAsRun = validation.ok && validation.resolved.runConfigHash === run.header.runConfigHash;
   const error = validation.ok ? undefined : validation.error;
   const warnings = validation.ok ? validation.resolved.warnings : [];
@@ -256,8 +259,8 @@ function RunConfigEditor(props: { loaded: Loaded }) {
                   {j.title} {j.id === "effective" ? (
                     <span className="muted">{validation.ok ? validation.resolved.agents.length : ""}</span>
                   ) : j.id === "presets" ? null : j.id === "mission" ? (
-                    <span className={missionFix > 0 || status.mission.errors > 0 ? "st st-warn" : "st st-ok"} data-testid="rc-jump-mission-state">
-                      {missionFix > 0 || status.mission.errors > 0 ? `▲ ${missionFix + status.mission.errors}` : `✓ ${missionSteps}`}
+                    <span className={`st ${missionCounts.errors > 0 ? "st-alm" : missionCounts.warnings > 0 ? "st-warn" : "st-ok"}`} data-testid="rc-jump-mission-state">
+                      {missionFix === 0 ? `✓ ${missionCounts.steps}` : countsWords({ ...missionCounts, valid: false })}
                     </span>
                   ) : (
                     <StatusGlyph status={status[j.id]} />
@@ -403,7 +406,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
             </section>
 
             {validation.ok && <EffectiveTable agents={validation.resolved.agents} />}
-            <MissionSection draft={draft} onChange={setDraft} agents={missions.agents} world={missions.world} pointedError={!validation.ok && validation.error.code === "invalid_mission" ? `${validation.error.code}: ${validation.error.message}` : undefined} />
+            <MissionSection draft={draft} onChange={setDraft} agents={missions.agents} world={missions.world} />
             <Presets draft={draft} scenario={draft.scenario} onLoad={setDraft} />
             </div>
           </div>
@@ -475,9 +478,9 @@ function RunConfigEditor(props: { loaded: Loaded }) {
         >
           {headlessButton(current.rerunCommands ?? 0)}
         </button>
-        {missionFix > 0 && missionStop !== undefined && (
+        {missionCounts.warnings > 0 && missionStop !== undefined && (
           <span className="st-warn mono" role="status" data-testid="rc-mission-stop">
-            ▲ {missionFix} warning{missionFix === 1 ? "" : "s"} · the mission will stop at step {missionStop.step} ({missionStop.agent})
+            ▲ {missionCounts.warnings} warning{missionCounts.warnings === 1 ? "" : "s"} · the mission will stop at step {missionStop.step} ({missionStop.agent})
           </span>
         )}
         <button type="button" className="btn" onClick={() => setDraft(props.loaded.initial)} data-testid="rc-revert">

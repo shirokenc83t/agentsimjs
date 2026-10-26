@@ -87,32 +87,53 @@ interface PropertySchema {
   readonly exclusiveMaximum?: number;
 }
 
-/** What is wrong with a step's arguments, in words (an empty list when they are valid): a missing field, an unknown one, a number outside its bounds, or the schema's own message. */
-export function fieldIssues(step: MissionStep): string[] {
+/** How an argument is named and measured for a reader (the key is for the document). */
+export const ARG_WORDS: Readonly<Record<string, { readonly label: string; readonly unit: string }>> = {
+  altitudeM: { label: "altitude", unit: "m" },
+  xM: { label: "x", unit: "m" },
+  yM: { label: "y", unit: "m" },
+  radiusM: { label: "radius", unit: "m" },
+  durationS: { label: "duration", unit: "s" },
+};
+const argWords = (k: string) => ARG_WORDS[k] ?? { label: k, unit: "" };
+const withUnit = (n: number, k: string) => `${n}${argWords(k).unit === "" ? "" : ` ${argWords(k).unit}`}`;
+
+export interface FieldProblem {
+  /** The argument it is about, when it is about one. */
+  readonly key?: string;
+  readonly words: string;
+}
+
+/** What is wrong with a step's arguments, in words that name each argument and give its unit (never the key); empty when they are valid. */
+export function fieldProblems(step: MissionStep): FieldProblem[] {
   const def = caps.list().find((c) => c.name === step.action);
-  if (!def) return [`${step.action} is not an action of the manifest`];
+  if (!def) return [{ words: `${step.action} is not an action of the manifest` }];
   const schema = def.paramsSchema as { properties?: Record<string, PropertySchema>; required?: readonly string[] };
   const props = schema.properties ?? {};
   const args = (step.args ?? {}) as Record<string, unknown>;
-  const out: string[] = [];
-  for (const k of schema.required ?? []) if (args[k] === undefined) out.push(`${k} is required`);
+  const out: FieldProblem[] = [];
+  for (const k of schema.required ?? []) if (args[k] === undefined) out.push({ key: k, words: `${argWords(k).label} is required` });
   for (const [k, v] of Object.entries(args)) {
     const p = props[k];
+    const label = argWords(k).label;
     if (p === undefined) {
-      out.push(`${k} is not an argument of ${step.action}`);
+      out.push({ key: k, words: `${label} is not an argument of ${step.action}` });
       continue;
     }
     if (p.type === "number" || p.type === "integer") {
-      if (typeof v !== "number" || !Number.isFinite(v)) out.push(`${k} must be a number`);
-      else if (p.minimum !== undefined && v < p.minimum) out.push(`${k} ${v} is below the minimum ${p.minimum}`);
-      else if (p.exclusiveMinimum !== undefined && v <= p.exclusiveMinimum) out.push(`${k} ${v} must be above ${p.exclusiveMinimum}`);
-      else if (p.maximum !== undefined && v > p.maximum) out.push(`${k} ${v} is above the maximum ${p.maximum}`);
+      if (typeof v !== "number" || !Number.isFinite(v)) out.push({ key: k, words: `${label} must be a number` });
+      else if (p.minimum !== undefined && v < p.minimum) out.push({ key: k, words: `${label} ${withUnit(v, k)} is below the minimum ${withUnit(p.minimum, k)}` });
+      else if (p.exclusiveMinimum !== undefined && v <= p.exclusiveMinimum) out.push({ key: k, words: `${label} must be above ${withUnit(p.exclusiveMinimum, k)}` });
+      else if (p.maximum !== undefined && v > p.maximum) out.push({ key: k, words: `${label} ${withUnit(v, k)} is above the maximum ${withUnit(p.maximum, k)}` });
     }
   }
   if (out.length > 0) return out;
   const v = caps.validate(step.action, step.args ?? {});
-  return v.ok ? [] : [v.error.message];
+  return v.ok ? [] : [{ words: v.error.message }];
 }
+
+/** The same, as lines of words. */
+export const fieldIssues = (step: MissionStep): string[] => fieldProblems(step).map((p) => p.words);
 
 export interface Fix {
   /** The step to insert, before the one at `at`. */
@@ -200,4 +221,10 @@ export function missionStatus(steps: readonly MissionStep[], start: AgentFacts):
   const errors = steps.filter((s) => fieldIssues(s).length > 0).length;
   const warnings = rows.filter((r) => !r.ok || r.blocked === true).length;
   return { steps: steps.length, errors, warnings, valid: errors === 0 && warnings === 0 };
+}
+
+/** The counts of a mission as every place says them: `✕ 1 · ▲ 2` (a part with nothing to count is left out), or `✓` when there is nothing to fix. */
+export function countsWords(st: MissionStatus): string {
+  const parts = [...(st.errors > 0 ? [`✕ ${st.errors}`] : []), ...(st.warnings > 0 ? [`▲ ${st.warnings}`] : [])];
+  return parts.length === 0 ? "✓" : parts.join(" · ");
 }

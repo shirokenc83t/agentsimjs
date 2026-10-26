@@ -13,5 +13,11 @@ export const summary = (r: TraceRecord): string => {
   const p = r.payload !== null && typeof r.payload === "object" ? (r.payload as Record<string, unknown>) : {};
   const op = typeof p["op"] === "string" ? p["op"] : "";
   const name = typeof p["name"] === "string" ? p["name"] : "";
+  // A mission's decision says where in the mission it is: `decision · step 2 of 4 · goTo`, `… · done`, `… · stopped`.
+  if (op === "decision" && typeof p["step"] === "number" && typeof p["of"] === "number") {
+    const d = p["decision"] as { kind?: unknown; name?: unknown } | undefined;
+    const what = p["stop"] !== undefined ? "stopped" : p["done"] === true ? "done" : typeof d?.name === "string" ? d.name : "";
+    return ["decision", `step ${p["step"]} of ${p["of"]}`, what].filter((x) => x !== "").join(" · ");
+  }
   return [op, name, r.detail ?? ""].filter((x) => x !== "").join(" · ");
 };
