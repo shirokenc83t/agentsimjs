@@ -234,7 +234,7 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
         <span className="live rp" data-testid="player-state">
           {GLYPH.replay} REPLAY
         </span>
-        <span className="trunc" data-testid="replay-label" title={`${live ? "Scrubbing" : "Replay of"} ${view.runId} from storage: the live run is not touched`}>
+        <span className="trunc hide-1100" data-testid="replay-label" title={`${live ? "Scrubbing" : "Replay of"} ${view.runId} from storage: the live run is not touched`}>
           {GLYPH.replay} {live ? "Scrubbing" : "Replay of"} {view.runId}
         </span>
         {derived !== undefined && <DerivedMark derived={derived} />}
