@@ -794,7 +794,7 @@
 .ah-row { display: flex; align-items: flex-start; border-bottom: 1px solid var(--ln); }
 .ah-gutter { flex: none; width: 92px; box-sizing: border-box; padding: 6px 8px; font-size: var(--type-label-size); color: var(--fg2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ah-track { position: relative; flex: none; }
-.ah-node { position: absolute; box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 0 4px; overflow: hidden; white-space: nowrap; font-size: var(--type-mono-size); cursor: pointer; background: var(--bg2); border: 1px solid var(--ln2); color: var(--fg); }
+.ah-node { user-select: none; position: absolute; box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 0 4px; overflow: hidden; white-space: nowrap; font-size: var(--type-mono-size); cursor: pointer; background: var(--bg2); border: 1px solid var(--ln2); color: var(--fg); }
 .ah-node.pt { min-width: 14px; border-color: transparent; background: transparent; overflow: visible; padding: 0; }
 .ah-node.pt .ah-label { padding-right: 2px; background: var(--bg0); }
 .ah-node:hover { background: var(--bg3); }
@@ -813,8 +813,8 @@
 .ah-glyph { flex: none; }
 .ah-label { overflow: hidden; text-overflow: ellipsis; }
 .ah-bracket { position: absolute; top: 0; bottom: 0; box-sizing: border-box; border-left: 1px dashed var(--fg3); border-right: 1px dashed var(--fg3); pointer-events: none; }
-.ah-note, .ah-span { position: absolute; left: 6px; top: 6px; font-size: var(--type-label-size); }
-.ah-span { left: auto; right: 4px; }
+.ah-note { position: absolute; left: 6px; top: 6px; font-size: var(--type-label-size); }
+.ah-span { font-size: var(--type-label-size); white-space: normal; }
 .ah-row.stretched { background: var(--bg1); }
 .ah-strip { position: relative; flex: none; height: 26px; margin-top: 4px; background: var(--bg1); border: 1px solid var(--ln); cursor: crosshair; touch-action: none; }
 .ah-ov { position: absolute; top: 8px; height: 8px; min-width: 1px; background: var(--fg3); }

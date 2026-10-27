@@ -123,7 +123,8 @@ export function AgentHistoryPanel(props: HistoryViewProps = {}) {
     const { commands, actions } = rootNodes(data.records, endS);
     const out: BuiltRow[] = [];
     const lay = (index: number, label: string, nodes: readonly HistoryNode[], opener: Placed | undefined, isReading: boolean): BuiltRow => {
-      const { placed, lanes } = layoutRow(nodes, { t0: axis.t0, t1: axis.t1, widthPx: width });
+      // What is outside the brushed window is not laid out (it would take lanes in a row it is not in).
+      const { placed, lanes } = layoutRow(nodes.filter((n) => n.t1 >= axis.t0 && n.t0 <= axis.t1), { t0: axis.t0, t1: axis.t1, widthPx: width });
       return { index, label, nodes, placed, lanes, opener, reading: isReading };
     };
     out.push(lay(1, "commands", commands, undefined, false));
@@ -292,18 +293,21 @@ export function AgentHistoryPanel(props: HistoryViewProps = {}) {
   const payload = rec !== undefined && rec.payload !== null && typeof rec.payload === "object" ? (rec.payload as Record<string, unknown>) : {};
   const ago = (n: HistoryNode) => `${n.t0.toFixed(1)} s · tick ${tickOf(n.t0, dt)}`;
 
-  const nodeView = (p: Placed, row: number, a = axis, w = width) => {
+  const nodeView = (p: Placed, row: number, siblings: readonly Placed[], a = axis, w = width) => {
     const n = p.node;
     const isSel = selected?.key === n.key;
     const isFocus = focus?.key === n.key;
     const point = n.t1 <= n.t0;
+    // A point's label has the room up to the next node of its sub-row (none: glyph only, the title says the rest); a selected one has all it needs.
+    const nextX = siblings.filter((q) => q.lane === p.lane && (q.x > p.x || (q.x === p.x && q.node.key > n.key))).reduce((m, q) => Math.min(m, q.x), w);
+    const room = isSel ? 400 : nextX - ((n.t0 - a.t0) / Math.max(1e-9, a.t1 - a.t0)) * w - 22;
     const x = ((n.t0 - a.t0) / Math.max(1e-9, a.t1 - a.t0)) * w;
     const cls = ["ah-node", n.kind, n.status ?? "", point ? "pt" : "bar", isSel ? "sel" : "", isFocus ? "focus" : "", isOpen(n.key) ? "opened" : ""].filter(Boolean).join(" ");
     return (
       <div
         key={n.key}
         className={`${cls}${n.kind === "idle" ? " hatched" : ""}`}
-        style={{ left: x, width: point ? undefined : Math.max(p.w, 3), top: ROW_PAD + p.lane * LANE_H, height: LANE_H - 4 }}
+        style={{ left: Math.max(0, x), width: point ? undefined : Math.max(3, Math.min(p.w + Math.min(0, x), w - Math.max(0, x))), top: ROW_PAD + p.lane * LANE_H, height: LANE_H - 4 }}
         role="button"
         tabIndex={-1}
         data-node={n.key}
@@ -313,12 +317,17 @@ export function AgentHistoryPanel(props: HistoryViewProps = {}) {
         data-t0={n.t0.toFixed(3)}
         data-x={x.toFixed(1)}
         aria-label={`${n.glyph} ${n.label}, ${ago(n)}`}
+        title={`${n.label} · ${ago(n)}`}
         onClick={() => select(n, row)}
         onDoubleClick={() => open(n, row)}
       >
         <span className="ah-glyph">{n.glyph}</span>
         {n.kind === "idle" || point ? null : <span className="ah-label">{n.label}</span>}
-        {point && n.kind !== "idle" ? <span className="ah-label pt">{n.label}</span> : null}
+        {point && n.kind !== "idle" && (row <= 2 || isSel) && room >= 28 ? (
+          <span className="ah-label pt" style={{ maxWidth: room }}>
+            {n.label}
+          </span>
+        ) : null}
         {n.kind === "idle" ? <span className="ah-label muted">idle</span> : null}
       </div>
     );
@@ -366,7 +375,7 @@ export function AgentHistoryPanel(props: HistoryViewProps = {}) {
               </div>
               <div className="ah-track" style={{ width, height: r.lanes * LANE_H + ROW_PAD * 2 }}>
                 {r.opener ? <div className="ah-bracket" style={{ left: r.opener.x, width: Math.max(4, r.opener.w) }} data-testid={`ah-bracket-${r.index}`} /> : null}
-                {r.placed.map((p) => nodeView(p, r.index))}
+                {r.placed.map((p) => nodeView(p, r.index, r.placed))}
                 {r.reading ? <span className="ah-note muted">reading…</span> : null}
                 {r.index >= 3 && r.nodes.length === 0 && !r.reading ? <span className="ah-note muted">no records below this one</span> : null}
               </div>
@@ -376,12 +385,12 @@ export function AgentHistoryPanel(props: HistoryViewProps = {}) {
             <div className="ah-row stretched" data-testid="ah-stretched">
               <div className="ah-gutter" title="the deepest row, stretched">
                 stretched
+                <div className="ah-span muted" data-testid="ah-stretched-span">
+                  {stretchAxis.t0.toFixed(1)}–{stretchAxis.t1.toFixed(1)} s
+                </div>
               </div>
               <div className="ah-track" style={{ width, height: stretched.lanes * LANE_H + ROW_PAD * 2 }}>
-                <span className="ah-span muted">
-                  {stretchAxis.t0.toFixed(1)} – {stretchAxis.t1.toFixed(1)} s
-                </span>
-                {stretched.placed.map((p) => nodeView(p, rows.length, stretchAxis))}
+                {stretched.placed.map((p) => nodeView(p, rows.length, stretched.placed, stretchAxis))}
               </div>
             </div>
           ) : null}

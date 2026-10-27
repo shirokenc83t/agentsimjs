@@ -70,6 +70,19 @@ describe("the layout", () => {
     expect(lanes).toBeGreaterThan(1);
   });
 
+  it("folds each op on its own: phases between iterations fold whatever the iterations do, and the wide iterations stay", () => {
+    seq = 0;
+    const start0 = start("a2", "explore", 0);
+    const kids: TraceRecord[] = [];
+    for (let i = 0; i < 4; i++) {
+      kids.push(rec("action", { op: "explore-iteration", iteration: i + 1 }, i * 25, { parentId: start0.id }));
+      for (let k = 0; k < 5; k++) kids.push(rec("action", { op: "phase", to: `p${k}` }, i * 25 + 0.1 * k, { parentId: start0.id }));
+    }
+    const { placed } = layoutRow(childNodes(kids, 100, 100), { t0: 0, t1: 100, widthPx: 600 });
+    expect(placed.filter((p) => p.node.kind === "group").map((p) => p.node.label)).toEqual(["… 4 phases ▸", "… 4 phases ▸", "… 4 phases ▸", "… 4 phases ▸"]);
+    expect(placed.filter((p) => p.node.label.startsWith("iteration"))).toHaveLength(4);
+  });
+
   it("folds runs of narrow bars of one op into one node with its members, and keeps the wide ones", () => {
     seq = 0;
     const start0 = start("a2", "explore", 0);
@@ -77,7 +90,7 @@ describe("the layout", () => {
     const nodes = childNodes(iterations, 100, 6);
     const folded = layoutRow(nodes, { t0: 0, t1: 100, widthPx: 600 });
     expect(folded.placed).toHaveLength(1);
-    expect(folded.placed[0]?.node).toMatchObject({ kind: "group", label: "… 12 explore-iterations ▸" });
+    expect(folded.placed[0]?.node).toMatchObject({ kind: "group", label: "… 12 iterations ▸" });
     expect(folded.placed[0]?.node.members).toHaveLength(12);
     // Stretched, the same nodes are wide enough to stay apart.
     expect(layoutRow(nodes, { t0: 0, t1: 6, widthPx: 600 }).placed).toHaveLength(12);

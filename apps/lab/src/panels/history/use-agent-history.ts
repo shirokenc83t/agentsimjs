@@ -1,6 +1,7 @@
 import type { StoragePorts } from "@agentsim/storage";
 import type { TraceRecord } from "@agentsim/trace";
 import { useEffect, useRef, useState } from "react";
+import { seqOfId } from "../debug/trace-tree.ts";
 import type { HistoryNode } from "./history-model.ts";
 
 // The reading behind the agent history (T-102): the first rows of one agent from storage, and the children of a node that is opened, by the parent and cause links (the indexes of
@@ -42,13 +43,21 @@ export async function readRootRecords(ports: Ports, runId: string, agentId: stri
 }
 
 /**
- * The children of a node: the records that have it as their parent (an action's phases, iterations, targets, replans and end), and, for a command, a decision or a reflex, the ones it
- * caused (a decision's action start, a command's effects). Both are read, any order; the model sorts.
+ * The children of a node: the records that have it as their parent (an action's phases, iterations, targets, replans and end) and the ones it caused (a decision's action start, a
+ * command's effects, the plans an iteration asked for). Both are read, any order; the model sorts.
  */
 export async function readChildren(ports: Ports, runId: string, node: HistoryNode): Promise<TraceRecord[]> {
   if (node.seq === undefined) return [];
-  const byParent = await readAll(ports, { runId, filter: `parent:#${node.seq}`, limit: PAGE }, 8000);
-  const byCause = node.kind === "command" || node.kind === "decision" || node.kind === "reflex" ? await readAll(ports, { runId, filter: `cause:#${node.seq}`, limit: PAGE }, 2000) : { records: [] as TraceRecord[] };
+  // An explore iteration has no records that name it as parent: its steps are the action's own children (phases, targets, replans) that fall in its span.
+  const owner = node.op === "explore-iteration" ? seqOfId(node.record?.parentId) : undefined;
+  const byParent =
+    owner === undefined
+      ? await readAll(ports, { runId, filter: `parent:#${node.seq}`, limit: PAGE }, 8000)
+      : await readAll(ports, { runId, filter: `parent:#${owner}`, limit: PAGE }, 8000).then((r) => ({
+          ...r,
+          records: r.records.filter((c) => c.simTime >= node.t0 - 1e-9 && c.simTime <= node.t1 + 1e-9 && (c.payload as { op?: unknown } | null)?.op !== "explore-iteration"),
+        }));
+  const byCause = await readAll(ports, { runId, filter: `cause:#${node.seq}`, limit: PAGE }, 2000);
   const seen = new Set<number>();
   return [...byParent.records, ...byCause.records].filter((r) => (seen.has(r.seq) ? false : (seen.add(r.seq), true))).sort((a, b) => a.seq - b.seq);
 }

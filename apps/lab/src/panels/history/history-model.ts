@@ -102,60 +102,84 @@ function withIdle(row: readonly HistoryNode[], endS: number): HistoryNode[] {
 const idleNode = (t0: number, t1: number): HistoryNode => ({ key: `i${t0.toFixed(3)}`, seq: undefined, record: undefined, kind: "idle", label: "idle", glyph: "○", t0, t1, canExplode: false });
 
 /**
- * The children of a node, from the records its `parent` and `cause` links reach (the caller reads them from storage, newest first or not, any order): phases and iterations of an
- * action become bars to the next one of their op, the rest are points. An explore iteration is labelled with its duration and its target when the records say them.
+ * The children of a node, from the records its `parent` and `cause` links reach (the caller reads them from storage, any order). A phase lasts until the next phase; an explore
+ * iteration is the bar from its `start` event to its `end` event (its end record is part of the bar, not a node of its own); the rest are points. An iteration is labelled with its
+ * number and centre, and with the groups it visited when its end says so. "Area first seen" is not in the records, so it is not shown.
  */
 export function childNodes(children: readonly TraceRecord[], endS: number, parentEndS?: number): HistoryNode[] {
   const sorted = [...children].sort((a, b) => a.seq - b.seq);
+  const limit = parentEndS ?? endS;
+  const numberOf = (p: Record<string, unknown>) => (typeof p["iteration"] === "number" ? p["iteration"] : undefined);
+  const iterEnds = new Map<number, TraceRecord>();
+  for (const r of sorted) {
+    const p = payloadOf(r);
+    const no = numberOf(p);
+    if (str(p["op"]) === "explore-iteration" && p["event"] === "end" && no !== undefined) iterEnds.set(no, r);
+  }
+  const starts = new Set(sorted.filter((r) => str(payloadOf(r)["op"]) === "explore-iteration" && payloadOf(r)["event"] !== "end").map((r) => numberOf(payloadOf(r))));
+  const nextOf = (from: number, op: string, test: (p: Record<string, unknown>) => boolean): TraceRecord | undefined => sorted.find((r) => r.seq > from && str(payloadOf(r)["op"]) === op && test(payloadOf(r)));
   const nodes: HistoryNode[] = [];
   for (const r of sorted) {
     const p = payloadOf(r);
     const op = str(p["op"]) ?? r.kind;
-    const bar = op === "phase" || op === "explore-iteration";
-    const label = op === "phase" ? `phase · ${str(p["to"]) ?? ""}`.trim() : op === "explore-iteration" ? iterationLabel(p) : r.kind === "action" && op === "start" ? `${str(p["name"]) ?? "action"}${argsLabel(str(p["name"]) ?? "", p["params"])}` : `${op}${str(p["name"]) ? ` · ${str(p["name"])}` : ""}${targetOf(p) ?? ""}`;
+    const no = numberOf(p);
+    // The end of an iteration whose start is here is drawn as the end of that bar.
+    if (op === "explore-iteration" && p["event"] === "end" && starts.has(no)) continue;
+    const isPhase = op === "phase";
+    const isIteration = op === "explore-iteration";
+    let t1 = r.simTime;
+    if (isPhase) t1 = nextOf(r.seq, "phase", () => true)?.simTime ?? Math.max(r.simTime, limit);
+    else if (isIteration) {
+      const end = no === undefined ? undefined : iterEnds.get(no);
+      t1 = end?.simTime ?? nextOf(r.seq, "explore-iteration", (q) => q["event"] !== "end")?.simTime ?? Math.max(r.simTime, limit);
+    }
+    const visited = isIteration && no !== undefined ? iterEnds.get(no)?.payload : undefined;
+    const visitedN = visited !== null && typeof visited === "object" ? (visited as { visited?: unknown }).visited : undefined;
+    const label = isPhase
+      ? `phase · ${str(p["to"]) ?? ""}`.trim()
+      : isIteration
+        ? `${iterationLabel(p)}${typeof visitedN === "number" ? ` · ${visitedN} group${visitedN === 1 ? "" : "s"}` : ""}`
+        : r.kind === "action" && op === "start"
+          ? `${str(p["name"]) ?? "action"}${argsLabel(str(p["name"]) ?? "", p["params"])}`
+          : op === "explore-target"
+            ? `target · ${str(p["event"]) ?? ""}${pointText(p["goal"] ?? p["group"]) ?? ""}`.replace(/ · $/, "")
+            : `${op}${str(p["name"]) ? ` · ${str(p["name"])}` : ""}${targetOf(p) ?? ""}`;
     const failed = op === "end" && str(p["status"]) === "failed";
     const status = op === "end" ? (str(p["status"]) as HistoryStatus | undefined) : undefined;
     nodes.push({
-      key: `${bar ? "b" : "p"}${r.seq}`,
+      key: `${isPhase || isIteration ? "b" : "p"}${r.seq}`,
       seq: r.seq,
       record: r,
       kind: r.kind === "reflex" ? "reflex" : failed ? "failure" : "record",
       label,
       glyph: r.kind === "reflex" ? "▲" : status !== undefined ? STATUS_GLYPH[status] : "▪",
       t0: r.simTime,
-      t1: r.simTime,
+      t1: Math.max(t1, r.simTime),
       status,
       op,
       canExplode: true,
     });
   }
-  // A phase or an iteration lasts until the next one of its op (or the end of what it is part of).
-  const last = new Map<string, number>();
-  const out: HistoryNode[] = nodes.map((n) => ({ ...n }));
-  const mutable = out as { -readonly [K in keyof HistoryNode]: HistoryNode[K] }[];
-  mutable.forEach((n, i) => {
-    if (n.key.startsWith("b")) {
-      const prev = last.get(n.op ?? "");
-      if (prev !== undefined) (mutable[prev] as { t1: number }).t1 = n.t0;
-      last.set(n.op ?? "", i);
-    }
-  });
-  for (const i of last.values()) (mutable[i] as { t1: number }).t1 = Math.max((mutable[i] as { t0: number }).t0, parentEndS ?? endS);
-  return mutable;
+  return nodes;
 }
 
-function targetOf(p: Record<string, unknown>): string | undefined {
-  const t = (p["target"] ?? p["frontier"]) as { xM?: unknown; yM?: unknown; x?: unknown; y?: unknown } | undefined;
+/** A point written as `(x, y)` from `[x, y]` or `{ xM, yM }` (whole metres), or undefined. */
+function pointText(v: unknown): string | undefined {
+  if (Array.isArray(v) && typeof v[0] === "number" && typeof v[1] === "number") return ` (${v[0].toFixed(0)}, ${v[1].toFixed(0)})`;
+  const t = v as { xM?: unknown; yM?: unknown; x?: unknown; y?: unknown } | null | undefined;
   const x = typeof t?.xM === "number" ? t.xM : typeof t?.x === "number" ? t.x : undefined;
   const y = typeof t?.yM === "number" ? t.yM : typeof t?.y === "number" ? t.y : undefined;
   return x !== undefined && y !== undefined ? ` (${x.toFixed(0)}, ${y.toFixed(0)})` : undefined;
 }
 
-/** `iteration 6`, with the target when the record says it: the duration is the bar's own length. "Area first seen" is not in the records, so it is not shown. */
+const targetOf = (p: Record<string, unknown>): string | undefined => pointText(p["target"] ?? p["frontier"] ?? p["goal"]);
+
+/** `iteration 6 (x, y)` with the centre (or the target) when the record says it: the duration is the bar's own length. */
 function iterationLabel(p: Record<string, unknown>): string {
   const n = typeof p["iteration"] === "number" ? p["iteration"] : typeof p["n"] === "number" ? p["n"] : undefined;
-  return `iteration${n === undefined ? "" : ` ${n}`}${targetOf(p) ?? ""}`;
+  return `iteration${n === undefined ? "" : ` ${n}`}${pointText(p["centre"]) ?? targetOf(p) ?? ""}`;
 }
+
 
 // ---- layout ------------------------------------------------------------------------------------------------------------------------
 
@@ -167,6 +191,9 @@ export interface Placed {
   readonly lane: number;
 }
 
+/** What a folded run is called in its label ("… 37 iterations ▸"). */
+const GROUP_NAME: Readonly<Record<string, string>> = { "explore-iteration": "iterations", phase: "phases", "explore-target": "targets", replan: "replans", recovery: "recoveries", start: "actions", end: "ends" };
+
 /** What a node of this width is drawn as: bars narrower than `minPx` of one op in a run fold into one group node. */
 export function layoutRow(nodes: readonly HistoryNode[], axis: { readonly t0: number; readonly t1: number; readonly widthPx: number }, opts: { readonly minPx?: number; readonly foldAt?: number } = {}): { placed: Placed[]; lanes: number } {
   const minPx = opts.minPx ?? 6;
@@ -174,28 +201,31 @@ export function layoutRow(nodes: readonly HistoryNode[], axis: { readonly t0: nu
   const span = Math.max(1e-9, axis.t1 - axis.t0);
   const px = (t: number) => ((t - axis.t0) / span) * axis.widthPx;
   const sorted = [...nodes].sort((a, b) => a.t0 - b.t0 || (a.seq ?? -1) - (b.seq ?? -1));
-  // Fold runs of narrow bars of one op.
-  const folded: HistoryNode[] = [];
-  let run: HistoryNode[] = [];
-  const flush = () => {
-    if (run.length >= foldAt) {
-      const first = run[0] as HistoryNode;
-      const last = run[run.length - 1] as HistoryNode;
-      const op = first.op ?? "record";
-      folded.push({ key: `g${first.seq ?? first.key}-${run.length}`, seq: undefined, record: undefined, kind: "group", label: `… ${run.length} ${op}${op.endsWith("s") ? "" : "s"} ▸`, glyph: "▪", t0: first.t0, t1: Math.max(last.t1, last.t0), op, canExplode: true, members: run });
-    } else folded.push(...run);
-    run = [];
-  };
-  for (const n of sorted) {
-    const narrow = n.t1 > n.t0 && px(n.t1) - px(n.t0) < minPx;
-    if (narrow && (run.length === 0 || run[0]?.op === n.op)) run.push(n);
-    else {
-      flush();
-      if (narrow) run.push(n);
-      else folded.push(n);
+  // Fold the runs of narrow nodes of one op (each op on its own: phases and iterations interleave in time, and the phases fold whatever the iterations do): a run is nodes in
+  // time order, each narrower than `minPx` and no more than two widths apart from the one before it.
+  const foldable = (n: HistoryNode) => (n.kind === "action" || n.kind === "record") && px(n.t1) - px(n.t0) < minPx;
+  const keep: HistoryNode[] = sorted.filter((n) => !foldable(n));
+  const byOp = new Map<string, HistoryNode[]>();
+  for (const n of sorted) if (foldable(n)) byOp.set(n.op ?? "record", [...(byOp.get(n.op ?? "record") ?? []), n]);
+  const folded: HistoryNode[] = [...keep];
+  for (const [op, list] of byOp) {
+    let run: HistoryNode[] = [];
+    const flush = () => {
+      if (run.length >= foldAt) {
+        const first = run[0] as HistoryNode;
+        const last = run[run.length - 1] as HistoryNode;
+        folded.push({ key: `g${op}-${first.seq ?? first.key}-${run.length}`, seq: undefined, record: undefined, kind: "group", label: `… ${run.length} ${GROUP_NAME[op] ?? `${op}s`} ▸`, glyph: "▪", t0: first.t0, t1: Math.max(last.t1, last.t0), op, canExplode: true, members: run });
+      } else folded.push(...run);
+      run = [];
+    };
+    for (const n of list) {
+      const prev = run[run.length - 1];
+      if (prev !== undefined && px(n.t0) - px(prev.t1) > minPx * 2) flush();
+      run.push(n);
     }
+    flush();
   }
-  flush();
+  folded.sort((a, b) => a.t0 - b.t0 || (a.seq ?? -1) - (b.seq ?? -1) || a.key.localeCompare(b.key));
   // Stagger what overlaps, greedily in time and seq order (deterministic).
   const laneEnds: number[] = [];
   const placed: Placed[] = folded.map((node) => {

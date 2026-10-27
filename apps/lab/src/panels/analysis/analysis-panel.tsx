@@ -4,7 +4,7 @@ import { useKnowledgeBand } from "../../shell/use-knowledge.ts";
 import { findingsOf } from "./findings.ts";
 import { parseFilter, type FilterAst, type TraceRecord } from "@agentsim/trace";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePolled, useServices, useSource } from "../../services.tsx";
+import { useAppActions, usePolled, useServices, useSource } from "../../services.tsx";
 import { shownChoices, toggleChoice, withTermValues } from "../debug/filter-text.ts";
 import { markOf } from "../debug/marks.ts";
 import { useJump } from "../debug/use-jump.ts";
@@ -42,6 +42,7 @@ export function AnalysisPanel() {
   const runId = snap.runId;
   const data = useRunData(storage, runId);
   const jump = useJump(snap);
+  const { openPanel } = useAppActions();
   const cursor = useUiContext((s) => s.simTime);
   const timeSel = useUiContext((s) => s.timeSelection);
   const picked = useUiContext((s) => s.selectedRecord);
@@ -212,7 +213,11 @@ export function AnalysisPanel() {
             aria-pressed={agentsOn.has(id)}
             data-testid={`an-agent-${id}`}
             data-tip="click to show or hide this agent, shift+click to show it alone"
-            onClick={(e) => setFilter(toggleChoice(text, "agent", id, allAgents, e.shiftKey))}
+            onClick={(e) => {
+              setFilter(toggleChoice(text, "agent", id, allAgents, e.shiftKey));
+              // Showing an agent alone makes it the subject: its history and audit are one key away.
+              if (e.shiftKey) useUiContext.getState().select({ kind: "agent", id });
+            }}
           >
             <span className="agent-swatch" style={{ ["--swatch" as string]: subjectColor(identityOf(indexOf(id)).colorIndex, selected?.kind === "agent" ? selected.id : undefined, id) }} /> {id}
           </button>
@@ -224,6 +229,9 @@ export function AnalysisPanel() {
           </button>
         ))}
         <span className="sep" aria-hidden="true" />
+        <button type="button" className="kt" disabled={selected?.kind !== "agent"} onClick={() => openPanel("agentAudit")} data-testid="an-history" data-tip="The history and audit of the selected agent (H)">
+          history and audit · H
+        </button>
         <button type="button" className={`kt${showMarkers ? "" : " off"}`} aria-pressed={showMarkers} data-testid="an-markers" data-tip="The events drawn on the paths: dots by kind, flags for failures and reflexes" onClick={() => setShowMarkers((v) => !v)}>
           markers
         </button>
