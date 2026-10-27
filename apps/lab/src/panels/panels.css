@@ -848,7 +848,7 @@
 .aa-row.failure td:nth-child(3), .aa-row.reflex .ah-glyph, .aa-row.refusal .ah-glyph { color: var(--alm); }
 .aa-row.stop td { font-weight: 600; }
 .aa-row.dim { opacity: 0.4; }
-.aa-row.now td:first-child { box-shadow: inset 2px 0 0 var(--ac); }
+.aa-row.now td:first-child { box-shadow: inset 1px 0 0 var(--ac); }
 .aa-row.sel { background: var(--bg3); box-shadow: inset 1px 0 0 var(--ac); }
 .aa-right { min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; background: var(--bg0); }
 .asv-chart .mark circle { fill: none; stroke: var(--ac); stroke-width: 2; }

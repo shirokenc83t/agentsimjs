@@ -157,7 +157,7 @@ test("a mission's chain is three levels in the history: a decision opens into th
   await expect(decision).toContainText("decision · step 1 of 2");
   await decision.dblclick();
   const started = page.getByTestId("ah-row-3").locator('[data-kind="record"]').first();
-  await expect(started).toContainText("takeoff", { timeout: 15_000 });
+  await expect(started).toHaveAttribute("title", /takeoff/, { timeout: 15_000 });
   await started.dblclick();
   await expect(page.getByTestId("ah-row-4")).toBeVisible();
   await expect.poll(async () => await page.getByTestId("ah-row-4").locator("[data-node]").count(), { timeout: 15_000 }).toBeGreaterThan(0);
