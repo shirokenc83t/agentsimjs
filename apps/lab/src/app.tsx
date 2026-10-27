@@ -309,7 +309,7 @@ export function App() {
     setActiveLayout(undefined);
   }, []);
   enterLogsRef.current = () => enterBuiltin(DEBUG_LOGS_LAYOUT);
-  openHistoryRef.current = () => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, "agentHistory");
+  openHistoryRef.current = () => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, workspaceRef.current === "analysis" ? "agentAudit" : "agentHistory");
   openGraphRef.current = () => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, "traceGraph");
   const cycleLayout = useCallback(() => {
     const list = LAYOUT_VARIANTS[workspace] ?? [];
@@ -486,7 +486,7 @@ export function App() {
       { id: "theme.toggle", title: "Theme: toggle dark and light", group: "Theme", keys: "ctrl+shift+L", run: () => setTheme(getThemeState().resolved === "dark" ? "light" : "dark") },
       { id: "panel.perf", title: "Open the Performance window", group: "Panel", run: openPerformance },
       { id: "panel.open.traceGraph", title: "Open panel: Trace graph", group: "Panel", keys: "T", run: () => dockRef.current && presetRef.current && openPanel(dockRef.current, presetRef.current, "traceGraph") },
-      { id: "panel.open.agentHistory", title: "Open panel: Agent history (the selected agent)", group: "Panel", keys: "H", run: () => openHistoryRef.current() },
+      { id: "panel.open.agentHistory", title: "Open panel: Agent history, or in Analysis its history and audit (the selected agent)", group: "Panel", keys: "H", run: () => openHistoryRef.current() },
       ...panelCommands,
     ],
     [ready, sim, storage, resetLayouts, resetLayout, workspace, selectLayout, cycleLayout, setTheme, openPerformance, resimulateWindow, view?.runId, loadDemo, loadReference, rerunCurrent, rerunInMode, runHeadless, rerunCommands, otherMode, runBusy, run, agentCommands, panelCommands],

@@ -61,22 +61,70 @@ test("the history opens from the Explorer with H: commands and actions on one ax
   await expect(page.getByTestId("ah-stretched")).toHaveCount(0);
 });
 
-test("the history is a tab in Analysis, opened for the selected agent, and the side panel sends the Log to this agent and a window", async ({ page }) => {
+test("history and audit is one tab in Analysis: the audit table with reasons and causes, the brush of the compact history filters it, a click on a chart point says where the value comes from", async ({ page }) => {
   test.setTimeout(240_000);
   await recorded(page, 3);
   await page.getByTestId(`explorer-row-${AGENT}`).click();
   await openWorkspace(page, "analysis");
   await expect(page.getByTestId("analysis")).toHaveAttribute("data-status", "ready", { timeout: 60_000 });
   await page.keyboard.press("h");
-  await expect(page.getByTestId("agent-history")).toBeVisible();
-  await expect(page.getByRole("tab", { name: `${AGENT} history` })).toBeVisible();
+  const audit = page.getByTestId("agent-audit");
+  await expect(audit).toBeVisible();
+  await expect(page.getByRole("tab", { name: `${AGENT} · history and audit` })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Analysis/ })).toBeVisible();
+  await expect(page.getByTestId("aa-findings")).toContainText(`${AGENT} ran`, { timeout: 20_000 });
 
-  const takeoff = page.getByTestId("ah-row-2").locator('[data-kind="action"]').first();
-  await expect(takeoff).toBeVisible({ timeout: 20_000 });
-  await takeoff.click();
-  await expect(page.getByTestId("ah-log")).toContainText(`Log: this agent`);
-  await expect(page.getByTestId("ah-debug")).toContainText("→ Debug at");
+  // The audit: one row per action with its outcome and reason; the compact history is on top with a way to the full one.
+  await expect(page.getByTestId("agent-history-compact")).toBeVisible();
+  await expect(page.getByTestId("ah-open-full")).toContainText("open full history (H)");
+  const rows = page.getByTestId("aa-table").locator('tr[data-kind="action"]');
+  await expect.poll(async () => await rows.count(), { timeout: 20_000 }).toBeGreaterThan(0);
+  await expect(rows.first()).toContainText(/✓|✕|▲|▶/);
+  await expect(page.getByTestId("aa-count")).toContainText("whole run");
+  // A row click moves the shared record and the cursor.
+  const explore = page.getByTestId("aa-table").locator('tr[data-kind="action"]', { hasText: "explore" }).first();
+  await explore.click();
+  await expect(explore).toHaveClass(/sel/);
+  const seq = await explore.getAttribute("data-seq");
+  expect(Number(seq)).toBeGreaterThanOrEqual(0);
+
+  // The brush on the compact history filters the audit: a stretch that holds no explore row leaves it out.
+  const strip = page.getByTestId("ah-overview");
+  const box = await strip.boundingBox();
+  if (box === null) throw new Error("no overview strip");
+  const before = await page.getByTestId("aa-table").locator("tbody tr").count();
+  await page.mouse.move(box.x + 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.02, box.y + box.height / 2);
+  await page.mouse.up();
+  await page.mouse.move(box.x + box.width * 0.9, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2);
+  await page.mouse.up();
+  await expect(page.getByTestId("ah-brush")).toBeVisible();
+  await expect(page.getByTestId("aa-count")).not.toContainText("whole run");
+  expect(await page.getByTestId("aa-table").locator("tbody tr").count()).toBeLessThanOrEqual(before);
+  await page.getByTestId("ah-reset-view").click();
+  await expect(page.getByTestId("aa-count")).toContainText("whole run");
+
+  // Provenance: a click on a point of a chart marks it and the panel says where the value comes from; Esc clears it.
+  await expect(page.getByTestId("aa-prov-empty")).toBeVisible();
+  const chart = audit.locator('[data-testid^="series-"] svg').first();
+  await expect(chart).toBeVisible({ timeout: 20_000 });
+  const spot = await chart.evaluate((svg) => {
+    const line = svg.querySelector("polyline.line");
+    const first = (line?.getAttribute("points") ?? "").split(" ")[1] ?? "";
+    const [x, y] = first.split(",").map(Number);
+    const r = svg.getBoundingClientRect();
+    return { x: r.left + (x ?? 0), y: r.top + (y ?? 0) };
+  });
+  await page.mouse.click(spot.x, spot.y);
+  await expect(page.getByTestId("aa-prov-lead")).toBeVisible();
+  await expect(page.getByTestId("aa-prov-lead")).toContainText(/sample of agent\.(soc|speedMps) at tick|compute record/);
+  await expect(page.getByTestId("aa-prov-chain").locator("li").first()).toBeVisible();
+  await expect(page.locator('[data-testid^="series-mark-"]')).toHaveCount(1);
+  await audit.press("Escape");
+  await expect(page.getByTestId("aa-prov-empty")).toBeVisible();
 });
 
 test("a mission's chain is three levels in the history: a decision opens into the action it started, which opens into its own steps", async ({ page }) => {

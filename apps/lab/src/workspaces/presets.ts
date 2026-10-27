@@ -49,6 +49,8 @@ export const TRACE_GRAPH_WINDOW: PresetPanel = { id: "traceGraph", floating: { w
  * (`openPanel` docks it there). In no preset: it is opened for the selected agent (H, the Inspector's ID card, the palette).
  */
 export const HISTORY_WINDOW: PresetPanel = { id: "agentHistory", floating: { width: 1240, height: 640, collapsed: false } };
+/** The history and audit of the selected agent (T-103): a tab beside the analysis view in Analysis; elsewhere a window like the history's. */
+export const AUDIT_WINDOW: PresetPanel = { id: "agentAudit", floating: { width: 1240, height: 700, collapsed: false } };
 /** The SQL results pinned in a window (U-010 section 5): opened from the console, in no preset. */
 export const SQL_RESULT_WINDOW: PresetPanel = { id: "sqlResult", floating: { width: 760, height: 420, collapsed: false } };
 /** The windows of the Scene (ADR-0042 section 8): all start collapsed, in one row along the bottom edge of the map (the Overview at the left, the Legend and the Performance window at the right) so that they hide none of it; opened, each grows from there. */

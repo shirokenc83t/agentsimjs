@@ -226,6 +226,9 @@ export function valueAtTime(points: readonly SeriesPoint[], t: number): number |
 export interface SeriesPoint {
   readonly t: number;
   readonly v: number;
+  /** Where the value comes from: the tick of a metric sample or of a plan's completion, and the record a planner value is (provenance). */
+  readonly tick?: number;
+  readonly seq?: number;
 }
 
 /** One series of one agent, and where it comes from: a recorded `metric` or the `compute` records of the planner (there is no metric for those). */
@@ -257,7 +260,7 @@ export function metricSeriesOf(samples: readonly { readonly source: string; read
   }
   return [...by.entries()]
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-    .map(([key, e]) => ({ key, agentId: e.agentId, name: e.def.name, unit: e.def.unit, source: "metric" as const, points: e.pts.sort((a, b) => a.tick - b.tick).map(({ t, v }) => ({ t, v })) }));
+    .map(([key, e]) => ({ key, agentId: e.agentId, name: e.def.name, unit: e.def.unit, source: "metric" as const, points: e.pts.sort((a, b) => a.tick - b.tick).map(({ t, v, tick }) => ({ t, v, tick })) }));
 }
 
 /**
@@ -271,8 +274,8 @@ export function computeSeriesOf(records: readonly TraceRecord[]): AnalysisSeries
     if (r.kind !== "compute" || r.agentId === undefined) continue;
     const p = r.payload as { op?: unknown; expansionsCharged?: unknown; submittedTick?: unknown; completedTick?: unknown } | null;
     if (p === null || typeof p !== "object" || p.op !== "plan") continue;
-    if (typeof p.expansionsCharged === "number") (exp.get(r.agentId) ?? exp.set(r.agentId, []).get(r.agentId))?.push({ t: r.simTime, v: p.expansionsCharged });
-    if (typeof p.submittedTick === "number" && typeof p.completedTick === "number") (lat.get(r.agentId) ?? lat.set(r.agentId, []).get(r.agentId))?.push({ t: r.simTime, v: p.completedTick - p.submittedTick });
+    if (typeof p.expansionsCharged === "number") (exp.get(r.agentId) ?? exp.set(r.agentId, []).get(r.agentId))?.push({ t: r.simTime, v: p.expansionsCharged, seq: r.seq, ...(typeof p.completedTick === "number" ? { tick: p.completedTick } : {}) });
+    if (typeof p.submittedTick === "number" && typeof p.completedTick === "number") (lat.get(r.agentId) ?? lat.set(r.agentId, []).get(r.agentId))?.push({ t: r.simTime, v: p.completedTick - p.submittedTick, seq: r.seq, tick: p.completedTick });
   }
   const out: AnalysisSeries[] = [];
   for (const id of [...exp.keys()].sort()) out.push({ key: `${id}|expansions`, agentId: id, name: "planner expansions", unit: "per query", source: "compute", points: exp.get(id) ?? [] });

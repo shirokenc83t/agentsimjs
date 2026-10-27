@@ -106,7 +106,7 @@ describe("series: metrics, and compute records where there is no metric", () => 
       { source: "uav-001/body", name: "agent.soc", simTime: 1, tick: 10, value: 0.7 },
     ]);
     expect(s.map((x) => [x.agentId, x.name, x.source])).toEqual([["uav-001", "battery", "metric"], ["ugv-001", "battery", "metric"], ["ugv-001", "speed", "metric"]]);
-    expect(s[1]?.points).toEqual([{ t: 1, v: 0.9 }, { t: 2, v: 0.8 }]);
+    expect(s[1]?.points).toMatchObject([{ t: 1, v: 0.9 }, { t: 2, v: 0.8 }]);
   });
 
   it("builds expansions and planning latency from the plan records of the planner", () => {
@@ -114,14 +114,14 @@ describe("series: metrics, and compute records where there is no metric", () => 
       ({ ...action(seq, agentId, t, { op: "plan", expansionsCharged: e, submittedTick: a, completedTick: b }), kind: "compute", source: `${agentId}/planner` }) as TraceRecord;
     const s = computeSeriesOf([plan(20, "ugv-001", 1, 120, 10, 14), plan(21, "ugv-001", 3, 80, 25, 26), action(22, "ugv-001", 2, { op: "plan" })]);
     expect(s.map((x) => [x.name, x.source, x.unit])).toEqual([["planner expansions", "compute", "per query"], ["planning latency", "compute", "ticks"]]);
-    expect(s[0]?.points).toEqual([{ t: 1, v: 120 }, { t: 3, v: 80 }]);
-    expect(s[1]?.points).toEqual([{ t: 1, v: 4 }, { t: 3, v: 1 }]);
+    expect(s[0]?.points).toMatchObject([{ t: 1, v: 120 }, { t: 3, v: 80 }]);
+    expect(s[1]?.points).toMatchObject([{ t: 1, v: 4 }, { t: 3, v: 1 }]);
   });
 
   it("keeps the series of the agents shown, inside the window", () => {
     const all = [...metricSeriesOf([{ source: "ugv-001/body", name: "agent.soc", simTime: 1, tick: 10, value: 0.9 }, { source: "ugv-001/body", name: "agent.soc", simTime: 9, tick: 90, value: 0.5 }, { source: "uav-001/body", name: "agent.soc", simTime: 1, tick: 10, value: 0.7 }])];
     expect(seriesInWindow(all, new Set(["ugv-001"]), undefined)).toHaveLength(1);
-    expect(seriesInWindow(all, new Set(["ugv-001"]), { t0: 5, t1: 20 })[0]?.points).toEqual([{ t: 9, v: 0.5 }]);
+    expect(seriesInWindow(all, new Set(["ugv-001"]), { t0: 5, t1: 20 })[0]?.points).toMatchObject([{ t: 9, v: 0.5 }]);
     expect(seriesInWindow(all, new Set(["ugv-001"]), { t0: 50, t1: 60 })).toEqual([]);
   });
 });

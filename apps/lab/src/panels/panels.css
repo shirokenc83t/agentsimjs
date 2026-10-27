@@ -824,3 +824,38 @@
 .ah-actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
 .ah-empty { padding: 12px 14px; }
 .idcard-actions { display: flex; align-items: center; gap: 8px; }
+
+/* The history and audit tab (T-103, ADR-0043): a findings line, the compact history over the audit table at 57 %, the charts over the pinned provenance panel at 43 %. */
+.ah.compact { border: 1px solid var(--ln); }
+.ah.compact .ah-body { grid-template-columns: minmax(0, 1fr); }
+.ah.compact .ah-main { max-height: 240px; }
+.aa { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.aa:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--fg3); }
+.aa .an-findings { flex: none; margin: 0; padding: 6px 12px; border-bottom: 1px solid var(--ln); }
+.aa-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 57fr) minmax(0, 43fr); }
+.aa-left { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--ln); }
+.aa-hist { flex: none; }
+.aa-audit-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: var(--bg0); border-bottom: 1px solid var(--ln); border-top: 1px solid var(--ln); font-size: var(--type-mono-size); }
+.aa-scroll { flex: 1; min-height: 0; overflow: auto; background: var(--bg0); }
+.aa-table { width: 100%; border-collapse: collapse; font-size: var(--type-mono-size); }
+.aa-table th { position: sticky; top: 0; z-index: 1; padding: 3px 8px; text-align: left; font-weight: 400; color: var(--fg3); background: var(--bg1); border-bottom: 1px solid var(--ln); white-space: nowrap; }
+.aa-table td { padding: 3px 8px; vertical-align: top; border-bottom: 1px solid var(--ln); }
+.aa-row { cursor: pointer; }
+.aa-row:hover { background: var(--bg2); }
+.aa-row.L1 td { color: var(--fg2); }
+.aa-row.L1 .aa-what { padding-left: 20px; }
+.aa-row.idle td { color: var(--fg3); }
+.aa-row.failure td:nth-child(3), .aa-row.reflex .ah-glyph, .aa-row.refusal .ah-glyph { color: var(--alm); }
+.aa-row.stop td { font-weight: 600; }
+.aa-row.dim { opacity: 0.4; }
+.aa-row.now td:first-child { box-shadow: inset 2px 0 0 var(--ac); }
+.aa-row.sel { background: var(--bg3); box-shadow: inset 1px 0 0 var(--ac); }
+.aa-right { min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; background: var(--bg0); }
+.asv-chart .mark circle { fill: none; stroke: var(--ac); stroke-width: 2; }
+.asv-chart .mark .drop { stroke: var(--ac); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.aa-prov { flex: none; margin-top: auto; padding: 4px 12px 8px; border-top: 1px solid var(--ln); background: var(--bg1); position: sticky; bottom: 0; }
+.aa-prov h4.sec { margin: 4px 0; }
+.aa-prov p { margin: 2px 0 6px; }
+.aa-chain { margin: 0 0 6px; padding-left: 0; list-style: none; font-size: var(--type-mono-size); }
+.aa-chain li { padding: 1px 0; }
+.aa-prov-actions { display: flex; flex-wrap: wrap; gap: 4px; }

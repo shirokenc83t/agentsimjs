@@ -34,6 +34,9 @@ export async function readRootRecords(ports: Ports, runId: string, agentId: stri
     readAll(ports, { runId, agentId, kinds: ["injected"], op: "command", limit: PAGE }),
     readAll(ports, { runId, agentId, kinds: ["reflex"], limit: PAGE }),
     readAll(ports, { runId, agentId, kinds: ["thought"], op: "decision", limit: PAGE }),
+    // The replans and recoveries an action went through: sub-rows of the audit (the history's rows ignore them).
+    readAll(ports, { runId, agentId, kinds: ["action"], op: "replan", limit: PAGE }),
+    readAll(ports, { runId, agentId, kinds: ["action"], op: "recovery", limit: PAGE }),
   ]);
   return { records: parts.flatMap((p) => p.records).sort((a, b) => a.seq - b.seq), cut: parts.some((p) => p.cut) };
 }

@@ -1,7 +1,10 @@
 import "../panels.css";
 import { identityOf, shortLabel, subjectColor } from "@agentsim/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { stackedLabelYs, valueAtTime, type AnalysisSeries } from "./analysis-model.ts";
+import { stackedLabelYs, valueAtTime, type AnalysisSeries, type SeriesPoint } from "./analysis-model.ts";
+
+/** How near a click must be to a point (px) to mark it rather than move the cursor. */
+const MARK_PX = 14;
 
 export interface AnalysisSeriesProps {
   readonly series: readonly AnalysisSeries[];
@@ -13,6 +16,10 @@ export interface AnalysisSeriesProps {
   /** The agent the panels are looking at: its line is drawn heavier and the others dimmer. */
   readonly selectedAgent?: string | undefined;
   readonly onSeek: (tS: number, agentId?: string) => void;
+  /** A click on a point of a line marks it, for provenance (T-103): the point and its series. A click that is not near a point still seeks. */
+  readonly onMark?: ((series: AnalysisSeries, point: SeriesPoint) => void) | undefined;
+  /** The marked point (accent ring, dashed drop line and its value). */
+  readonly marked?: { readonly key: string; readonly t: number; readonly v: number } | undefined;
 }
 
 const PAD = { l: 52, r: 78, t: 6, b: 16 };
@@ -126,6 +133,21 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
               onClick={(e) => {
                 const r = e.currentTarget.getBoundingClientRect();
                 const t = t0 + ((e.clientX - r.left - PAD.l) / (w - PAD.l - PAD.r)) * (t1 - t0);
+                if (props.onMark) {
+                  // The nearest point of any line of this chart, in pixels (the subject's line wins a tie).
+                  const cx = e.clientX - r.left;
+                  const cy = e.clientY - r.top;
+                  let best: { line: AnalysisSeries; p: SeriesPoint; d: number } | undefined;
+                  for (const l of lines)
+                    for (const p of l.points) {
+                      const d = Math.hypot(x(p.t) - cx, y(p.v) - cy) - (l.agentId === props.selectedAgent ? 0.5 : 0);
+                      if (best === undefined || d < best.d) best = { line: l, p, d };
+                    }
+                  if (best !== undefined && best.d <= MARK_PX) {
+                    props.onMark(best.line, best.p);
+                    return;
+                  }
+                }
                 if (t >= t0 && t <= t1) props.onSeek(Math.round(t * 10) / 10);
               }}
               onPointerMove={(e) => {
@@ -165,6 +187,13 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
                   <text className="tick" x={w - PAD.r + 16} y={(labelYs[i] as number) + 3}>{shortLabel(e.line.agentId)} {fmt(e.v)}</text>
                 </g>
               ))}
+              {props.marked !== undefined && lines.some((l) => l.key === props.marked?.key) && props.marked.t >= t0 && props.marked.t <= t1 && (
+                <g className="mark" data-testid={`series-mark-${testName}`}>
+                  <line className="drop" x1={x(props.marked.t)} y1={y(props.marked.v)} x2={x(props.marked.t)} y2={ROW_H - PAD.b} />
+                  <circle cx={x(props.marked.t)} cy={y(props.marked.v)} r={5} />
+                  <text className="tick" x={Math.min(x(props.marked.t) + 8, w - PAD.r - 40)} y={Math.max(PAD.t + 8, y(props.marked.v) - 8)}>{fmt(props.marked.v)}</text>
+                </g>
+              )}
               {props.cursorS >= t0 && props.cursorS <= t1 && <line className="cursor" x1={x(props.cursorS)} y1={PAD.t} x2={x(props.cursorS)} y2={ROW_H - PAD.b} />}
               {hv !== undefined && <line className="hover" x1={x(hv)} y1={PAD.t} x2={x(hv)} y2={ROW_H - PAD.b} />}
             </svg>

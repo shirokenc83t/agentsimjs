@@ -22,7 +22,7 @@ import {
   type Placed,
   type RowView,
 } from "./history-model.ts";
-import { readChildren, readEffects, useAgentHistory } from "./use-agent-history.ts";
+import { readChildren, readEffects, useAgentHistory, type AgentHistoryData } from "./use-agent-history.ts";
 
 /**
  * The action history of one agent (T-102, ADR-0043, the designer's AgentHistory): the whole run on one time axis, one row per level. The first two rows are the commands (◆) and the
@@ -48,7 +48,16 @@ interface BuiltRow {
 
 const tickOf = (t: number, dt: number) => Math.round(t / dt);
 
-export function AgentHistoryPanel() {
+export interface HistoryViewProps {
+  /** The compact history of the audit tab: no side panel, the brush and the data are the audit's (controlled), and a way to the full history. */
+  readonly compact?: boolean;
+  readonly data?: AgentHistoryData;
+  readonly view?: { readonly t0: number; readonly t1: number } | undefined;
+  readonly onView?: (w: { t0: number; t1: number } | undefined) => void;
+}
+
+export function AgentHistoryPanel(props: HistoryViewProps = {}) {
+  const compact = props.compact === true;
   const source = useSource();
   const { storage } = useServices();
   const { openPanel, openWorkspace } = useAppActions();
@@ -62,7 +71,8 @@ export function AgentHistoryPanel() {
   const sharedRecord = useUiContext((s) => s.selectedRecord);
   const sharedSeq = sharedRecord !== undefined && sharedRecord.runId === runId ? sharedRecord.seq : undefined;
 
-  const data = useAgentHistory(storage.ports, runId, agentId, head);
+  const own = useAgentHistory(storage.ports, props.data === undefined ? runId : undefined, agentId, head);
+  const data = props.data ?? own;
   const lastRecordS = data.records.reduce((m, r) => Math.max(m, r.simTime), 0);
   const endS = Math.max(snap.replay?.headS ?? snap.simTimeS, lastRecordS, 1);
 
@@ -71,7 +81,9 @@ export function AgentHistoryPanel() {
   const [reading, setReading] = useState<ReadonlySet<string>>(new Set());
   const [selKey, setSelKey] = useState<string | undefined>(undefined);
   const [focus, setFocus] = useState<{ row: number; key: string } | undefined>(undefined);
-  const [view, setView] = useState<{ t0: number; t1: number } | undefined>(undefined);
+  const [ownView, setOwnView] = useState<{ t0: number; t1: number } | undefined>(undefined);
+  const view = props.onView === undefined ? ownView : props.view;
+  const setView = props.onView ?? setOwnView;
   const [effects, setEffects] = useState<{ seq: number; records: readonly TraceRecord[] } | undefined>(undefined);
 
   const box = useRef<HTMLDivElement>(null);
@@ -92,13 +104,14 @@ export function AgentHistoryPanel() {
     setChildren(new Map());
     setSelKey(undefined);
     setFocus(undefined);
-    setView(undefined);
+    setOwnView(undefined);
+    props.onView?.(undefined);
   }, [agentId, runId]);
 
   // The tab says whose history it is: "ugv-007 history" in Analysis, "[5h] History · ugv-007" in the Debug window.
   useEffect(() => {
     const api = dock?.api;
-    if (!api || agentId === undefined) return;
+    if (!api || agentId === undefined || compact) return;
     const title = api.title ?? "";
     const prefix = /^\[5h\]/.test(title) ? "[5h] " : "";
     api.setTitle(prefix === "" ? `${agentId} history` : `${prefix}History · ${agentId}`);
@@ -235,6 +248,8 @@ export function AgentHistoryPanel() {
   // The brush of the overview strip: drag to take a stretch of the run, a click to take it all again.
   const strip = useRef<HTMLDivElement>(null);
   const drag = useRef<number | undefined>(undefined);
+  // The stretch being dragged, kept in a ref: the release can come before the render of the last move.
+  const dragging = useRef<{ t0: number; t1: number } | undefined>(undefined);
   const stripT = (e: ReactPointerEvent) => {
     const r = strip.current?.getBoundingClientRect();
     return r === undefined || r.width === 0 ? 0 : Math.min(endS, Math.max(0, ((e.clientX - r.left) / r.width) * endS));
@@ -242,16 +257,20 @@ export function AgentHistoryPanel() {
   const onStripDown = (e: ReactPointerEvent) => {
     e.currentTarget.setPointerCapture?.(e.pointerId);
     drag.current = stripT(e);
-    setView({ t0: drag.current, t1: drag.current });
+    dragging.current = { t0: drag.current, t1: drag.current };
+    setView(dragging.current);
   };
   const onStripMove = (e: ReactPointerEvent) => {
     if (drag.current === undefined) return;
     const t = stripT(e);
-    setView({ t0: Math.min(drag.current, t), t1: Math.max(drag.current, t) });
+    dragging.current = { t0: Math.min(drag.current, t), t1: Math.max(drag.current, t) };
+    setView(dragging.current);
   };
   const onStripUp = () => {
     drag.current = undefined;
-    setView((v) => (v === undefined || v.t1 - v.t0 < endS * 0.01 ? undefined : v));
+    const w = dragging.current;
+    dragging.current = undefined;
+    setView(w === undefined || w.t1 - w.t0 < endS * 0.01 ? undefined : w);
   };
 
   const actionsRow = rows[1];
@@ -306,7 +325,7 @@ export function AgentHistoryPanel() {
   };
 
   return (
-    <div className="panel ah" data-testid="agent-history" tabIndex={0} onKeyDown={onKey} data-agent={agentId}>
+    <div className={`panel ah${compact ? " compact" : ""}`} data-testid={compact ? "agent-history-compact" : "agent-history"} tabIndex={0} onKeyDown={onKey} data-agent={agentId}>
       <div className="ah-bar">
         <span className="ah-title" data-testid="agent-history-title">
           {agentId} · history
@@ -316,6 +335,11 @@ export function AgentHistoryPanel() {
         </span>
         <span className="ah-spacer" />
         {data.cut ? <span className="muted">the history is cut at its first records</span> : null}
+        {compact ? (
+          <button type="button" className="kt" onClick={() => openPanel("agentHistory")} data-testid="ah-open-full" data-tip="The full history: one row per level, with its side panel">
+            ⤢ open full history (H)
+          </button>
+        ) : null}
         <button type="button" className="kt" onClick={() => setPath(collapseAll())} disabled={path.length === 0} data-testid="ah-collapse">
           collapse all
         </button>
@@ -380,7 +404,7 @@ export function AgentHistoryPanel() {
             </div>
           </div>
         </div>
-        <aside className="ah-side" data-testid="agent-history-side">
+        {compact ? null : <aside className="ah-side" data-testid="agent-history-side">
           {selected === undefined ? (
             <p className="muted">Click a node: its fields, its cause and its effects are here. Double-click or Enter opens it.</p>
           ) : (
@@ -470,11 +494,11 @@ export function AgentHistoryPanel() {
               </div>
             </>
           )}
-        </aside>
+        </aside>}
       </div>
-      <p className="tg-keys muted" data-testid="ah-keys">
+      {compact ? null : <p className="tg-keys muted" data-testid="ah-keys">
         ← → previous and next · ↑ ↓ change level · ⏎ open or fold · ⌫ fold the last · T trace graph · Esc clears the selection
-      </p>
+      </p>}
     </div>
   );
 }
