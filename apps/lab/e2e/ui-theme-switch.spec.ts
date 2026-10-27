@@ -10,9 +10,12 @@ test("switching the theme during a run keeps the scene's ground and walls", asyn
   await page.addInitScript((t) => window.localStorage.setItem("agentsim.ui.theme", t), "dark");
   await loadF2(page, "agents");
   await page.waitForTimeout(500);
+  // The scene's background is read just under the top edge of its canvas, wherever the toolbar above it ends (it wraps to more rows as the type grows).
+  const canvas = await page.locator("canvas").first().boundingBox();
+  const bgY = Math.round((canvas?.y ?? 130) + 10);
   const before = await page.screenshot();
   const darkGround = await pixel(page, before, 450, 560);
-  const darkBackground = await pixel(page, before, 600, 130);
+  const darkBackground = await pixel(page, before, 600, bgY);
 
   await openWorkspace(page, "settings");
   await page.getByTestId("theme-light").check();
@@ -21,7 +24,7 @@ test("switching the theme during a run keeps the scene's ground and walls", asyn
   await page.waitForTimeout(1000);
   const after = await page.screenshot();
   const ground = await pixel(page, after, 450, 560);
-  const background = await pixel(page, after, 600, 130);
+  const background = await pixel(page, after, 600, bgY);
   expect(ratio(ground, background), `light after the switch: ground ${ground} on background ${background}`).toBeGreaterThanOrEqual(1.2);
   // Not the dark ground in a light scene, and the ground is not the background.
   expect(ratio(ground, darkGround)).toBeGreaterThan(1.3);
