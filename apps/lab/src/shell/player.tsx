@@ -300,7 +300,7 @@ function KnowledgeLabel(props: { band: KnowledgeBand; marks: readonly Mark[]; at
   if (band.points.length === 0) {
     return (
       <span className="kb-label mono" data-testid="player-knowledge" title="This recording profile holds no samples of the beliefs against the truth: the swarm knowledge band has nothing to draw from.">
-        swarm knowledge · no belief samples in this recording profile <span className="muted">· observer</span>
+        no belief samples <span className="muted">· observer</span>
       </span>
     );
   }
