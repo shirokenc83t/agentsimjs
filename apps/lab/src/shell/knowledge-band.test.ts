@@ -33,7 +33,7 @@ describe("the swarm knowledge band", () => {
     expect(b.ideal).toBe(1);
     expect(b.observed).toBe(2);
     expect(b.points.map((p) => p.agents)).toEqual([1, 2]);
-    expect(knowledgeWords(b, 3)).toContain("1 of 2 agents have reported");
+    expect(knowledgeWords(b, 3)).toContain("mean of the 1 of 2 agents that have reported");
     expect(knowledgeWords(b, 3)).toContain("(1 ideal not counted)");
     expect(knowledgeWords(knowledgeBand([ideal("ugv-009", 0)]), 3)).toContain("nothing to compare");
   });

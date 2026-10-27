@@ -39,11 +39,17 @@ export function TopBar(props: TopBarProps) {
   // When the bar does not fit its row, the layout controls fold into one `layout ▾` button first (U-010 §8): the theme button and ctrl+k always stay. It is measured, not a
   // width: what is in the bar (a derived replay's long segment, the name of the run) decides. It unfolds again when the room is back.
   const bar = useRef<HTMLElement>(null);
-  const [folded, setFolded] = useState(false);
-  // When even the folded bar is too wide (a derived replay's long segment at a narrow window), the theme button gives up its word and keeps its glyph.
-  const [compact, setCompact] = useState(false);
-  const needed = useRef(0);
-  useLayoutEffect(() => (setFolded(false), setCompact(false)), [props.replaying, props.derived, props.runLabel, props.workspaces.length, props.layoutActive]);
+  // The bar gives way in steps, the workspace tabs never: 1, the layout controls fold into one button; 2, the theme button keeps its glyph and drops its word; 3, the brand keeps its mark
+  // and drops its name, the run label is cut shorter and the replay segment loses its connecting words. `needed[l]` is the width the bar wanted at level l, to come back down when room returns.
+  const [level, setLevel] = useState(0);
+  const folded = level >= 1;
+  const compact = level >= 2;
+  const tight = level >= 3;
+  const needed = useRef<number[]>([]);
+  useLayoutEffect(() => {
+    needed.current = [];
+    setLevel(0);
+  }, [props.replaying, props.derived, props.runLabel, props.workspaces.length, props.layoutActive]);
   useLayoutEffect(() => {
     const el = bar.current;
     if (!el) return;
@@ -57,30 +63,25 @@ export function TopBar(props: TopBarProps) {
       return w;
     };
     const fit = () => {
-      if (!folded) {
-        const want = natural();
-        if (want > el.clientWidth) {
-          needed.current = want;
-          setFolded(true);
-        }
-      } else {
-        if (el.clientWidth >= needed.current) setFolded(false);
-        else if (natural() > el.clientWidth) setCompact(true);
-      }
+      const want = natural();
+      if (want > el.clientWidth && level < 3) {
+        needed.current[level] = want;
+        setLevel(level + 1);
+      } else if (level > 0 && el.clientWidth >= (needed.current[level - 1] ?? Infinity)) setLevel(level - 1);
     };
     fit();
     if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [folded, props.replaying, props.derived, props.runLabel, props.layoutActive]);
+  }, [level, props.replaying, props.derived, props.runLabel, props.layoutActive]);
   return (
-    <header className={`top${compact ? " compact" : ""}`} aria-label="Workspaces and run" data-testid="topbar" ref={bar}>
+    <header className={`top${compact ? " compact" : ""}${tight ? " tight" : ""}`} aria-label="Workspaces and run" data-testid="topbar" ref={bar}>
       <div className="seg brand">
         <span className="mark" aria-hidden="true">
           {""}
         </span>{" "}
-        AgentSimJS-NG
+        <span className="name">AgentSimJS-NG</span>
       </div>
       <nav className="seg ws-nav" aria-label="Workspaces">
         {props.workspaces.map((w, i) => (
@@ -137,7 +138,7 @@ function ReplaySegment(props: { derived: ReplayDerived | undefined }) {
   if (d === undefined) {
     return (
       <div className="seg r rpseg" role="status" data-testid="replay-segment">
-        {GLYPH.replay} REPLAY · viewing t {at.toFixed(1)} s
+        {GLYPH.replay} REPLAY<span className="rp-words"> · viewing</span> t {at.toFixed(1)} s
         <span className="k k-opt"> · live run keeps running {GLYPH.running}</span>
       </div>
     );
@@ -147,7 +148,7 @@ function ReplaySegment(props: { derived: ReplayDerived | undefined }) {
     <div className="seg r rpseg" role="status" data-testid="replay-segment" title={`REPLAY · viewing t ${at.toFixed(1)} s · a re-simulated window (${d.t0S.toFixed(1)}–${d.t1S.toFixed(1)} s) of ${d.parentRunId}: ${verdict} · the live run keeps running`}>
       {GLYPH.replay} t {at.toFixed(1)}
       <span data-testid="replay-derived">
-        {" "}· ◇ {d.t0S.toFixed(1)}–{d.t1S.toFixed(1)} of {d.parentRunId} · {d.status === "matches" ? <span className="ok">✓</span> : <span className="danger">{GLYPH.fail} @{d.divergenceTick ?? "?"}</span>}
+        {" "}· ◇ {d.t0S.toFixed(1)}–{d.t1S.toFixed(1)}<span className="rp-words"> of {d.parentRunId}</span> · {d.status === "matches" ? <span className="ok">✓</span> : <span className="danger">{GLYPH.fail} @{d.divergenceTick ?? "?"}</span>}
       </span>
     </div>
   );
@@ -289,7 +290,8 @@ function LayoutMenu(props: TopBarProps) {
   return (
     <div className="seg r layout-fold" ref={box}>
       <button type="button" className="tb tip-right" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} data-testid="layout-fold" data-tip={`Layout: ${props.layoutActive ?? "autosaved"}`}>
-        layout <span className="k">▾</span>
+        <span className="lay-word">layout </span>
+        <span className="k">▾</span>
       </button>
       {open && (
         <div className="layout-pop" role="menu" aria-label="Layout" data-testid="layout-menu">

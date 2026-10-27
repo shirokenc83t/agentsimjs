@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it } from "vitest";
 import { AnalysisSeriesView } from "./analysis-series.tsx";
 import type { AnalysisSeries } from "./analysis-model.ts";
@@ -61,5 +62,16 @@ describe("the series charts", () => {
     expect(stroke(picked, "ugv-002")).toBe("var(--agent-2)");
     expect(stroke(picked, "ugv-001")).toBe("var(--fg3)");
     expect(stroke(picked, "ugv-003")).toBe("var(--fg3)");
+  });
+
+  it("with a subject a crowded chart says the subject's value and the others as a range, and the full list is behind ▸ all", async () => {
+    const series = Array.from({ length: 12 }, (_, i) => line(`ugv-${String(i + 1).padStart(3, "0")}`, "speed", "m/s", [0, i, i + 1]));
+    render(<AnalysisSeriesView series={series} indexOf={(id) => Number(id.replace(/\D/g, "")) || 0} span={{ t0: 0, t1: 10 }} cursorS={0} selectedAgent="ugv-003" onSeek={() => {}} />);
+    const sub = screen.getByTestId("series-subject-speed");
+    expect(sub).toHaveTextContent("g03");
+    expect(sub).toHaveTextContent("11 others");
+    expect(screen.queryByTestId("series-legend-speed")).toBeNull(); // the list of twenty is not under the chart
+    await userEvent.click(screen.getByTestId("series-all-speed"));
+    expect(screen.getByTestId("series-legend-speed").querySelectorAll("li")).toHaveLength(12);
   });
 });

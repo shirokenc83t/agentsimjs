@@ -176,7 +176,7 @@ function LiveScrub(props: { snap: SimSnapshot; view: RunSnapshot | undefined; dt
         <span className="live" data-testid="player-state">
           {snap.headless ? `${GLYPH.running} HEADLESS` : "● LIVE"}
         </span>
-        <span data-testid="player-tick">tick {snap.tick}</span>
+        <span className="hide-1100" data-testid="player-tick">tick {snap.tick}</span>
         <KnowledgeLabel band={band} marks={marks} atS={Math.min(snap.simTimeS, savedS)} />
       </div>
       <div className={`track${strip ? " kbt" : ""}`} role="img" aria-label="Run so far">
@@ -308,10 +308,10 @@ function KnowledgeLabel(props: { band: KnowledgeBand; marks: readonly Mark[]; at
   const upTo = props.marks.filter((m) => m.t <= atS);
   const reflexes = upTo.filter((m) => m.kind === "reflex").length;
   const failures = upTo.filter(isFailure).length;
+  // The numbers come first and the tag last: when the row is short it is the tag that is cut, never a number. "avg": the mean of the agents until the union of what they know exists.
   return (
     <span className="kb-label mono" data-testid="player-knowledge" title={knowledgeWords(band, atS)}>
-      swarm knows {p === undefined ? "–" : `${p.knownPct.toFixed(0)} %`} of what it can reach · belief matches truth {p === undefined ? "–" : `${p.matchPct.toFixed(0)} %`} · {reflexes} reflex{reflexes === 1 ? "" : "es"} · {failures} failure{failures === 1 ? "" : "s"}{" "}
-      <span className="muted">· observer</span>
+      agents know {p === undefined ? "–" : `${p.knownPct.toFixed(0)} %`} avg · match {p === undefined ? "–" : `${p.matchPct.toFixed(0)} %`} · ▲{reflexes} ✕{failures} <span className="muted">· observer</span>
     </span>
   );
 }

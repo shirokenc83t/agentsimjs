@@ -86,10 +86,10 @@ export function KnowledgeStrip(props: { band: KnowledgeBand; marks: readonly Mar
   const empty = band.points.length === 0;
   return (
     <div className="kbs" ref={host} data-testid="player-knowledge-band" data-known={at?.knownPct} data-match={at?.matchPct} data-points={band.points.length} data-empty={empty ? "true" : undefined} role="img" aria-label={words} title={words}>
-      {empty && <div className="kb-hatch" style={{ left: 0, right: 0 }} data-testid="player-knowledge-nosamples" />}
-      {!empty && first !== undefined && first.t > startS && <div className="kb-hatch" style={{ left: 0, width: pct(first.t) }} data-testid="player-knowledge-before" />}
+      {empty && <div className="kb-hatch" style={{ left: 0, right: 0 }} data-testid="player-knowledge-nosamples" title="No belief samples in this recording profile: nothing to draw" />}
+      {!empty && first !== undefined && first.t > startS && <div className="kb-hatch" style={{ left: 0, width: pct(first.t) }} data-testid="player-knowledge-before" title={`Before the first sample (${first.t.toFixed(1)} s): nothing known yet`} />}
       {band.gaps.map((g) => (
-        <div key={g.fromS} className="kb-hatch" style={{ left: pct(g.fromS + (band.everyS ?? 0)), width: `${((g.toS - g.fromS - (band.everyS ?? 0)) / span) * 100}%` }} data-testid="player-knowledge-gap" />
+        <div key={g.fromS} className="kb-hatch" style={{ left: pct(g.fromS + (band.everyS ?? 0)), width: `${((g.toS - g.fromS - (band.everyS ?? 0)) / span) * 100}%` }} data-testid="player-knowledge-gap" title={`No sample from ${g.fromS.toFixed(1)} s to ${g.toS.toFixed(1)} s: the value is not carried across`} />
       ))}
       {!empty && (
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">

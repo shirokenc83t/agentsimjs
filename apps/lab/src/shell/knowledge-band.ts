@@ -110,6 +110,6 @@ export function knowledgeWords(band: KnowledgeBand, t: number): string {
   const p = knowledgeAt(band, t);
   if (p === undefined) return band.ideal > 0 && band.observed === 0 ? "swarm knowledge · observer data · every agent plans on the ground truth: nothing to compare" : "swarm knowledge · observer data · no sample yet";
   const rate = band.everyS === undefined ? "" : ` · each agent every ${Math.round(band.everyS * 2) / 2} s`;
-  const agents = p.agents < band.observed ? `${p.agents} of ${band.observed} agents have reported` : `${p.agents} agent${p.agents === 1 ? "" : "s"}`;
-  return `swarm knowledge · observer data · knows ${p.knownPct.toFixed(1)} % of what it can reach, ${p.matchPct.toFixed(1)} % matching the truth · ${agents}${band.ideal > 0 ? ` (${band.ideal} ideal not counted)` : ""}${rate}`;
+  const agents = p.agents < band.observed ? `the ${p.agents} of ${band.observed} agents that have reported` : `${p.agents} agent${p.agents === 1 ? "" : "s"}`;
+  return `swarm knowledge · observer data · agents know ${p.knownPct.toFixed(1)} % of what they can reach on average, ${p.matchPct.toFixed(1)} % matching the truth · mean of ${agents}${band.ideal > 0 ? ` (${band.ideal} ideal not counted)` : ""}${rate}`;
 }

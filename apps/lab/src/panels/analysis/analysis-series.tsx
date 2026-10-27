@@ -168,18 +168,51 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
               {props.cursorS >= t0 && props.cursorS <= t1 && <line className="cursor" x1={x(props.cursorS)} y1={PAD.t} x2={x(props.cursorS)} y2={ROW_H - PAD.b} />}
               {hv !== undefined && <line className="hover" x1={x(hv)} y1={PAD.t} x2={x(hv)} y2={ROW_H - PAD.b} />}
             </svg>
-            {crowded && (
-              <ul className="asv-legend mono" data-testid={`series-legend-${testName}`} aria-label={`${name}: every agent and its last value`}>
-                {allEnds.map((e) => (
-                  <li key={e.line.key} className={props.selectedAgent === e.line.agentId ? "sel" : undefined}>
-                    <span className="sw" style={{ background: subjectColor(identityOf(props.indexOf(e.line.agentId)).colorIndex, props.selectedAgent, e.line.agentId) }} /> {shortLabel(e.line.agentId)} <span className="muted">{fmt(e.v)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            {crowded && <SeriesLegend ends={allEnds} selected={props.selectedAgent} indexOf={props.indexOf} fmt={fmt} name={name} testName={testName} />}
           </figure>
         );
       })}
+    </div>
+  );
+}
+
+interface LegendEnd {
+  readonly line: { readonly key: string; readonly agentId: string };
+  readonly v: number;
+}
+
+/**
+ * The legend of a crowded chart. With no subject it lists every agent and its last value. With a subject (one subject, one hue) it says the subject's value and the others as a range, and the
+ * full list is behind "all": the others are grey and a list of twenty of them under every chart says nothing.
+ */
+function SeriesLegend(props: { ends: readonly LegendEnd[]; selected: string | undefined; indexOf: (id: string) => number; fmt: (v: number) => string; name: string; testName: string }) {
+  const { ends, selected, fmt } = props;
+  const [all, setAll] = useState(false);
+  const subject = selected === undefined ? undefined : ends.find((e) => e.line.agentId === selected);
+  const list = (
+    <ul className="asv-legend mono" data-testid={`series-legend-${props.testName}`} aria-label={`${props.name}: every agent and its last value`}>
+      {ends.map((e) => (
+        <li key={e.line.key} className={selected === e.line.agentId ? "sel" : undefined}>
+          <span className="sw" style={{ background: subjectColor(identityOf(props.indexOf(e.line.agentId)).colorIndex, selected, e.line.agentId) }} /> {shortLabel(e.line.agentId)} <span className="muted">{fmt(e.v)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+  if (subject === undefined) return list;
+  const others = ends.filter((e) => e !== subject).map((e) => e.v);
+  return (
+    <div className="asv-subject mono" data-testid={`series-subject-${props.testName}`}>
+      <span className="sw" style={{ background: subjectColor(identityOf(props.indexOf(subject.line.agentId)).colorIndex, selected, subject.line.agentId) }} /> <b>{shortLabel(subject.line.agentId)}</b> {fmt(subject.v)}
+      {others.length > 0 && (
+        <span className="muted">
+          {" "}
+          · {others.length} other{others.length === 1 ? "" : "s"} · {fmt(Math.min(...others))}–{fmt(Math.max(...others))}
+        </span>
+      )}{" "}
+      <button type="button" className="kt" aria-expanded={all} onClick={() => setAll((o) => !o)} data-testid={`series-all-${props.testName}`}>
+        {all ? "▾ all" : "▸ all"}
+      </button>
+      {all && list}
     </div>
   );
 }

@@ -67,7 +67,8 @@
 
 /* A narrow title bar keeps its tabs and buttons and drops the context line. */
 .dockview-theme-agentsim .dv-tabs-and-actions-container { container-type: inline-size; }
-@container (max-width: 380px) {
+/* The context line (the Timeline's legend, a summary) folds first: a panel title stays whole (U-016). */
+@container (max-width: 620px) {
   .tmeta { display: none; }
 }
 

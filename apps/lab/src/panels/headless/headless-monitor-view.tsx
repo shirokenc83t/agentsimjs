@@ -2,6 +2,9 @@ import "../panels.css";
 import { formatBytes, GLYPH, KIND_STYLE } from "@agentsim/ui";
 import type { TraceRecord } from "@agentsim/trace";
 import { summary } from "../debug/log-rows.ts";
+import type { Mark } from "../debug/marks.ts";
+import { KnowledgeStrip } from "../../shell/knowledge-band-view.tsx";
+import { knowledgeAt, knowledgeWords, type KnowledgeBand } from "../../shell/knowledge-band.ts";
 import { averageRates, estimateVolume, etaS, formatDuration, fractionDone, grouped, snapshotMarks, sparkPoints, speedLabel, waitingLabel, type Progress } from "./monitor-model.ts";
 
 /** One sparkline of the monitor: a metric of the run over its sim time. */
@@ -22,6 +25,8 @@ export interface MonitorViewProps {
   /** The sampled event stream: the latest rows and what the display says of its sampling. */
   readonly stream: { readonly rows: readonly TraceRecord[]; readonly totalMatched: number; readonly totalShown: number; readonly sampled: boolean };
   readonly sparks: readonly Spark[];
+  /** The swarm knowledge band of the run (observer data), its marks and the sim time it stands for: shown under the metrics when the run has samples. */
+  readonly knowledge?: { readonly band: KnowledgeBand; readonly marks: readonly Mark[]; readonly runId: string; readonly endS: number } | undefined;
   /** The storage writer's state as the worker reports it (`ok`, or why the run waits). */
   readonly writer: { readonly state: "ok" | "storage_backpressure" | "storage_quota"; readonly backlogRecords: number } | undefined;
   readonly actions: { pause(): void; play(): void; stop(): void; openDebug(): void; openAnalysis: (() => void) | undefined; rerunHeadless?: (() => void) | undefined };
@@ -154,7 +159,7 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
 
       <section className="hm-sec" aria-label="Recording">
         <h4 className="sec">
-          <b>RECORDING</b>
+          <b>Recording</b>
           <span className="rule" />
         </h4>
         <div className="hm-line mono">
@@ -191,9 +196,27 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
         </div>
       </section>
 
+      {props.knowledge !== undefined && props.knowledge.band.points.length > 0 && (
+        <section className="hm-sec" aria-label="Swarm knowledge" data-testid="hm-knowledge">
+          <h4 className="sec">
+            <b>Swarm knowledge</b>
+            <span className="rule" />
+          </h4>
+          <p className="mono hm-knowledge-line" data-testid="hm-knowledge-line">
+            {knowledgeAt(props.knowledge.band, props.knowledge.endS) === undefined ? "–" : `agents know ${knowledgeAt(props.knowledge.band, props.knowledge.endS)?.knownPct.toFixed(0)} % avg · match ${knowledgeAt(props.knowledge.band, props.knowledge.endS)?.matchPct.toFixed(0)} %`}{" "}
+            <span className="muted" title={knowledgeWords(props.knowledge.band, props.knowledge.endS)}>
+              · observer data
+            </span>
+          </p>
+          <div className="track kbt hm-band">
+            <KnowledgeStrip band={props.knowledge.band} marks={props.knowledge.marks} runId={props.knowledge.runId} startS={0} scaleS={Math.max(props.knowledge.endS, 1)} atS={props.knowledge.endS} />
+          </div>
+        </section>
+      )}
+
       <section className="hm-sec" aria-label="Metrics">
         <h4 className="sec">
-          <b>METRICS</b>
+          <b>Metrics</b>
           <span className="rule" />
         </h4>
         <div className="hm-sparks">
@@ -215,7 +238,7 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
 
       <section className="hm-stream" aria-label="Events">
         <h4 className="sec">
-          <b>EVENTS</b>
+          <b>Events</b>
           <span className="rule" />
         </h4>
         <p className="muted hm-note" data-testid="hm-stream-note">

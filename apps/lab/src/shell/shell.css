@@ -4,7 +4,7 @@
 .top { display: flex; align-items: stretch; height: 28px; background: var(--bg1); border-bottom: 1px solid var(--ln); white-space: nowrap; }
 .top .seg { display: flex; align-items: center; gap: 8px; padding: 0 8px; border-right: 1px solid var(--ln); min-width: 0; flex: 0 1 auto; }
 .top .seg.r { border-right: 0; border-left: 1px solid var(--ln); }
-.top .ws-nav { padding: 0; gap: 0; }
+.top .ws-nav { padding: 0; gap: 0; flex: none; }
 .top .brand { background: var(--bg3); color: var(--fg); font-weight: 600; }
 .top .k, .bot .k { color: var(--fg3); }
 .sp { flex: 1; }
@@ -135,6 +135,17 @@
 .top .runsel { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
 .queued-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16em; font-size: var(--type-label-size); }
 .top.compact .theme-btn .lbl { display: none; }
+/* Tight (the last step of the fold): the brand keeps its mark, the run label is cut shorter and the replay segment loses its connecting words; the workspace tabs are never touched. */
+.top.tight .brand .name, .top.tight .rp-words, .top.tight .k-opt { display: none; }
+.top.tight .runsel { max-width: 60px; }
+.top.tight .runsel .k, .top.tight .theme-btn .k { display: none; }
+.top.tight .lay-word { display: none; }
+.top.tight .layout-fold .k { display: inline; }
+.top.tight .ws { padding: 0 4px; }
+.top.tight .ws b { margin-right: 2px; }
+.top.tight .seg { padding: 0 5px; gap: 5px; }
+.top.tight .ws-nav { padding: 0; }
+.top .brand { flex: none; }
 /* A narrow window: the launch row gives up the run's id (the summary under it has it), the time mode chip (it is in that summary too) and the words of "scrub back". */
 @media (max-width: 1100px) {
   .ready-start .rid, .hide-1100, .ply .lbl-long { display: none; }
@@ -149,3 +160,5 @@
 }
 .top .theme-btn { text-transform: none; }
 .clock .mission-note { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
+/* The mark of the product (ADR-0043 section 6) is drawn larger than the text beside it: at the size of the text it reads as the plain boxed glyph it replaces. */
+.top .brand .mark { font-size: 24px; line-height: 1; }

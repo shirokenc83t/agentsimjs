@@ -90,7 +90,7 @@
 .li-comp { padding-left: 22px; color: var(--fg2); }
 .li-area { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .li-tabs { flex: none; display: flex; gap: 4px; padding: 3px 8px; background: var(--bg1); border-bottom: 1px solid var(--ln); overflow-x: auto; }
-.li-tabs .kt.on { background: var(--bg3); border-color: var(--fg2); }
+.li-tabs .kt.on { color: var(--fg); box-shadow: inset 0 -1px 0 var(--ac); }
 .li-panes { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(0, 1fr); overflow: hidden; }
 .li-panes[data-layout="tabs"] { display: block; }
 .li-panes[data-layout="tabs"] .li-cell { height: 100%; }
@@ -186,6 +186,9 @@
 .kt { appearance: none; font: inherit; font-size: var(--type-label-size); border: 1px solid var(--ln); background: transparent; color: var(--fg2); padding: 0 5px; height: 18px; cursor: pointer; }
 .kt:hover { background: var(--bg3); border-color: var(--fg3); }
 .kt.off { opacity: 0.5; text-decoration: line-through; }
+/* Every toggle (ADR-0043 section 2): on is `fg` with a 1 px accent line under it, off is `fg3`; nothing is filled. */
+.kt[aria-pressed="true"], .chip[aria-pressed="true"], .btn[aria-pressed="true"] { color: var(--fg); box-shadow: inset 0 -1px 0 var(--ac); }
+.kt[aria-pressed="false"], .chip[aria-pressed="false"] { color: var(--fg3); }
 .tag { display: inline-block; font-weight: 600; font-size: var(--type-label-size); }
 .lfoot { flex: none; display: flex; gap: 12px; height: 20px; align-items: center; padding: 0 10px; background: var(--bg2); border-top: 1px solid var(--ln); color: var(--fg3); font-size: var(--type-label-size); white-space: nowrap; overflow: hidden; }
 .event-detail { margin: 0; flex: none; max-height: 96px; overflow: auto; padding: 6px 8px; border-top: 1px solid var(--ln); font-size: var(--type-label-size); white-space: pre-wrap; }
@@ -771,3 +774,7 @@
 
 /* The findings line under the title of the Analysis workspace (ADR-0043). */
 .an-findings { margin: 0; padding: 4px 10px; font-size: var(--type-body-size); color: var(--fg2); border-bottom: 1px solid var(--ln); }
+.asv-subject { margin: 2px 10px 0; font-size: var(--type-label-size); }
+.asv-subject .sw { display: inline-block; width: 7px; height: 7px; }
+.hm-knowledge-line { margin: 0 0 4px; }
+.hm-band { height: 24px; margin-bottom: 8px; }

@@ -47,6 +47,20 @@ export const muiTheme = createTheme({
     MuiButton: { defaultProps: { size: "small", disableElevation: true }, styleOverrides: { outlined: { borderColor: "var(--ln2)" } } },
     MuiOutlinedInput: { styleOverrides: { notchedOutline: { borderColor: "var(--ln2)" } } },
     MuiInput: { styleOverrides: { underline: { "&::before": { borderBottomColor: "var(--ln2)" } } } },
+    // A toggle follows ADR-0043 section 2 everywhere: on is `fg` with a 1 px accent line under the label, off is `fg3`, and nothing is filled (MUI fills the selected one and reads
+    // reversed in the dark theme).
+    MuiToggleButton: {
+      styleOverrides: {
+        root: {
+          color: "var(--fg3)",
+          borderColor: "var(--ln2)",
+          backgroundColor: "transparent",
+          "&:hover": { backgroundColor: "var(--bg3)", color: "var(--fg2)" },
+          "&.Mui-selected": { color: "var(--fg)", backgroundColor: "transparent", boxShadow: "inset 0 -1px 0 var(--ac)" },
+          "&.Mui-selected:hover": { color: "var(--fg)", backgroundColor: "var(--bg3)" },
+        },
+      },
+    },
     MuiIconButton: { defaultProps: { size: "small" } },
     MuiTextField: { defaultProps: { size: "small" } },
     MuiSelect: { defaultProps: { size: "small" } },
