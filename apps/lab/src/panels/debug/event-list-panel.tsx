@@ -8,6 +8,7 @@ import { DerivedTag } from "./derived-tag.tsx";
 import { resultOf } from "./log-rows.ts";
 import { shownChoices, termValues, toggleChoice, withTermValues } from "./filter-text.ts";
 import { LogList, type LogListHandle } from "./log-list.tsx";
+import { takeLogFilterRequest, useLogFilterRequest } from "./log-filter-request.ts";
 import { useJump } from "./use-jump.ts";
 import { useLogRows } from "./use-log-rows.ts";
 
@@ -53,6 +54,8 @@ export function EventListPanel() {
   // The filter text is the one state: the toggles and the agent choice rewrite it.
   const [text, setText] = useState("");
   const state = useMemo(() => readFilter(text), [text]);
+  // A filter another panel asked for (the agent history's "Log: this agent, window"), applied once per request; the request that was there when the Log opened is not one.
+  const request = useLogFilterRequest();
   const [active, setActive] = useState("");
   useEffect(() => {
     if (!state.ok) return;
@@ -67,6 +70,10 @@ export function EventListPanel() {
     const s = readFilter(next);
     if (s.ok) setActive(s.text);
   };
+  useEffect(() => {
+    const asked = takeLogFilterRequest();
+    if (asked !== undefined) edit(asked);
+  }, [request.id]);
 
   const [atEnd, setAtEnd] = useState(true);
   const paused = live && !atEnd;

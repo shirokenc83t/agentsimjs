@@ -6,7 +6,7 @@ export type WorkspaceId = "scene" | "debug" | "configurations" | "data" | "setti
 export interface PresetPanel {
   readonly id: PanelId;
   /** Where the panel goes relative to an earlier one (default: a tab next to the previous panel). */
-  readonly position?: { readonly referencePanel: PanelId; readonly direction: "left" | "right" | "above" | "below" };
+  readonly position?: { readonly referencePanel: PanelId; readonly direction: "left" | "right" | "above" | "below" | "within" };
   /** Initial width (px) for side panels. */
   readonly initialWidth?: number;
   /** Initial height (px) for panels below another: the Timeline is as tall as its lanes, not half the window. */
@@ -44,6 +44,11 @@ export const PERF_WINDOW: PresetPanel = { id: "perf", floating: { width: 300, he
  * the Debug.
  */
 export const TRACE_GRAPH_WINDOW: PresetPanel = { id: "traceGraph", floating: { width: 1360, height: 840, collapsed: false } };
+/**
+ * The agent history (T-102): in the Debug a big floating window, "5h" (the history is panel 5's sub-window like the trace graph's "5c"); in Analysis a tab beside the analysis view
+ * (`openPanel` docks it there). In no preset: it is opened for the selected agent (H, the Inspector's ID card, the palette).
+ */
+export const HISTORY_WINDOW: PresetPanel = { id: "agentHistory", floating: { width: 1240, height: 640, collapsed: false } };
 /** The SQL results pinned in a window (U-010 section 5): opened from the console, in no preset. */
 export const SQL_RESULT_WINDOW: PresetPanel = { id: "sqlResult", floating: { width: 760, height: 420, collapsed: false } };
 /** The windows of the Scene (ADR-0042 section 8): all start collapsed, in one row along the bottom edge of the map (the Overview at the left, the Legend and the Performance window at the right) so that they hide none of it; opened, each grows from there. */
@@ -156,6 +161,7 @@ export function panelNumber(preset: WorkspacePreset, id: PanelId): number | unde
 /** The tab title of a panel: `[2] Explorer`. */
 export function tabTitle(preset: WorkspacePreset, id: PanelId, title: string): string {
   if (id === "traceGraph") return `[5c] ${title}`;
+  if (id === "agentHistory") return preset.id === "debug" ? `[5h] ${title}` : title;
   const n = panelNumber(preset, id);
   return n === undefined ? title : `[${n}] ${title}`;
 }
