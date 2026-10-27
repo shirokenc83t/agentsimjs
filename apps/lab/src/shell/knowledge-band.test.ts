@@ -1,6 +1,7 @@
 import type { TraceRecord } from "@agentsim/trace";
 import { describe, expect, it } from "vitest";
-import { knowledgeAt, knowledgeBand, knowledgeWords } from "./knowledge-band.ts";
+import { knowledgeAt, knowledgeBand, knowledgeShown, knowledgeWords } from "./knowledge-band.ts";
+import { MAX_READS, unionGrid } from "./use-union.ts";
 
 // The band is the mean over agents of their latest recorded belief-vs-truth sample, nothing else (observer data).
 
@@ -56,5 +57,25 @@ describe("the swarm knowledge band", () => {
     expect(knowledgeAt(b, 10)?.knownPct).toBe(50);
     expect(knowledgeAt(b, -1)).toBeUndefined();
     expect(knowledgeWords(b, -1)).toContain("no sample yet");
+  });
+
+  it("shows the union where it has been computed and the mean before it, and the label and the tooltip say which, with the matching share scaled from the samples", () => {
+    const mean = knowledgeBand([sample("ugv-001", 0, 100, 0), sample("ugv-002", 0, 100, 0), sample("ugv-001", 10, 50, 40), sample("ugv-002", 10, 70, 20)]);
+    // Means at 10 s: known (50 + 30) / 2 = 40, match (40 + 20) / 2 = 30: three quarters of what is known matches.
+    expect(knowledgeShown(mean, 10)).toEqual({ kind: "mean", knownPct: 40, matchPct: 30 });
+    expect(knowledgeWords(mean, 10)).toContain("mean of 2 agents");
+    expect(knowledgeWords(mean, 10)).toContain("the union of their known cells is not computed here");
+    const withUnion = { ...mean, union: { points: [{ t: 10, pct: 60 }], stepS: 10, calls: 4, costMs: 5 } };
+    expect(knowledgeShown(withUnion, 10)).toEqual({ kind: "union", knownPct: 60, matchPct: 45 });
+    expect(knowledgeShown(withUnion, 9)?.kind).toBe("mean"); // before the union's first point
+    expect(knowledgeWords(withUnion, 10)).toContain("the swarm knows 60.0 % of the map (the union of what its agents know), 45.0 % of it matching the truth");
+  });
+
+  it("takes the union at a grid of the sampling rate, coarser for a long run so that a run asks the worker for at most MAX_READS maps", () => {
+    expect(unionGrid({ firstS: 3, headS: 60, everyS: 10, agents: 20 })).toEqual({ stepS: 10, times: [10, 20, 30, 40, 50, 60] });
+    const long = unionGrid({ firstS: 0, headS: 3600, everyS: 10, agents: 20 });
+    expect(long.stepS).toBeGreaterThan(10);
+    expect(long.stepS % 10).toBe(0);
+    expect(long.times.length * 20).toBeLessThanOrEqual(MAX_READS + 20);
   });
 });

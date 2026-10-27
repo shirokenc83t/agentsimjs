@@ -2,17 +2,18 @@ import type { TraceRecord } from "@agentsim/trace";
 import { useEffect, useRef, useState } from "react";
 import { useServices } from "../services.tsx";
 import { knowledgeBand, type KnowledgeBand } from "./knowledge-band.ts";
+import { useBandWithUnion } from "./use-union.ts";
 
 const PAGE = 5_000;
 /** Samples kept: a run with more is drawn from its first ones (20 agents every 10 s is 7,200 an hour). */
 const MAX_SAMPLES = 40_000;
-const NONE: KnowledgeBand = { points: [], observed: 0, ideal: 0, everyS: undefined, gaps: [] };
+const NONE: KnowledgeBand = { points: [], observed: 0, agentIds: [], ideal: 0, everyS: undefined, gaps: [] };
 
 /**
  * The swarm knowledge band of a stored run up to `headS`: the observer's `belief-vs-truth` samples read from storage in the background (more of them as the head grows, for a run that is
  * still recording), reduced by `knowledgeBand`. Nothing here is on the render path, and nothing of it reaches a mind: the samples are read where panels read, never from the world.
  */
-export function useKnowledgeBand(runId: string | undefined, headS: number): KnowledgeBand {
+export function useKnowledgeBand(runId: string | undefined, headS: number, dtS = 0.1): KnowledgeBand {
   const { storage } = useServices();
   const [band, setBand] = useState<KnowledgeBand>(NONE);
   const state = useRef<{ runId: string | undefined; records: TraceRecord[]; after: number | undefined; busy: boolean }>({ runId: undefined, records: [], after: undefined, busy: false });
@@ -47,5 +48,5 @@ export function useKnowledgeBand(runId: string | undefined, headS: number): Know
     };
   }, [storage, runId, headS]);
 
-  return band;
+  return useBandWithUnion(band, runId, headS, dtS);
 }

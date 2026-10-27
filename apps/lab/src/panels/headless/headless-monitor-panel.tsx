@@ -42,7 +42,7 @@ export function HeadlessMonitorPanel() {
   );
   const dtS = snap.run?.dtS ?? 0.1;
   const endS = mine === undefined ? 0 : mine.tick * dtS;
-  const knowledgeBand = useKnowledgeBand(mine === undefined ? undefined : runId, endS + dtS);
+  const knowledgeBand = useKnowledgeBand(mine === undefined ? undefined : runId, endS + dtS, dtS);
   const knowledgeMarks = useRunMarks(mine === undefined ? undefined : runId, endS + dtS);
   const header = run?.header;
   const profile = header?.recordingProfile as { name?: string } | undefined;

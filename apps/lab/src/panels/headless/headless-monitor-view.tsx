@@ -4,7 +4,7 @@ import type { TraceRecord } from "@agentsim/trace";
 import { summary } from "../debug/log-rows.ts";
 import type { Mark } from "../debug/marks.ts";
 import { KnowledgeStrip } from "../../shell/knowledge-band-view.tsx";
-import { knowledgeAt, knowledgeWords, type KnowledgeBand } from "../../shell/knowledge-band.ts";
+import { knowledgeShown, knowledgeWords, type KnowledgeBand } from "../../shell/knowledge-band.ts";
 import { averageRates, estimateVolume, etaS, formatDuration, fractionDone, grouped, snapshotMarks, sparkPoints, speedLabel, waitingLabel, type Progress } from "./monitor-model.ts";
 
 /** One sparkline of the monitor: a metric of the run over its sim time. */
@@ -203,7 +203,10 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
             <span className="rule" />
           </h4>
           <p className="mono hm-knowledge-line" data-testid="hm-knowledge-line">
-            {knowledgeAt(props.knowledge.band, props.knowledge.endS) === undefined ? "–" : `agents know ${knowledgeAt(props.knowledge.band, props.knowledge.endS)?.knownPct.toFixed(0)} % avg · match ${knowledgeAt(props.knowledge.band, props.knowledge.endS)?.matchPct.toFixed(0)} %`}{" "}
+            {(() => {
+              const k = knowledgeShown(props.knowledge.band, props.knowledge.endS);
+              return k === undefined ? "–" : `${k.kind === "union" ? "swarm knows" : "agents know"} ${k.knownPct.toFixed(0)} %${k.kind === "union" ? "" : " avg"} · match ${k.matchPct.toFixed(0)} %`;
+            })()}{" "}
             <span className="muted" title={knowledgeWords(props.knowledge.band, props.knowledge.endS)}>
               · observer data
             </span>

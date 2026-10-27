@@ -15,10 +15,24 @@ export interface KnowledgePoint {
   readonly agents: number;
 }
 
+/** The union of what the agents know, where it has been computed (T-101): the share of the map's cells known to at least one agent, at the times it was taken. */
+export interface KnowledgeUnion {
+  readonly points: readonly { readonly t: number; readonly pct: number }[];
+  /** Seconds between two points. */
+  readonly stepS: number;
+  /** What it cost: belief maps rebuilt and the wall time spent (diagnostics). */
+  readonly calls: number;
+  readonly costMs: number;
+}
+
 export interface KnowledgeBand {
   readonly points: readonly KnowledgePoint[];
+  /** The union of the agents' known cells, when it has been computed for this run: the band shows it instead of the mean. */
+  readonly union?: KnowledgeUnion | undefined;
   /** Agents with a belief to compare (a sample with a map): the denominator the band is a mean over once all have reported. */
   readonly observed: number;
+  /** Their IDs, in the order they first reported: the maps the union of what they know is taken over. */
+  readonly agentIds: readonly string[];
   /** Agents that plan on the ground truth (`ideal`): they have no belief to compare and are not in the mean. */
   readonly ideal: number;
   /** The time between two samples of one agent (the median of the spacings), or undefined before any agent has two. */
@@ -92,7 +106,7 @@ export function knowledgeBand(records: readonly TraceRecord[]): KnowledgeBand {
       if (b.t - a.t > 2 * everyS) gaps.push({ fromS: a.t, toS: b.t });
     }
   }
-  return { points, observed: latest.size, ideal: ideal.size, everyS, gaps };
+  return { points, observed: latest.size, agentIds: [...latest.keys()], ideal: ideal.size, everyS, gaps };
 }
 
 /** The band at time `t`: the latest point at or before it, if any. */
@@ -111,5 +125,28 @@ export function knowledgeWords(band: KnowledgeBand, t: number): string {
   if (p === undefined) return band.ideal > 0 && band.observed === 0 ? "swarm knowledge · observer data · every agent plans on the ground truth: nothing to compare" : "swarm knowledge · observer data · no sample yet";
   const rate = band.everyS === undefined ? "" : ` · each agent every ${Math.round(band.everyS * 2) / 2} s`;
   const agents = p.agents < band.observed ? `the ${p.agents} of ${band.observed} agents that have reported` : `${p.agents} agent${p.agents === 1 ? "" : "s"}`;
-  return `swarm knowledge · observer data · agents know ${p.knownPct.toFixed(1)} % of what they can reach on average, ${p.matchPct.toFixed(1)} % matching the truth · mean of ${agents}${band.ideal > 0 ? ` (${band.ideal} ideal not counted)` : ""}${rate}`;
+  const ideal = band.ideal > 0 ? ` (${band.ideal} ideal not counted)` : "";
+  const shown = knowledgeShown(band, t) as NonNullable<ReturnType<typeof knowledgeShown>>;
+  if (shown.kind === "union") {
+    return `swarm knowledge · observer data · the swarm knows ${shown.knownPct.toFixed(1)} % of the map (the union of what its agents know), ${shown.matchPct.toFixed(1)} % of it matching the truth · ${agents}${ideal}${rate}`;
+  }
+  return `swarm knowledge · observer data · agents know ${p.knownPct.toFixed(1)} % of what they can reach on average, ${p.matchPct.toFixed(1)} % matching the truth · mean of ${agents}${ideal}${rate} · the union of their known cells is not computed here`;
+}
+
+/**
+ * The swarm's known share at `t`, in the form the band shows: the union (share of the map's cells known to at least one agent) when it has a point at or before `t`, with the matching share
+ * scaled from the samples (the share of what an agent knows that matches the truth, applied to the union); else the mean over the agents. `kind` says which, for the label and the tooltip.
+ */
+export function knowledgeShown(band: KnowledgeBand, t: number): { readonly kind: "union" | "mean"; readonly knownPct: number; readonly matchPct: number } | undefined {
+  const mean = knowledgeAt(band, t);
+  if (mean === undefined) return undefined;
+  let u: { t: number; pct: number } | undefined;
+  for (const p of band.union?.points ?? []) {
+    if (p.t > t + 1e-9) break;
+    u = p;
+  }
+  if (u === undefined) return { kind: "mean", knownPct: mean.knownPct, matchPct: mean.matchPct };
+  const atU = knowledgeAt(band, u.t) ?? mean;
+  const ratio = atU.knownPct > 0 ? Math.min(1, atU.matchPct / atU.knownPct) : 1;
+  return { kind: "union", knownPct: u.pct, matchPct: Math.round(u.pct * ratio * 100) / 100 };
 }

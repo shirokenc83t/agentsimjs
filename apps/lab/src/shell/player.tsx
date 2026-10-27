@@ -9,7 +9,7 @@ import { LazyAttentionTile, LazyMissionNote } from "../workspaces/registry.tsx";
 import { isFailure, type Mark } from "../panels/debug/marks.ts";
 import { useRunMarks } from "../panels/debug/use-run-marks.ts";
 import { KnowledgeStrip } from "./knowledge-band-view.tsx";
-import { knowledgeAt, knowledgeWords, type KnowledgeBand } from "./knowledge-band.ts";
+import { knowledgeShown, knowledgeWords, type KnowledgeBand } from "./knowledge-band.ts";
 import { trackLayout } from "./track.ts";
 import { useKnowledgeBand } from "./use-knowledge.ts";
 
@@ -167,7 +167,7 @@ function LiveScrub(props: { snap: SimSnapshot; view: RunSnapshot | undefined; dt
   const savedS = (view?.persistedHeadTick ?? 0) * dtS;
   const t = trackLayout({ headS: Math.min(savedS, snap.simTimeS), simHeadS: snap.simTimeS, shownS: snap.simTimeS, dtS });
   const runId = recorded ? view?.runId : undefined;
-  const band = useKnowledgeBand(runId, savedS);
+  const band = useKnowledgeBand(runId, savedS, dtS);
   const marks = useRunMarks(runId, savedS);
   const strip = runId !== undefined;
   return (
@@ -207,7 +207,7 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
   const shown = Math.max(startS, Math.min(simTime, head));
   const derived = replay.derived;
   const t = trackLayout({ headS: head, simHeadS: simHead, shownS: shown, dtS, startS });
-  const band = useKnowledgeBand(view.runId, head);
+  const band = useKnowledgeBand(view.runId, head, dtS);
   const marks = useRunMarks(view.runId, head);
 
   // Following the persisted head: the cursor goes to it now and every time it moves.
@@ -304,14 +304,17 @@ function KnowledgeLabel(props: { band: KnowledgeBand; marks: readonly Mark[]; at
       </span>
     );
   }
-  const p = knowledgeAt(band, atS);
+  const p = knowledgeShown(band, atS);
   const upTo = props.marks.filter((m) => m.t <= atS);
   const reflexes = upTo.filter((m) => m.kind === "reflex").length;
   const failures = upTo.filter(isFailure).length;
-  // The numbers come first and the tag last: when the row is short it is the tag that is cut, never a number. "avg": the mean of the agents until the union of what they know exists.
+  // The numbers come first and the tag last: when the row is short it is the tag that is cut, never a number. The union of what the agents know where it has been computed ("swarm knows"),
+  // else the mean over the agents ("agents know … avg"); the tooltip says which it is.
+  const union = p?.kind === "union";
   return (
-    <span className="kb-label mono" data-testid="player-knowledge" title={knowledgeWords(band, atS)}>
-      agents know {p === undefined ? "–" : `${p.knownPct.toFixed(0)} %`} avg · match {p === undefined ? "–" : `${p.matchPct.toFixed(0)} %`} · ▲{reflexes} ✕{failures} <span className="muted">· observer</span>
+    <span className="kb-label mono" data-testid="player-knowledge" data-kind={p?.kind ?? "mean"} title={knowledgeWords(band, atS)}>
+      {union ? "swarm knows" : "agents know"} {p === undefined ? "–" : `${p.knownPct.toFixed(0)} %`}
+      {union ? "" : " avg"} · match {p === undefined ? "–" : `${p.matchPct.toFixed(0)} %`} · ▲{reflexes} ✕{failures} <span className="muted">· observer</span>
     </span>
   );
 }

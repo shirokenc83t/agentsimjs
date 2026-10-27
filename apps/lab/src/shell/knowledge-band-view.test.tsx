@@ -13,6 +13,7 @@ const BAND: KnowledgeBand = {
     { t: 70, knownPct: 60, matchPct: 55, agents: 2 },
   ],
   observed: 2,
+  agentIds: ["ugv-001", "ugv-002"],
   ideal: 0,
   everyS: 10,
   gaps: [{ fromS: 20, toS: 70 }],
@@ -28,7 +29,7 @@ describe("the swarm knowledge strip", () => {
   });
 
   it("a recording with no belief sample is hatched whole and says so", () => {
-    render(<KnowledgeStrip band={{ points: [], observed: 0, ideal: 0, everyS: undefined, gaps: [] }} marks={[]} runId="run-1" startS={0} scaleS={80} atS={0} />);
+    render(<KnowledgeStrip band={{ points: [], observed: 0, agentIds: [], ideal: 0, everyS: undefined, gaps: [] }} marks={[]} runId="run-1" startS={0} scaleS={80} atS={0} />);
     expect(screen.getByTestId("player-knowledge-nosamples")).toHaveAttribute("title", expect.stringContaining("No belief samples in this recording profile"));
     expect(screen.getByTestId("player-knowledge-band")).toHaveAttribute("data-empty", "true");
   });

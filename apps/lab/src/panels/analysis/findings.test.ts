@@ -4,7 +4,7 @@ import type { KnowledgeBand } from "../../shell/knowledge-band.ts";
 import { findingsOf } from "./findings.ts";
 
 const rec = (kind: TraceRecord["kind"], payload: unknown, simTime: number, agentId = "ugv-007"): TraceRecord => ({ id: `r#${simTime}`, runId: "r", seq: Math.round(simTime * 10), simTime, wallTime: 0, agentId, source: "x", kind, payload }) as TraceRecord;
-const BAND: KnowledgeBand = { points: [{ t: 30, knownPct: 35.7, matchPct: 33.1, agents: 20 }], observed: 20, ideal: 0, everyS: 10, gaps: [] };
+const BAND: KnowledgeBand = { points: [{ t: 30, knownPct: 35.7, matchPct: 33.1, agents: 20 }], observed: 20, agentIds: [], ideal: 0, everyS: 10, gaps: [] };
 
 describe("the findings line of the Analysis workspace", () => {
   it("says what the swarm knew at the end (observer data), the first reflex with its agent and time, and the failures", () => {
@@ -14,6 +14,11 @@ describe("the findings line of the Analysis workspace", () => {
       "2 reflexes: ugv-007 outside the geofence at 39.1 s (the first).",
       "1 action failed.",
     ]);
+  });
+
+  it("says the union when the band has it", () => {
+    const withUnion = { ...BAND, union: { points: [{ t: 30, pct: 41.2 }], stepS: 10, calls: 20, costMs: 3 } };
+    expect(findingsOf({ band: withUnion, events: [], endS: 40 })[0]).toBe("At the end the swarm knows 41.2 % of the map, 38.2 % of it matching the truth (observer data, the union of what its 20 agents know).");
   });
 
   it("leaves out a sentence the run holds nothing for", () => {

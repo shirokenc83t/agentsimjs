@@ -2,7 +2,7 @@ import { useUiContext } from "@agentsim/ui";
 import { useEffect, useRef, useState } from "react";
 import type { Mark } from "../panels/debug/marks.ts";
 import { bandMarks } from "./band-marks.ts";
-import { knowledgeAt, knowledgeWords, type KnowledgeBand } from "./knowledge-band.ts";
+import { knowledgeAt, knowledgeShown, knowledgeWords, type KnowledgeBand } from "./knowledge-band.ts";
 
 const W = 1000;
 const H = 100;
@@ -73,23 +73,26 @@ function useWidth(ref: React.RefObject<HTMLElement | null>, fallback = 600): num
  * at all is hatched whole. ▲ reflex and ✕ failure marks sit on the top edge (merged under 6 px, a click selects the record, a hover says what is under it). Observer data: labelled so.
  */
 export function KnowledgeStrip(props: { band: KnowledgeBand; marks: readonly Mark[]; runId: string | undefined; startS: number; scaleS: number; atS: number }) {
-  const { band, startS, scaleS } = props;
+  const { startS, scaleS } = props;
+  const original = props.band;
+  // Where the union of the agents' known cells has been computed the strip draws it (the matching part scaled from the samples); else the mean over the agents.
+  const band: KnowledgeBand = original.union === undefined ? original : { ...original, points: unionPoints(original), gaps: unionGaps(original), everyS: (original.union.stepS ?? 0) * Math.max(1, original.observed) };
   const host = useRef<HTMLDivElement>(null);
   const widthPx = useWidth(host);
   const span = Math.max(1e-9, scaleS - startS);
   const x = (t: number) => (Math.max(0, t - startS) / span) * W;
   const pct = (t: number) => `${(Math.max(0, t - startS) / span) * 100}%`;
-  const words = knowledgeWords(band, props.atS);
-  const at = knowledgeAt(band, props.atS);
-  const first = band.points[0];
+  const words = knowledgeWords(original, props.atS);
+  const at = knowledgeShown(original, props.atS);
+  const first = original.points[0];
   const marks = bandMarks(props.marks, { widthPx, startS, scaleS });
-  const empty = band.points.length === 0;
+  const empty = original.points.length === 0;
   return (
-    <div className="kbs" ref={host} data-testid="player-knowledge-band" data-known={at?.knownPct} data-match={at?.matchPct} data-points={band.points.length} data-empty={empty ? "true" : undefined} role="img" aria-label={words} title={words}>
+    <div className="kbs" ref={host} data-testid="player-knowledge-band" data-known={at?.knownPct} data-match={at?.matchPct} data-kind={at?.kind} data-union-ms={original.union?.costMs} data-union-reads={original.union?.calls} data-points={original.points.length} data-empty={empty ? "true" : undefined} role="img" aria-label={words} title={words}>
       {empty && <div className="kb-hatch" style={{ left: 0, right: 0 }} data-testid="player-knowledge-nosamples" title="No belief samples in this recording profile: nothing to draw" />}
       {!empty && first !== undefined && first.t > startS && <div className="kb-hatch" style={{ left: 0, width: pct(first.t) }} data-testid="player-knowledge-before" title={`Before the first sample (${first.t.toFixed(1)} s): nothing known yet`} />}
-      {band.gaps.map((g) => (
-        <div key={g.fromS} className="kb-hatch" style={{ left: pct(g.fromS + (band.everyS ?? 0)), width: `${((g.toS - g.fromS - (band.everyS ?? 0)) / span) * 100}%` }} data-testid="player-knowledge-gap" title={`No sample from ${g.fromS.toFixed(1)} s to ${g.toS.toFixed(1)} s: the value is not carried across`} />
+      {original.gaps.map((g) => (
+        <div key={g.fromS} className="kb-hatch" style={{ left: pct(g.fromS + (original.everyS ?? 0)), width: `${((g.toS - g.fromS - (original.everyS ?? 0)) / span) * 100}%` }} data-testid="player-knowledge-gap" title={`No sample from ${g.fromS.toFixed(1)} s to ${g.toS.toFixed(1)} s: the value is not carried across`} />
       ))}
       {!empty && (
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
@@ -121,4 +124,26 @@ export function KnowledgeStrip(props: { band: KnowledgeBand; marks: readonly Mar
       ))}
     </div>
   );
+}
+
+/** The band's points with the union of the known cells for the known share, at the times the union was taken; the matching share is the samples' share of what is known, applied to it. */
+function unionPoints(band: KnowledgeBand): KnowledgeBand["points"] {
+  return (band.union?.points ?? []).map((u) => {
+    const shown = knowledgeShown({ ...band, union: { ...(band.union as NonNullable<KnowledgeBand["union"]>), points: [u] } }, u.t);
+    const mean = knowledgeAt(band, u.t);
+    return { t: u.t, knownPct: shown?.knownPct ?? u.pct, matchPct: shown?.matchPct ?? 0, agents: mean?.agents ?? band.observed };
+  });
+}
+
+/** The gaps of the union's points: the spans where the union was not taken for more than two steps (the mean's own gaps hatch separately). */
+function unionGaps(band: KnowledgeBand): KnowledgeBand["gaps"] {
+  const pts = band.union?.points ?? [];
+  const step = band.union?.stepS ?? 0;
+  const out: { fromS: number; toS: number }[] = [];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1] as { t: number };
+    const b = pts[i] as { t: number };
+    if (b.t - a.t > 2 * step) out.push({ fromS: a.t, toS: b.t });
+  }
+  return out;
 }

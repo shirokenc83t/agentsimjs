@@ -16,13 +16,13 @@ test("the player draws the swarm knowledge band from the recorded observer sampl
   await expect.poll(async () => Number(await band.getAttribute("data-points"))).toBeGreaterThan(2);
   const label = page.getByTestId("player-knowledge");
   await expect(label).toContainText("observer");
-  await expect(label).toContainText("agents know");
-  await expect(label).toContainText("avg · match");
+  await expect(label).toContainText(/(agents|swarm) know/); // the mean first, the union when the worker has rebuilt the maps
+  await expect(label).toContainText("match");
   // The tooltip carries the facts of the definition: that it is observer data and the rate of the samples.
   const tip = (await label.getAttribute("title")) ?? "";
   expect(tip).toContain("observer data");
   expect(tip).toContain("each agent every 10 s");
-  expect(tip).toContain("mean of"); // the mean of the agents, until the union exists
+  expect(tip).toMatch(/mean of|the union of what its agents know/); // which it is, whichever it is
   const early = Number(await band.getAttribute("data-known"));
   await step(page, 3);
   await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 600", { timeout: 30_000 });
@@ -39,7 +39,7 @@ for (const width of [1440, 1000]) {
     await step(page, 2);
     await expect(page.getByTestId("status-recording-saved")).toHaveText("saved to tick 200", { timeout: 30_000 });
     const label = page.getByTestId("player-knowledge");
-    await expect(label).toContainText("agents know");
+    await expect(label).toContainText(/(agents|swarm) know/);
     const room = await label.evaluate((el) => {
       // The width the numbers need: the label's text up to the end of the failure count, in the label's own font.
       const full = el.textContent ?? "";
@@ -62,7 +62,7 @@ test("the headless monitor shows the knowledge band, and its metric boxes keep t
   await runCommand(page, "Run headless");
   await expect(page.getByTestId("hm-state")).toContainText("done", { timeout: 120_000 });
   await expect(page.getByTestId("hm-knowledge")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("hm-knowledge-line")).toContainText("agents know");
+  await expect(page.getByTestId("hm-knowledge-line")).toContainText(/(agents|swarm) know/);
   await expect(page.getByTestId("hm-knowledge-line")).toContainText("observer data");
   // The three metric boxes: samples, not "no samples yet", after the end (the writer had records left when the run was done).
   for (const name of ["sim.tickMs", "sim.planExpansions"]) await expect(page.getByTestId(`hm-spark-${name}`)).not.toContainText("no samples yet", { timeout: 30_000 });
