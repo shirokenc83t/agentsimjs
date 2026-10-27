@@ -10,6 +10,7 @@ import traceAgentKindSeq0009 from "../../schema/0009_trace_agent_kind_seq.sql?ra
 import importedFrom0010 from "../../schema/0010_imported_from.sql?raw";
 import derivedRuns0011 from "../../schema/0011_derived_runs.sql?raw";
 import metrics0012 from "../../schema/0012_metrics.sql?raw";
+import parentCauseIndex0013 from "../../schema/0013_parent_cause_index.sql?raw";
 import type { SqlDriver } from "./driver.ts";
 
 export interface Migration {
@@ -32,6 +33,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 10, name: "0010_imported_from", sql: importedFrom0010 },
   { version: 11, name: "0011_derived_runs", sql: derivedRuns0011 },
   { version: 12, name: "0012_metrics", sql: metrics0012 },
+  { version: 13, name: "0013_parent_cause_index", sql: parentCauseIndex0013 },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.length;

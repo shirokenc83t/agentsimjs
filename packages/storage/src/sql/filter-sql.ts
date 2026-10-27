@@ -10,6 +10,8 @@ import type { SqlValue } from "./driver.ts";
 export interface Fragment {
   readonly sql: string;
   readonly params: SqlValue[];
+  /** A term that an index serves from its value (the children or the effects of a record): the query is better driven by it than by the seq order, and sorts what it finds. */
+  readonly driven?: boolean;
 }
 
 /** Parses a filter that arrived over the worker's boundary and checks it selects the kind of row asked for; a bad one is a bad request. */
@@ -79,11 +81,13 @@ function recordTerm(t: FilterTerm, runId: string, params: SqlValue[]): string {
       params.push(asciiLower(t.text));
       return "instr(lower(t.payload), ?) > 0";
     case "cause":
-      params.push(...t.seqs.map((s) => `${runId}#${s}`));
-      return `EXISTS (SELECT 1 FROM trace_causes c WHERE c.run_id = t.run_id AND c.record_id = t.id AND c.cause_id IN (${placeholders(t.seqs.length)}))`;
+      params.push(runId, ...t.seqs.map((s) => `${runId}#${s}`));
+      // Uncorrelated, so the causes index starts the lookup from the cause (an EXISTS per record would visit every record of the run).
+      return `t.id IN (SELECT c.record_id FROM trace_causes c WHERE c.run_id = ? AND c.cause_id IN (${placeholders(t.seqs.length)}))`;
     case "parent":
       params.push(...t.seqs.map((s) => `${runId}#${s}`));
-      return `COALESCE(t.parent_id IN (${placeholders(t.seqs.length)}), 0)`;
+      // `IS NOT NULL AND ... IN`: false (not unknown) for a record with no parent, so a negation still keeps it, and the planner can use the partial parent index.
+      return `(t.parent_id IS NOT NULL AND t.parent_id IN (${placeholders(t.seqs.length)}))`;
     case "source":
       return sourceClause("t.source_owner", "t.source_component", t.patterns, params);
     case "metric":
@@ -95,11 +99,13 @@ function recordTerm(t: FilterTerm, runId: string, params: SqlValue[]): string {
 export function compileRecordFilter(ast: FilterAst, runId: string): Fragment {
   const params: SqlValue[] = [];
   let sql = "";
+  let driven = false;
   for (const t of ast.terms) {
     const clause = recordTerm(t, runId, params);
     sql += t.negated ? ` AND NOT (${clause})` : ` AND (${clause})`;
+    if (!t.negated && (t.key === "cause" || t.key === "parent")) driven = true;
   }
-  return { sql, params };
+  return { sql, params, ...(driven ? { driven } : {}) };
 }
 
 const SAMPLE_OWNER = "substr(m.source, 1, instr(m.source, '/') - 1)";

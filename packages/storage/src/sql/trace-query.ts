@@ -37,7 +37,10 @@ export function buildTraceQuery(q: TraceQuery, range: SeqRange | undefined): { s
   const filter = compileSourceFilter(q.source);
   checkRecordFilter(q);
   const params: SqlValue[] = [q.runId, Math.max(q.afterSeq ?? -1, range ? range.min - 1 : -1)];
-  let where = "t.run_id = ? AND t.seq > ?";
+  // A query driven by an index on a value (the children or the effects of a record) does not take the seq bound as an index range either: the unary plus keeps the planner from walking the
+  // primary key in seq order (which visits every record of the run) instead of starting from the index of the term.
+  const parsed = q.filter === undefined ? undefined : compileRecordFilter(parseQueryFilter(q.filter, "records"), q.runId);
+  let where = parsed?.driven === true ? "t.run_id = ? AND +t.seq > ?" : "t.run_id = ? AND t.seq > ?";
   if (range) {
     // Unary plus: the upper bound filters rows but is not offered to the planner as an index range, so a
     // source filter keeps its (run_id, owner|component, seq) index instead of a two-sided PK range.
@@ -58,12 +61,11 @@ export function buildTraceQuery(q: TraceQuery, range: SeqRange | undefined): { s
     more += " AND json_extract(t.payload, '$.op') = ?";
     params.push(q.op);
   }
-  const parsed = q.filter === undefined ? undefined : compileRecordFilter(parseQueryFilter(q.filter, "records"), q.runId);
   params.push(...filter.params, ...(parsed?.params ?? []), Math.max(0, Math.min(q.limit, MAX_LIMIT)));
   return {
     sql: `SELECT t.*, (SELECT json_group_array(cause_id) FROM (SELECT cause_id FROM trace_causes c
                      WHERE c.run_id = t.run_id AND c.record_id = t.id ORDER BY cause_id)) AS cause_ids_all
-          FROM trace_records t WHERE ${where}${more}${filter.sql}${parsed?.sql ?? ""} ORDER BY t.seq LIMIT ?`,
+          FROM trace_records t WHERE ${where}${more}${filter.sql}${parsed?.sql ?? ""} ORDER BY ${parsed?.driven === true ? "+t.seq" : "t.seq"} LIMIT ?`,
     params,
   };
 }
