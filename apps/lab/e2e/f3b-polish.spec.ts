@@ -85,14 +85,19 @@ test("the live track is neutral: only the head is the accent", async ({ page }) 
   await expect(fill).toBeVisible();
   const same = await page.evaluate(() => {
     const sv = document.querySelector(".track .sv");
+    // Neutral: a fill of the surfaces, or (with the knowledge strip, ADR-0043 section 7) the grey of the saved-range line; never the accent.
     const probe = document.createElement("div");
-    probe.style.background = "var(--bg3)";
     document.body.append(probe);
-    const want = getComputedStyle(probe).backgroundColor;
+    const colour = (v: string) => {
+      probe.style.background = `var(${v})`;
+      return getComputedStyle(probe).backgroundColor;
+    };
+    const have = getComputedStyle(sv as Element).backgroundColor;
+    const ok = [colour("--bg3"), colour("--fg3")].includes(have) && have !== colour("--ac");
     probe.remove();
-    return getComputedStyle(sv as Element).backgroundColor === want;
+    return ok;
   });
-  expect(same, "the recorded part of the track is the neutral fill").toBe(true);
+  expect(same, "the recorded part of the track is neutral").toBe(true);
 });
 
 test("the Scene's collapsed windows sit in one row along its bottom edge and do not cover each other", async ({ page }) => {

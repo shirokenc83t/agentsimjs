@@ -95,8 +95,10 @@
 .dockview-theme-agentsim .dv-resize-container .tmeta { flex: 1 1 auto; text-align: right; margin-right: 6px; }
 .dockview-theme-agentsim .dv-groupview.collapsed .tmeta { display: none !important; }
 
-/* Collapsed windows are a strip along the map's edge (ADR-0043 §6): each shows its title and the one button that opens it; docking and closing wait for the open window, so three of them fit in a narrow host (1000 px). */
-.dockview-theme-agentsim .dv-groupview.collapsed .wb[data-testid^="wb-dock-"],
-.dockview-theme-agentsim .dv-groupview.collapsed .wb[data-testid^="wb-close-"] { display: none; }
+/* Collapsed windows are a strip along the map's edge (ADR-0043 §6): in a narrow host (1000 px: under 190 px each) a window shows its title and the one button that opens it, docking and closing wait for the open window; wider, it keeps its three buttons. */
+@container (max-width: 190px) {
+  .dockview-theme-agentsim .dv-groupview.collapsed .wb[data-testid^="wb-dock-"],
+  .dockview-theme-agentsim .dv-groupview.collapsed .wb[data-testid^="wb-close-"] { display: none; }
+}
 .dockview-theme-agentsim .dv-groupview.collapsed .dv-tabs-container { flex: 1 1 auto; min-width: 0; overflow: hidden; }
 .dockview-theme-agentsim .dv-groupview.collapsed .dv-tab { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

@@ -138,6 +138,14 @@
 /* A narrow window: the launch row gives up the run's id (the summary under it has it), the time mode chip (it is in that summary too) and the words of "scrub back". */
 @media (max-width: 1100px) {
   .ready-start .rid, .hide-1100, .ply .lbl-long { display: none; }
+  /* The scrub cell keeps its 200 px (the knowledge band, ADR-0043 section 7): the launch summary is shorter and the rate tile gives way (the frame rate is in the status line). */
+  .ready-sum { max-width: 150px; }
+  .telem .tile:first-child { display: none; }
+  .telem .tile { padding: 0 8px; min-width: 60px; }
+  .ready-sum { max-width: 110px; }
+  .player { grid-template-columns: auto 128px minmax(200px, 1fr) auto; }
+  .clock { padding: 0 8px; }
+  .clock .big { font-size: 18px; }
 }
 .top .theme-btn { text-transform: none; }
 .clock .mission-note { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
