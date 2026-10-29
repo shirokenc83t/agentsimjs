@@ -22,4 +22,11 @@ describe("log rows", () => {
     expect(summary(rec("action", { op: "start", name: "goTo" }, "to (3, 4)"))).toBe("start · goTo · to (3, 4)");
     expect(summary(rec("event", null))).toBe("");
   });
+
+  it("a mission's decision says its step: the action begun, the end, the stop; a decision without a mission keeps its detail", () => {
+    expect(summary(rec("thought", { op: "decision", step: 2, of: 4, decision: { kind: "action", name: "goTo" } }, "full"))).toBe("decision · step 2 of 4 · goTo");
+    expect(summary(rec("thought", { op: "decision", step: 4, of: 4, done: true, decision: { kind: "idle" } }, "full"))).toBe("decision · step 4 of 4 · done");
+    expect(summary(rec("thought", { op: "decision", step: 2, of: 4, stop: { status: "failed" }, decision: { kind: "idle" } }, "full"))).toBe("decision · step 2 of 4 · stopped");
+    expect(summary(rec("thought", { op: "decision" }, "full"))).toBe("decision · full");
+  });
 });

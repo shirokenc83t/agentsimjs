@@ -131,7 +131,7 @@ describe("the headless run monitor", () => {
     view({}, progress({ done: true, running: false, tick: 3000, simTimeS: 300, wallMs: 2500, simSecondsPerSecond: 0, ticksPerSecond: 0 }));
     expect(screen.getByTestId("hm-speed")).toHaveTextContent("×120 real time");
     expect(screen.getByTestId("hm-tps")).toHaveTextContent("1 200");
-    expect(screen.getByText(/SPEED · AVERAGE/)).toBeInTheDocument();
+    expect(screen.getByText(/Speed · average/)).toBeInTheDocument();
   });
 
   it("a run stopped before its end says stopped, not done, and a run switched to the live view says so", () => {

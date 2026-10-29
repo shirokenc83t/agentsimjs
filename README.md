@@ -33,6 +33,7 @@ pnpm bench              # benchmarks, checked against bench/thresholds.json
 - **F2b, planning strategies:** composable planners (selection, fallback, coarse-to-fine refinement, anytime), traced per query, with a sandbox to try them.
 - **F3a, trace recorder and replay:** recording profiles, snapshots and belief frames written by a recorder channel between the workers, replay of a stored run in the panels, a storage browser.
 - **F3b, observation and analysis:** a metrics channel, a filter language for the trace (log console with a live tail, trace tree, multi-log inspector, read-only SQL console), re-simulation of a window of a recorded run, headless runs with a monitor (as fast as lockstep allows, always recorded), and an Analysis workspace (trajectories, events, per-agent series, exports) next to a top-down 2D view of the Scene. The UI has a new chrome: numbered dockable panels, named layouts, light and dark themes.
+- **F3c, missions, audit and identity:** a step editor in Configurations composes a mission (take off, go to, explore, return, land) that runs as the `sequence` script mind and shows each step's state, an agent history on one time axis that opens an action into its iterations, steps and records, an audit of every action with its reason and cause and the records behind a chart value, an index on the trace parent and cause columns, a swarm knowledge band in the player, and a new look (neutral darks, one subject one hue).
 
 ## License
 

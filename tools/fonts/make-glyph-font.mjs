@@ -106,6 +106,12 @@ export const GLYPHS = [
   { code: 0x25a0, name: "square", contours: [solid([[95, 95], [95, 635], [505, 635], [505, 95]])] },
   { code: 0x25aa, name: "small-square", contours: [solid([[170, 220], [170, 480], [430, 480], [430, 220]])] },
   { code: 0x2713, name: "check", contours: [solid(bar(60, 330, 225, 150, 110)), solid(bar(225, 150, 540, 650, 110))] },
+  {
+    code: 0xe000,
+    name: "agentsim-mark",
+    // The mark of the product (ADR-0043 §6): an agent (the pointed triangle of the Scene's cone) in a cell (a square outline). Private use: no character means it.
+    contours: [solid([[60, 60], [60, 600], [540, 600], [540, 60]]), hole([[125, 125], [455, 125], [455, 535], [125, 535]]), solid([[200, 205], [200, 455], [420, 330]])],
+  },
   { code: 0x2502, name: "light-vertical", contours: [solid([[270, -150], [270, 800], [330, 800], [330, -150]])] },
 ];
 

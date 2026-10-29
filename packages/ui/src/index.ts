@@ -1,6 +1,6 @@
 export { StateInterpolator, DEFAULT_INTERPOLATOR_OPTIONS, type InterpolatorOptions, type PoseSource } from "./scene/interpolator.ts";
 export { SceneRenderer, type AgentDecor, type EditPointerPhase, type GridSpec, type MapPin, type ScenePick } from "./scene/scene-renderer.ts";
-export { identityOf, shortLabel, IDENTITY_COUNT, type Identity, type MarkerStyle } from "./theme/identity.ts";
+export { identityOf, isMuted, shortLabel, SUBJECT_NEUTRAL, subjectColor, IDENTITY_COUNT, type Identity, type MarkerStyle } from "./theme/identity.ts";
 export { type StageLine } from "./scene/stages-overlay.ts";
 export { type ExplorationView } from "./scene/overlay-layers.ts";
 export { AtlasLayout, ChunkQueue, CHUNK_UPLOADS_PER_FRAME, type GridDims } from "./scene/atlas-layout.ts";

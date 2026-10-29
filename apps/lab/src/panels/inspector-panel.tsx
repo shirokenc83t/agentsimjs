@@ -3,7 +3,7 @@ import { STATUS_STRIDE, type AgentFacts, type SimLoadedMessage } from "@agentsim
 import { GLYPH, identityOf, shortLabel, STATE_GLYPH, useUiContext } from "@agentsim/ui";
 import Button from "@mui/material/Button";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { usePolled, useSource } from "../services.tsx";
+import { useAppActions, usePolled, useSource } from "../services.tsx";
 import type { RunFeature, RunSnapshot, RunSource } from "../sim/run-source.ts";
 import { pendingAt, queueCommand, useQueuedCommands } from "../queued-commands.ts";
 import { AGENT_COMMANDS, agentExploreRadius, agentFacts, batteryWarning, commandButtonState, commandHint, commandParams, commandUnsupported, DONE_MS, refusalWords } from "../commands.ts";
@@ -15,7 +15,10 @@ import { querySelection, useQuerySelection } from "./query-selection.ts";
 import { asResearcherCellBeliefs } from "./researcher-data.ts";
 import { RESEARCHER_BANNER, ResearcherSection } from "./researcher-section.tsx";
 import { useSimStream } from "./use-sim-stream.ts";
+import { MissionProgress } from "./mission-progress.tsx";
+import type { MissionView } from "./mission-view.ts";
 import { useAgentViews } from "./use-agent-views.ts";
+import { useMissionViews } from "./use-mission-views.ts";
 import { usePlanQueries } from "./use-plan-queries.ts";
 import { StrategyTestSection } from "./strategy-test-section.tsx";
 
@@ -107,7 +110,7 @@ function bodyRows(body: Record<string, unknown>): [string, string][] {
  * Researcher commands (ADR-0015 addition of 2026-10-12): world scope, recorded as run inputs. Every button is always
  * available: preconditions still apply, so a command the agent cannot run now is refused with its code, shown here.
  */
-function CommandsSection(props: { id: string; kind: string; body: Record<string, unknown>; source: RunSource; views: AgentViews | undefined; facts: AgentFacts | undefined }) {
+function CommandsSection(props: { id: string; kind: string; body: Record<string, unknown>; source: RunSource; views: AgentViews | undefined; facts: AgentFacts | undefined; mission?: MissionView | undefined }) {
   const { id, kind, body, source, facts } = props;
   const command = props.views?.command;
   const action = props.views?.action;
@@ -142,6 +145,11 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
   const batteryNote = batteryWarning(body, facts?.soc);
   return (
     <Section title="Commands (researcher, world scope)" testId="inspector-commands">
+      {props.mission !== undefined && (props.mission.status === "ready" || props.mission.status === "running") && (
+        <p className="muted pre-hint" data-testid="command-mission-note">
+          ◇ a command stops the mission: the step it is at is preempted and the mission does not go on
+        </p>
+      )}
       <Row k="send">
         <span className="muted">Send to… (G) in the Scene</span>
       </Row>
@@ -247,6 +255,7 @@ function CommandsSection(props: { id: string; kind: string; body: Record<string,
 
 function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSource; views: Map<string, AgentViews> }) {
   const { id, snap, source, views } = props;
+  const { openPanel } = useAppActions();
   const queries = usePlanQueries(source, id);
   const picked = useQuerySelection();
   const selectedQuery = picked?.agentId === id && queries.some((q) => q.queryId === picked.queryId) ? picked.queryId : undefined;
@@ -258,6 +267,7 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
   const st = snap.agentStatus;
   const o = index * STATUS_STRIDE;
   const v = views.get(id);
+  const mission = useMissionViews(source).get(id);
   const action = v?.action;
   const state = actionState(action);
   const cfg = (agent.config ?? {}) as AgentConfig;
@@ -286,9 +296,15 @@ function AgentInspector(props: { id: string; snap: RunSnapshot; source: RunSourc
           </span>
           {action && <span className="muted nowrap"> · since {action.startedAtS.toFixed(1)} s</span>}
         </div>
-        <FoldAll />
+        <div className="idcard-actions">
+          <button type="button" className="kt" onClick={() => openPanel("agentHistory")} data-testid="inspector-history" data-tip="The history of this agent: what it did, from start to end (H)">
+            history · H
+          </button>
+          <FoldAll />
+        </div>
       </div>
-      <CommandsSection id={id} kind={agent.kind} body={body} source={source} views={v} facts={agentFacts(run, snap.agentStatus, snap.entityIds, id)} />
+      {mission !== undefined && <MissionProgress agentId={id} runId={run.runId} view={mission} />}
+      <CommandsSection id={id} kind={agent.kind} body={body} source={source} views={v} facts={agentFacts(run, snap.agentStatus, snap.entityIds, id)} mission={mission} />
       <Unavailable source={source} feature="mindView" title="What the mind receives">
         <Fold id="mindView" title="What the mind receives" summary="the request the planner got and the plan it chose" bare>
           <MindViewSection source={source} agentId={id} runId={run.runId} />

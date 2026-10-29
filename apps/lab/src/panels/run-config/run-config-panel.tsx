@@ -37,6 +37,8 @@ import {
   type SectionStatus,
 } from "./model.ts";
 import { headlessButton, headlessTip } from "../../sim/headless-names.ts";
+import { missionAgentsOf, MissionSection } from "./mission-section.tsx";
+import { alongList, countsWords, missionOf, missionStatus } from "./mission-model.ts";
 import { StrategyPicker } from "./strategy-picker.tsx";
 
 const ALGORITHMS = ["dijkstra", "astar", "hpa", "weighted-astar"] as const;
@@ -142,12 +144,13 @@ function StatusGlyph(props: { status: SectionStatus | undefined }) {
 
 /** The jump row on top of the form: one chip a section, with its validation glyph. */
 const JUMPS = [
-  { id: "run", title: "RUN" },
-  { id: "planning", title: "PLANNING" },
-  { id: "drive", title: "DRIVE" },
-  { id: "beliefs", title: "BELIEFS" },
-  { id: "effective", title: "EFFECTIVE" },
-  { id: "presets", title: "PRESETS" },
+  { id: "run", title: "Run" },
+  { id: "planning", title: "Planning" },
+  { id: "drive", title: "Drive" },
+  { id: "beliefs", title: "Beliefs" },
+  { id: "effective", title: "Effective" },
+  { id: "mission", title: "Mission" },
+  { id: "presets", title: "Presets" },
 ] as const;
 const JUMP_ROW_PX = 30;
 
@@ -195,6 +198,28 @@ function RunConfigEditor(props: { loaded: Loaded }) {
     e.preventDefault();
   };
   const validation = useMemo(() => validateDraft(draft, view, version), [draft, view, version]);
+  // The missions: who can have one, what each says of itself (valid, or how many steps to fix), and what the run buttons say of them.
+  const missions = useMemo(() => missionAgentsOf(run.loaded.agents, run.scenario), [run]);
+  const missionCounts = useMemo(
+    () =>
+      missions.agents.reduce(
+        (n, a) => {
+          const st = missionStatus(missionOf(draft, a.key), a.facts);
+          return { steps: n.steps + st.steps, errors: n.errors + st.errors, warnings: n.warnings + st.warnings, valid: n.valid && st.valid };
+        },
+        { steps: 0, errors: 0, warnings: 0, valid: true },
+      ),
+    [missions, draft],
+  );
+  const missionFix = missionCounts.errors + missionCounts.warnings;
+  // The first step expected to be refused, so that running a list that will stop is a choice: `▲ 2 warnings · the mission will stop at step 3 (uav-001)`.
+  const missionStop = useMemo(() => {
+    for (const a of missions.agents) {
+      const k = alongList(missionOf(draft, a.key), a.facts).findIndex((r) => !r.ok);
+      if (k >= 0) return { agent: a.id, step: k + 1 };
+    }
+    return undefined;
+  }, [missions, draft]);
   const sameAsRun = validation.ok && validation.resolved.runConfigHash === run.header.runConfigHash;
   const error = validation.ok ? undefined : validation.error;
   const warnings = validation.ok ? validation.resolved.warnings : [];
@@ -231,7 +256,15 @@ function RunConfigEditor(props: { loaded: Loaded }) {
             <nav className="rc-jump mono" aria-label="Sections of the run configuration" data-testid="rc-jump">
               {JUMPS.map((j) => (
                 <button key={j.id} type="button" className="kt" onClick={() => jumpTo(j.id)} data-testid={`rc-jump-${j.id}`}>
-                  {j.title} {j.id === "effective" ? <span className="muted">{validation.ok ? validation.resolved.agents.length : ""}</span> : j.id === "presets" ? null : <StatusGlyph status={status[j.id]} />}
+                  {j.title} {j.id === "effective" ? (
+                    <span className="muted">{validation.ok ? validation.resolved.agents.length : ""}</span>
+                  ) : j.id === "presets" ? null : j.id === "mission" ? (
+                    <span className={`st ${missionCounts.errors > 0 ? "st-alm" : missionCounts.warnings > 0 ? "st-warn" : "st-ok"}`} data-testid="rc-jump-mission-state">
+                      {missionFix === 0 ? `✓ ${missionCounts.steps}` : countsWords({ ...missionCounts, valid: false })}
+                    </span>
+                  ) : (
+                    <StatusGlyph status={status[j.id]} />
+                  )}
                 </button>
               ))}
             </nav>
@@ -245,7 +278,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
             </p>
             <section className={`fs${folded.has("run") ? " folded" : ""}`} data-section="run">
               <h4 className="sec">
-                <b>1 · RUN</b>
+                <b>1 · Run</b>
                 <span className="rule" />
                 <span data-testid="rc-status-run"><StatusGlyph status={status.run} /></span>
                 {draft.seed === undefined && draft.timeMode === undefined && (rowCounts["run"] ?? 0) > 0 && (
@@ -276,7 +309,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
 
             <section className={`fs${folded.has("planning") ? " folded" : ""}`} data-testid="rc-planning" data-section="planning">
               <h4 className="sec">
-                <b>2 · PLANNING</b>
+                <b>2 · Planning</b>
                 <span className="rule" />
                 <span data-testid="rc-status-planning"><StatusGlyph status={status.planning} /></span>
                 {countSet(getEntry(draft, "planning", pScope)) === 0 && (rowCounts["planning"] ?? 0) > 0 && (
@@ -319,7 +352,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
 
             <section className={`fs${folded.has("drive") ? " folded" : ""}`} data-testid="rc-drive" data-section="drive">
               <h4 className="sec">
-                <b>3 · GROUND DRIVE</b>
+                <b>3 · Ground drive</b>
                 <span className="rule" />
                 <span data-testid="rc-status-drive"><StatusGlyph status={status.drive} /></span>
                 {countSet(getEntry(draft, "drive", dScope)) === 0 && (rowCounts["drive"] ?? 0) > 0 && (
@@ -347,7 +380,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
 
             <section className={`fs${folded.has("beliefs") ? " folded" : ""}`} data-testid="rc-beliefs" data-section="beliefs">
               <h4 className="sec">
-                <b>4 · BELIEFS</b>
+                <b>4 · Beliefs</b>
                 <span className="rule" />
                 <span data-testid="rc-status-beliefs"><StatusGlyph status={status.beliefs} /></span>
                 {countSet(getEntry(draft, "beliefs", bScope)) === 0 && (rowCounts["beliefs"] ?? 0) > 0 && (
@@ -373,6 +406,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
             </section>
 
             {validation.ok && <EffectiveTable agents={validation.resolved.agents} />}
+            <MissionSection draft={draft} onChange={setDraft} agents={missions.agents} world={missions.world} />
             <Presets draft={draft} scenario={draft.scenario} onLoad={setDraft} />
             </div>
           </div>
@@ -429,6 +463,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
           className="btn pri"
           onClick={() => validation.ok && !current.busy && current.runWithConfig(validation.resolved.document)}
           aria-disabled={!validation.ok || current.busy}
+          title={missionFix > 0 ? `${missionFix} mission step${missionFix === 1 ? "" : "s"} cannot run where the list puts ${missionFix === 1 ? "it" : "them"}: the mission stops there, with the reason` : undefined}
           data-testid="rc-run"
         >
           ▶ Run with this configuration
@@ -443,6 +478,11 @@ function RunConfigEditor(props: { loaded: Loaded }) {
         >
           {headlessButton(current.rerunCommands ?? 0)}
         </button>
+        {missionCounts.warnings > 0 && missionStop !== undefined && (
+          <span className="st-warn mono" role="status" data-testid="rc-mission-stop">
+            ▲ {missionCounts.warnings} warning{missionCounts.warnings === 1 ? "" : "s"} · the mission will stop at step {missionStop.step} ({missionStop.agent})
+          </span>
+        )}
         <button type="button" className="btn" onClick={() => setDraft(props.loaded.initial)} data-testid="rc-revert">
           Revert to the current run
         </button>
@@ -494,7 +534,7 @@ function EffectiveTable(props: { agents: readonly EffectiveAgentConfig[] }) {
   return (
     <section className="fs" data-testid="rc-effective" data-section="effective">
       <h4 className="sec">
-        <b>5 · EFFECTIVE CONFIGURATION</b>
+        <b>5 · Effective configuration</b>
         <span className="rule" />
       </h4>
       <table className="effective-table">
@@ -580,7 +620,7 @@ function Presets(props: { draft: RunConfigDocument; scenario: RunConfigDocument[
   return (
     <section className="fs" data-testid="rc-presets" data-section="presets">
       <h4 className="sec">
-        <b>6 · PRESETS</b>
+        <b>6 · Presets</b>
         <span className="rule" />
       </h4>
       <div className="rc-inline">

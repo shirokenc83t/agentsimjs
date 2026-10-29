@@ -3,6 +3,8 @@ import { useCallback, useId, useMemo } from "react";
 import { useSeries } from "../inspector/use-series.ts";
 import { useAppActions, useCurrentRun, usePolled, useServices } from "../../services.tsx";
 import { HeadlessMonitorView, type Spark } from "./headless-monitor-view.tsx";
+import { useRunMarks } from "../debug/use-run-marks.ts";
+import { useKnowledgeBand } from "../../shell/use-knowledge.ts";
 import { useSampledStream, useStoredBytes } from "./use-monitor-data.ts";
 
 /** The metrics the monitor draws: the tick's wall cost, what the planner spends and the writer's backlog. */
@@ -26,7 +28,8 @@ export function HeadlessMonitorPanel() {
   const runId = snap.run?.runId;
   const mine = progress !== undefined && progress.runId === runId ? progress : undefined;
   const base = useId().replace(/[^A-Za-z0-9]/g, "");
-  const tail = mine !== undefined && !mine.done;
+  // The subscriptions keep going until the writer has flushed too: a run that is done may still have records (and the samples of its metrics) on their way to the store.
+  const tail = mine !== undefined && (!mine.done || (snap.recording?.runId === runId && (snap.recording?.backlogRecords ?? 0) > 0));
   const stream = useSampledStream(storage, mine === undefined ? undefined : runId, `hm-${base}-events`);
   const stored = useStoredBytes(storage, mine === undefined ? undefined : runId, tail);
   // One series per metric, each its own live subscription (a metric filter), tailing while the run is not done.
@@ -37,6 +40,10 @@ export function HeadlessMonitorPanel() {
     () => [tick, plan, backlog].map((s, i) => ({ name: (SPARKS[i] as (typeof SPARKS)[number]).name, title: (SPARKS[i] as (typeof SPARKS)[number]).title, unit: (SPARKS[i] as (typeof SPARKS)[number]).unit, points: s.lines[0]?.points ?? [] })),
     [tick, plan, backlog],
   );
+  const dtS = snap.run?.dtS ?? 0.1;
+  const endS = mine === undefined ? 0 : mine.tick * dtS;
+  const knowledgeBand = useKnowledgeBand(mine === undefined ? undefined : runId, endS + dtS, dtS);
+  const knowledgeMarks = useRunMarks(mine === undefined ? undefined : runId, endS + dtS);
   const header = run?.header;
   const profile = header?.recordingProfile as { name?: string } | undefined;
   return (
@@ -47,6 +54,7 @@ export function HeadlessMonitorPanel() {
       storedBytes={stored}
       stream={stream}
       sparks={sparks}
+      knowledge={mine === undefined || runId === undefined ? undefined : { band: knowledgeBand, marks: knowledgeMarks, runId, endS }}
       writer={snap.recording === undefined || snap.recording.runId !== runId ? undefined : { state: snap.recording.state, backlogRecords: snap.recording.backlogRecords }}
       actions={{
         rerunHeadless,

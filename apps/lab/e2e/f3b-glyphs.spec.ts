@@ -48,6 +48,6 @@ test("a key state quoted in Settings prose is a mono chip: its symbols are drawn
     expect(fonts.find((f) => f.family === "AgentSim Glyphs")?.glyphs, `${id}: the circle`).toBeGreaterThan(0);
     for (const f of fonts) expect(f.family, `${id}: ${f.family}`).toMatch(/^(JetBrains Mono|AgentSim Glyphs)/); // never IBM Plex Sans
     const size = await page.getByTestId(id).evaluate((el) => getComputedStyle(el).fontSize);
-    expect(size).toBe("12px");
+    expect(size).toBe("12.5px"); // the chrome size (ADR-0043 §5)
   }
 });

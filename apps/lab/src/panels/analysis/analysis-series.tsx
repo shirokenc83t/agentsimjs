@@ -1,7 +1,10 @@
 import "../panels.css";
-import { identityOf, shortLabel } from "@agentsim/ui";
+import { identityOf, shortLabel, subjectColor } from "@agentsim/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { stackedLabelYs, valueAtTime, type AnalysisSeries } from "./analysis-model.ts";
+import { stackedLabelYs, valueAtTime, type AnalysisSeries, type SeriesPoint } from "./analysis-model.ts";
+
+/** How near a click must be to a point (px) to mark it rather than move the cursor. */
+const MARK_PX = 14;
 
 export interface AnalysisSeriesProps {
   readonly series: readonly AnalysisSeries[];
@@ -13,6 +16,10 @@ export interface AnalysisSeriesProps {
   /** The agent the panels are looking at: its line is drawn heavier and the others dimmer. */
   readonly selectedAgent?: string | undefined;
   readonly onSeek: (tS: number, agentId?: string) => void;
+  /** A click on a point of a line marks it, for provenance (T-103): the point and its series. A click that is not near a point still seeks. */
+  readonly onMark?: ((series: AnalysisSeries, point: SeriesPoint) => void) | undefined;
+  /** The marked point (accent ring, dashed drop line and its value). */
+  readonly marked?: { readonly key: string; readonly t: number; readonly v: number } | undefined;
 }
 
 const PAD = { l: 52, r: 78, t: 6, b: 16 };
@@ -109,7 +116,7 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
                   {" "}
                   · at {hv?.toFixed(1)} s:
                   {readout.map((r) => (
-                    <span key={r.agentId} style={{ color: `var(--agent-${identityOf(props.indexOf(r.agentId)).colorIndex})` }}>
+                    <span key={r.agentId} style={{ color: subjectColor(identityOf(props.indexOf(r.agentId)).colorIndex, props.selectedAgent, r.agentId) }}>
                       {" "}
                       {shortLabel(r.agentId)} {fmt(r.v)}
                     </span>
@@ -126,6 +133,21 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
               onClick={(e) => {
                 const r = e.currentTarget.getBoundingClientRect();
                 const t = t0 + ((e.clientX - r.left - PAD.l) / (w - PAD.l - PAD.r)) * (t1 - t0);
+                if (props.onMark) {
+                  // The nearest point of any line of this chart, in pixels (the subject's line wins a tie).
+                  const cx = e.clientX - r.left;
+                  const cy = e.clientY - r.top;
+                  let best: { line: AnalysisSeries; p: SeriesPoint; d: number } | undefined;
+                  for (const l of lines)
+                    for (const p of l.points) {
+                      const d = Math.hypot(x(p.t) - cx, y(p.v) - cy) - (l.agentId === props.selectedAgent ? 0.5 : 0);
+                      if (best === undefined || d < best.d) best = { line: l, p, d };
+                    }
+                  if (best !== undefined && best.d <= MARK_PX) {
+                    props.onMark(best.line, best.p);
+                    return;
+                  }
+                }
                 if (t >= t0 && t <= t1) props.onSeek(Math.round(t * 10) / 10);
               }}
               onPointerMove={(e) => {
@@ -154,32 +176,72 @@ export function AnalysisSeriesView(props: AnalysisSeriesProps) {
                     key={l.key}
                     className={`line${props.selectedAgent === l.agentId ? " sel" : ""}${dim ? " dim" : ""}`}
                     data-agent={l.agentId}
-                    style={{ stroke: `var(--agent-${identityOf(props.indexOf(l.agentId)).colorIndex})` }}
+                    style={{ stroke: subjectColor(identityOf(props.indexOf(l.agentId)).colorIndex, props.selectedAgent, l.agentId) }}
                     points={l.points.map((p) => `${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ")}
                   />
                 );
               })}
               {ends.map((e, i) => (
                 <g key={e.line.key} className={`end${props.selectedAgent !== undefined && props.selectedAgent !== e.line.agentId ? " dim" : ""}`} data-testid={`series-end-${testName}-${e.line.agentId}`}>
-                  <rect x={w - PAD.r + 6} y={(labelYs[i] as number) - 4} width={7} height={7} style={{ fill: `var(--agent-${identityOf(props.indexOf(e.line.agentId)).colorIndex})` }} />
+                  <rect x={w - PAD.r + 6} y={(labelYs[i] as number) - 4} width={7} height={7} style={{ fill: subjectColor(identityOf(props.indexOf(e.line.agentId)).colorIndex, props.selectedAgent, e.line.agentId) }} />
                   <text className="tick" x={w - PAD.r + 16} y={(labelYs[i] as number) + 3}>{shortLabel(e.line.agentId)} {fmt(e.v)}</text>
                 </g>
               ))}
+              {props.marked !== undefined && lines.some((l) => l.key === props.marked?.key) && props.marked.t >= t0 && props.marked.t <= t1 && (
+                <g className="mark" data-testid={`series-mark-${testName}`}>
+                  <line className="drop" x1={x(props.marked.t)} y1={y(props.marked.v)} x2={x(props.marked.t)} y2={ROW_H - PAD.b} />
+                  <circle cx={x(props.marked.t)} cy={y(props.marked.v)} r={5} />
+                  <text className="tick" x={Math.min(x(props.marked.t) + 8, w - PAD.r - 40)} y={Math.max(PAD.t + 8, y(props.marked.v) - 8)}>{fmt(props.marked.v)}</text>
+                </g>
+              )}
               {props.cursorS >= t0 && props.cursorS <= t1 && <line className="cursor" x1={x(props.cursorS)} y1={PAD.t} x2={x(props.cursorS)} y2={ROW_H - PAD.b} />}
               {hv !== undefined && <line className="hover" x1={x(hv)} y1={PAD.t} x2={x(hv)} y2={ROW_H - PAD.b} />}
             </svg>
-            {crowded && (
-              <ul className="asv-legend mono" data-testid={`series-legend-${testName}`} aria-label={`${name}: every agent and its last value`}>
-                {allEnds.map((e) => (
-                  <li key={e.line.key} className={props.selectedAgent === e.line.agentId ? "sel" : undefined}>
-                    <span className="sw" style={{ background: `var(--agent-${identityOf(props.indexOf(e.line.agentId)).colorIndex})` }} /> {shortLabel(e.line.agentId)} <span className="muted">{fmt(e.v)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            {crowded && <SeriesLegend ends={allEnds} selected={props.selectedAgent} indexOf={props.indexOf} fmt={fmt} name={name} testName={testName} />}
           </figure>
         );
       })}
+    </div>
+  );
+}
+
+interface LegendEnd {
+  readonly line: { readonly key: string; readonly agentId: string };
+  readonly v: number;
+}
+
+/**
+ * The legend of a crowded chart. With no subject it lists every agent and its last value. With a subject (one subject, one hue) it says the subject's value and the others as a range, and the
+ * full list is behind "all": the others are grey and a list of twenty of them under every chart says nothing.
+ */
+function SeriesLegend(props: { ends: readonly LegendEnd[]; selected: string | undefined; indexOf: (id: string) => number; fmt: (v: number) => string; name: string; testName: string }) {
+  const { ends, selected, fmt } = props;
+  const [all, setAll] = useState(false);
+  const subject = selected === undefined ? undefined : ends.find((e) => e.line.agentId === selected);
+  const list = (
+    <ul className="asv-legend mono" data-testid={`series-legend-${props.testName}`} aria-label={`${props.name}: every agent and its last value`}>
+      {ends.map((e) => (
+        <li key={e.line.key} className={selected === e.line.agentId ? "sel" : undefined}>
+          <span className="sw" style={{ background: subjectColor(identityOf(props.indexOf(e.line.agentId)).colorIndex, selected, e.line.agentId) }} /> {shortLabel(e.line.agentId)} <span className="muted">{fmt(e.v)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+  if (subject === undefined) return list;
+  const others = ends.filter((e) => e !== subject).map((e) => e.v);
+  return (
+    <div className="asv-subject mono" data-testid={`series-subject-${props.testName}`}>
+      <span className="sw" style={{ background: subjectColor(identityOf(props.indexOf(subject.line.agentId)).colorIndex, selected, subject.line.agentId) }} /> <b>{shortLabel(subject.line.agentId)}</b> {fmt(subject.v)}
+      {others.length > 0 && (
+        <span className="muted">
+          {" "}
+          · {others.length} other{others.length === 1 ? "" : "s"} · {fmt(Math.min(...others))}–{fmt(Math.max(...others))}
+        </span>
+      )}{" "}
+      <button type="button" className="kt" aria-expanded={all} onClick={() => setAll((o) => !o)} data-testid={`series-all-${props.testName}`}>
+        {all ? "▾ all" : "▸ all"}
+      </button>
+      {all && list}
     </div>
   );
 }

@@ -95,6 +95,23 @@ describe("RunConfigPanel (ADR-0028)", () => {
     expect(runWithConfig).toHaveBeenCalledWith(expect.objectContaining({ planning: { byAgent: { rover: { radiusM: 25, windowMarginM: 5 } } } }));
   });
 
+  it("a mission with a schema error (✕) cannot be run; a step that cannot run where it is (▲) can, and the buttons say where the mission will stop", async () => {
+    const { runWithConfig } = setup();
+    await userEvent.selectOptions(screen.getByTestId("ms-agent"), within(screen.getByTestId("ms-agent")).getAllByRole("option").find((o) => /UAV/.test(o.textContent ?? "")) as HTMLElement);
+    await userEvent.selectOptions(screen.getByTestId("ms-add"), "explore");
+    // Explore on the ground: a warning, not an error. Run stays on and says where the mission stops.
+    expect(screen.getByTestId("rc-mission-stop")).toHaveTextContent("▲ 1 warning · the mission will stop at step 1");
+    expect(screen.getByTestId("rc-run")).toHaveAttribute("aria-disabled", "false");
+    // A radius of 0 is an error: Run is off, nothing runs.
+    await userEvent.type(screen.getByTestId("ms-arg-0-radiusM"), "0");
+    expect(screen.getByTestId("rc-run")).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(screen.getByTestId("rc-run"));
+    expect(runWithConfig).not.toHaveBeenCalled();
+    await userEvent.clear(screen.getByTestId("ms-arg-0-radiusM"));
+    await userEvent.click(screen.getByTestId("rc-run"));
+    expect(runWithConfig).toHaveBeenCalledTimes(1);
+  });
+
   it("reports invalid values with their stable codes and does not run them", async () => {
     const { runWithConfig } = setup();
     await userEvent.type(screen.getByTestId("rc-per-tick"), "0");
@@ -352,10 +369,10 @@ describe("RunConfigPanel: the planner choice (ADR-0037, F2b M4)", () => {
 
   it("has a jump row of the sections with their validation glyphs, and a section whose fields are all inherited folds to one line", async () => {
     setup();
-    expect(screen.getByTestId("rc-jump-planning")).toHaveTextContent("PLANNING ✓");
+    expect(screen.getByTestId("rc-jump-planning")).toHaveTextContent("Planning ✓");
     await userEvent.type(screen.getByTestId("rc-per-tick"), "0");
-    expect(screen.getByTestId("rc-jump-planning")).toHaveTextContent("PLANNING ✕ 1");
-    expect(screen.getByTestId("rc-jump-drive")).toHaveTextContent("DRIVE ✓");
+    expect(screen.getByTestId("rc-jump-planning")).toHaveTextContent("Planning ✕ 1");
+    expect(screen.getByTestId("rc-jump-drive")).toHaveTextContent("Drive ✓");
     // Something set at this level: the section cannot be said to be all inherited, so it has no fold; the drive section is all inherited and has one.
     expect(screen.queryByTestId("rc-fold-planning")).toBeNull();
     const fold = screen.getByTestId("rc-fold-drive");

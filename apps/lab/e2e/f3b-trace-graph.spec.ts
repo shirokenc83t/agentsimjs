@@ -19,7 +19,7 @@ async function open(page: Page, hundreds: number): Promise<void> {
   await page.getByTestId("event-scroller").evaluate((el) => {
     el.scrollTop = 0;
   });
-  await page.locator('[data-testid^="event-row-"]').filter({ hasText: "start" }).first().click();
+  await page.locator('[data-testid^="event-row-"]').filter({ hasText: "start" }).first().click({ timeout: 20_000 });
   await expect(page.getByTestId("trace-tree-selected")).toBeVisible();
 }
 

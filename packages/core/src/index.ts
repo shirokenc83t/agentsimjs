@@ -112,6 +112,7 @@ export {
   type ScriptStep,
   type SelfView,
 } from "./world/brain.ts";
+export { MISSION_MAX_STEPS, resumesAfterPreemption, SequenceBrain, validateSequence, type MissionError, type MissionErrorCode, type MissionNote, type PositionedBrain, type SequenceStep } from "./world/sequence.ts";
 export { World, runLockstep, mindSlot, type WorldParts, type WorldSnapshot, type RunInput } from "./world/world.ts";
 export { Inbox, INBOX_CAP, isControl, type AgentEvent, type DecisionEvent, type DecisionEventKind, type InboxSnapshot } from "./world/events.ts";
 export {

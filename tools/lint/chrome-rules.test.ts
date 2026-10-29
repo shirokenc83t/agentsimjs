@@ -31,11 +31,11 @@ describe("chrome rules (ADR-0042)", () => {
     expect(found).toEqual([]);
   });
 
-  it("no coloured side bar on a row: selection is an accent tint with a 1 px outline", () => {
+  it("a selection line is 1 px (ADR-0043 §2): no inset shadow of 2 px or more at the side of a row", () => {
     const found: string[] = [];
     for (const f of stylesheets()) {
       lines(f).forEach((l, i) => {
-        if (/box-shadow:\s*inset\s+\d+px\s+0\s+0/.test(l)) found.push(`${relative(root, f)}:${i + 1}: ${l.trim().slice(0, 90)}`);
+        if (/box-shadow:\s*inset\s+([2-9]|\d\d+)px\s+0\s+0/.test(l)) found.push(`${relative(root, f)}:${i + 1}: ${l.trim().slice(0, 90)}`);
       });
     }
     expect(found).toEqual([]);

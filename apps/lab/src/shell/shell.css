@@ -4,14 +4,14 @@
 .top { display: flex; align-items: stretch; height: 28px; background: var(--bg1); border-bottom: 1px solid var(--ln); white-space: nowrap; }
 .top .seg { display: flex; align-items: center; gap: 8px; padding: 0 8px; border-right: 1px solid var(--ln); min-width: 0; flex: 0 1 auto; }
 .top .seg.r { border-right: 0; border-left: 1px solid var(--ln); }
-.top .ws-nav { padding: 0; gap: 0; }
-.top .brand { background: var(--bg3); color: var(--fg); font-weight: 600; letter-spacing: 0.04em; }
+.top .ws-nav { padding: 0; gap: 0; flex: none; }
+.top .brand { background: var(--bg3); color: var(--fg); font-weight: 600; }
 .top .k, .bot .k { color: var(--fg3); }
 .sp { flex: 1; }
 .ws { appearance: none; border: 0; background: transparent; color: var(--fg2); padding: 0 6px; height: 28px; cursor: pointer; font: inherit; }
 .ws b { color: var(--fg3); font-weight: 400; margin-right: 4px; }
 .ws:hover { color: var(--fg); background: var(--bg3); }
-.ws.on { background: var(--bg0); color: var(--fg); box-shadow: inset 0 2px 0 var(--ac); }
+.ws.on { background: var(--bg0); color: var(--fg); box-shadow: inset 0 1px 0 var(--ac); }
 .tb { appearance: none; font: inherit; font-size: var(--type-label-size); height: 20px; min-width: 22px; padding: 0 6px; border: 1px solid var(--ln2); background: var(--bg1); color: var(--fg); cursor: pointer; }
 .tb:hover { background: var(--bg3); border-color: var(--fg3); }
 .tb.runsel { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
@@ -20,13 +20,14 @@
 .rpseg .ok, .derived-mark .ok { color: var(--ok); }
 
 /* Row 2: the player. */
-.player { display: grid; grid-template-columns: auto 140px minmax(0, 1fr) auto; align-items: stretch; height: 56px; background: var(--bg2); border-bottom: 2px solid var(--ln2); }
+.player { display: grid; grid-template-columns: auto minmax(140px, auto) minmax(200px, 1fr) auto; align-items: stretch; height: 56px; background: var(--bg2); border-bottom: 2px solid var(--ln2); }
 .player.rp { background-color: var(--bg3); background-image: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--fg) 6%, transparent) 9px 18px); border-top: 2px solid var(--fg2); border-bottom-color: var(--fg2); }
 .ply { display: flex; align-items: center; gap: 4px; padding: 0 12px; border-right: 1px solid var(--ln); }
 .pb { appearance: none; font: inherit; width: 32px; height: 32px; border: 1px solid var(--ln2); background: var(--bg1); color: var(--fg); cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
 .pb:hover { background: var(--bg3); border-color: var(--fg3); }
-.pb.pri { width: 40px; height: 40px; background: var(--ac); border-color: var(--ac); color: var(--acfg); font-size: 15px; }
-.pb.pri:hover { background: var(--ac); border-color: var(--fg); }
+/* Play is drawn by inversion (ADR-0043 §2): a light button with a dark glyph; the accent fills nothing. */
+.pb.pri { width: 40px; height: 40px; background: var(--fg); border-color: var(--fg); color: var(--bg0); font-size: 15px; }
+.pb.pri:hover { background: var(--fg2); border-color: var(--fg2); }
 .pb.sm { width: auto; height: 28px; padding: 0 8px; font-size: var(--type-label-size); }
 .pb.static { cursor: default; background: transparent; }
 .pb.static:hover { background: transparent; border-color: var(--ln2); }
@@ -34,18 +35,37 @@
 .pb[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 .clock { display: flex; flex-direction: column; justify-content: center; padding: 0 14px; border-right: 1px solid var(--ln); }
 .clock .big { font-size: var(--type-clock-size); font-weight: var(--type-clock-weight); line-height: 1.1; white-space: nowrap; }
-.lbl { font-size: var(--type-label-size); letter-spacing: var(--type-label-tracking); color: var(--fg3); text-transform: uppercase; }
+.lbl { font-size: var(--type-label-size); color: var(--fg3); }
 .scrub { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 14px; border-right: 1px solid var(--ln); min-width: 0; overflow: hidden; }
 .scrub .row { display: flex; align-items: center; gap: 10px; font-size: var(--type-label-size); color: var(--fg3); min-width: 0; margin: 0; flex-wrap: nowrap; overflow: hidden; }
 .scrub .row > * { flex: none; }
 .scrub .row > .derived-mark { flex: 0 100 auto; min-width: 8ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scrub .row > .trunc { flex: 0 1 auto; min-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scrub .row > .kb-label { flex: 0 30 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scrub .row > .trunc { flex: 0 60 auto; min-width: 8ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scrub .row .sp { flex: 1 1 0; }
 .track { position: relative; height: 14px; background: var(--bg0); border: 1px solid var(--ln); }
 .track.clickable { cursor: pointer; }
 .track .sv { position: absolute; left: 0; top: 0; bottom: 0; background: var(--bg3); }
+/* The swarm knowledge strip (ADR-0043 section 7, U-015): 22 px on the well and under it the saved range as a line; the hatch is what was not sampled or not saved. */
+.track.kbt { height: 24px; background: var(--bg0); }
+.track.kbt .sv { top: auto; height: 2px; background: var(--fg3); }
+.track.kbt .gap { top: auto; height: 2px; }
+.track.kbt .hd { width: 1px; margin-left: 0; }
+.kbs { position: absolute; left: 0; right: 0; top: 0; height: 22px; }
+.kbs svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.kb-hatch { position: absolute; top: 0; bottom: 0; background-image: var(--hatch-pattern); }
+.kb-rule { stroke: var(--ln); stroke-width: 1; }
+.kb-known { fill: var(--fg3); fill-opacity: 0.38; stroke: none; }
+.kb-warn { fill: var(--warn); fill-opacity: 0.85; stroke: none; }
+.kb-top { fill: none; stroke: var(--fg2); stroke-width: 1; }
+.kb-mark { position: absolute; top: 0; margin: 0; padding: 0; width: 9px; height: 9px; transform: translateX(-4px); border: 0; background: transparent; cursor: pointer; z-index: 1; }
+.kb-mark svg { display: block; width: 9px; height: 9px; }
+.kb-mark.reflex { color: var(--warn); }
+.kb-mark.reflex path { fill: currentColor; }
+.kb-mark.failure { color: var(--alm); }
+.kb-mark.failure path { fill: none; stroke: currentColor; stroke-width: 1.6; }
 .track .gap { position: absolute; top: 0; bottom: 0; background-image: var(--hatch-pattern); }
-.track .tick { position: absolute; top: 2px; bottom: 2px; width: 2px; }
+.track .tick { position: absolute; top: 2px; bottom: 2px; width: 2px; z-index: 1; }
 .track .hd { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: var(--ac); }
 .track .cursor-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
 .track:has(.cursor-input:focus-visible) { outline: var(--focus-ring) solid var(--ac); outline-offset: 1px; }
@@ -99,7 +119,7 @@
 
 /* READY (U-010 section 4): the launch group takes the place of the play button until a run is started or stepped; the Re-run split button. */
 .ready-start { display: inline-flex; align-items: center; gap: 6px; padding-right: 4px; color: var(--fg2); white-space: nowrap; }
-.ready-start .pb.pri { background: var(--ac); color: var(--acfg); }
+.ready-start .pb.pri { background: var(--fg); color: var(--bg0); }
 .ready-sum { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; font-size: var(--type-label-size); }
 .rerun-split { position: relative; display: inline-flex; }
 .rerun-split .caret { padding: 0 6px; border-left: 0; }
@@ -115,8 +135,30 @@
 .top .runsel { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
 .queued-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16em; font-size: var(--type-label-size); }
 .top.compact .theme-btn .lbl { display: none; }
+/* Tight (the last step of the fold): the brand keeps its mark, the run label is cut shorter and the replay segment loses its connecting words; the workspace tabs are never touched. */
+.top.tight .brand .name, .top.tight .rp-words, .top.tight .k-opt { display: none; }
+.top.tight .runsel { max-width: 60px; }
+.top.tight .runsel .k, .top.tight .theme-btn .k { display: none; }
+.top.tight .lay-word { display: none; }
+.top.tight .layout-fold .k { display: inline; }
+.top.tight .ws { padding: 0 4px; }
+.top.tight .ws b { margin-right: 2px; }
+.top.tight .seg { padding: 0 5px; gap: 5px; }
+.top.tight .ws-nav { padding: 0; }
+.top .brand { flex: none; }
 /* A narrow window: the launch row gives up the run's id (the summary under it has it), the time mode chip (it is in that summary too) and the words of "scrub back". */
 @media (max-width: 1100px) {
   .ready-start .rid, .hide-1100, .ply .lbl-long { display: none; }
+  /* The scrub cell keeps its 200 px (the knowledge band, ADR-0043 section 7): the launch summary is shorter and the rate tile gives way (the frame rate is in the status line). */
+  .ready-sum { max-width: 150px; }
+  .telem .tile:first-child { display: none; }
+  .telem .tile { padding: 0 8px; min-width: 60px; }
+  .ready-sum { max-width: 110px; }
+  .player { grid-template-columns: auto minmax(128px, auto) minmax(200px, 1fr) auto; }
+  .clock { padding: 0 8px; }
+  .clock .big { font-size: 18px; }
 }
 .top .theme-btn { text-transform: none; }
+.clock .mission-note { display: block; font-size: 11px; white-space: nowrap; width: max-content; max-width: 210px; overflow: hidden; text-overflow: ellipsis; }
+/* The mark of the product (ADR-0043 section 6) is drawn larger than the text beside it: at the size of the text it reads as the plain boxed glyph it replaces. */
+.top .brand .mark { font-size: 24px; line-height: 1; }

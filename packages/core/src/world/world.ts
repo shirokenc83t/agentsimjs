@@ -372,6 +372,7 @@ export class World implements Steppable {
           ...(p.request.eventsDropped > 0 ? { eventsDropped: p.request.eventsDropped } : {}),
           decision: d,
           ...(env.rationale === undefined ? {} : { rationale: env.rationale }),
+          ...(env.mission === undefined ? {} : { step: env.mission.step, of: env.mission.of, ...(env.mission.done ? { done: true } : {}), ...(env.mission.stop ? { stop: env.mission.stop } : {}) }),
         },
       });
       // Timer bookkeeping comes before the decision's action, and may accompany an idle decision.

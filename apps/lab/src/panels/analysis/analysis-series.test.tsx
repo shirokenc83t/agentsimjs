@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it } from "vitest";
 import { AnalysisSeriesView } from "./analysis-series.tsx";
 import type { AnalysisSeries } from "./analysis-model.ts";
@@ -48,5 +49,29 @@ describe("the series charts", () => {
     view([line("ugv-001", "speed", "m/s", [0, 1]), line("ugv-002", "speed", "m/s", [0, 2])]);
     expect(screen.queryByTestId("series-legend-speed")).toBeNull();
     expect(screen.getAllByTestId(/^series-end-speed-/)).toHaveLength(2);
+  });
+
+  it("one subject, one hue: with an agent selected its line keeps its colour and the others are neutral; with none every line has its own", () => {
+    const series = [line("ugv-001", "battery", "%", [100, 90, 80]), line("ugv-002", "battery", "%", [100, 70, 60]), line("ugv-003", "battery", "%", [100, 95, 92])];
+    const idx = (id: string) => Number(id.replace(/\D/g, "")) || 0;
+    const stroke = (c: HTMLElement, id: string) => (c.querySelector(`polyline[data-agent="${id}"]`) as SVGElement).style.stroke;
+    const none = render(<AnalysisSeriesView series={series} indexOf={idx} span={{ t0: 0, t1: 10 }} cursorS={0} onSeek={() => {}} />).container;
+    expect(stroke(none, "ugv-001")).toBe("var(--agent-1)");
+    expect(stroke(none, "ugv-002")).toBe("var(--agent-2)");
+    const picked = render(<AnalysisSeriesView series={series} indexOf={idx} span={{ t0: 0, t1: 10 }} cursorS={0} selectedAgent="ugv-002" onSeek={() => {}} />).container;
+    expect(stroke(picked, "ugv-002")).toBe("var(--agent-2)");
+    expect(stroke(picked, "ugv-001")).toBe("var(--fg3)");
+    expect(stroke(picked, "ugv-003")).toBe("var(--fg3)");
+  });
+
+  it("with a subject a crowded chart says the subject's value and the others as a range, and the full list is behind ▸ all", async () => {
+    const series = Array.from({ length: 12 }, (_, i) => line(`ugv-${String(i + 1).padStart(3, "0")}`, "speed", "m/s", [0, i, i + 1]));
+    render(<AnalysisSeriesView series={series} indexOf={(id) => Number(id.replace(/\D/g, "")) || 0} span={{ t0: 0, t1: 10 }} cursorS={0} selectedAgent="ugv-003" onSeek={() => {}} />);
+    const sub = screen.getByTestId("series-subject-speed");
+    expect(sub).toHaveTextContent("g03");
+    expect(sub).toHaveTextContent("11 others");
+    expect(screen.queryByTestId("series-legend-speed")).toBeNull(); // the list of twenty is not under the chart
+    await userEvent.click(screen.getByTestId("series-all-speed"));
+    expect(screen.getByTestId("series-legend-speed").querySelectorAll("li")).toHaveLength(12);
   });
 });

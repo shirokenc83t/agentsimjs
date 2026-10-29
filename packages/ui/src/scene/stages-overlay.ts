@@ -112,7 +112,7 @@ export class StagesOverlay {
 
   constructor(
     tokens: SceneTokens,
-    readonly kind: "run" | "sandbox",
+    readonly kind: "run" | "sandbox" | "mission",
   ) {
     this.tokens = tokens;
     this.coarse = new LineSegments(segmentGeometry(MAX_COARSE_SEGMENTS * 2), new LineBasicMaterial({ color: new Color(this.coarseColor()) }));

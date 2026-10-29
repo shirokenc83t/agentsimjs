@@ -1,6 +1,7 @@
 import "../panels.css";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { identityOf, KIND_STYLE, ROW_PX } from "@agentsim/ui";
+import { identityOf, KIND_STYLE, ROW_PX, subjectColor } from "@agentsim/ui";
+import { useSelectedAgentId } from "../selected-agent.ts";
 import type { TraceRecord } from "@agentsim/trace";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type KeyboardEvent } from "react";
 import { copyOfRecord } from "./derived-tag.tsx";
@@ -46,6 +47,7 @@ const NEAR_END_PX = 28;
  * inspector (ADR-0035 section 7). It owns scrolling and the keys that move the selection (j k ↑ ↓ Home End g G, ⏎); the rest of the keys are the console's.
  */
 export const LogList = forwardRef<LogListHandle, LogListProps>(function LogList(props, ref) {
+  const subject = useSelectedAgentId();
   const { rows, more, entityIds, selectedSeq, expanded } = props;
   const scroller = useRef<HTMLDivElement>(null);
   // The row's context menu: what can be done with the record under the pointer.
@@ -186,7 +188,7 @@ export const LogList = forwardRef<LogListHandle, LogListProps>(function LogList(
               <span className="mono muted">{r.simTime.toFixed(2)} s</span>
               {r.agentId ? (
                 <span className="mono">
-                  <span className={`agent-swatch ${identityOf(Math.max(0, id)).style}`} style={{ ["--swatch" as string]: `var(--agent-${identityOf(Math.max(0, id)).colorIndex})` }} /> {r.agentId}
+                  <span className={`agent-swatch ${identityOf(Math.max(0, id)).style}`} style={{ ["--swatch" as string]: subjectColor(identityOf(Math.max(0, id)).colorIndex, subject, r.agentId) }} /> {r.agentId}
                 </span>
               ) : (
                 <span className="mono muted">run</span>

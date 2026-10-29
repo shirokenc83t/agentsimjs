@@ -1,12 +1,14 @@
 import "./panels.css";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { GLYPH, identityOf, KIND_STYLE, STATE_GLYPH, useUiContext } from "@agentsim/ui";
+import { GLYPH, identityOf, KIND_STYLE, STATE_GLYPH, subjectColor, useUiContext } from "@agentsim/ui";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { usePolled, useSource } from "../services.tsx";
 import { actionLabel, actionState } from "./agent-views.ts";
 import { AttentionCounts } from "../shell/attention-counts.tsx";
 import { useAttention } from "./attention-store.ts";
+import { missionActivity, type MissionView } from "./mission-view.ts";
 import { useAgentViews } from "./use-agent-views.ts";
+import { useMissionViews } from "./use-mission-views.ts";
 
 /**
  * Explorer (UI-SPEC §4): the run's entities, agents only in F1. Virtualized (ADR-0016: long lists are, and
@@ -20,6 +22,7 @@ export function ExplorerPanel() {
   const source = useSource();
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 100);
   const views = useAgentViews(source);
+  const missions = useMissionViews(source);
   const attn = useAttention(source);
   const [attnFilter, setAttnFilter] = useState<"all" | "alarm" | "warning">("all");
   const [attnOpen, setAttnOpen] = useState(true);
@@ -90,7 +93,7 @@ export function ExplorerPanel() {
                   onClick={() => useUiContext.getState().select({ kind: "agent", id: a.id })}
                   onKeyDown={(e) => e.key === "Enter" && useUiContext.getState().select({ kind: "agent", id: a.id })}
                 >
-                  <span className={`agent-swatch ${idn.style}`} style={{ ["--swatch" as string]: `var(--agent-${idn.colorIndex})` }} />
+                  <span className={`agent-swatch ${idn.style}`} style={{ ["--swatch" as string]: subjectColor(idn.colorIndex, selection?.kind === "agent" ? selection.id : undefined, a.id) }} />
                   <span className="mono">{a.id}</span>
                   <span className={`mono ${c.level === "alarm" ? "st-alm" : "st-warn"}`}>
                     {c.glyph} {c.label}
@@ -128,12 +131,20 @@ export function ExplorerPanel() {
                 onClick={() => select(row.index)}
                 style={{ position: "absolute", top: 0, left: 0, right: 0, height: row.size, transform: `translateY(${row.start}px)` }}
               >
-                <span className={`agent-swatch ${identityOf(row.index).style}`} style={{ ["--swatch" as string]: `var(--agent-${identityOf(row.index).colorIndex})` }} />
+                <span className={`agent-swatch ${identityOf(row.index).style}`} style={{ ["--swatch" as string]: subjectColor(identityOf(row.index).colorIndex, selection?.kind === "agent" ? selection.id : undefined, a.id) }} />
                 <span className="mono">{a.id}</span>
                 <span className="muted">{a.key ?? ""}</span>
                 <span className="kind-tag mono">{a.kind.toUpperCase()}</span>
                 <span className={`mono st-${state}`} data-testid={`explorer-state-${a.id}`}>
-                  {STATE_GLYPH[state]} {actionLabel(action, views.get(a.id)?.reflex)}
+                  {missions.has(a.id) ? (
+                    <span data-testid={`explorer-mission-${a.id}`} title={`mission: ${actionLabel(action, views.get(a.id)?.reflex)}`}>
+                      {missionActivity(missions.get(a.id) as MissionView, actionLabel(action, views.get(a.id)?.reflex))}
+                    </span>
+                  ) : (
+                    <>
+                      {STATE_GLYPH[state]} {actionLabel(action, views.get(a.id)?.reflex)}
+                    </>
+                  )}
                   {ideal.has(a.id) && (
                     <span className="kind-tag" data-testid={`explorer-ideal-${a.id}`} title="ideal: plans on the ground truth (baseline), not on its own map">
                       {" "}

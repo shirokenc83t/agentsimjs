@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IDENTITY_COUNT, identityOf, shortLabel } from "./identity.ts";
+import { IDENTITY_COUNT, identityOf, isMuted, shortLabel, SUBJECT_NEUTRAL, subjectColor } from "./identity.ts";
 
 describe("agent identity", () => {
   it("24 distinct identities, a colour and a marker style, in order of the run's agents", () => {
@@ -28,5 +28,13 @@ describe("agent identity", () => {
     expect(shortLabel("ugv-0")).toBe("g00");
     expect(shortLabel("rover")).toBe("rover");
     expect(shortLabel("a-very-long-name")).toBe("a-ver…");
+  });
+
+  it("one subject, one hue: the selected agent keeps its colour and the others are neutral; with none selected every agent keeps its own", () => {
+    expect(subjectColor(3, undefined, "ugv-001")).toBe("var(--agent-3)");
+    expect(subjectColor(3, "ugv-001", "ugv-001")).toBe("var(--agent-3)");
+    expect(subjectColor(3, "ugv-002", "ugv-001")).toBe(SUBJECT_NEUTRAL);
+    expect(isMuted(undefined, "ugv-001")).toBe(false);
+    expect(isMuted("ugv-002", "ugv-001")).toBe(true);
   });
 });

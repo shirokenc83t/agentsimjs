@@ -317,7 +317,8 @@ for (const theme of THEMES) {
       await page.getByTestId("event-scroller").evaluate((el) => {
         el.scrollTop = 0;
       });
-      await page.locator('[data-testid^="event-row-"]').filter({ hasText: "start" }).first().click();
+      // A click that cannot settle (the list reloads under it) gives up after 20 s so that the retry of the test starts at once, not after the test's 4 minutes.
+      await page.locator('[data-testid^="event-row-"]').filter({ hasText: "start" }).first().click({ timeout: 20_000 });
       await expect(page.getByTestId("trace-tree-selected")).toBeVisible();
     }
 

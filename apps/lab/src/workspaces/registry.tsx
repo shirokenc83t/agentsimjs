@@ -17,6 +17,8 @@ const SqlResultWindow = lazy(() => import("../panels/sql/sql-result-window.tsx")
 const SqlConsolePanel = lazy(() => import("../panels/sql/sql-console-panel.tsx").then((m) => ({ default: m.SqlConsolePanel })));
 const TraceGraphPanel = lazy(() => import("../panels/debug/trace-graph-panel.tsx").then((m) => ({ default: m.TraceGraphPanel })));
 const TraceTreePanel = lazy(() => import("../panels/debug/trace-tree-panel.tsx").then((m) => ({ default: m.TraceTreePanel })));
+const AgentAuditPanel = lazy(() => import("../panels/history/agent-audit-panel.tsx").then((m) => ({ default: m.AgentAuditPanel })));
+const AgentHistoryPanel = lazy(() => import("../panels/history/agent-history-panel.tsx").then((m) => ({ default: m.AgentHistoryPanel })));
 const OverviewPanel = lazy(() => import("../panels/overview-panel.tsx").then((m) => ({ default: m.OverviewPanel })));
 const LegendPanel = lazy(() => import("../panels/legend-panel.tsx").then((m) => ({ default: m.LegendPanel })));
 const PerfPanel = lazy(() => import("../panels/perf-panel.tsx").then((m) => ({ default: m.PerfPanel })));
@@ -52,13 +54,13 @@ export const LazyReplayHost = lazy(() => import("../panels/replay-host.tsx").the
 /** The attention tile of the player: the attention rules load with it, when a run is there. */
 export const LazyAttentionTile = lazy(() => import("../shell/attention-tile.tsx").then((m) => ({ default: m.AttentionTile })));
 
-/** Flag markers on the player's scrub track, loaded when a stored run is shown. */
-export const LazyPlayerMarks = lazy(() => import("../shell/player-marks.tsx").then((m) => ({ default: m.PlayerMarks })));
+/** The mission of the selected agent under the player's clock; its trace reading loads with it, not in the initial chunk. */
+export const LazyMissionNote = lazy(() => import("../shell/mission-note.tsx").then((m) => ({ default: m.MissionNote })));
 
 /** The run header popover, loaded on first open (the toolbar keeps only the run label). */
 export const LazyRunPopover = lazy(() => import("../run-info.tsx").then((m) => ({ default: m.RunPopover })));
 
-export type PanelId = "overview" | "legend" | "perf" | "scene" | "explorer" | "inspector" | "timeline" | "eventList" | "traceTree" | "traceGraph" | "sqlConsole" | "sqlResult" | "logInspector" | "headlessMonitor" | "analysisView" | "runConfig" | "scenarioEditor" | "storage" | "settings";
+export type PanelId = "overview" | "legend" | "perf" | "scene" | "explorer" | "inspector" | "timeline" | "eventList" | "traceTree" | "traceGraph" | "agentHistory" | "agentAudit" | "sqlConsole" | "sqlResult" | "logInspector" | "headlessMonitor" | "analysisView" | "runConfig" | "scenarioEditor" | "storage" | "settings";
 
 export const PANELS: Record<PanelId, { readonly title: string; readonly component: ComponentType }> = {
   perf: { title: "Performance", component: PerfPanel },
@@ -71,6 +73,8 @@ export const PANELS: Record<PanelId, { readonly title: string; readonly componen
   eventList: { title: "Log", component: EventListPanel },
   traceTree: { title: "Trace", component: TraceTreePanel },
   traceGraph: { title: "Trace graph", component: TraceGraphPanel },
+  agentHistory: { title: "History", component: AgentHistoryPanel },
+  agentAudit: { title: "History and audit", component: AgentAuditPanel },
   logInspector: { title: "Logs", component: LogInspectorPanel },
   headlessMonitor: { title: "Headless monitor", component: HeadlessMonitorPanel },
   analysisView: { title: "Analysis", component: AnalysisPanel },

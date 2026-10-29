@@ -7,7 +7,8 @@ function palette(t: ThemeName) {
   const c = COLORS[t];
   return {
     mode: t,
-    primary: { main: c.ac, contrastText: c.acfg },
+    // The accent fills nothing (ADR-0043 section 2): a contained primary button is drawn by inversion, like Play.
+    primary: { main: c.fg, contrastText: c.bg0 },
     error: { main: c.alm },
     warning: { main: c.warn },
     success: { main: c.ok },
@@ -46,13 +47,27 @@ export const muiTheme = createTheme({
     MuiButton: { defaultProps: { size: "small", disableElevation: true }, styleOverrides: { outlined: { borderColor: "var(--ln2)" } } },
     MuiOutlinedInput: { styleOverrides: { notchedOutline: { borderColor: "var(--ln2)" } } },
     MuiInput: { styleOverrides: { underline: { "&::before": { borderBottomColor: "var(--ln2)" } } } },
+    // A toggle follows ADR-0043 section 2 everywhere: on is `fg` with a 1 px accent line under the label, off is `fg3`, and nothing is filled (MUI fills the selected one and reads
+    // reversed in the dark theme).
+    MuiToggleButton: {
+      styleOverrides: {
+        root: {
+          color: "var(--fg3)",
+          borderColor: "var(--ln2)",
+          backgroundColor: "transparent",
+          "&:hover": { backgroundColor: "var(--bg3)", color: "var(--fg2)" },
+          "&.Mui-selected": { color: "var(--fg)", backgroundColor: "transparent", boxShadow: "inset 0 -1px 0 var(--ac)" },
+          "&.Mui-selected:hover": { color: "var(--fg)", backgroundColor: "var(--bg3)" },
+        },
+      },
+    },
     MuiIconButton: { defaultProps: { size: "small" } },
     MuiTextField: { defaultProps: { size: "small" } },
     MuiSelect: { defaultProps: { size: "small" } },
     // Map objects, timeline marks and icon-only buttons explain themselves after 400 ms (ADR-0042 §6).
     MuiTooltip: { defaultProps: { disableInteractive: true, enterDelay: TOOLTIP_DELAY_MS, enterNextDelay: TOOLTIP_DELAY_MS } },
     // Hover is a neutral fill, not the accent (ADR-0042 §6); selection is the accent tint.
-    MuiMenuItem: { styleOverrides: { root: { "&:hover": { backgroundColor: "var(--bg3)" }, "&.Mui-selected": { backgroundColor: "var(--acbg)" }, "&.Mui-selected:hover": { backgroundColor: "var(--acbg)" } } } },
+    MuiMenuItem: { styleOverrides: { root: { "&:hover": { backgroundColor: "var(--bg3)" }, "&.Mui-selected": { backgroundColor: "var(--bg2)", boxShadow: "inset 1px 0 0 var(--ac)" }, "&.Mui-selected:hover": { backgroundColor: "var(--bg3)" } } } },
   },
 });
 

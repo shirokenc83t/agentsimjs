@@ -267,6 +267,8 @@ test("render loop on the 1 km² reference world with the belief overlay", async 
 test("the Scene's 2D view with a 20-agent run", async ({ page }) => {
   test.setTimeout(240_000);
   await loadF2(page, "agents");
+  // The Explorer fills a moment after the run loads: wait for its first row before counting them.
+  await page.locator('[data-testid^="explorer-row-ugv-"]').first().waitFor();
   const ground = await page.locator('[data-testid^="explorer-row-ugv-"]').evaluateAll((els) => els.map((e) => (e.getAttribute("data-testid") ?? "").replace("explorer-row-", "")));
   expect(ground.length).toBeGreaterThan(2);
   for (const id of ground.slice(0, 6)) {

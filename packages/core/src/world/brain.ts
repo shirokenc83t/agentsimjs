@@ -1,5 +1,6 @@
 import type { DecisionEvent } from "./events.ts";
 import type { AllowedAction, BeliefSummary, SpaceSummary, UnavailableAction } from "./mind-view.ts";
+import type { MissionNote } from "./sequence.ts";
 
 export type { DecisionEvent } from "./events.ts";
 
@@ -58,6 +59,8 @@ export interface DecisionEnvelope {
   readonly timers?: readonly TimerOp[];
   readonly confidence?: number;
   readonly rationale?: string;
+  /** A mission's mind (`sequence`) says which step this decision is, or how the mission ended; the world writes it into the decision record (`step`, `of`, `done`, `stop`). */
+  readonly mission?: MissionNote;
 }
 
 export type BrainTier = "S1" | "S2" | "baseline" | "script" | "external";

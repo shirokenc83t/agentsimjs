@@ -14,7 +14,10 @@ import { useAttention } from "./attention-store.ts";
 import { sandboxTarget, useSandboxTarget, useSandboxView } from "./sandbox-store.ts";
 import { publishScene } from "./scene-handle.ts";
 import { publishSceneView } from "./scene-view-store.ts";
+import { MissionTooltip } from "./mission-progress.tsx";
+import { missionBadge, missionPoints, type MissionView } from "./mission-view.ts";
 import { useAgentViews } from "./use-agent-views.ts";
+import { useMissionViews } from "./use-mission-views.ts";
 import { useSandboxOverlay } from "./use-sandbox-overlay.ts";
 import { useExploreOverlay } from "./use-explore-overlay.ts";
 import { useStagesOverlay } from "./use-stages-overlay.ts";
@@ -164,22 +167,26 @@ export function ScenePanel() {
 
   // Identity, short label and attention badge of every agent, and the pins of collisions, pushed to the renderer when they change (at most 10 Hz).
   const attn = useAttention(source);
+  const missions = useMissionViews(source);
   const [labelMode, setLabelMode] = useState<"short" | "full">("short");
   const decorKey = snap.entityIds
     .map((id) => {
       const c = attn.byAgent.get(id)?.conditions[0];
-      return `${id}:${c ? `${c.level}/${c.glyph}/${c.label}` : ""}`;
+      return `${id}:${c ? `${c.level}/${c.glyph}/${c.label}` : ""}:${missionBadge(missions.get(id))}`;
     })
     .join("|");
   const pinsKey = snap.entityIds.flatMap((id) => (attn.byAgent.get(id)?.conditions ?? []).filter((c) => c.at).map((c) => `${id}@${c.at?.xM},${c.at?.yM}`)).join("|");
   const attnRef = useRef(attn);
   attnRef.current = attn;
+  const missionsRef = useRef(missions);
+  missionsRef.current = missions;
   const decor = useMemo<AgentDecor[]>(
     () =>
       snap.entityIds.map((id, i) => {
         const idn = identityOf(i);
         const c = attnRef.current.byAgent.get(id)?.conditions[0];
-        return { id, short: shortLabel(id), colorIndex: idn.colorIndex, style: idn.style, badge: c ? { level: c.level, glyph: c.glyph, text: c.label } : undefined };
+        const badge = missionBadge(missionsRef.current.get(id));
+        return { id, short: badge === "" ? shortLabel(id) : `${shortLabel(id)} ${badge}`, colorIndex: idn.colorIndex, style: idn.style, badge: c ? { level: c.level, glyph: c.glyph, text: c.label } : undefined };
       }),
     [snap.entityIds, decorKey],
   );
@@ -190,8 +197,22 @@ export function ScenePanel() {
   }, [renderer, pinsKey, snap.entityIds]);
   useEffect(() => renderer?.setLabelMode(labelMode), [renderer, labelMode]);
 
+  // The rest of the selected agent's mission (or of the only one running) on the map, dashed from where it is through the points of the steps still to come.
+  const selected = useUiContext((s) => s.selection);
+  const missionAgent = (selected?.kind === "agent" && missions.has(selected.id) ? selected.id : undefined) ?? [...missions.keys()][0];
+  const missionView = missionAgent === undefined ? undefined : missions.get(missionAgent);
+  const missionKey = missionView?.steps.map((s) => s.state).join(",") ?? "";
+  useEffect(() => {
+    if (!renderer) return;
+    const pose = missionAgent === undefined ? undefined : source.pose(snap.entityIds.indexOf(missionAgent));
+    const pts = missionPoints(missionView, pose ? { x: pose.x, y: pose.y } : undefined);
+    renderer.setMissionPath(pts ? [{ role: "coarse", points: pts }] : undefined);
+    return () => renderer.setMissionPath(undefined);
+  }, [renderer, missionAgent, missionKey]);
+
   // The tooltip of the agent under the pointer: the whole ID, its identity and what it is doing.
   const views = useAgentViews(source);
+  const areaRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | undefined>(undefined);
   useEffect(() => {
     if (!renderer) return;
@@ -315,7 +336,7 @@ export function ScenePanel() {
           )}
         </>
       )}
-      <div className={`scene-area${view === "2d" ? " view-2d" : ""}`} data-view={view}>
+      <div className={`scene-area${view === "2d" ? " view-2d" : ""}`} data-view={view} ref={areaRef}>
         <SceneView interpolator={source.poses} onRenderer={onRenderer} />
         {view === "2d" && (
           <div className="scene-2d" data-testid="scene-2d">
@@ -323,11 +344,12 @@ export function ScenePanel() {
           </div>
         )}
         {hover && hoverAgent && (
-          <div className="map-tooltip mono" style={{ left: hover.x + 14, top: hover.y + 14 }} role="tooltip" data-testid="map-tooltip">
+          <div className="map-tooltip mono" style={tooltipPlace(hover, areaRef.current)} role="tooltip" data-testid="map-tooltip">
             <div>
               {hoverAgent.id} · {shortLabel(hoverAgent.id)} · {hoverAgent.kind.toUpperCase()}
             </div>
             <div className="muted">{actionLabel(views.get(hoverAgent.id)?.action, views.get(hoverAgent.id)?.reflex)}</div>
+            {missions.has(hoverAgent.id) && <MissionTooltip view={missions.get(hoverAgent.id) as MissionView} />}
             {hoverCondition && (
               <div className={hoverCondition.level === "alarm" ? "danger" : "warn"}>
                 {hoverCondition.glyph} {hoverCondition.label}
@@ -339,4 +361,20 @@ export function ScenePanel() {
       </div>
     </div>
   );
+}
+
+/**
+ * Where the tooltip of the agent under the pointer goes. The renderer reports the pointer in client coordinates, the tooltip is placed inside the Scene area: the area's own offset is taken off.
+ * It sits right of and below the pointer, and goes to its left or above when it would run out of the area (a mission's tooltip is tall and wide).
+ */
+function tooltipPlace(hover: { x: number; y: number }, area: HTMLElement | null): { left?: number; right?: number; top?: number; bottom?: number } {
+  const box = area?.getBoundingClientRect();
+  const x = hover.x - (box?.left ?? 0);
+  const y = hover.y - (box?.top ?? 0);
+  const w = box?.width ?? Infinity;
+  const h = box?.height ?? Infinity;
+  return {
+    ...(x > w - 300 ? { right: w - x + 14 } : { left: x + 14 }),
+    ...(y > h - 280 ? { bottom: h - y + 14 } : { top: y + 14 }),
+  };
 }

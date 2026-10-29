@@ -5,8 +5,13 @@ import { useSource } from "../services.tsx";
 import { gapLabel, resolveGapClick } from "../sim/gap-click.ts";
 import type { RunSnapshot } from "../sim/run-source.ts";
 import type { SimClient, SimSnapshot } from "../sim/sim-client.ts";
-import { LazyAttentionTile, LazyPlayerMarks } from "../workspaces/registry.tsx";
+import { LazyAttentionTile, LazyMissionNote } from "../workspaces/registry.tsx";
+import { isFailure, type Mark } from "../panels/debug/marks.ts";
+import { useRunMarks } from "../panels/debug/use-run-marks.ts";
+import { KnowledgeStrip } from "./knowledge-band-view.tsx";
+import { knowledgeShown, knowledgeWords, type KnowledgeBand } from "./knowledge-band.ts";
 import { trackLayout } from "./track.ts";
+import { useKnowledgeBand } from "./use-knowledge.ts";
 
 export const SPEEDS = [
   { label: "×0.5", hz: 5 },
@@ -55,8 +60,11 @@ export function Player(props: PlayerProps) {
     <section className={`player${replay ? " rp" : ""}`} aria-label={replay ? "Player, replay of a stored run" : "Player, live run"} data-testid="player">
       <Transport {...props} replay={replay} />
       <div className="clock">
-        <span className="lbl">{replay ? "REPLAY" : "SIM TIME"}</span>
+        <span className="lbl">{replay ? "Replay" : "Sim time"}</span>
         <ClockValue replay={replay} simTimeS={snap.simTimeS} />
+        <Suspense fallback={null}>
+          <LazyMissionNote />
+        </Suspense>
       </div>
       {replay && view ? <ReplayScrub view={view} dtS={dtS} onBackToLive={props.onBackToLive} /> : <LiveScrub snap={snap} view={view} dtS={dtS} recorded={recorded} />}
       <Telemetry snap={snap} recorded={recorded} />
@@ -158,21 +166,22 @@ function LiveScrub(props: { snap: SimSnapshot; view: RunSnapshot | undefined; dt
   const { snap, view, dtS, recorded } = props;
   const savedS = (view?.persistedHeadTick ?? 0) * dtS;
   const t = trackLayout({ headS: Math.min(savedS, snap.simTimeS), simHeadS: snap.simTimeS, shownS: snap.simTimeS, dtS });
+  const runId = recorded ? view?.runId : undefined;
+  const band = useKnowledgeBand(runId, savedS, dtS);
+  const marks = useRunMarks(runId, savedS);
+  const strip = runId !== undefined;
   return (
     <div className="scrub">
       <div className="row">
         <span className="live" data-testid="player-state">
           {snap.headless ? `${GLYPH.running} HEADLESS` : "● LIVE"}
         </span>
-        <span data-testid="player-tick">tick {snap.tick}</span>
+        <span className="hide-1100" data-testid="player-tick">tick {snap.tick}</span>
+        <KnowledgeLabel band={band} marks={marks} atS={Math.min(snap.simTimeS, savedS)} />
       </div>
-      <div className="track" role="img" aria-label="Run so far">
+      <div className={`track${strip ? " kbt" : ""}`} role="img" aria-label="Run so far">
         {recorded && <div className="sv" style={{ width: `${t.savedPct}%` }} />}
-        {recorded && view?.runId && (
-          <Suspense fallback={null}>
-            <LazyPlayerMarks runId={view.runId} headS={savedS} scaleS={t.scaleS} />
-          </Suspense>
-        )}
+        {strip && <KnowledgeStrip band={band} marks={marks} runId={runId} startS={0} scaleS={t.scaleS} atS={Math.min(snap.simTimeS, savedS)} />}
         <i className="hd" style={{ left: `${t.cursorPct}%` }} />
       </div>
     </div>
@@ -198,6 +207,8 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
   const shown = Math.max(startS, Math.min(simTime, head));
   const derived = replay.derived;
   const t = trackLayout({ headS: head, simHeadS: simHead, shownS: shown, dtS, startS });
+  const band = useKnowledgeBand(view.runId, head, dtS);
+  const marks = useRunMarks(view.runId, head);
 
   // Following the persisted head: the cursor goes to it now and every time it moves.
   useEffect(() => {
@@ -223,13 +234,14 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
         <span className="live rp" data-testid="player-state">
           {GLYPH.replay} REPLAY
         </span>
-        <span className="trunc" data-testid="replay-label" title={`${live ? "Scrubbing" : "Replay of"} ${view.runId} from storage: the live run is not touched`}>
+        <span className="trunc hide-1100" data-testid="replay-label" title={`${live ? "Scrubbing" : "Replay of"} ${view.runId} from storage: the live run is not touched`}>
           {GLYPH.replay} {live ? "Scrubbing" : "Replay of"} {view.runId}
         </span>
         {derived !== undefined && <DerivedMark derived={derived} />}
         <span className="muted hide-narrow" data-testid="replay-pose-rate">
           {replay.poseRate}
         </span>
+        <KnowledgeLabel band={band} marks={marks} atS={shown} />
         <span className="sp" />
         {label !== undefined && (
           <span className="warn" data-testid="replay-gap">
@@ -246,19 +258,17 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
         </span>
         {live && (
           <label>
-            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} data-testid="replay-follow" /> Follow saved
+            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} data-testid="replay-follow" /> Follow<span className="lbl-long"> saved</span>
           </label>
         )}
         <button type="button" className="pb sm golive" onClick={props.onBackToLive} data-testid="replay-close" data-tip={live ? "Back to the live run" : "Close the replay"}>
           → {live ? "LIVE" : "Back to live"}
         </button>
       </div>
-      <div className="track clickable" ref={track} onClick={onTrackClick} data-testid="replay-track" role="presentation">
+      <div className="track clickable kbt" ref={track} onClick={onTrackClick} data-testid="replay-track" role="presentation">
         <div className="sv" style={{ width: `${t.savedPct}%` }} />
+        <KnowledgeStrip band={band} marks={marks} runId={view.runId} startS={startS} scaleS={t.scaleS} atS={shown} />
         {label !== undefined && <div className="gap" data-testid="replay-gap-area" style={{ left: `${t.gapLeftPct}%`, width: `${t.gapWidthPct}%` }} />}
-        <Suspense fallback={null}>
-          <LazyPlayerMarks runId={view.runId as string} headS={head} scaleS={t.scaleS} />
-        </Suspense>
         <i className="hd" style={{ left: `${t.cursorPct}%` }} />
         {/* The keyboard control of the cursor: a slider over the track that does not take the pointer (a click is the track's, with the gap rule). */}
         <input
@@ -281,6 +291,34 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
   );
 }
 
+/**
+ * Line 1 of the swarm knowledge band, above the strip (U-015): what the swarm knows and how much of it matches the truth at the cursor, the reflexes and failures so far, labelled as observer data;
+ * the definition, the rate, the agents and the gaps are in the tooltip. A recorded run with no belief sample says so.
+ */
+function KnowledgeLabel(props: { band: KnowledgeBand; marks: readonly Mark[]; atS: number }) {
+  const { band, atS } = props;
+  if (band.points.length === 0) {
+    return (
+      <span className="kb-label mono" data-testid="player-knowledge" title="This recording profile holds no samples of the beliefs against the truth: the swarm knowledge band has nothing to draw from.">
+        no belief samples <span className="muted">· observer</span>
+      </span>
+    );
+  }
+  const p = knowledgeShown(band, atS);
+  const upTo = props.marks.filter((m) => m.t <= atS);
+  const reflexes = upTo.filter((m) => m.kind === "reflex").length;
+  const failures = upTo.filter(isFailure).length;
+  // The numbers come first and the tag last: when the row is short it is the tag that is cut, never a number. The union of what the agents know where it has been computed ("swarm knows"),
+  // else the mean over the agents ("agents know … avg"); the tooltip says which it is.
+  const union = p?.kind === "union";
+  return (
+    <span className="kb-label mono" data-testid="player-knowledge" data-kind={p?.kind ?? "mean"} title={knowledgeWords(band, atS)}>
+      {union ? "swarm knows" : "agents know"} {p === undefined ? "–" : `${p.knownPct.toFixed(0)} %`}
+      {union ? "" : " avg"} · match {p === undefined ? "–" : `${p.matchOfKnownPct.toFixed(0)} %`} · ▲{reflexes} ✕{failures} <span className="muted">· observer</span>
+    </span>
+  );
+}
+
 /** A derived run in the player: where it comes from, its window and whether its checkpoints were reproduced (ADR-0035 section 3). */
 function DerivedMark(props: { derived: NonNullable<NonNullable<RunSnapshot["replay"]>["derived"]> }) {
   const d = props.derived;
@@ -298,7 +336,7 @@ function Telemetry(props: { snap: SimSnapshot; recorded: boolean }) {
   return (
     <div className="telem">
       <div className="tile">
-        <span className="lbl">RATE</span>
+        <span className="lbl">Rate</span>
         <span className="v mono">
           {snap.headless ? (
             <>
@@ -312,7 +350,7 @@ function Telemetry(props: { snap: SimSnapshot; recorded: boolean }) {
         </span>
       </div>
       <div className="tile">
-        <span className="lbl">TICK COST</span>
+        <span className="lbl">Tick cost</span>
         <span className="v mono">
           {snap.tickTimeP95Ms.toFixed(1)} <small>/{budgetMs.toFixed(0)} ms</small>
         </span>
@@ -326,11 +364,11 @@ function Telemetry(props: { snap: SimSnapshot; recorded: boolean }) {
         </Suspense>
       )}
       <div className="tile opt">
-        <span className="lbl">AGENTS</span>
+        <span className="lbl">Agents</span>
         <span className="v mono">{snap.entityIds.length}</span>
       </div>
       <div className="tile opt">
-        <span className="lbl">REC</span>
+        <span className="lbl">Rec</span>
         <span className={`v mono ${recorded ? "ok" : "muted"}`}>{recorded ? "● stored" : "○ none"}</span>
       </div>
     </div>

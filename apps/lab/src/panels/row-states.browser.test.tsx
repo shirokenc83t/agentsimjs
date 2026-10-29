@@ -50,10 +50,11 @@ describe.each(["dark", "light"] as const)("selectable rows, %s theme", (theme) =
 
     await userEvent.unhover(row);
     const selected = look(other);
-    expect(selected.bg).toBe(token("--acbg"));
-    expect(selected.outlineColor).toBe(token("--ac"));
-    expect(selected.outlineWidth).toBe(1);
-    expect(selected.shadow).toBe("none"); // no coloured side bar
+    // Selection (ADR-0043 §2): a neutral fill and a 1 px accent line at the start of the row; the accent fills nothing and there is no outline.
+    expect(selected.bg).toBe(token("--bg2"));
+    expect(selected.outlineWidth).toBe(0);
+    expect(selected.shadow).toContain(token("--ac"));
+    expect(selected.shadow).toMatch(/inset 1px 0px 0px 0px|1px 0px 0px/);
 
     await userEvent.keyboard("{Tab}");
     expect(document.activeElement).toBe(row);
@@ -64,7 +65,7 @@ describe.each(["dark", "light"] as const)("selectable rows, %s theme", (theme) =
     // Told apart: hover from rest, from selection and from focus.
     expect(hover.bg).not.toBe(rest.bg);
     expect(hover.bg).not.toBe(selected.bg);
-    expect(hover.outlineColor).not.toBe(selected.outlineColor);
+    expect(hover.shadow).not.toBe(selected.shadow);
     expect(focus.outlineWidth).toBeGreaterThan(hover.outlineWidth);
     expect(focus.outlineWidth).toBeGreaterThan(selected.outlineWidth);
   });

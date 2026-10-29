@@ -144,6 +144,7 @@ export class SceneRenderer {
   /** The stages of the selected planning query, and of the researcher's Strategy test: created on first use. */
   private stagesOverlay: StagesOverlay | undefined;
   private sandboxOverlay: StagesOverlay | undefined;
+  private missionOverlay: StagesOverlay | undefined;
   private gridSpec: GridSpec | undefined;
   private tokens: SceneTokens;
   private entityIds: readonly string[] = [];
@@ -278,6 +279,7 @@ export class SceneRenderer {
     this.sensorOverlay?.applyTheme(t);
     this.stagesOverlay?.applyTheme(t);
     this.sandboxOverlay?.applyTheme(t);
+    this.missionOverlay?.applyTheme(t);
     this.drawZones();
     this.paintAgents();
   }
@@ -381,6 +383,16 @@ export class SceneRenderer {
     this.sandboxOverlay.setStages(lines);
   }
 
+  /** The rest of an agent's mission on the map, dashed through the points of its steps (the same dashes as a coarse path); `undefined` clears it. */
+  setMissionPath(lines: readonly StageLine[] | undefined): void {
+    if (lines === undefined && !this.missionOverlay) return;
+    if (!this.missionOverlay) {
+      this.missionOverlay = new StagesOverlay(this.tokens, "mission");
+      this.scene.add(this.missionOverlay.group);
+    }
+    this.missionOverlay.setStages(lines);
+  }
+
   /** What the overlays draw now (diagnostics and e2e): sensors, then the stages of the selected query and of the sandbox. */
   overlayCounts(): {
     rays: number;
@@ -390,12 +402,14 @@ export class SceneRenderer {
     exploration: { area: number; temporary: number; permanent: number };
     stages: { coarseDashes: number; legs: number; legSegments: number; joints: number; labels: number };
     sandbox: { coarseDashes: number; legs: number; legSegments: number; joints: number; labels: number };
+    mission: { coarseDashes: number; legs: number; legSegments: number; joints: number; labels: number };
   } {
     const none = { coarseDashes: 0, legs: 0, legSegments: 0, joints: 0, labels: 0 };
     return {
       ...(this.sensorOverlay?.counts() ?? { rays: 0, regions: 0, frontiers: 0, markedFrontiers: 0, exploration: { area: 0, temporary: 0, permanent: 0 } }),
       stages: this.stagesOverlay?.counts() ?? none,
       sandbox: this.sandboxOverlay?.counts() ?? none,
+      mission: this.missionOverlay?.counts() ?? none,
     };
   }
 
@@ -490,7 +504,11 @@ export class SceneRenderer {
 
   /** Highlights the selected agent (or none). */
   setSelection(agentId: string | undefined): void {
-    this.selectedIndex = agentId === undefined ? -1 : this.entityIds.indexOf(agentId);
+    const next = agentId === undefined ? -1 : this.entityIds.indexOf(agentId);
+    if (next === this.selectedIndex) return;
+    this.selectedIndex = next;
+    // One subject, one hue (ADR-0043 §3): the colours of the agents depend on which one is selected.
+    this.paintAgents();
   }
 
   /** The identity of the agent at `i`: the one the panel gave, else the one its place in the run gives. */
@@ -500,6 +518,8 @@ export class SceneRenderer {
   }
 
   private agentColor(i: number): string {
+    // With an agent selected the others are drawn in a neutral grey; with none, every agent keeps its own colour.
+    if (this.selectedIndex >= 0 && i !== this.selectedIndex) return this.tokens.pathPlannedDim;
     return this.tokens.agent[this.identity(i).colorIndex] ?? this.tokens.selection;
   }
 
@@ -756,6 +776,7 @@ export class SceneRenderer {
     this.sensorOverlay?.dispose();
     this.stagesOverlay?.dispose();
     this.sandboxOverlay?.dispose();
+    this.missionOverlay?.dispose();
     this.beliefAtlas?.dispose();
     this.atlas?.dispose();
     this.paths.clear();

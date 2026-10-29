@@ -72,7 +72,7 @@ test("the Overview and the Legend are floating windows, collapsed until opened",
 test("a failed agent: badge and ring on the map, a row in the Explorer's attention group, the player's tile, a flag in the timeline", async ({ page }) => {
   test.setTimeout(150_000);
   await loadDemo(page);
-  await expect(page.getByTestId("attention-tile")).toHaveText(/none|ATTENTION/);
+  await expect(page.getByTestId("attention-tile")).toHaveText(/none|Attention/);
   await sendTo(page, "ugv-001", 50, 45); // a closed box: unreachable
   await stepUntilEnded(page, 5);
 
