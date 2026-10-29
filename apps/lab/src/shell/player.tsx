@@ -258,7 +258,7 @@ function ReplayScrub(props: { view: RunSnapshot; dtS: number; onBackToLive: () =
         </span>
         {live && (
           <label>
-            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} data-testid="replay-follow" /> Follow saved
+            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} data-testid="replay-follow" /> Follow<span className="lbl-long"> saved</span>
           </label>
         )}
         <button type="button" className="pb sm golive" onClick={props.onBackToLive} data-testid="replay-close" data-tip={live ? "Back to the live run" : "Close the replay"}>
@@ -314,7 +314,7 @@ function KnowledgeLabel(props: { band: KnowledgeBand; marks: readonly Mark[]; at
   return (
     <span className="kb-label mono" data-testid="player-knowledge" data-kind={p?.kind ?? "mean"} title={knowledgeWords(band, atS)}>
       {union ? "swarm knows" : "agents know"} {p === undefined ? "–" : `${p.knownPct.toFixed(0)} %`}
-      {union ? "" : " avg"} · matches {p === undefined ? "–" : `${p.matchOfKnownPct.toFixed(0)} %`} · ▲{reflexes} ✕{failures} <span className="muted">· observer</span>
+      {union ? "" : " avg"} · match {p === undefined ? "–" : `${p.matchOfKnownPct.toFixed(0)} %`} · ▲{reflexes} ✕{failures} <span className="muted">· observer</span>
     </span>
   );
 }

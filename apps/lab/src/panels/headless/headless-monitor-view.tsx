@@ -205,7 +205,7 @@ export function HeadlessMonitorView(props: MonitorViewProps) {
           <p className="mono hm-knowledge-line" data-testid="hm-knowledge-line">
             {(() => {
               const k = knowledgeShown(props.knowledge.band, props.knowledge.endS);
-              return k === undefined ? "–" : `${k.kind === "union" ? "swarm knows" : "agents know"} ${k.knownPct.toFixed(0)} %${k.kind === "union" ? "" : " avg"} · matches ${k.matchOfKnownPct.toFixed(0)} %`;
+              return k === undefined ? "–" : `${k.kind === "union" ? "swarm knows" : "agents know"} ${k.knownPct.toFixed(0)} %${k.kind === "union" ? "" : " avg"} · match ${k.matchOfKnownPct.toFixed(0)} %`;
             })()}{" "}
             <span className="muted" title={knowledgeWords(props.knowledge.band, props.knowledge.endS)}>
               · observer data
