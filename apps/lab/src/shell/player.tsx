@@ -314,7 +314,7 @@ function KnowledgeLabel(props: { band: KnowledgeBand; marks: readonly Mark[]; at
   return (
     <span className="kb-label mono" data-testid="player-knowledge" data-kind={p?.kind ?? "mean"} title={knowledgeWords(band, atS)}>
       {union ? "swarm knows" : "agents know"} {p === undefined ? "–" : `${p.knownPct.toFixed(0)} %`}
-      {union ? "" : " avg"} · match {p === undefined ? "–" : `${p.matchPct.toFixed(0)} %`} · ▲{reflexes} ✕{failures} <span className="muted">· observer</span>
+      {union ? "" : " avg"} · matches {p === undefined ? "–" : `${p.matchOfKnownPct.toFixed(0)} %`} · ▲{reflexes} ✕{failures} <span className="muted">· observer</span>
     </span>
   );
 }

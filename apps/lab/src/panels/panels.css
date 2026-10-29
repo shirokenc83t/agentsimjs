@@ -792,7 +792,7 @@
 .ah-axis-track { position: relative; height: 100%; border-bottom: 1px solid var(--ln); }
 .ah-tick { position: absolute; top: 2px; padding-left: 3px; border-left: 1px solid var(--ln2); font-size: var(--type-label-size); color: var(--fg3); white-space: nowrap; }
 .ah-row { display: flex; align-items: flex-start; border-bottom: 1px solid var(--ln); }
-.ah-gutter { flex: none; width: 92px; box-sizing: border-box; padding: 6px 8px; font-size: var(--type-label-size); color: var(--fg2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ah-gutter { flex: none; width: 92px; box-sizing: border-box; padding: 6px 8px; font-size: var(--type-label-size); line-height: 1.25; color: var(--fg2); overflow: hidden; overflow-wrap: anywhere; }
 .ah-track { position: relative; flex: none; }
 .ah-node { user-select: none; position: absolute; box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 0 4px; overflow: hidden; white-space: nowrap; font-size: var(--type-mono-size); cursor: pointer; background: var(--bg2); border: 1px solid var(--ln2); color: var(--fg); }
 .ah-node.pt { min-width: 14px; border-color: transparent; background: transparent; overflow: visible; padding: 0; }
@@ -853,9 +853,13 @@
 .aa-right { min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; background: var(--bg0); }
 .asv-chart .mark circle { fill: none; stroke: var(--ac); stroke-width: 2; }
 .asv-chart .mark .drop { stroke: var(--ac); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-.aa-prov { flex: none; margin-top: auto; padding: 4px 12px 8px; border-top: 1px solid var(--ln); background: var(--bg1); position: sticky; bottom: 0; }
+.aa-prov { flex: none; padding: 4px 12px 8px; border-top: 1px solid var(--ln); background: var(--bg1); }
 .aa-prov h4.sec { margin: 4px 0; }
 .aa-prov p { margin: 2px 0 6px; }
 .aa-chain { margin: 0 0 6px; padding-left: 0; list-style: none; font-size: var(--type-mono-size); }
 .aa-chain li { padding: 1px 0; }
 .aa-prov-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.ah-node.tick { width: 1px; min-width: 1px; padding: 0; border: 0; background: var(--fg3); overflow: visible; }
+.ah-node.tick > * { display: none; }
+.ah-node.tick::before { content: ""; position: absolute; top: 0; bottom: 0; left: -3px; right: -3px; }
+.ah-node.tick:hover, .ah-node.tick.sel { background: var(--ac); }

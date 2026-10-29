@@ -58,6 +58,18 @@ describe("the audit rows", () => {
     expect(rows[0]?.causedBy).toBe("none recorded");
   });
 
+  it("names the command that made an action by its input id (an association, said so), never \"none recorded\" when the input matches, and a sub-row says which action it is within", () => {
+    seq = 0;
+    const command = rec("injected", { op: "command", caller: "world", inputId: "inp-000002", name: "explore", ok: true }, 0.1);
+    const a1 = rec("action", { op: "start", actionId: "a1", name: "explore", params: { radiusM: 20 }, caller: "world", inputId: "inp-000002" }, 0.1);
+    const replan = rec("action", { op: "replan", reason: "map_changed" }, 5, { parentId: a1.id });
+    const other = rec("action", { op: "start", actionId: "a2", name: "hold", params: {}, caller: "world", inputId: "inp-000009" }, 8);
+    const rows = auditRows([command, a1, replan, other], 20);
+    expect(rows.find((r) => r.kind === "action" && r.what.startsWith("explore"))?.causedBy).toBe("command at 0.1 s (input inp-000002, #0)");
+    expect(rows.find((r) => r.kind === "replan")?.causedBy).toBe("within explore (#1)");
+    expect(rows.find((r) => r.kind === "action" && r.what.startsWith("hold"))?.causedBy).toBe("none recorded"); // its command was not read: nothing to associate
+  });
+
   it("filters by the brush window (a row is in when it overlaps it), and exports the table as CSV", () => {
     const rows = auditRows(mission(), 60);
     const inWin = rowsInWindow(rows, { t0: 30, t1: 60 });

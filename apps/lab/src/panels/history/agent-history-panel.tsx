@@ -22,6 +22,7 @@ import {
   type Placed,
   type RowView,
 } from "./history-model.ts";
+import { causeWords, commandsByInput } from "./audit-model.ts";
 import { readChildren, readEffects, useAgentHistory, type AgentHistoryData } from "./use-agent-history.ts";
 
 /**
@@ -73,6 +74,8 @@ export function AgentHistoryPanel(props: HistoryViewProps = {}) {
 
   const own = useAgentHistory(storage.ports, props.data === undefined ? runId : undefined, agentId, head);
   const data = props.data ?? own;
+  const byId = useMemo(() => new Map(data.records.map((r) => [r.id, r] as const)), [data.records]);
+  const byInput = useMemo(() => commandsByInput(data.records), [data.records]);
   const lastRecordS = data.records.reduce((m, r) => Math.max(m, r.simTime), 0);
   const endS = Math.max(snap.replay?.headS ?? snap.simTimeS, lastRecordS, 1);
 
@@ -127,7 +130,7 @@ export function AgentHistoryPanel(props: HistoryViewProps = {}) {
       const { placed, lanes } = layoutRow(nodes.filter((n) => n.t1 >= axis.t0 && n.t0 <= axis.t1), { t0: axis.t0, t1: axis.t1, widthPx: width });
       return { index, label, nodes, placed, lanes, opener, reading: isReading };
     };
-    out.push(lay(1, "commands", commands, undefined, false));
+    out.push(lay(1, "commands · decisions", commands, undefined, false));
     out.push(lay(2, "actions", actions, undefined, false));
     for (let i = 0; i < path.length; i++) {
       const item = path[i] as { row: number; key: string };
@@ -154,9 +157,10 @@ export function AgentHistoryPanel(props: HistoryViewProps = {}) {
     const t0 = Math.min(...deepest.nodes.map((n) => n.t0));
     const t1 = Math.max(...deepest.nodes.map((n) => n.t1));
     const pad = t1 > t0 ? (t1 - t0) * 0.02 : 0.5;
-    return { t0: t0 - pad, t1: Math.max(t1, t0 + 0.1) + pad };
-  }, [deepest]);
-  const stretched = useMemo(() => (deepest && stretchAxis ? layoutRow(deepest.nodes, { ...stretchAxis, widthPx: width }, { minPx: 3 }) : undefined), [deepest, stretchAxis, width]);
+    // Clamped to the run: 0 and its end (a node at the start of the run has no time before it).
+    return { t0: Math.max(0, t0 - pad), t1: Math.min(Math.max(endS, t0 + 0.1), Math.max(t1, t0 + 0.1) + pad) };
+  }, [deepest, endS]);
+  const stretched = useMemo(() => (deepest && stretchAxis ? layoutRow(deepest.nodes, { ...stretchAxis, widthPx: width }) : undefined), [deepest, stretchAxis, width]);
 
   const selected = useMemo(() => {
     const own = selKey === undefined ? undefined : allNodes.get(selKey)?.node;
@@ -302,12 +306,12 @@ export function AgentHistoryPanel(props: HistoryViewProps = {}) {
     const nextX = siblings.filter((q) => q.lane === p.lane && (q.x > p.x || (q.x === p.x && q.node.key > n.key))).reduce((m, q) => Math.min(m, q.x), w);
     const room = isSel ? 400 : nextX - ((n.t0 - a.t0) / Math.max(1e-9, a.t1 - a.t0)) * w - 22;
     const x = ((n.t0 - a.t0) / Math.max(1e-9, a.t1 - a.t0)) * w;
-    const cls = ["ah-node", n.kind, n.status ?? "", point ? "pt" : "bar", isSel ? "sel" : "", isFocus ? "focus" : "", isOpen(n.key) ? "opened" : ""].filter(Boolean).join(" ");
+    const cls = ["ah-node", n.kind, n.status ?? "", point ? "pt" : "bar", isSel ? "sel" : "", isFocus ? "focus" : "", isOpen(n.key) ? "opened" : "", p.tick ? "tick" : ""].filter(Boolean).join(" ");
     return (
       <div
         key={n.key}
         className={`${cls}${n.kind === "idle" ? " hatched" : ""}`}
-        style={{ left: Math.max(0, x), width: point ? undefined : Math.max(3, Math.min(p.w + Math.min(0, x), w - Math.max(0, x))), top: ROW_PAD + p.lane * LANE_H, height: LANE_H - 4 }}
+        style={{ left: Math.max(0, x), width: p.tick ? 1 : point ? undefined : Math.max(3, Math.min(p.w + Math.min(0, x), w - Math.max(0, x))), top: ROW_PAD + p.lane * LANE_H, height: LANE_H - 4 }}
         role="button"
         tabIndex={-1}
         data-node={n.key}
@@ -317,7 +321,7 @@ export function AgentHistoryPanel(props: HistoryViewProps = {}) {
         data-t0={n.t0.toFixed(3)}
         data-x={x.toFixed(1)}
         aria-label={`${n.glyph} ${n.label}, ${ago(n)}`}
-        title={`${n.label} · ${ago(n)}`}
+        title={`${n.label} · ${ago(n)}${n.op === "explore-iteration" ? " · a cell group is a set of adjacent frontier cells the explorer treats as one place to go to; the count is how many of them this iteration visited" : ""}`}
         onClick={() => select(n, row)}
         onDoubleClick={() => open(n, row)}
       >
@@ -444,7 +448,7 @@ export function AgentHistoryPanel(props: HistoryViewProps = {}) {
                     </div>
                     <div>
                       <dt className="muted">cause</dt>
-                      <dd className="mono">{(rec.causeIds ?? []).length === 0 ? "none recorded" : (rec.causeIds ?? []).join(", ")}</dd>
+                      <dd className="mono">{causeWords(rec, byId, byInput)}</dd>
                     </div>
                     <div>
                       <dt className="muted">sits in</dt>

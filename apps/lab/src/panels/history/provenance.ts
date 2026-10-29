@@ -1,7 +1,7 @@
 import type { TraceRecord } from "@agentsim/trace";
 import type { AnalysisSeries, SeriesPoint } from "../analysis/analysis-model.ts";
 import { seqOfId } from "../debug/trace-tree.ts";
-import { recordWords } from "./audit-model.ts";
+import { commandWords, recordWords } from "./audit-model.ts";
 
 // Where a value on a chart comes from (T-103, U-017): a point of a planner series is one `compute` record, with the chain of what it came from (its causes, then its parent and
 // what caused that); a point of a recorded metric is a sample with its tick and its rate, and the line between samples is drawn, not measured. Pure but for the lookup it is given.
@@ -55,7 +55,7 @@ export function metricProvenance(series: AnalysisSeries, point: SeriesPoint, dtS
  * The chain behind a planner point: the compute record, then what caused it (each cause's own cause, up to `depth`), then its parent and what caused that. `lookup` reads one
  * record by its number.
  */
-export async function computeProvenance(series: AnalysisSeries, point: SeriesPoint, lookup: Lookup, depth = 4): Promise<Provenance> {
+export async function computeProvenance(series: AnalysisSeries, point: SeriesPoint, lookup: Lookup, depth = 4, commandOfInput?: (inputId: string) => TraceRecord | undefined): Promise<Provenance> {
   const seq = point.seq;
   const record = seq === undefined ? undefined : await lookup(seq);
   if (record === undefined) {
@@ -80,7 +80,11 @@ export async function computeProvenance(series: AnalysisSeries, point: SeriesPoi
   const parent = parentSeq === undefined ? undefined : await lookup(parentSeq);
   if (parent !== undefined) {
     chain.push({ relation: "parent", label: recordWords(parent), seq: parent.seq, tick: undefined });
-    await walkCauses(parent, "cause");
+    const walked = await walkCauses(parent, "cause");
+    // An action a command started has no cause link to it; the same input id says which command it was (an association, said so).
+    const input = (parent.payload as { inputId?: unknown } | null)?.inputId;
+    const command = walked === undefined && typeof input === "string" ? commandOfInput?.(input) : undefined;
+    if (command !== undefined) chain.push({ relation: "cause", label: `${commandWords(command)} · by input id`, seq: command.seq, tick: undefined });
   }
   const what = series.name === "planner expansions" ? `${fmtValue(point.v, series.unit)} expansions` : `${fmtValue(point.v, series.unit)} ticks of planning latency`;
   const own = `${what} at ${point.t.toFixed(1)} s is one compute record`;

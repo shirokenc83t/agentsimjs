@@ -42,7 +42,7 @@ test("the history opens from the Explorer with H: commands and actions on one ax
   await explore.click();
   await expect(page.getByTestId("ah-sel-label")).toContainText("explore");
   await expect(page.getByTestId("ah-fields")).toContainText("action · start");
-  await expect(page.getByTestId("ah-fields")).toContainText("none recorded");
+  await expect(page.getByTestId("ah-fields")).toContainText(/command at \d+\.\d s \(input inp-\d+, #\d+\)/);
   await explore.dblclick();
   await expect(page.getByTestId("ah-row-3")).toBeVisible();
   await expect(page.getByTestId("ah-bracket-3")).toBeVisible();

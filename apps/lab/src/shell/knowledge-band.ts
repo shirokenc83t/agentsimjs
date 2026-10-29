@@ -128,16 +128,16 @@ export function knowledgeWords(band: KnowledgeBand, t: number): string {
   const ideal = band.ideal > 0 ? ` (${band.ideal} ideal not counted)` : "";
   const shown = knowledgeShown(band, t) as NonNullable<ReturnType<typeof knowledgeShown>>;
   if (shown.kind === "union") {
-    return `swarm knowledge · observer data · the swarm knows ${shown.knownPct.toFixed(1)} % of the map (the union of what its agents know), ${shown.matchPct.toFixed(1)} % of it matching the truth · ${agents}${ideal}${rate}`;
+    return `swarm knowledge · observer data · the swarm knows ${shown.knownPct.toFixed(1)} % of the map (the union of what its agents know), and ${shown.matchOfKnownPct.toFixed(1)} % of what it knows matches the truth · ${agents}${ideal}${rate}`;
   }
-  return `swarm knowledge · observer data · agents know ${p.knownPct.toFixed(1)} % of what they can reach on average, ${p.matchPct.toFixed(1)} % matching the truth · mean of ${agents}${ideal}${rate} · the union of their known cells is not computed here`;
+  return `swarm knowledge · observer data · agents know ${p.knownPct.toFixed(1)} % of what they can reach on average, and ${shown.matchOfKnownPct.toFixed(1)} % of what they know matches the truth · mean of ${agents}${ideal}${rate} · (mean until the first union point: the union of their known cells is not computed here)`;
 }
 
 /**
  * The swarm's known share at `t`, in the form the band shows: the union (share of the map's cells known to at least one agent) when it has a point at or before `t`, with the matching share
  * scaled from the samples (the share of what an agent knows that matches the truth, applied to the union); else the mean over the agents. `kind` says which, for the label and the tooltip.
  */
-export function knowledgeShown(band: KnowledgeBand, t: number): { readonly kind: "union" | "mean"; readonly knownPct: number; readonly matchPct: number } | undefined {
+export function knowledgeShown(band: KnowledgeBand, t: number): { readonly kind: "union" | "mean"; readonly knownPct: number; /** The known cells that match the truth, as a share of the map (or of what the agents reach): what the band's disagreement area draws. */ readonly matchPct: number; /** The share of what is known that matches the truth (U-015: matching ÷ known), the number the labels say: "matches 97 %". */ readonly matchOfKnownPct: number } | undefined {
   const mean = knowledgeAt(band, t);
   if (mean === undefined) return undefined;
   let u: { t: number; pct: number } | undefined;
@@ -145,8 +145,8 @@ export function knowledgeShown(band: KnowledgeBand, t: number): { readonly kind:
     if (p.t > t + 1e-9) break;
     u = p;
   }
-  if (u === undefined) return { kind: "mean", knownPct: mean.knownPct, matchPct: mean.matchPct };
+  if (u === undefined) return { kind: "mean", knownPct: mean.knownPct, matchPct: mean.matchPct, matchOfKnownPct: mean.knownPct > 0 ? Math.round(Math.min(100, (mean.matchPct / mean.knownPct) * 100) * 100) / 100 : 100 };
   const atU = knowledgeAt(band, u.t) ?? mean;
   const ratio = atU.knownPct > 0 ? Math.min(1, atU.matchPct / atU.knownPct) : 1;
-  return { kind: "union", knownPct: u.pct, matchPct: Math.round(u.pct * ratio * 100) / 100 };
+  return { kind: "union", knownPct: u.pct, matchPct: Math.round(u.pct * ratio * 100) / 100, matchOfKnownPct: Math.round(ratio * 10000) / 100 };
 }

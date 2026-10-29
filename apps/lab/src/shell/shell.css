@@ -159,6 +159,6 @@
   .clock .big { font-size: 18px; }
 }
 .top .theme-btn { text-transform: none; }
-.clock .mission-note { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
+.clock .mission-note { font-size: 11px; line-height: 1.15; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; max-width: 190px; }
 /* The mark of the product (ADR-0043 section 6) is drawn larger than the text beside it: at the size of the text it reads as the plain boxed glyph it replaces. */
 .top .brand .mark { font-size: 24px; line-height: 1; }

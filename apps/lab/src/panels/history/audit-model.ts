@@ -42,10 +42,32 @@ export function recordWords(r: TraceRecord): string {
   return `${r.kind}${op === undefined ? "" : ` ${op}`} ${n}`;
 }
 
-/** What caused a record, in words: the first record it names as a cause that is among `byId` (or its bare number when it was not read). */
-export function causeWords(r: TraceRecord, byId: ReadonlyMap<string, TraceRecord>): string {
+/** The injected commands by their input id (`inp-000002`): the start of an action a command made carries the same input id, which is how the two are associated (not a cause link). */
+export function commandsByInput(records: readonly TraceRecord[]): Map<string, TraceRecord> {
+  const out = new Map<string, TraceRecord>();
+  for (const r of records) {
+    const p = payloadOf(r);
+    if (r.kind === "injected" && p["op"] === "command" && typeof p["inputId"] === "string") out.set(p["inputId"], r);
+  }
+  return out;
+}
+
+/** `command at 0.1 s (input inp-000002, #14)`: said as an association by input id, since the trace has no cause link there. */
+export function commandWords(c: TraceRecord): string {
+  return `command at ${c.simTime.toFixed(1)} s (input ${str(payloadOf(c)["inputId"]) ?? "?"}, #${c.seq})`;
+}
+
+/**
+ * What caused a record, in words: the first record it names as a cause that is among `byId` (or its bare number when it was not read); when it names none, the command that has the
+ * same input id as the record (an association, said so); else "none recorded".
+ */
+export function causeWords(r: TraceRecord, byId: ReadonlyMap<string, TraceRecord>, byInput?: ReadonlyMap<string, TraceRecord>): string {
   const id = r.causeIds?.[0];
-  if (id === undefined) return "none recorded";
+  if (id === undefined) {
+    const input = str(payloadOf(r)["inputId"]);
+    const c = input === undefined ? undefined : byInput?.get(input);
+    return c === undefined ? "none recorded" : commandWords(c);
+  }
   const c = byId.get(id);
   if (c !== undefined) return recordWords(c);
   const seq = seqOfId(id);
@@ -63,6 +85,7 @@ const failureOf = (p: Record<string, unknown>): { code: string | undefined; mess
 export function auditRows(records: readonly TraceRecord[], endS: number): AuditRow[] {
   const sorted = [...records].sort((a, b) => a.seq - b.seq);
   const byId = new Map(sorted.map((r) => [r.id, r] as const));
+  const byInput = commandsByInput(sorted);
   const ends = new Map<string, TraceRecord>();
   for (const r of sorted) {
     const p = payloadOf(r);
@@ -85,20 +108,22 @@ export function auditRows(records: readonly TraceRecord[], endS: number): AuditR
     else if (status === "succeeded") reason = "completed";
     else if (status === "preempted") reason = endCause !== undefined ? `preempted by ${recordWords(endCause)}` : (f.message ?? (next !== undefined ? `replaced by ${str(payloadOf(next)["name"]) ?? "another action"}` : "preempted"));
     else reason = f.message ?? (f.code === undefined ? "failed" : words(f.code));
-    rows.push({ key: `a${start.seq}`, level: 0, kind: "action", t0: bar.t0, t1: bar.t1, seq: start.seq, glyph: bar.glyph, what: bar.label, outcome: status === "running" ? "▶ running" : `${bar.glyph} ${dur} s`, reason, causedBy: causeWords(start, byId), status });
+    rows.push({ key: `a${start.seq}`, level: 0, kind: "action", t0: bar.t0, t1: bar.t1, seq: start.seq, glyph: bar.glyph, what: bar.label, outcome: status === "running" ? "▶ running" : `${bar.glyph} ${dur} s`, reason, causedBy: causeWords(start, byId, byInput), status });
+    // A sub-row says what recorded cause it has, else which action it is within.
+    const within = (r: TraceRecord) => (r.causeIds?.[0] === undefined ? `within ${bar.label.split(" ")[0] ?? "the action"} (#${start.seq})` : causeWords(r, byId, byInput));
     // Inside the action: the reflexes that hit it, its replans and recoveries, the commands refused while it ran.
     for (const r of sorted) {
       if (r.seq === start.seq) continue;
       const p = payloadOf(r);
       const op = str(p["op"]);
       const inside = r.simTime >= bar.t0 - 1e-9 && r.simTime <= bar.t1 + 1e-9;
-      if (r.kind === "reflex" && inside) rows.push({ key: `x${r.seq}`, level: 1, kind: "reflex", t0: r.simTime, t1: r.simTime, seq: r.seq, glyph: "▲", what: `reflex ${str(p["reflex"]) ?? ""}`.trim(), outcome: "", reason: reflexWords(str(p["code"]) ?? str(p["reflex"]) ?? "reflex"), causedBy: causeWords(r, byId), status: undefined });
+      if (r.kind === "reflex" && inside) rows.push({ key: `x${r.seq}`, level: 1, kind: "reflex", t0: r.simTime, t1: r.simTime, seq: r.seq, glyph: "▲", what: `reflex ${str(p["reflex"]) ?? ""}`.trim(), outcome: "", reason: reflexWords(str(p["code"]) ?? str(p["reflex"]) ?? "reflex"), causedBy: within(r), status: undefined });
       else if (r.kind === "action" && r.parentId === start.id && (op === "replan" || op === "recovery")) {
         const why = str(p["reason"]) ?? "";
-        rows.push({ key: `${op === "replan" ? "p" : "v"}${r.seq}`, level: 1, kind: op === "replan" ? "replan" : "recovery", t0: r.simTime, t1: r.simTime, seq: r.seq, glyph: "↻", what: op === "replan" ? "replan" : `recovery${str(p["kind"]) === undefined ? "" : ` · ${str(p["kind"])}`}`, outcome: "", reason: words(why), causedBy: causeWords(r, byId), status: undefined });
+        rows.push({ key: `${op === "replan" ? "p" : "v"}${r.seq}`, level: 1, kind: op === "replan" ? "replan" : "recovery", t0: r.simTime, t1: r.simTime, seq: r.seq, glyph: "↻", what: op === "replan" ? "replan" : `recovery${str(p["kind"]) === undefined ? "" : ` · ${str(p["kind"])}`}`, outcome: "", reason: words(why), causedBy: within(r), status: undefined });
       } else if (r.kind === "action" && op === "rejected" && inside) {
         const code = failureOf(p).code ?? "refused";
-        rows.push({ key: `r${r.seq}`, level: 1, kind: "refusal", t0: r.simTime, t1: r.simTime, seq: r.seq, glyph: "✕", what: `${str(p["name"]) ?? "action"} refused`, outcome: "", reason: words(code), causedBy: causeWords(r, byId), status: "refused" });
+        rows.push({ key: `r${r.seq}`, level: 1, kind: "refusal", t0: r.simTime, t1: r.simTime, seq: r.seq, glyph: "✕", what: `${str(p["name"]) ?? "action"} refused`, outcome: "", reason: words(code), causedBy: within(r), status: "refused" });
       }
     }
   }
@@ -106,12 +131,12 @@ export function auditRows(records: readonly TraceRecord[], endS: number): AuditR
   const inAny = (t: number) => bars.some((b) => t >= b.t0 - 1e-9 && t <= b.t1 + 1e-9);
   for (const r of sorted) {
     const p = payloadOf(r);
-    if (r.kind === "reflex" && !inAny(r.simTime)) rows.push({ key: `x${r.seq}`, level: 0, kind: "reflex", t0: r.simTime, t1: r.simTime, seq: r.seq, glyph: "▲", what: `reflex ${str(p["reflex"]) ?? ""}`.trim(), outcome: "", reason: reflexWords(str(p["code"]) ?? str(p["reflex"]) ?? "reflex"), causedBy: causeWords(r, byId), status: undefined });
-    else if (r.kind === "action" && p["op"] === "rejected" && !inAny(r.simTime)) rows.push({ key: `r${r.seq}`, level: 0, kind: "refusal", t0: r.simTime, t1: r.simTime, seq: r.seq, glyph: "✕", what: `${str(p["name"]) ?? "action"} refused`, outcome: "", reason: words(failureOf(p).code ?? "refused"), causedBy: causeWords(r, byId), status: "refused" });
+    if (r.kind === "reflex" && !inAny(r.simTime)) rows.push({ key: `x${r.seq}`, level: 0, kind: "reflex", t0: r.simTime, t1: r.simTime, seq: r.seq, glyph: "▲", what: `reflex ${str(p["reflex"]) ?? ""}`.trim(), outcome: "", reason: reflexWords(str(p["code"]) ?? str(p["reflex"]) ?? "reflex"), causedBy: causeWords(r, byId, byInput), status: undefined });
+    else if (r.kind === "action" && p["op"] === "rejected" && !inAny(r.simTime)) rows.push({ key: `r${r.seq}`, level: 0, kind: "refusal", t0: r.simTime, t1: r.simTime, seq: r.seq, glyph: "✕", what: `${str(p["name"]) ?? "action"} refused`, outcome: "", reason: words(failureOf(p).code ?? "refused"), causedBy: causeWords(r, byId, byInput), status: "refused" });
     else if (r.kind === "thought" && p["op"] === "decision" && p["stop"] !== undefined) {
       const stop = p["stop"];
       const why = typeof stop === "string" ? stop : str((stop as { reason?: unknown } | null)?.reason) ?? "";
-      rows.push({ key: `m${r.seq}`, level: 0, kind: "stop", t0: r.simTime, t1: r.simTime, seq: r.seq, glyph: "■", what: `mission stopped at step ${String(p["step"])} of ${String(p["of"])}`, outcome: "", reason: why === "" ? "the mission stopped" : words(why), causedBy: causeWords(r, byId), status: undefined });
+      rows.push({ key: `m${r.seq}`, level: 0, kind: "stop", t0: r.simTime, t1: r.simTime, seq: r.seq, glyph: "■", what: `mission stopped at step ${String(p["step"])} of ${String(p["of"])}`, outcome: "", reason: why === "" ? "the mission stopped" : words(why), causedBy: causeWords(r, byId, byInput), status: undefined });
     }
   }
   for (const n of actions.filter((x) => x.kind === "idle")) rows.push({ key: n.key, level: 0, kind: "idle", t0: n.t0, t1: n.t1, seq: undefined, glyph: "○", what: "idle", outcome: `${(n.t1 - n.t0).toFixed(1)} s`, reason: "no action running", causedBy: "—", status: undefined });

@@ -9,7 +9,7 @@ import { recordBySeq } from "../debug/trace-tree.ts";
 import { useJump } from "../debug/use-jump.ts";
 import { useDockPanel } from "../../workspaces/panel-context.ts";
 import { useSelectedAgentId } from "../selected-agent.ts";
-import { auditCsv, auditFindings, auditRows, rowsInWindow, type AuditRow } from "./audit-model.ts";
+import { auditCsv, auditFindings, auditRows, commandsByInput, rowsInWindow, type AuditRow } from "./audit-model.ts";
 import { AgentHistoryPanel } from "./agent-history-panel.tsx";
 import { computeProvenance, metricProvenance, type Provenance } from "./provenance.ts";
 import { useAgentHistory } from "./use-agent-history.ts";
@@ -108,7 +108,7 @@ export function AgentAuditPanel() {
   const onMark = (s: AnalysisSeries, p: SeriesPoint) => {
     setMark({ key: s.key, point: p, series: s });
     if (s.source === "metric") setProv(metricProvenance(s, p, dt));
-    else void computeProvenance(s, p, lookup).then(setProv);
+    else void computeProvenance(s, p, lookup, 4, (input) => commandsByInput(data.records).get(input)).then(setProv);
   };
 
   const selectRow = (r: AuditRow) => {

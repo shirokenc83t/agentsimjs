@@ -138,7 +138,7 @@ export function childNodes(children: readonly TraceRecord[], endS: number, paren
     const label = isPhase
       ? `phase · ${str(p["to"]) ?? ""}`.trim()
       : isIteration
-        ? `${iterationLabel(p)}${typeof visitedN === "number" ? ` · ${visitedN} group${visitedN === 1 ? "" : "s"}` : ""}`
+        ? `${iterationLabel(p)}${typeof visitedN === "number" ? ` · ${visitedN} cell group${visitedN === 1 ? "" : "s"} visited` : ""}`
         : r.kind === "action" && op === "start"
           ? `${str(p["name"]) ?? "action"}${argsLabel(str(p["name"]) ?? "", p["params"])}`
           : op === "explore-target"
@@ -189,6 +189,8 @@ export interface Placed {
   readonly w: number;
   /** Sub-row inside the row: points and bars that would overlap are staggered by `seq` order. */
   readonly lane: number;
+  /** A lone narrow node: drawn as a 1 px tick with its tooltip, not as a box. */
+  readonly tick: boolean;
 }
 
 /** What a folded run is called in its label ("… 37 iterations ▸"). */
@@ -196,18 +198,20 @@ const GROUP_NAME: Readonly<Record<string, string>> = { "explore-iteration": "ite
 
 /** What a node of this width is drawn as: bars narrower than `minPx` of one op in a run fold into one group node. */
 export function layoutRow(nodes: readonly HistoryNode[], axis: { readonly t0: number; readonly t1: number; readonly widthPx: number }, opts: { readonly minPx?: number; readonly foldAt?: number } = {}): { placed: Placed[]; lanes: number } {
-  const minPx = opts.minPx ?? 6;
-  const foldAt = opts.foldAt ?? 3;
+  const minPx = opts.minPx ?? 40;
+  const foldAt = opts.foldAt ?? 2;
   const span = Math.max(1e-9, axis.t1 - axis.t0);
   const px = (t: number) => ((t - axis.t0) / span) * axis.widthPx;
   const sorted = [...nodes].sort((a, b) => a.t0 - b.t0 || (a.seq ?? -1) - (b.seq ?? -1));
-  // Fold the runs of narrow nodes of one op (each op on its own: phases and iterations interleave in time, and the phases fold whatever the iterations do): a run is nodes in
-  // time order, each narrower than `minPx` and no more than two widths apart from the one before it.
+  // The width rule (U-018): a node narrower than its shortest label (`minPx`, about 40 px) joins its neighbours of the same op in a fold ("… 12 phases ▸"), even across the nodes of
+  // other ops between them (each op is folded on its own: phases and iterations interleave in time); a run is the op's narrow nodes in time order, no more than 4 widths (160 px) apart. A
+  // lone narrow node is a tick (1 px, its tooltip says what it is), never a box.
   const foldable = (n: HistoryNode) => (n.kind === "action" || n.kind === "record") && px(n.t1) - px(n.t0) < minPx;
   const keep: HistoryNode[] = sorted.filter((n) => !foldable(n));
   const byOp = new Map<string, HistoryNode[]>();
   for (const n of sorted) if (foldable(n)) byOp.set(n.op ?? "record", [...(byOp.get(n.op ?? "record") ?? []), n]);
   const folded: HistoryNode[] = [...keep];
+  const ticks = new Set<string>();
   for (const [op, list] of byOp) {
     let run: HistoryNode[] = [];
     const flush = () => {
@@ -215,12 +219,16 @@ export function layoutRow(nodes: readonly HistoryNode[], axis: { readonly t0: nu
         const first = run[0] as HistoryNode;
         const last = run[run.length - 1] as HistoryNode;
         folded.push({ key: `g${op}-${first.seq ?? first.key}-${run.length}`, seq: undefined, record: undefined, kind: "group", label: `… ${run.length} ${GROUP_NAME[op] ?? `${op}s`} ▸`, glyph: "▪", t0: first.t0, t1: Math.max(last.t1, last.t0), op, canExplode: true, members: run });
-      } else folded.push(...run);
+      } else
+        for (const n of run) {
+          ticks.add(n.key);
+          folded.push(n);
+        }
       run = [];
     };
     for (const n of list) {
       const prev = run[run.length - 1];
-      if (prev !== undefined && px(n.t0) - px(prev.t1) > minPx * 2) flush();
+      if (prev !== undefined && px(n.t0) - px(prev.t1) > minPx * 4) flush();
       run.push(n);
     }
     flush();
@@ -231,11 +239,12 @@ export function layoutRow(nodes: readonly HistoryNode[], axis: { readonly t0: nu
   const placed: Placed[] = folded.map((node) => {
     const x = px(node.t0);
     const w = Math.max(node.kind === "idle" ? 0 : 0, px(node.t1) - x);
-    const need = Math.max(w, minPx);
+    const tick = ticks.has(node.key);
+    const need = tick ? 2 : Math.max(w, 6);
     let lane = laneEnds.findIndex((end) => end <= x);
     if (lane < 0) lane = laneEnds.length;
     laneEnds[lane] = x + need + 1;
-    return { node, x, w, lane };
+    return { node, x, w, lane, tick };
   });
   return { placed, lanes: Math.max(1, laneEnds.length) };
 }

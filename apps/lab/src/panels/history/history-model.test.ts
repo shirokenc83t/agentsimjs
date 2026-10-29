@@ -70,6 +70,26 @@ describe("the layout", () => {
     expect(lanes).toBeGreaterThan(1);
   });
 
+  it("the width rule: nodes narrower than 40 px fold with their neighbours of the same op across other ops, a lone narrow node is a tick, and wide ones stay boxes", () => {
+    seq = 0;
+    const start0 = start("a2", "explore", 0);
+    const kids: TraceRecord[] = [];
+    for (let i = 0; i < 6; i++) {
+      kids.push(rec("action", { op: "explore-iteration", event: "start", iteration: i + 1 }, i * 10, { parentId: start0.id }));
+      kids.push(rec("action", { op: "explore-iteration", event: "end", iteration: i + 1 }, i * 10 + 9, { parentId: start0.id }));
+      kids.push(rec("action", { op: "explore-target", event: "selected" }, i * 10 + 1, { parentId: start0.id }));
+    }
+    kids.push(rec("action", { op: "explore-target", event: "selected" }, 59.5, { parentId: start0.id }));
+    const { placed } = layoutRow(childNodes(kids, 60, 60), { t0: 0, t1: 60, widthPx: 600 }); // an iteration is 90 px: wide; a target is a point: narrow
+    const groups = placed.filter((p) => p.node.kind === "group");
+    expect(groups.map((g) => g.node.label)).toEqual(["… 7 targets ▸"]); // across the iterations between them
+    expect(placed.filter((p) => p.node.label.startsWith("iteration")).every((p) => !p.tick)).toBe(true);
+    expect(placed.filter((p) => p.node.label.startsWith("iteration"))).toHaveLength(6);
+    // One narrow node alone is a tick.
+    const lone = layoutRow(childNodes([rec("action", { op: "explore-target", event: "selected" }, 30, { parentId: start0.id })], 60, 60), { t0: 0, t1: 60, widthPx: 600 });
+    expect(lone.placed.map((p) => [p.node.kind, p.tick])).toEqual([["record", true]]);
+  });
+
   it("folds each op on its own: phases between iterations fold whatever the iterations do, and the wide iterations stay", () => {
     seq = 0;
     const start0 = start("a2", "explore", 0);
@@ -79,7 +99,7 @@ describe("the layout", () => {
       for (let k = 0; k < 5; k++) kids.push(rec("action", { op: "phase", to: `p${k}` }, i * 25 + 0.1 * k, { parentId: start0.id }));
     }
     const { placed } = layoutRow(childNodes(kids, 100, 100), { t0: 0, t1: 100, widthPx: 600 });
-    expect(placed.filter((p) => p.node.kind === "group").map((p) => p.node.label)).toEqual(["… 4 phases ▸", "… 4 phases ▸", "… 4 phases ▸", "… 4 phases ▸"]);
+    expect(placed.filter((p) => p.node.kind === "group").map((p) => p.node.label)).toEqual(["… 16 phases ▸"]); // the narrow phases of all four bursts: the wide iterations between them do not break the run
     expect(placed.filter((p) => p.node.label.startsWith("iteration"))).toHaveLength(4);
   });
 
@@ -145,8 +165,8 @@ describe("exploding and folding", () => {
 describe("the keyboard", () => {
   const node = (key: string, t0: number, seq: number): HistoryNode => ({ key, seq, record: undefined, kind: "record", label: key, glyph: "▪", t0, t1: t0, canExplode: false });
   const rows = [
-    { index: 1, placed: [{ node: node("a", 0, 1), x: 0, w: 5, lane: 0 }, { node: node("b", 10, 2), x: 10, w: 5, lane: 0 }, { node: node("c", 20, 3), x: 20, w: 5, lane: 0 }] },
-    { index: 2, placed: [{ node: node("d", 10, 4), x: 10, w: 5, lane: 0 }] },
+    { index: 1, placed: [{ node: node("a", 0, 1), x: 0, w: 5, lane: 0, tick: false }, { node: node("b", 10, 2), x: 10, w: 5, lane: 0, tick: false }, { node: node("c", 20, 3), x: 20, w: 5, lane: 0, tick: false }] },
+    { index: 2, placed: [{ node: node("d", 10, 4), x: 10, w: 5, lane: 0, tick: false }] },
   ];
   const path = [{ row: 1, key: "b" }];
 

@@ -13,8 +13,8 @@ export function findingsOf(args: { readonly band: KnowledgeBand; readonly events
   const out: string[] = [];
   const known = knowledgeShown(args.band, args.endS);
   const agents = knowledgeAt(args.band, args.endS)?.agents ?? 0;
-  if (known?.kind === "union") out.push(`At the end the swarm knows ${known.knownPct.toFixed(1)} % of the map, ${known.matchPct.toFixed(1)} % of it matching the truth (observer data, the union of what its ${plural(agents, "agent", "agents")} know).`);
-  else if (known !== undefined) out.push(`At the end the swarm knows ${known.knownPct.toFixed(1)} % of what it can reach, ${known.matchPct.toFixed(1)} % matching the truth (observer data, mean of ${plural(agents, "agent", "agents")}).`);
+  if (known?.kind === "union") out.push(`At the end the swarm knows ${known.knownPct.toFixed(1)} % of the map, ${known.matchOfKnownPct.toFixed(1)} % of what it knows matching the truth (observer data, the union of what its ${plural(agents, "agent", "agents")} know).`);
+  else if (known !== undefined) out.push(`At the end the swarm knows ${known.knownPct.toFixed(1)} % of what it can reach, ${known.matchOfKnownPct.toFixed(1)} % of what it knows matching the truth (observer data, mean of ${plural(agents, "agent", "agents")} until the first union point).`);
   const reflexes = args.events.filter((r) => r.kind === "reflex").sort((a, b) => a.simTime - b.simTime);
   const first = reflexes[0];
   if (first !== undefined) {
