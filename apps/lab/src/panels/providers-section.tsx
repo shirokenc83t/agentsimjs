@@ -37,6 +37,24 @@ async function profilesUsing(storage: StorageClient, providerId: string): Promis
   }
 }
 
+/** The key fact of a probe's summary (up to the first ` · ` or `: `) and the details after it. */
+function splitSummary(summary: string): [string, string] {
+  const cut = [summary.indexOf(" · "), summary.indexOf(": ")].filter((i) => i >= 0).sort((a, b) => a - b)[0];
+  return cut === undefined ? [summary, ""] : [summary.slice(0, cut), summary.slice(cut)];
+}
+
+/** The result of a probe: the mark and the border take the state colour, the text is the foreground with the key fact in bold. The probe note belongs to a result that sent something worth counting. */
+function ResultBox({ result }: { result: ProbeResult }) {
+  const [fact, rest] = splitSummary(result.summary);
+  return (
+    <p className={`pv-result ${result.ok ? "st-ok" : "st-alm"}`} role="status" data-testid="pv-result" data-kind={result.kind}>
+      <span className="pv-mark">{result.ok ? "✓" : "✕"}</span> <b>{fact}</b>
+      <span className="pv-rest">{rest}</span>
+      {result.ok && <span className="pv-rest"> · each probe sends about 40 tokens and counts toward no limit</span>}
+    </p>
+  );
+}
+
 const clock = (ms: number): string => new Date(ms).toTimeString().slice(0, 5);
 
 interface Draft {
@@ -117,12 +135,12 @@ export function ProvidersSection(props: { storage: StorageClient; ready: boolean
   const statusOf = (e: ProviderEntry) => {
     if (allowedBy(policy, e.baseUrl) === false) return { mark: "▲", text: "endpoint not allowed yet", cls: "st-warn" };
     if (e.tested === undefined) return { mark: "○", text: "not tested", cls: "" };
-    return e.tested.ok ? { mark: "✓", text: `tested ${clock(e.tested.atMs)}`, cls: "st-ok" } : { mark: "✕", text: `test failed ${clock(e.tested.atMs)}`, cls: "st-warn" };
+    return e.tested.ok ? { mark: "✓", text: `tested ${clock(e.tested.atMs)}`, cls: "st-ok" } : { mark: "✕", text: `test failed ${clock(e.tested.atMs)}`, cls: "st-alm" };
   };
 
   return (
     <>
-      <p className="prose pv-intro">
+      <p className="pv-prose pv-intro">
         A provider is a server that speaks the OpenAI chat API: Ollama, vLLM, SGLang, or a hosted endpoint. Without one the agents here plan with algorithms, not with a language model. Each key is shown only as <span className="keystate mono" data-testid="key-state-set">●●●● set</span> or <span className="keystate mono" data-testid="key-state-unset">○ not set</span>; the value is never rendered.
       </p>
       <div className="pv-bar">
@@ -153,14 +171,17 @@ export function ProvidersSection(props: { storage: StorageClient; ready: boolean
               return (
                 <tr key={e.id} data-testid={`pv-row-${e.id}`}>
                   <td>{e.id}</td>
-                  <td>{e.baseUrl}</td>
-                  <td>{e.models === undefined || e.models.length === 0 ? "—" : `${e.models.length} · ${e.models[0]}${e.models.length > 1 ? " …" : ""}`}</td>
+                  <td className="pv-cut" title={e.baseUrl}>{e.baseUrl}</td>
+                  <td className="pv-cut" title={e.models === undefined || e.models.length === 0 ? undefined : e.models.join(", ")}>
+                    {e.models === undefined || e.models.length === 0 ? "—" : `${e.models.length} · ${e.models[0]}${e.models.length > 1 ? " …" : ""}`}
+                  </td>
                   <td data-testid={`pv-key-${e.id}`}>{keyWords(e.id)}</td>
                   <td>{e.prices === undefined ? "—" : `${e.prices.inputUsdPerMTok} / ${e.prices.outputUsdPerMTok}`}</td>
                   <td className={s.cls} data-testid={`pv-status-${e.id}`} title={e.tested?.summary}>
                     {s.mark} {s.text}
                   </td>
-                  <td className="pv-actions">
+                  <td className="pv-actions-cell">
+                    <span className="pv-actions">
                     <button type="button" className="btn" disabled={busy} onClick={() => void test(e.id, e.baseUrl, providerStore.keyOf(e.id), e.models?.[0])} data-testid={`pv-test-${e.id}`}>
                       test
                     </button>
@@ -170,6 +191,7 @@ export function ProvidersSection(props: { storage: StorageClient; ready: boolean
                     <button type="button" className="btn dng" onClick={() => setRemoving({ id: e.id, used: usedBy[e.id] ?? [] })} data-testid={`pv-remove-${e.id}`}>
                       remove
                     </button>
+                    </span>
                   </td>
                 </tr>
               );
@@ -241,8 +263,8 @@ export function ProvidersSection(props: { storage: StorageClient; ready: boolean
               </button>
             </div>
           )}
-          <p className="muted rc-note">
-            After saving, a key is shown only as ●●●● set, never again in full. It stays in memory for this session unless you tick "remember"; it is never exported, traced or readable from the SQL console.
+          <p className="pv-prose">
+            After saving, a key is shown only as <b>●●●● set</b>, never again in full. It stays in memory for this session unless you tick "remember"; it is <b>never exported, traced or readable from the SQL console</b>.
           </p>
           <div className="st-row pv-prices">
             <span className="rc-label">prices <small>optional</small></span>
@@ -255,7 +277,7 @@ export function ProvidersSection(props: { storage: StorageClient; ready: boolean
               <span className="unit">USD / M output tok</span>
             </span>
           </div>
-          <p className="muted rc-note">Prices are what you pay your provider per million tokens; with them a run also has a cost limit. Without them there is none.</p>
+          <p className="pv-prose">Prices are what you pay your provider <b>per million tokens</b>; with them a run also has a cost limit. Without them there is none.</p>
           <div className="pv-buttons">
             <button type="button" className="btn" disabled={!valid || busy} onClick={() => void test(undefined, base as string, draft.key === "" ? (draft.editing === undefined ? undefined : providerStore.keyOf(draft.editing)) : draft.key)} data-testid="pv-test-new">
               Test connection
@@ -267,15 +289,11 @@ export function ProvidersSection(props: { storage: StorageClient; ready: boolean
               Cancel
             </button>
           </div>
+          {result !== undefined && <ResultBox result={result} />}
         </form>
       )}
-      {result !== undefined && (
-        <p className={`pv-result ${result.ok ? "st-ok" : "st-warn"}`} role="status" data-testid="pv-result" data-kind={result.kind}>
-          {result.ok ? "✓" : "✕"} {result.summary}
-          <span className="muted"> · each probe sends about 40 tokens and counts toward no limit</span>
-        </p>
-      )}
-      <p className="muted rc-note" data-testid="pv-note">
+      {result !== undefined && draft === undefined && <ResultBox result={result} />}
+      <p className="pv-prose" data-testid="pv-note">
         <b>Token counts and cost.</b> Tokens are counted by the server (its usage field); a server that sends none is counted as characters ÷ 4, and the run says so. They may differ from a provider's bill. Cost appears only for a provider with prices. <b>Consumption is your responsibility</b>: every run has limits (default 20 calls, 40 000 tokens, 0.05 USD with prices) and pauses when one is reached.
       </p>
     </>
@@ -313,8 +331,8 @@ export function EndpointsSection(props: { storage: StorageClient; ready: boolean
   const line = connectSrcLine(wanted);
   return (
     <>
-      <p className="prose">
-        localhost and 127.0.0.1 on any port are always allowed. Another address is allowed only if the server that serves this page lists it in its policy: a page cannot widen its own, and the worker that calls the model takes its policy from the server too.
+      <p className="pv-prose">
+        <b>localhost and 127.0.0.1</b> on any port are always allowed. Another address is allowed only if the server that serves this page lists it in its policy: a page cannot widen its own, and the worker that calls the model takes its policy from the server too.
         Addresses added here are remembered and checked against the policy this page was served with.
       </p>
       <ul className="pv-endpoints" data-testid="pv-endpoints">
@@ -340,7 +358,7 @@ export function EndpointsSection(props: { storage: StorageClient; ready: boolean
         </button>
       </div>
       {wanted.length > 0 && (
-        <p className="muted rc-note">
+        <p className="pv-prose">
           To allow them, the server that serves this page adds this to its Content-Security-Policy (for the Vite server of this repository: <code className="mono">AGENTSIM_CONNECT_SRC</code>):{" "}
           <code className="mono" data-testid="pv-csp-line">
             {line}

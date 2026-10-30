@@ -10,9 +10,9 @@ import { openWorkspace, waitForStorageReady } from "./helpers.ts";
 const DIR = process.env["AGENTSIM_REVIEW_DIR"];
 test.skip(!DIR, "review screenshots are made only when AGENTSIM_REVIEW_DIR is set");
 
-async function fakeServer() {
+async function fakeServer(withCors = true) {
   const server = createServer((req, res) => {
-    const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, OPTIONS" };
+    const cors = !withCors ? {} : { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, OPTIONS" };
     if (req.method === "OPTIONS") return void res.writeHead(204, cors).end();
     let body = "";
     req.on("data", (c: Buffer) => (body += c.toString()));
@@ -81,4 +81,46 @@ for (const theme of ["dark", "light"] as const) {
       }
     });
   }
+}
+
+// The two states the designer could not review (U-022): an endpoint the page's policy does not allow yet (with the server's line and the copy button, the row marked ▲, the Endpoints chip too), and a failure
+// by CORS (a server that answers without allowing this origin, with the start lines for Ollama and vLLM). At 1440 px, in both themes.
+for (const theme of ["dark", "light"] as const) {
+  test(`Settings → Providers, endpoint not allowed and CORS failure, ${theme}, 1440 px`, async ({ page }) => {
+    test.setTimeout(120_000);
+    const plain = await fakeServer(false);
+    try {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+      await page.addInitScript((t) => window.localStorage.setItem("agentsim.ui.theme", t), theme);
+      await page.goto("/?probe");
+      await waitForStorageReady(page);
+      await openWorkspace(page, "settings");
+      await page.getByTestId("st-jump-providers").click();
+      // CORS: the server is there and answers, but not to this page.
+      await page.getByTestId("pv-add").click();
+      await page.getByTestId("pv-name").fill("local-vllm");
+      await page.getByTestId("pv-address").fill(`http://localhost:${plain.port}`);
+      await page.getByTestId("pv-test-new").click();
+      await expect(page.getByTestId("pv-result")).toHaveAttribute("data-kind", "cors", { timeout: 20_000 });
+      await shot(page, "providers-test-cors", theme, 1440);
+      await page.getByTestId("pv-cancel").click();
+      // An address the page's policy does not list: the test says so without a request, the row and the Endpoints chip carry ▲, and the line for the server's policy has its copy button.
+      await page.getByTestId("pv-add").click();
+      await page.getByTestId("pv-name").fill("team-gpu");
+      await page.getByTestId("pv-address").fill("http://gpu-box.internal.example:8000");
+      await page.getByTestId("pv-test-new").click();
+      await expect(page.getByTestId("pv-result")).toHaveAttribute("data-kind", "not_allowed");
+      await page.getByTestId("pv-save").click();
+      await expect(page.getByTestId("pv-status-team-gpu")).toContainText("endpoint not allowed yet");
+      await expect(page.getByTestId("st-jump-endpoints")).toContainText("▲");
+      await page.getByTestId("st-jump-providers").click();
+      await shot(page, "providers-not-allowed", theme, 1440);
+      await page.getByTestId("st-jump-endpoints").click();
+      await expect(page.getByTestId("pv-csp-copy")).toBeVisible();
+      await shot(page, "endpoints-not-allowed", theme, 1440);
+    } finally {
+      await new Promise<void>((r) => plain.server.close(() => r()));
+    }
+  });
 }

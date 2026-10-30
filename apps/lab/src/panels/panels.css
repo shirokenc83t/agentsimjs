@@ -869,8 +869,13 @@
 .pv-bar { margin: 0 0 8px; }
 .pv-table { width: 100%; border-collapse: collapse; margin: 0 0 10px; }
 .pv-table th { text-align: left; font-weight: 400; color: var(--fg3); padding: 4px 8px; border-bottom: 1px solid var(--ln); }
-.pv-table td { padding: 5px 8px; border-bottom: 1px solid var(--ln); vertical-align: top; }
+.pv-table { table-layout: auto; }
+.pv-table td { padding: 0 8px; height: 34px; border-bottom: 1px solid var(--ln); vertical-align: middle; white-space: nowrap; }
+.pv-table td.pv-cut { max-width: 30ch; overflow: hidden; text-overflow: ellipsis; }
+.pv-table td.pv-actions-cell, .pv-table th:last-child { width: 1%; }
 .pv-actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
+.pv-table .pv-actions { display: inline-flex; vertical-align: middle; }
+.pv-table td.pv-actions-cell { text-align: right; }
 .pv-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--alm); background: var(--bg1); }
 .pv-confirm .pv-actions { margin-left: auto; }
 .pv-form { margin: 0 0 10px; padding: 10px 12px; border: 1px solid var(--ln2); background: var(--bg1); }
@@ -881,7 +886,15 @@
 .pv-prices .rc-input .unit { white-space: nowrap; }
 .pv-remember { display: inline-flex; align-items: center; gap: 6px; color: var(--fg2); }
 .pv-buttons { display: flex; gap: 8px; margin-top: 8px; }
-.pv-result { margin: 8px 0; padding: 6px 10px; border: 1px solid var(--ln2); background: var(--bg1); line-height: 1.5; }
+.pv-result { margin: 8px 0 0; padding: 6px 10px; border: 1px solid var(--ln2); background: var(--bg1); line-height: 1.5; color: var(--fg); font-family: var(--font-prose); font-size: 13.5px; }
+.pv-result.st-ok { border-color: var(--ok); }
+.pv-result.st-alm { border-color: var(--alm); }
+.pv-result .pv-mark { font-weight: 600; }
+.pv-result.st-ok .pv-mark { color: var(--ok); }
+.pv-result.st-alm .pv-mark { color: var(--alm); }
+.pv-result .pv-rest { color: var(--fg2); }
+.pv-prose { margin: 6px 0; font-family: var(--font-prose); font-size: 13.5px; line-height: 1.5; color: var(--fg2); }
+.pv-prose b { color: var(--fg); font-weight: 600; }
 .pv-endpoints { list-style: none; margin: 0 0 8px; padding: 0; }
 .pv-endpoints li { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--ln); }
 .pv-endpoints li .btn { margin-left: auto; }
