@@ -23,7 +23,7 @@ import {
 import { QuotaGuard, MEMORY_FALLBACK_LIMIT_BYTES, type QuotaMeasure } from "./quota.ts";
 import { recorderAppend, recorderSide, reportCommit, type RecorderAppend, type RecorderSide } from "./recorder-ingest.ts";
 import type { QuotaMessage, RecorderPortLike, RecorderPortMessage, RecorderToStorage } from "./recorder-protocol.ts";
-import { deserializeToMemory, exportRun, validateImport, type ImportErrorCode } from "./transfer.ts";
+import { deserializeToMemory, exportRun, validateImport, withoutProviderKeys, type ImportErrorCode } from "./transfer.ts";
 
 /** The subset of a DedicatedWorkerGlobalScope the storage worker needs (keeps it testable). */
 export interface WorkerScope {
@@ -194,7 +194,9 @@ class Engine {
   }
 
   exportDb(): Uint8Array {
-    return this.pool ? this.pool.exportFile(this.init.dbFile) : this.sqlite3.capi.sqlite3_js_db_export(this.raw);
+    const bytes = this.pool ? this.pool.exportFile(this.init.dbFile) : this.sqlite3.capi.sqlite3_js_db_export(this.raw);
+    // A key remembered on this device never leaves it (ADR-0044 §3): the export is made without it.
+    return withoutProviderKeys(this.sqlite3, bytes);
   }
 
   exportRun(runId: string) {

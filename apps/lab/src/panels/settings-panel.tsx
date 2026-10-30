@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { applyAppearance, DEFAULT_APPEARANCE, loadAppearance, saveAppearance, type Appearance } from "../config/appearance.ts";
 import { readQuotaThreshold, writeQuotaThreshold } from "../config/environment.ts";
 import { useAppActions, useServices, useStorageStatus } from "../services.tsx";
+import { EndpointsSection, ProvidersSection } from "./providers-section.tsx";
 
 const KEYS: readonly (readonly [string, string])[] = [
   ["Space", "play or pause"],
@@ -77,6 +78,7 @@ export function SettingsPanel() {
             {[
               ["appearance", "APPEARANCE"],
               ["providers", "PROVIDERS AND KEYS"],
+              ["endpoints", "ENDPOINTS"],
               ["storage", "STORAGE"],
               ["layouts", "LAYOUTS"],
               ["keyboard", "KEYBOARD"],
@@ -120,14 +122,20 @@ export function SettingsPanel() {
               <b>2 · Providers and keys</b>
               <span className="rule" />
             </h4>
-            <p className="prose">
-              No provider is configured: the agents here plan with algorithms, not with a language model. When providers arrive, each key is shown only as <span className="keystate mono" data-testid="key-state-set">●●●● set</span> or <span className="keystate mono" data-testid="key-state-unset">○ not set</span>, with Replace and Remove; the value is never rendered.
-            </p>
+            <ProvidersSection storage={storage} ready={ready} />
+          </section>
+
+          <section className="fs" data-section="endpoints">
+            <h4 className="sec">
+              <b>3 · Endpoints</b>
+              <span className="rule" />
+            </h4>
+            <EndpointsSection storage={storage} ready={ready} />
           </section>
 
           <section className="fs" data-section="storage">
             <h4 className="sec">
-              <b>3 · Storage</b>
+              <b>4 · Storage</b>
               <span className="rule" />
             </h4>
             <div className="st-row">
@@ -173,7 +181,7 @@ export function SettingsPanel() {
 
           <section className="fs" data-section="layouts">
             <h4 className="sec">
-              <b>4 · Layouts</b>
+              <b>5 · Layouts</b>
               <span className="rule" />
             </h4>
             <div className="st-row">
@@ -187,7 +195,7 @@ export function SettingsPanel() {
 
           <section className="fs" data-section="keyboard">
             <h4 className="sec">
-              <b>5 · Keyboard</b>
+              <b>6 · Keyboard</b>
               <span className="rule" />
             </h4>
             <dl className="kv st-keys">

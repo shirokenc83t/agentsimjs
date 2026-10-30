@@ -18,6 +18,8 @@ export interface FetchInit {
   readonly headers: Record<string, string>;
   readonly body?: string;
   readonly signal?: unknown;
+  /** Redirects are not followed (ADR-0044 section 4): a call goes to the address of the entry, and to no other. */
+  readonly redirect?: "error";
 }
 export interface FetchResponse {
   readonly ok: boolean;
@@ -102,7 +104,7 @@ export class OpenAiCompatibleProvider implements ProviderPort {
   }
 
   /** One request with a wall-clock limit; errors become words. */
-  private async send(path: string, init: Omit<FetchInit, "signal" | "headers">, json: boolean, timeoutMs: number): Promise<{ ok: true; text: string } | { ok: false; kind: ProviderErrorKind; status?: number; message: string }> {
+  private async send(path: string, init: Omit<FetchInit, "signal" | "headers" | "redirect">, json: boolean, timeoutMs: number): Promise<{ ok: true; text: string } | { ok: false; kind: ProviderErrorKind; status?: number; message: string }> {
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -110,7 +112,7 @@ export class OpenAiCompatibleProvider implements ProviderPort {
       controller.abort();
     }, timeoutMs);
     try {
-      const res = await this.#fetch(`${this.#base}${path}`, { ...init, headers: this.headers(json), signal: controller.signal });
+      const res = await this.#fetch(`${this.#base}${path}`, { ...init, headers: this.headers(json), signal: controller.signal, redirect: "error" });
       const text = await res.text();
       if (!res.ok) return { ok: false, kind: "http_error", status: res.status, message: `${STATUS_WORDS[res.status] ?? "the server answered with an error"} (status ${res.status})` };
       return { ok: true, text };

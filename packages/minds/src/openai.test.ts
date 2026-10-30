@@ -58,6 +58,7 @@ describe("a call", () => {
     expect(s.init.method).toBe("POST");
     expect(s.init.headers["content-type"]).toBe("application/json");
     expect(s.init.headers["authorization"]).toBeUndefined();
+    expect(s.init.redirect).toBe("error"); // a redirect is an error, not a second destination
     expect(bodyOf(s)).toEqual({
       model: "qwen2.5:7b",
       messages: [{ role: "system", content: "s" }, { role: "user", content: "u" }],

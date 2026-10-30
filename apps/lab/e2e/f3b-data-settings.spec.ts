@@ -24,7 +24,7 @@ test("Settings: sections headed in place with no rail, the theme as a segmented 
   await openWorkspace(page, "settings");
   const panel = page.getByTestId("settings-panel");
   await expect(panel.getByRole("navigation", { name: "Settings sections" })).toHaveCount(0); // no rail: the sections are headed in one column
-  await expect(panel.locator("section.fs > h4")).toHaveCount(5);
+  await expect(panel.locator("section.fs > h4")).toHaveCount(6);
   await expect(page.getByTestId("st-jump")).toContainText("KEYBOARD"); // a jump row stands in for the rail
   await expect(panel).toContainText("Ctrl+Shift+L");
   await expect(panel).toContainText("trace graph of the selected record");
@@ -32,7 +32,7 @@ test("Settings: sections headed in place with no rail, the theme as a segmented 
   await expect(panel.locator('section.fs[data-section="keyboard"] > h4')).toBeVisible();
   await expect(panel).toContainText("Minimum quota");
   await expect(panel).toContainText("play or pause");
-  // A key is only ever “set” or “not set”: there is nothing to type here yet.
+  // A key field exists only while a provider is being added or edited, and is masked.
   await expect(panel.locator('input[type="password"]')).toHaveCount(0);
   await page.getByTestId("setting-reduced-motion").check();
   await expect(page.locator("html")).toHaveAttribute("data-motion", "reduce");

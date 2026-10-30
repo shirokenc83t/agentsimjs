@@ -5,6 +5,7 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
 import { connectMindCache, connectRecorder, resolveEnvironment } from "./config/environment.ts";
+import { providerStore } from "./config/providers.ts";
 import { probeEnabled } from "./probe.ts";
 import { mindsFixture } from "./shell/minds-fixture.ts";
 import { setMinds } from "./shell/minds-status.ts";
@@ -24,6 +25,9 @@ const storage = env.createStorage();
 const sim = env.createSim(10);
 connectRecorder(sim, storage);
 connectMindCache(sim, storage);
+// The provider keys reach the sim worker in a message of their own, whenever they change; the entries and the remembered keys are read once storage is open.
+providerStore.connectKeys((keys) => sim.setProviderKeys(keys));
+void storage.ready().then(() => providerStore.load(storage.ports.userData), () => undefined);
 
 /** The panels' run source: the live run, or a recorded run while a replay session is open. */
 function Root() {

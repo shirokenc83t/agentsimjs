@@ -55,6 +55,7 @@ export {
 } from "./client/storage-client.ts";
 export type { StorageInfo, StorageMode, StorageStatus } from "./worker/protocol.ts";
 export type { ImportErrorCode } from "./worker/transfer.ts";
+export { PROVIDER_KEYS_NAMESPACE } from "./worker/transfer.ts";
 // Worker side. sqlite-wasm itself is loaded lazily inside the worker (load-sqlite.ts).
 export { runStorageWorker, type WorkerScope } from "./worker/storage-worker.ts";
 export { storageMessageChecks, type StorageMessageChecks } from "./worker/message-checks.ts";

@@ -863,3 +863,23 @@
 .ah-node.tick > * { display: none; }
 .ah-node.tick::before { content: ""; position: absolute; top: 0; bottom: 0; left: -3px; right: -3px; }
 .ah-node.tick:hover, .ah-node.tick.sel { background: var(--ac); }
+
+/* Settings → Providers and keys, and Endpoints (F4 M3, the designer's Providers board) */
+.pv-intro { margin: 0 0 8px; }
+.pv-bar { margin: 0 0 8px; }
+.pv-table { width: 100%; border-collapse: collapse; margin: 0 0 10px; }
+.pv-table th { text-align: left; font-weight: 400; color: var(--fg3); padding: 4px 8px; border-bottom: 1px solid var(--ln); }
+.pv-table td { padding: 5px 8px; border-bottom: 1px solid var(--ln); vertical-align: top; }
+.pv-actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
+.pv-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--alm); background: var(--bg1); }
+.pv-confirm .pv-actions { margin-left: auto; }
+.pv-form { margin: 0 0 10px; padding: 10px 12px; border: 1px solid var(--ln2); background: var(--bg1); }
+.pv-form h5 { margin: 0 0 8px; font-weight: 600; color: var(--fg2); }
+.pv-form .rc-input { min-width: 240px; }
+.pv-remember { display: inline-flex; align-items: center; gap: 6px; color: var(--fg2); }
+.pv-buttons { display: flex; gap: 8px; margin-top: 8px; }
+.pv-result { margin: 8px 0; padding: 6px 10px; border: 1px solid var(--ln2); background: var(--bg1); line-height: 1.5; }
+.pv-endpoints { list-style: none; margin: 0 0 8px; padding: 0; }
+.pv-endpoints li { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--ln); }
+.pv-endpoints li .btn { margin-left: auto; }
+.st-ok { color: var(--ok); }

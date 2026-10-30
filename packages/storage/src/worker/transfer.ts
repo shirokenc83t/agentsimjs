@@ -29,6 +29,26 @@ function openMemory(sqlite3: Sqlite3Static): { driver: SqlDriver; raw: Database 
 }
 
 /** Loads `bytes` into a fresh in-memory database with sqlite3_deserialize. */
+/** The `user_data` namespace where a provider key the user chose to remember on this device lives (ADR-0044 §3). */
+export const PROVIDER_KEYS_NAMESPACE = "providerKeys";
+
+/**
+ * A copy of a database file without the provider keys remembered on this device (ADR-0044 §3: a key is never exported). The rows are deleted from an in-memory copy and the copy is vacuumed, so that no page
+ * of the file still holds a key; a file with none is returned as it is.
+ */
+export function withoutProviderKeys(sqlite3: Sqlite3Static, bytes: Uint8Array): Uint8Array {
+  const mem = deserializeToMemory(sqlite3, bytes);
+  try {
+    const has = mem.driver.get<{ n: number }>("SELECT count(*) AS n FROM user_data WHERE namespace = ?", [PROVIDER_KEYS_NAMESPACE])?.n ?? 0;
+    if (has === 0) return bytes;
+    mem.driver.run("DELETE FROM user_data WHERE namespace = ?", [PROVIDER_KEYS_NAMESPACE]);
+    mem.driver.exec("VACUUM");
+    return sqlite3.capi.sqlite3_js_db_export(mem.raw);
+  } finally {
+    mem.driver.close();
+  }
+}
+
 export function deserializeToMemory(sqlite3: Sqlite3Static, bytes: Uint8Array): { driver: SqlDriver; raw: Database } {
   const mem = openMemory(sqlite3);
   const capi = sqlite3.capi;
