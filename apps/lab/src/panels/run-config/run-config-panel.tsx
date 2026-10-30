@@ -299,7 +299,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
               <OptionField
                 label="time mode"
                 value={draft.timeMode}
-                options={["lockstep", "realtime"] as const}
+                options={["lockstep", "realtime", "latency-modeled"] as const}
                 inheritLabel="lockstep (default)"
                 onChange={(v) => setDraft((d) => withField(d, "timeMode", v))}
                 testId="rc-time-mode"

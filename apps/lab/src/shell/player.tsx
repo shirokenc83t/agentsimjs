@@ -150,7 +150,7 @@ function Transport(props: PlayerProps & { replay: boolean }) {
         // A scenario run has its time mode as part of the run (header, runConfigHash): read-only while it is loaded. Changing it starts a new run of the same scenario version.
         <>
           <span className="pb sm static mono hide-1100" data-testid="time-mode" title="The time mode is part of the run. Re-run to change it.">
-            {snap.mode}
+            {snap.run.timeMode}
           </span>
           <RerunSplit busy={busy} runId={snap.run.runId} commands={props.rerunCommands} onRerun={props.onRerun} />
         </>
