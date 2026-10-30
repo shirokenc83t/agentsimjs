@@ -1,5 +1,4 @@
 import type { SimLoadMessage } from "@agentsim/core";
-import { DEFAULT_PROMPT_TEMPLATE } from "@agentsim/minds";
 import type { StoragePorts } from "@agentsim/storage";
 import type { ProviderEntry } from "../config/providers.ts";
 
@@ -43,7 +42,8 @@ export async function mindsSpecFor(ports: Pick<StoragePorts, "mindProfiles" | "p
     const t = (doc.document as { s2?: { promptTemplate?: unknown } } | undefined)?.s2?.promptTemplate;
     if (isRef(t)) templateRefs.set(`${t.id}@${t.version}`, { id: t.id, version: t.version });
   }
-  const templates: Spec["templates"][number][] = [{ id: "default", version: 1, document: DEFAULT_PROMPT_TEMPLATE }];
+  // The built-in default template (`default` v1) is the worker's own: it is added there when a profile names it.
+  const templates: Spec["templates"][number][] = [];
   for (const r of templateRefs.values()) {
     if (r.id === "default" && r.version === 1) continue;
     const doc = await ports.promptTemplates.get(r.id, r.version);

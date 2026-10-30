@@ -25,7 +25,7 @@ describe("the minds part of a load", () => {
     await ports.promptTemplates.saveVersion({ id: "terse", name: "Terse", document: { schemaVersion: 1, kind: "prompt-template", system: "s", sections: ["role"] } });
     const spec = await mindsSpecFor(ports, [provider], config);
     expect(spec?.profiles.map((p) => `${p.id}@${p.version}`).sort()).toEqual(["other@1", "scout-llm@2"]);
-    expect(spec?.templates.map((t) => `${t.id}@${t.version}`).sort()).toEqual(["default@1", "terse@1"]); // terse@1 from the profile; terse@3 is not in the library: the resolution reports it
+    expect(spec?.templates.map((t) => `${t.id}@${t.version}`).sort()).toEqual(["terse@1"]); // default@1 is the worker's own; terse@1 from the profile; terse@3 is not in the library: the resolution reports it
     expect(spec?.providers).toEqual([{ id: "local", kind: "openai-compatible", baseUrl: "http://localhost:11434", prices: { inputUsdPerMTok: 1, outputUsdPerMTok: 2 } }]);
     expect(JSON.stringify(spec)).not.toMatch(/key|tested|models/i);
   });

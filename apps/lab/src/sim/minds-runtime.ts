@@ -1,5 +1,5 @@
 import type { Brain, SimLoadMessage, SimMindsMessage } from "@agentsim/core";
-import { InferenceQueue, LlmBrain, MemoryMindCache, OpenAiCompatibleProvider, ScriptedProvider, type LimitEvent, type LimitName, type LimitWarning, type LlmBrainHooks, type MindCache, type MindsRunMode, type Prices, type ProviderPort, type ProviderRequest, type ProviderResponse, type ScriptedAnswer } from "@agentsim/minds";
+import { DEFAULT_PROMPT_TEMPLATE, InferenceQueue, LlmBrain, MemoryMindCache, OpenAiCompatibleProvider, ScriptedProvider, type LimitEvent, type LimitName, type LimitWarning, type LlmBrainHooks, type MindCache, type MindsRunMode, type Prices, type ProviderPort, type ProviderRequest, type ProviderResponse, type ScriptedAnswer } from "@agentsim/minds";
 import type { MindLibrary, MindsOptions, ProviderInfo, ResolvedRunConfig, ResolveOptions } from "@agentsim/scenarios";
 
 // What the sim worker holds for the System 2 minds of a run (F4 M1, T-110): the providers it was given, the response cache, the inference queue, the hooks of each mind (the limit warnings and the pause),
@@ -48,7 +48,8 @@ export class MindsRuntime {
 
   constructor(spec: Spec, readonly mode: MindsRunMode, private readonly headless = false, cacheStore?: MindCache, keys: ReadonlyMap<string, string> = new Map()) {
     const profiles = new Map(spec.profiles.map((p) => [`${p.id}@${p.version}`, p.document]));
-    const templates = new Map(spec.templates.map((t) => [`${t.id}@${t.version}`, t.document]));
+    // The built-in default template is the worker's own (the main thread does not carry the mind documents); a template of the library with the same id and version would win.
+    const templates = new Map<string, unknown>([["default@1", DEFAULT_PROMPT_TEMPLATE], ...spec.templates.map((t) => [`${t.id}@${t.version}`, t.document] as const)]);
     const library: MindLibrary = { profile: (id, v) => profiles.get(`${id}@${v}`) as never, template: (id, v) => templates.get(`${id}@${v}`) as never };
     const entries = new Map(spec.providers.map((p) => [p.id, p]));
     this.resolve = { library, providers: (id): ProviderInfo | undefined => (entries.get(id) === undefined ? undefined : { kind: entries.get(id)?.kind ?? "", baseUrl: entries.get(id)?.baseUrl ?? "" }) };

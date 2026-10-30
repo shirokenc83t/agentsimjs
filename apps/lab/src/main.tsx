@@ -6,13 +6,12 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
 import { connectMindCache, connectRecorder, resolveEnvironment } from "./config/environment.ts";
 import { providerStore } from "./config/providers.ts";
-import { startPresetRun } from "./sim/run-controller.ts";
 import { probeEnabled } from "./probe.ts";
 import { mindsFixture } from "./shell/minds-fixture.ts";
 import { setMinds } from "./shell/minds-status.ts";
 import type { RunSource } from "./sim/run-source.ts";
 import { ServicesProvider } from "./services.tsx";
-import { loadLiveSource } from "./workspaces/registry.tsx";
+import { loadLiveSource, loadRunController } from "./workspaces/registry.tsx";
 
 // TypeBox is configured lazily, by the first validate()/isValid() call (ADR-0018 addition 2026-10-08): keeping
 // it out of the entry keeps the checker out of the initial chunk. Lint allows the checker only in that wrapper.
@@ -58,6 +57,7 @@ if (probeEnabled()) {
     startMindsRun: async (o) => {
       const saved = await storage.ports.mindProfiles.saveVersion({ id: "probe-llm", name: "Probe", document: { schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: o.provider, model: o.model, promptTemplate: { id: "default", version: 1 } } } });
       if (!saved.ok) throw new Error(saved.error.message);
+      const { startPresetRun } = await loadRunController();
       await startPresetRun(storage, sim, "f2-discovery", (cfg) => ({ ...(cfg as object), minds: { byAgent: { scout: { s2: { profile: { id: "probe-llm", version: saved.value.version }, mission: o.mission ?? "Wait for events." } } } } }));
     },
   };

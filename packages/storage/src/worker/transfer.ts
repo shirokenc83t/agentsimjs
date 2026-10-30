@@ -1,4 +1,5 @@
 import type { CodedError, Result } from "@agentsim/core";
+import { PROVIDER_KEYS_NAMESPACE } from "../provider-keys.ts";
 import { err, ok } from "@agentsim/core";
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import type { SqlDriver, SqlValue } from "../sql/driver.ts";
@@ -29,9 +30,6 @@ function openMemory(sqlite3: Sqlite3Static): { driver: SqlDriver; raw: Database 
 }
 
 /** Loads `bytes` into a fresh in-memory database with sqlite3_deserialize. */
-/** The `user_data` namespace where a provider key the user chose to remember on this device lives (ADR-0044 §3). */
-export const PROVIDER_KEYS_NAMESPACE = "providerKeys";
-
 /**
  * A copy of a database file without the provider keys remembered on this device (ADR-0044 §3: a key is never exported). The rows are deleted from an in-memory copy and the copy is vacuumed, so that no page
  * of the file still holds a key; a file with none is returned as it is.

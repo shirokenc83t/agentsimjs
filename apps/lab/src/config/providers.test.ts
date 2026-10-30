@@ -1,5 +1,7 @@
+import { normalizeBaseUrl as adapter } from "@agentsim/minds";
 import { createMemoryPorts, PROVIDER_KEYS_NAMESPACE } from "@agentsim/storage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { normalizeBaseUrl as here } from "./address.ts";
 import { probeProvider, type ProbeDeps } from "./provider-probe.ts";
 import { cleanAddress, ProviderStore } from "./providers.ts";
 import { connectAllowed, connectSrcLine, parseConnectSrc, readPagePolicy } from "./network-policy.ts";
@@ -148,5 +150,11 @@ describe("test connection", () => {
     const urls: string[] = [];
     await probeProvider("http://localhost:11434", KEY, deps((u, i) => (urls.push(u + "|" + (i.headers["authorization"] ?? "")), server()(u, i))));
     expect(urls.every((u) => u.startsWith("http://localhost:11434/v1/") && u.endsWith(`|Bearer ${KEY}`))).toBe(true);
+  });
+});
+
+describe("the address rule of the main thread and the adapter's agree", () => {
+  it("gives the same answer for every address a person might type", () => {
+    for (const a of ["http://localhost:11434", "HTTPS://api.example.com/", " http://127.0.0.1:8000/proxy// ", "ftp://x", "localhost:1", "http://", "http://user:key@host", "http://a b", "http://host?x=1", "javascript:alert(1)", "https://h/p/q/"]) expect(here(a), a).toBe(adapter(a));
   });
 });

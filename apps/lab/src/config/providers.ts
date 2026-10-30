@@ -1,4 +1,4 @@
-import { normalizeBaseUrl } from "@agentsim/minds";
+import { normalizeBaseUrl } from "./address.ts";
 import { PROVIDER_KEYS_NAMESPACE, type UserDataStore } from "@agentsim/storage";
 import { useSyncExternalStore } from "react";
 
