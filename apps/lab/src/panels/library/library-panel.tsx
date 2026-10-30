@@ -69,6 +69,9 @@ function docOf(d: ProfileDraft, base: unknown): unknown {
 
 const EMPTY_VERSIONS: LibVersion[] = [];
 
+/** The line (1-based) of an offset of the text. */
+const lineOf = (text: string, at: number): number => text.slice(0, Math.max(0, at)).split(String.fromCharCode(10)).length;
+
 export function LibraryPanel() {
   const { storage } = useServices();
   const ports = storage.ports;
@@ -80,6 +83,7 @@ export function LibraryPanel() {
   // The versions read for one item of one kind: what is drawn is only ever the versions of the item and the kind on show (a tab or an import changes both before the read is back).
   const [read, setRead] = useState<{ readonly kind: LibKind; readonly id: string; readonly list: LibVersion[] } | undefined>(undefined);
   const [version, setVersion] = useState<number | undefined>(undefined);
+  const [showAll, setShowAll] = useState(false);
   const [compare, setCompare] = useState(false);
   const [used, setUsed] = useState<UsedBy | undefined>(undefined);
   const [editing, setEditing] = useState<{ draft?: ProfileDraft; text?: string } | undefined>(undefined);
@@ -126,6 +130,11 @@ export function LibraryPanel() {
       live = false;
     };
   }, [ports, kind, item?.id, version, item?.latestVersion]);
+
+  // A status line of the last action is gone once a new edit starts (it would sit under an unsaved draft).
+  useEffect(() => {
+    if (editing !== undefined) setMessage(undefined);
+  }, [editing === undefined]);
 
   const current = versions.find((v) => v.version === version);
   const previous = versions.filter((v) => version !== undefined && v.version < version).pop();
@@ -187,7 +196,7 @@ export function LibraryPanel() {
           <div className="li-tabs" role="tablist">
             {(["profile", "template"] as const).map((k) => (
               <button key={k} type="button" role="tab" aria-selected={kind === k} className={`kt${kind === k ? " on" : ""}`} onClick={() => (setKind(k), setSelected(undefined), setMessage(undefined))} data-testid={`lib-tab-${k}`}>
-                {k === "profile" ? "mind profiles" : "prompt templates"} · {items[k].length}
+                {k === "profile" ? "mind profiles" : "prompt templates"} {items[k].length}
               </button>
             ))}
           </div>
@@ -229,18 +238,33 @@ export function LibraryPanel() {
                 </label>
               )}
               {diff !== undefined && (
-                <table className="lib-diff mono" data-testid="lib-diff">
-                  <tbody>
-                    {diff.map((l) => (
-                      <tr key={l.path} data-change={l.change}>
-                        <td>{l.change === "changed" || l.change === "removed" ? "−" : l.change === "added" ? "+" : ""}</td>
-                        <td>{l.path}</td>
-                        <td>{l.change === "same" ? l.after : l.change === "added" ? l.after : l.before}</td>
-                        <td>{l.change === "changed" ? `+ ${l.after}` : ""}</td>
+                <>
+                  <label className="lib-compare lib-showall">
+                    <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} data-testid="lib-showall" /> show all {diff.length} lines
+                  </label>
+                  <table className="lib-diff mono" data-testid="lib-diff">
+                    <thead>
+                      <tr>
+                        <th />
+                        <th>field</th>
+                        <th>v{previous?.version}</th>
+                        <th>v{version}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {diff
+                        .filter((l) => showAll || l.change !== "same")
+                        .map((l) => (
+                          <tr key={l.path} data-change={l.change}>
+                            <td>{l.change === "changed" || l.change === "removed" ? "−" : l.change === "added" ? "+" : ""}</td>
+                            <td>{l.path}</td>
+                            <td className="old">{l.change === "same" ? l.after : l.change === "added" ? "" : l.before}</td>
+                            <td className="new">{l.change === "changed" || l.change === "added" ? <><span className="plus">+</span> {l.after}</> : ""}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </>
               )}
               {diff === undefined && kind === "profile" && editing?.draft === undefined && (
                 <dl className="compute-kv mono" data-testid="lib-profile-table">
@@ -295,8 +319,8 @@ export function LibraryPanel() {
                   {issues.length > 0 && (
                     <ul className="lib-issues" data-testid="lib-issues">
                       {issues.map((i, k) => (
-                        <li key={k} className="st-warn">
-                          ✕ {i.code}: {i.message}
+                        <li key={k}>
+                          <span className="st-alm">✕</span> line {lineOf(draftText, i.from)}: {i.message} <span className="lib-code">{i.code}</span>
                         </li>
                       ))}
                     </ul>
@@ -333,6 +357,7 @@ export function LibraryPanel() {
                       type="button"
                       className="btn pri"
                       disabled={kind === "template" && issues.length > 0}
+                      title={kind === "template" && issues.length > 0 ? `fix line ${lineOf(draftText, issues[0]?.from ?? 0)} first` : undefined}
                       onClick={() => void save(item.id, kind === "profile" ? docOf(editing.draft as ProfileDraft, current.document) : textToTemplate(editing.text ?? draftText))}
                       data-testid="lib-save"
                     >
@@ -360,11 +385,15 @@ export function LibraryPanel() {
             </>
           )}
           {message !== undefined && (
-            <p className={message.ok ? "st-ok" : "st-warn"} role="status" data-testid="lib-message">
-              {message.ok ? "✓" : "✕"} {message.text}
+            <p className="lib-status" role="status" data-testid="lib-message">
+              <span className={message.ok ? "st-ok" : "st-alm"}>{message.ok ? "✓" : "✕"}</span> {message.text}
             </p>
           )}
-          <p className="muted rc-note">Editing a profile makes a new version; runs keep the version they used, so a re-run is the same mind. A template's fixed slots (role, mission, notebook, last decisions, state, beliefs, space, events, allowed actions) are read-only; only the text around them is edited.</p>
+          <p className="muted rc-note" data-testid="lib-note">
+            {kind === "profile"
+              ? "Editing a profile makes a new version; runs keep the version they used, so a re-run is the same mind."
+              : "A template's slots (role, mission, notebook, last decisions, state, beliefs, space, events, allowed actions) are fixed chips; only the text around them is edited, and saving makes a new version that a profile can name."}
+          </p>
         </div>
       </div>
     </div>

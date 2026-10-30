@@ -168,3 +168,40 @@ export function callSays(call: TraceRecord): string {
   }
   return typeof resp.error === "string" ? resp.error : "";
 }
+
+// ---- the facts of one model call ---------------------------------------------------------------------------------------------------------------
+
+export interface CallFacts {
+  /** The parameters the mind sends with a call, as the run's configuration says them (`temperature 0.2 · max output default`). */
+  readonly params: string;
+  /** What the run had used of its limits once this call was counted (a raise of a limit before it counted). */
+  readonly calls: { readonly used: number; readonly max: number };
+  readonly tokens: { readonly used: number; readonly max: number };
+  /** How the call ended: an answer, tool calls, or the failure. */
+  readonly finish: string;
+}
+
+/** The parameters, the limits after this call and the way it ended, from the run's `config` record of the agent, the model calls up to this one and the raises before it; undefined without a record to read from. */
+export async function callFacts(ports: Ports, runId: string, call: TraceRecord): Promise<CallFacts | undefined> {
+  const agentId = call.agentId;
+  if (agentId === undefined) return undefined;
+  const config = (await ports.trace.query({ runId, agentId, kinds: ["lifecycle"], op: "config", limit: 4 }))[0];
+  const eff = ((config?.payload as { mindS2?: { effective?: { params?: Record<string, unknown>; limits?: { calls?: number; tokens?: number } } } } | undefined)?.mindS2?.effective) ?? {};
+  const params = eff.params ?? {};
+  const named = [["temperature", "temperature"], ["maxOutputTokens", "max output"], ["topP", "top p"]].filter(([k]) => typeof params[k as string] === "number").map(([k, label]) => `${label} ${String(params[k as string])}`);
+  const calls = (await ports.trace.query({ runId, agentId, kinds: ["thought"], op: "llm-call", limit: 5000 })).filter((r) => r.seq <= call.seq);
+  const raises = (await ports.trace.query({ runId, agentId, kinds: ["lifecycle"], op: "raiseLimit", limit: 200 })).filter((r) => r.seq < call.seq);
+  const raised = (limit: string, fallback: number): number => {
+    const r = raises.filter((x) => (x.payload as { limit?: string }).limit === limit).pop();
+    return r === undefined ? fallback : Number((r.payload as { after?: number }).after ?? fallback);
+  };
+  const tokens = calls.reduce((n, r) => n + (callTokens(r)?.input ?? 0) + (callTokens(r)?.output ?? 0), 0);
+  const p = (call.payload ?? {}) as { outcome?: string; response?: { toolCalls?: unknown[]; error?: string } };
+  const finish = p.outcome === "ok" || p.outcome === "invalid" ? (Array.isArray(p.response?.toolCalls) && p.response.toolCalls.length > 0 ? "tool calls" : "answer") : String(p.outcome ?? "—");
+  return {
+    params: named.length === 0 ? "defaults of the server" : named.join(" · "),
+    calls: { used: calls.length, max: raised("calls", eff.limits?.calls ?? 0) },
+    tokens: { used: tokens, max: raised("tokens", eff.limits?.tokens ?? 0) },
+    finish,
+  };
+}

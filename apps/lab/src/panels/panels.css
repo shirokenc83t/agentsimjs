@@ -869,9 +869,11 @@
 .pv-bar { margin: 0 0 8px; }
 .pv-table { width: 100%; border-collapse: collapse; margin: 0 0 10px; }
 .pv-table th { text-align: left; font-weight: 400; color: var(--fg3); padding: 4px 8px; border-bottom: 1px solid var(--ln); }
-.pv-table { table-layout: auto; }
+.pv-table { table-layout: fixed; max-width: 100%; }
+.pv-table td, .pv-table th { overflow: hidden; text-overflow: ellipsis; }
+.pv-table td.pv-actions-cell .btn { padding: 0 6px; }
 .pv-table td { padding: 0 8px; height: 34px; border-bottom: 1px solid var(--ln); vertical-align: middle; white-space: nowrap; }
-.pv-table td.pv-cut { max-width: 30ch; overflow: hidden; text-overflow: ellipsis; }
+
 .pv-table td.pv-actions-cell, .pv-table th:last-child { width: 1%; }
 .pv-actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
 .pv-table .pv-actions { display: inline-flex; vertical-align: middle; }
@@ -912,14 +914,18 @@
 .llm-lane button { display: flex; gap: 8px; width: 100%; padding: 4px 6px; text-align: left; background: transparent; border: 0; color: var(--fg); font: inherit; cursor: pointer; }
 .llm-lane .llm-step-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .llm-lane .llm-ms { white-space: nowrap; }
-.llm-lane li[data-kind="invalid"] .llm-step-text, .llm-lane li[data-kind="fallback"] .llm-step-text { color: var(--alm); }
-.llm-lane li[data-kind="limit"] .llm-step-text { color: var(--warn); }
+.llm-lane .llm-mark { white-space: nowrap; font-weight: 600; }
+.llm-lane .llm-mark.alm { color: var(--alm); }
+.llm-lane .llm-mark.warn { color: var(--warn); }
 .llm-detail { border: 1px solid var(--ln2); background: var(--bg1); padding: 6px 8px; margin: 0 0 8px; }
 .llm-sections { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 6px; }
 .llm-sections button { padding: 2px 8px; border: 1px solid var(--ln2); background: transparent; color: var(--fg); font: inherit; cursor: pointer; }
 .llm-sections button.on { box-shadow: inset 0 -1px 0 var(--ac); font-weight: 600; }
 .llm-text { margin: 0; padding: 6px; max-height: 280px; overflow: auto; background: var(--bg0); border: 1px solid var(--ln); white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--type-mono-size); }
-.compute-map { display: block; width: 100%; max-width: 560px; height: auto; background: var(--bg0); border: 1px solid var(--ln); margin: 0 0 8px; }
+.compute-body { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: flex-start; }
+.compute-fig { flex: none; width: 320px; max-width: 100%; }
+.compute-side { flex: 1 1 300px; min-width: 0; }
+.compute-map { display: block; width: 320px; height: 320px; max-width: 100%; background: var(--bg0); border: 1px solid var(--ln); margin: 0 0 8px; }
 .compute-kv { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 4px 12px; margin: 0 0 8px; }
 .compute-kv dt { color: var(--fg3); }
 .compute-kv dd { margin: 0; overflow-wrap: anywhere; }
@@ -928,7 +934,7 @@
 .library { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .lib-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--ln); }
 .lib-head .sp { flex: 1; }
-.lib-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 0; flex: 1; }
+.lib-body { display: grid; grid-template-columns: 290px minmax(0, 1fr); min-height: 0; flex: 1; }
 .lib-list { border-right: 1px solid var(--ln); overflow: auto; }
 .lib-list ul { list-style: none; margin: 0; padding: 0; }
 .lib-list li button { display: block; width: 100%; padding: 6px 12px; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--ln); color: var(--fg); font: inherit; cursor: pointer; }
@@ -939,9 +945,15 @@
 .lib-compare { display: inline-flex; gap: 6px; margin: 0 0 6px; color: var(--fg2); }
 .lib-diff { border-collapse: collapse; margin: 0 0 8px; width: 100%; }
 .lib-diff td { padding: 2px 8px; border-bottom: 1px solid var(--ln); overflow-wrap: anywhere; }
-.lib-diff tr[data-change="same"] { color: var(--fg3); }
-.lib-diff tr[data-change="added"] td:first-child, .lib-diff tr[data-change="changed"] td:last-child { color: var(--ok); }
+.lib-diff th { text-align: left; font-weight: 400; color: var(--fg3); padding: 2px 8px; border-bottom: 1px solid var(--ln); }
+.lib-diff tr[data-change="same"] td { color: var(--fg3); }
+.lib-diff td.old { color: var(--fg2); }
+.lib-diff td.new { color: var(--fg); }
+.lib-diff td .plus, .lib-diff tr[data-change="added"] td:first-child { color: var(--ok); }
 .lib-diff tr[data-change="removed"] td:first-child, .lib-diff tr[data-change="changed"] td:first-child { color: var(--alm); }
+.lib-showall { margin-left: 12px; }
+.lib-status { margin: 8px 0; color: var(--fg); }
+.lib-list .li-tabs .kt { white-space: nowrap; padding: 0 6px; }
 .lib-form .st-row { display: grid; grid-template-columns: 180px minmax(0, 320px); gap: 4px 12px; align-items: center; margin: 0 0 6px; }
 .lib-actions, .lib-dup, .lib-slots { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
 .lib-issues { margin: 6px 0; padding-left: 16px; }
@@ -959,3 +971,18 @@
 .rc-estimate { margin: 6px 0; padding: 6px 10px; border: 1px solid var(--ln2); background: var(--bg1); }
 .rc-runmode { margin: 8px 0; }
 .rc-mode { display: block; margin: 2px 0; }
+
+.llm-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 14px; margin: 8px 0; }
+.llm-facts dt { color: var(--fg3); }
+.llm-facts dd { margin: 0; color: var(--fg); }
+.inline-code { font-family: var(--font-mono); background: var(--bg2); padding: 0 3px; }
+.lib-issues { list-style: none; margin: 6px 0; padding: 0; color: var(--fg); }
+.lib-issues .lib-code { color: var(--fg3); margin-left: 6px; }
+.lib-issues .st-alm { font-weight: 600; }
+.rc-minds .rc-input { display: inline-flex; }
+.rc-counter { text-align: right; margin-top: 4px; }
+.pv-result p { margin: 0; }
+.pv-cors { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.pv-cors-line { display: flex; align-items: center; gap: 10px; }
+.pv-cors-label { flex: none; width: 60px; color: var(--fg3); }
+.pv-cors-line code { flex: 1; min-width: 0; padding: 2px 6px; background: var(--bg2); color: var(--fg); overflow-wrap: anywhere; }

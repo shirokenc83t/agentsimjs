@@ -172,7 +172,9 @@
 .bot .s2-chip { font-size: 11px; }
 .bot .s2-chip.warn { color: var(--warn); }
 .bot .s2-chip.run { color: var(--run); }
-.limit-notice { position: fixed; left: 16px; top: 128px; z-index: var(--z-popover); width: min(560px, calc(100vw - 32px)); background: var(--bg1); border: 1px solid var(--warn); box-shadow: var(--float); font-size: var(--type-mono-size); }
+.notice-frame { position: fixed; z-index: var(--z-hud); overflow: hidden; pointer-events: none; }
+.notice-slot { position: absolute; pointer-events: auto; }
+.limit-notice { position: relative; width: min(560px, calc(100vw - 32px)); background: var(--bg1); border: 1px solid var(--warn); box-shadow: var(--float); font-size: var(--type-mono-size); }
 .limit-notice .ln-h { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-bottom: 1px solid var(--ln); background: color-mix(in srgb, var(--warn) 10%, var(--bg1)); }
 .limit-notice .sp, .raise-dialog .sp { flex: 1; }
 .limit-notice .muted { color: var(--fg3); }

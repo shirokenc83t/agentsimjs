@@ -124,17 +124,28 @@ export function MindsStatusSegments() {
  * Where the notice sits: under the Scene's toolbar, at the top left of the map area, so that it covers map and never a control (the toolbar wraps to two rows at a narrow width: it is measured, not assumed).
  * Without a Scene on the screen it sits under the player.
  */
-export function useNoticeAnchor(active: boolean): { top: number; left: number } {
-  const [at, setAt] = useState({ top: 128, left: 16 });
+export interface NoticeAnchor {
+  /** Where the notice sits inside the Scene pane (px from the pane's corner). */
+  readonly top: number;
+  readonly left: number;
+  /** The Scene pane on screen: the notice is clipped by it and sits under the floating windows (it may cover the map, never another panel). */
+  readonly pane: { readonly top: number; readonly left: number; readonly width: number; readonly height: number } | undefined;
+}
+
+export function useNoticeAnchor(active: boolean): NoticeAnchor {
+  const [at, setAt] = useState<NoticeAnchor>({ top: 8, left: 16, pane: undefined });
   useLayoutEffect(() => {
     if (!active) return;
     const measure = () => {
       const bar = document.querySelector('[data-testid="scene-toolbar"]');
-      if (bar === null) return setAt({ top: 128, left: 16 });
+      const col = bar?.closest(".scene-col") ?? undefined;
+      if (bar === null || col === undefined || col === null) return setAt((old) => (old.pane === undefined ? old : { top: 8, left: 16, pane: undefined }));
       const r = bar.getBoundingClientRect();
-      const top = Math.round(r.bottom + 8);
-      const left = Math.max(16, Math.round(r.left + 8));
-      setAt((old) => (old.top === top && old.left === left ? old : { top, left }));
+      const c = col.getBoundingClientRect();
+      const top = Math.round(r.bottom - c.top + 8);
+      const left = Math.max(8, Math.round(r.left - c.left + 8));
+      const pane = { top: Math.round(c.top), left: Math.round(c.left), width: Math.round(c.width), height: Math.round(c.height) };
+      setAt((old) => (old.top === top && old.left === left && old.pane?.top === pane.top && old.pane.left === pane.left && old.pane.width === pane.width && old.pane.height === pane.height ? old : { top, left, pane }));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -145,6 +156,19 @@ export function useNoticeAnchor(active: boolean): { top: number; left: number } 
     };
   }, [active]);
   return at;
+}
+
+/** The frame of a Scene notice: the Scene pane's box, clipping what is put in it and under the floating windows; only the notice itself takes the pointer. */
+function NoticeFrame(props: { readonly anchor: NoticeAnchor; readonly children: React.ReactNode }) {
+  const { anchor } = props;
+  const pane = anchor.pane;
+  return (
+    <div className="notice-frame" style={pane === undefined ? { top: 0, left: 0, width: "100vw", height: "100vh" } : { top: pane.top, left: pane.left, width: pane.width, height: pane.height }}>
+      <div className="notice-slot" style={{ top: anchor.top, left: anchor.left }}>
+        {props.children}
+      </div>
+    </div>
+  );
 }
 
 export interface LimitNoticeProps {
@@ -181,7 +205,8 @@ export function LimitNotice(props: LimitNoticeProps) {
     const others = (["calls", "tokens", "costUsd"] as const).filter((l) => l !== p.limit).map((l) => (l === "costUsd" ? (a.pricesKnown ? `cost ${a.costUsd.toFixed(4)} / ${a.limits.costUsd.toFixed(2)}` : `cost — (no prices for ${a.provider})`) : `${LIMIT_WORDS[l].short} ${spaced(usedOf(a, l))} / ${spaced(a.limits[l])}`));
     return (
       <>
-        <div className="limit-notice" role="alertdialog" aria-label="Run paused by a limit" data-testid="limit-notice" data-limit={p.limit} style={anchor}>
+        <NoticeFrame anchor={anchor}>
+        <div className="limit-notice" role="alertdialog" aria-label="Run paused by a limit" data-testid="limit-notice" data-limit={p.limit}>
           <div className="ln-h">
             <span className="warn">■</span>
             <b>Run paused: {words.title.replace(" limit", "")} limit reached</b>
@@ -221,6 +246,7 @@ export function LimitNotice(props: LimitNoticeProps) {
             <span className="muted">headless: the run ends with "limit reached"</span>
           </div>
         </div>
+        </NoticeFrame>
         {raising && (
           <RaiseDialog
             agent={a}
@@ -243,7 +269,8 @@ export function LimitNotice(props: LimitNoticeProps) {
   // The title's share is computed from the numbers of the body: they can never disagree.
   const pct = Math.floor((used / Math.max(a.limits[warningNotice.limit], 1e-9)) * 100);
   return (
-    <div className="limit-notice warning" role="status" aria-label="Limit warning" data-testid="limit-warning-notice" style={anchor}>
+    <NoticeFrame anchor={anchor}>
+    <div className="limit-notice warning" role="status" aria-label="Limit warning" data-testid="limit-warning-notice">
       <div className="ln-h">
         <span className="warn">▲</span>
         <b>
@@ -257,6 +284,7 @@ export function LimitNotice(props: LimitNoticeProps) {
         <span className="prose">The run pauses at the limit and waits for you.</span>
       </div>
     </div>
+    </NoticeFrame>
   );
 }
 

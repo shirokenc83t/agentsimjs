@@ -1,9 +1,10 @@
 import "../panels.css";
 import { useUiContext } from "@agentsim/ui";
 import type { TraceRecord } from "@agentsim/trace";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePolled, useServices, useSource } from "../../services.tsx";
-import { buildDecisionStory, callSays, callTokens, notebookAt, opOf, promptSections, type DecisionStory, type Step } from "./decision-story.ts";
+import { buildDecisionStory, callFacts, callSays, callTokens, notebookAt, opOf, promptSections, type CallFacts, type DecisionStory, type Step } from "./decision-story.ts";
 import { summary } from "./log-rows.ts";
 import { useJump } from "./use-jump.ts";
 
@@ -25,8 +26,17 @@ const TAGS: Record<Step["kind"], { tag: string; tone: string }> = {
 };
 const payload = (r: TraceRecord): Record<string, unknown> => (r.payload !== null && typeof r.payload === "object" ? (r.payload as Record<string, unknown>) : {});
 
-/** What the lane writes for a step, after its tag. */
-export function stepText(s: Step): string {
+/** The mark of a step that is not as it should be: a red ✕ for a call or an answer that failed, an amber ▲ for a degradation or a limit. Only the mark takes the colour; the text is the foreground. */
+export function stepMark(s: Step): { readonly glyph: string; readonly tone: "alm" | "warn" } | undefined {
+  const p = payload(s.record);
+  if (s.kind === "invalid") return { glyph: "✕", tone: "alm" };
+  if (s.kind === "call" && (p["outcome"] === "error" || p["outcome"] === "timeout" || p["outcome"] === "invalid")) return { glyph: "✕", tone: "alm" };
+  if (s.kind === "fallback" || s.kind === "limit") return { glyph: "▲", tone: "warn" };
+  return undefined;
+}
+
+/** What the lane writes for a step, after its tag and its mark; `callNo` is the number of a model call among the calls of the decision (unique: a retry has its own call number and says its attempt). */
+export function stepText(s: Step, callNo = 1): string {
   const p = payload(s.record);
   switch (s.kind) {
     case "request": {
@@ -37,19 +47,28 @@ export function stepText(s: Step): string {
     case "call": {
       const t = callTokens(s.record);
       const says = callSays(s.record);
-      return `model call ${String(p["attempt"] ?? 1)} · ${t === undefined ? "" : `${spaced(t.input)} → ${spaced(t.output)} tok`}${says === "" ? "" : ` — “${says}”`}`;
+      const failed = stepMark(s) !== undefined;
+      const head = `model call ${callNo} · attempt ${String(p["attempt"] ?? 1)} · ${t === undefined ? "" : `${spaced(t.input)} → ${spaced(t.output)} tok`}`;
+      return failed ? `${head}${says === "" ? "" : ` · ${says}`}` : `${head}${says === "" ? "" : ` — “${says}”`}`;
     }
     case "invalid":
-      return `✕ invalid · ${String(p["validationError"] ?? "")}`;
+      return `invalid · ${String(p["validationError"] ?? "")}`;
     case "answer": {
       const d = p["decision"] as { kind?: unknown; name?: unknown; params?: unknown } | undefined;
       const mind = p["mind"] as { fallback?: unknown } | undefined;
       const what = d?.kind === "action" ? `${String(d.name)} ${JSON.stringify(d.params ?? {})}` : "idle";
       return `${mind?.fallback === undefined ? "answer" : "fallback decision"} · ${what}`;
     }
+    case "fallback":
+      return `fallback · ${String(p["decision"] ?? "idle")} · ${String(p["reason"] ?? "").slice(0, 120)}`;
     default:
       return summary(s.record);
   }
+}
+
+/** A text with `code` in backticks drawn as code (Mono on the raised background) instead of raw backticks. */
+function Ticks({ text }: { text: string }): ReactNode {
+  return text.split("`").map((t, i) => (i % 2 === 1 ? <code key={i} className="inline-code">{t}</code> : t));
 }
 
 function Tabs(props: { value: string; onChange: (v: string) => void; items: readonly string[] }) {
@@ -102,6 +121,15 @@ export function LlmInspectorPanel() {
 
   const selected = story?.steps.find((s) => s.record.seq === sel);
   const call = selected !== undefined && selected.kind === "call" ? selected.record : undefined;
+  const [facts, setFacts] = useState<CallFacts | undefined>(undefined);
+  useEffect(() => {
+    if (call === undefined || runId === undefined) return setFacts(undefined);
+    let live = true;
+    void callFacts(storage.ports, runId, call).then((f) => live && setFacts(f));
+    return () => {
+      live = false;
+    };
+  }, [storage, runId, call]);
   const sections = useMemo(() => (call === undefined ? [] : promptSections(payload(call)["messages"])), [call]);
   const totals = useMemo(() => {
     if (!story) return undefined;
@@ -186,6 +214,8 @@ export function LlmInspectorPanel() {
         {story.steps.map((s) => {
           const t = TAGS[s.kind];
           const p = payload(s.record);
+          const mark = stepMark(s);
+          const callNo = s.kind === "call" ? story.calls.findIndex((c) => c.record.seq === s.record.seq) + 1 : 0;
           const ms = typeof p["latencyMs"] === "number" ? `+${((p["latencyMs"] as number) / 1000).toFixed(1)} s` : "";
           return (
             <li key={`${s.kind}-${s.record.seq}`} className={s.record.seq === sel ? "sel" : undefined} data-kind={s.kind} data-seq={s.record.seq}>
@@ -193,7 +223,8 @@ export function LlmInspectorPanel() {
                 <span className="tag" style={{ color: `var(--kind-${t.tone})` }}>
                   {t.tag}
                 </span>{" "}
-                <span className="llm-step-text">{stepText(s)}</span>
+                {mark !== undefined && <span className={`llm-mark ${mark.tone}`}>{mark.glyph} </span>}
+                <span className="llm-step-text">{stepText(s, callNo)}</span>
                 <span className="muted llm-ms">{ms}</span>
               </button>
             </li>
@@ -203,15 +234,33 @@ export function LlmInspectorPanel() {
       {call !== undefined && (
         <div className="llm-detail" data-testid="llm-detail">
           <Tabs value={tab} onChange={(v) => setTab(v as typeof tab)} items={["prompt", "answer", "notebook", "raw JSON"]} />
+          {facts !== undefined && (tab === "prompt" || tab === "answer") && (
+            <dl className="llm-facts mono" data-testid="llm-facts">
+              <dt>parameters</dt>
+              <dd>
+                {facts.params} · format: function tools, JSON in the answer
+              </dd>
+              <dt>limits after this call</dt>
+              <dd>
+                calls {facts.calls.used} / {facts.calls.max} · tokens {spaced(facts.tokens.used)} / {spaced(facts.tokens.max)}
+              </dd>
+              <dt>output</dt>
+              <dd>
+                {spaced(callTokens(call)?.output ?? 0)} tok · {((Number(payload(call)["latencyMs"]) || 0) / 1000).toFixed(1)} s · finish: {facts.finish}
+              </dd>
+            </dl>
+          )}
           {tab === "prompt" && typeof payload(call)["messages"] === "string" && (
             <p className="muted" data-testid="llm-metadata-note">
-              This run kept `mind-io` at `metadata`: the prompt of this call is only its hash ({String(payload(call)["messages"])}), with its size ({spaced(callTokens(call)?.input ?? 0)} tok in). At `full` the sections would be here to read.
+              <Ticks text="This run kept `mind-io` at `metadata`: the prompt of this call is only its hash (" />
+              {String(payload(call)["messages"])}
+              <Ticks text={`), with its size (${spaced(callTokens(call)?.input ?? 0)} tok in). At \`full\` the sections would be here to read.`} />
             </p>
           )}
           {tab === "prompt" && typeof payload(call)["messages"] !== "string" && (
             <div className="llm-prompt">
               <p className="muted">
-                model call {String(payload(call)["attempt"] ?? 1)} · input {spaced(callTokens(call)?.input ?? sections.reduce((n, x) => n + x.tokens, 0))} tok by section (characters / 4, an estimate) · click a section to read it
+                model call {story.calls.findIndex((c) => c.record.seq === call.seq) + 1} · attempt {String(payload(call)["attempt"] ?? 1)} · input {spaced(callTokens(call)?.input ?? sections.reduce((n, x) => n + x.tokens, 0))} tok by section (characters / 4, an estimate) · click a section to read it
               </p>
               <div className="llm-sections">
                 {sections.map((s, i) => (
@@ -230,7 +279,9 @@ export function LlmInspectorPanel() {
             <div className="llm-answer">
               {typeof payload(call)["response"] === "string" ? (
                 <p className="muted" data-testid="llm-answer-text">
-                  `mind-io` was kept at `metadata`: the answer is only its hash ({String(payload(call)["response"])}); at `full` it would be here.
+                  <Ticks text="`mind-io` was kept at `metadata`: the answer is only its hash (" />
+                  {String(payload(call)["response"])}
+                  <Ticks text="); at `full` it would be here." />
                 </p>
               ) : (
                 <pre className="llm-text" data-testid="llm-answer-text">
@@ -262,7 +313,7 @@ export function LlmInspectorPanel() {
       )}
       {story.other.length > 0 && <p className="muted mono">{story.other.map((r) => summary(r)).join(" · ")}</p>}
       <p className="muted rc-note">
-        {payload(story.request)["allowed"] === undefined ? "" : "mind-io at `metadata` keeps the sizes, the outcome and the hashes of what was sent and answered; at `full` it also keeps the prompt and the answer, which this panel then shows."}
+        {payload(story.request)["allowed"] === undefined ? "" : <Ticks text="mind-io at `metadata` keeps the sizes, the outcome and the hashes of what was sent and answered; at `full` it also keeps the prompt and the answer, which this panel then shows." />}
       </p>
     </div>
   );

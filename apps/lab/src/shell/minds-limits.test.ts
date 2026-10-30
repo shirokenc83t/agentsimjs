@@ -36,6 +36,8 @@ describe("the limit words", () => {
   it("writes what was used of a limit, the presets of a raise, the rate, and what a raise allows at that rate", () => {
     expect(usedWords(40_912, 40_000, "tokens")).toBe("40 912 of 40 000 (102 %)");
     expect(usedWords(0.0512, 0.05, "costUsd")).toBe("0.0512 of 0.0500 (102 %)");
+    // The title of a notice and its body say the same share, rounded the same way (2 373 of 2 500 is 94.9 %: 94 in both).
+    expect(usedWords(2373, 2500, "tokens")).toBe("2 373 of 2 500 (94 %)");
     expect(raisePresets("tokens", 40_000)).toEqual([{ label: "+50 %", value: 60_000 }, { label: "×2", value: 80_000 }, { label: "×5", value: 200_000 }]);
     expect(raisePresets("costUsd", 0.05).map((p) => p.value)).toEqual([0.08, 0.1, 0.25]);
     expect(rateWords(agent())).toBe("about 2 900 tokens a call");

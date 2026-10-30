@@ -1,7 +1,7 @@
 import { createMemoryPorts } from "@agentsim/storage";
 import type { TraceRecord } from "@agentsim/trace";
 import { describe, expect, it } from "vitest";
-import { buildDecisionStory, callSays, callTokens, notebookAt, promptSections, requestOf } from "./decision-story.ts";
+import { buildDecisionStory, callFacts, callSays, callTokens, notebookAt, promptSections, requestOf } from "./decision-story.ts";
 
 // The story of a decision of a System 2 mind, read from the records' own links (F4 M4, T-123): the chain request → model call → compute call → model call → decision → action, a decision with retries and a
 // fallback, the limit records, and the pieces of a model call (prompt sections, tokens, what it says).
@@ -117,5 +117,22 @@ describe("the pieces of a model call", () => {
     expect(callSays(r.call1)).toBe("asks for estimateCost, planPath");
     expect(callSays(r.call2)).toBe("P2 is cheaper");
     expect(callSays(rec("thought", "x/s2", { op: "llm-call", response: { error: "http_error 503" } }))).toBe("http_error 503");
+  });
+});
+
+describe("the facts of one model call", () => {
+  it("says the parameters of the mind, the limits after this call (what the run had used by then, a raise counted) and how the call ended", async () => {
+    seq = 0;
+    const config = rec("lifecycle", "uav-001/config", { op: "config", mindS2: { effective: { params: { temperature: 0.2 }, limits: { calls: 20, tokens: 4000, costUsd: 0.05 } } } });
+    const request = rec("thought", "uav-001/s2", { op: "request" });
+    const call1 = rec("thought", "uav-001/s2", { op: "llm-call", attempt: 1, usage: { inputTokens: 900, outputTokens: 40 }, outcome: "ok", response: { toolCalls: [{ name: "planPath" }] } }, { parentId: id(request) });
+    const raise = rec("lifecycle", "uav-001/s2", { op: "raiseLimit", limit: "tokens", before: 4000, after: 8000 });
+    const call2 = rec("thought", "uav-001/s2", { op: "llm-call", attempt: 1, usage: { inputTokens: 1000, outputTokens: 60 }, outcome: "ok", response: { content: "{}" } }, { parentId: id(request) });
+    const p = await ports([config, request, call1, raise, call2]);
+    const f1 = await callFacts(p, RUN, call1);
+    expect(f1).toMatchObject({ params: "temperature 0.2", calls: { used: 1, max: 20 }, tokens: { used: 940, max: 4000 }, finish: "tool calls" });
+    const f2 = await callFacts(p, RUN, call2);
+    expect(f2).toMatchObject({ calls: { used: 2, max: 20 }, tokens: { used: 2000, max: 8000 }, finish: "answer" });
+    expect(f2?.params).toBe("temperature 0.2");
   });
 });

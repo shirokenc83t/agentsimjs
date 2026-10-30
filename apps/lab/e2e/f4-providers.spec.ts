@@ -193,12 +193,17 @@ test("an address the page's policy does not list is saved with ▲ endpoint not 
   await expect(page.getByTestId("pv-status-lab-vllm")).toContainText("▲ endpoint not allowed yet");
   await page.getByTestId("st-jump-endpoints").click();
   await expect(page.getByTestId("pv-csp-line")).toHaveText("connect-src 'self' http://localhost:* http://127.0.0.1:* http://192.168.1.20:8000");
+  // The address of the provider is a row of its own (the reason for the line), with no ✕: it is the provider's.
+  await expect(page.getByTestId("pv-endpoint")).toHaveCount(1);
+  await expect(page.getByTestId("pv-endpoint")).toContainText("http://192.168.1.20:8000");
+  await expect(page.getByTestId("pv-endpoint")).toContainText("▲ not allowed yet");
+  await expect(page.getByTestId("pv-endpoint")).toContainText("address of lab-vllm");
   await page.getByTestId("pv-endpoint-input").fill("https://api.example.com");
   await page.getByTestId("pv-endpoint-add").click();
-  await expect(page.getByTestId("pv-endpoint")).toContainText("https://api.example.com:443");
-  await expect(page.getByTestId("pv-endpoint")).toContainText("▲ the policy this page was served with does not list it yet");
+  await expect(page.getByTestId("pv-endpoint")).toHaveCount(2);
+  await expect(page.getByTestId("pv-endpoint").filter({ hasText: "https://api.example.com:443" })).toContainText("▲ not allowed yet");
   await page.getByRole("button", { name: "Remove https://api.example.com:443" }).click();
-  await expect(page.getByTestId("pv-endpoint")).toHaveCount(0);
+  await expect(page.getByTestId("pv-endpoint")).toHaveCount(1);
   // Removing asks first, and Cancel keeps it.
   await page.getByTestId("pv-remove-lab-vllm").click();
   await expect(page.getByTestId("pv-confirm")).toContainText("Remove lab-vllm?");

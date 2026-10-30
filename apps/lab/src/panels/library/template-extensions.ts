@@ -3,8 +3,8 @@ import { codeFolding, foldGutter, foldKeymap, foldService } from "@codemirror/la
 import { linter, lintGutter, type Diagnostic } from "@codemirror/lint";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { EditorState, RangeSetBuilder, type Extension } from "@codemirror/state";
-import { Decoration, drawSelection, EditorView, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
-import { blocksOf, lintTemplateText, SLOT_LINE } from "./template-text.ts";
+import { Decoration, drawSelection, EditorView, keymap, lineNumbers, WidgetType, type DecorationSet } from "@codemirror/view";
+import { blocksOf, lintTemplateText, SLOT_LINE, SLOT_NAMES } from "./template-text.ts";
 
 // The CodeMirror 6 extensions of the prompt-template editor (F4 M4, T-124, ADR-0045 point 3.1): the slot lines are atomic read-only ranges (a slot cannot be partly edited, only deleted whole or kept), an issue the
 // schema's validator would raise is marked in the text, each section folds, the search is CodeMirror's, and the theme is made of the tokens (CSS variables), not of a palette of its own. Loaded with the editor,
@@ -55,12 +55,35 @@ const slotFilter = EditorState.changeFilter.of((tr) => {
   return ok;
 });
 
-/** The slot lines drawn as what they are: a fixed line, not text. */
+/** A known slot drawn as a chip: ‹mission› on the raised background, whole and fixed (the text under it is still `{{mission}}`; an atomic range, so the caret jumps over it and a backspace takes it whole). */
+class SlotChip extends WidgetType {
+  constructor(readonly name: string) {
+    super();
+  }
+  override eq(other: SlotChip): boolean {
+    return other.name === this.name;
+  }
+  override toDOM(): HTMLElement {
+    const el = document.createElement("span");
+    el.className = "cm-slot-chip";
+    el.setAttribute("data-slot", this.name);
+    el.textContent = `‹${this.name}›`;
+    return el;
+  }
+  override ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+const KNOWN = new Set<string>(SLOT_NAMES);
+
+/** The slot lines drawn as what they are: a known slot is a chip, an unknown one stays text (marked by the linter) but is as fixed as the others. */
 function slotDecorations(state: EditorState): DecorationSet {
   const b = new RangeSetBuilder<Decoration>();
   for (const r of slotRanges(state.doc.toString())) {
+    const name = state.doc.sliceString(r.from + 2, r.to - 2);
     b.add(r.from, r.from, Decoration.line({ class: "cm-slot-line" }));
-    if (r.to > r.from) b.add(r.from, r.to, Decoration.mark({ class: "cm-slot", attributes: { "data-slot": state.doc.sliceString(r.from + 2, r.to - 2) } }));
+    if (r.to > r.from) b.add(r.from, r.to, KNOWN.has(name) ? Decoration.replace({ widget: new SlotChip(name) }) : Decoration.mark({ class: "cm-slot", attributes: { "data-slot": name } }));
   }
   return b.finish();
 }
@@ -81,7 +104,7 @@ const foldSections = foldService.of((state, lineStart) => {
 
 /** The issues of the text as marks in it. */
 function templateLint(view: EditorView): Diagnostic[] {
-  return lintTemplateText(view.state.doc.toString()).map((i) => ({ from: i.from, to: Math.max(i.to, i.from + 1), severity: "error", message: `${i.code}: ${i.message}`, source: "template" }));
+  return lintTemplateText(view.state.doc.toString()).map((i) => ({ from: i.from, to: Math.max(i.to, i.from + 1), severity: "error", message: `line ${view.state.doc.lineAt(i.from).number}: ${i.message} · ${i.code}`, source: "template" }));
 }
 
 /** The theme, from the tokens of the app: the editor reads the same CSS variables as everything else. */
@@ -93,8 +116,8 @@ const theme = EditorView.theme({
   ".cm-activeLine": { backgroundColor: "transparent" },
   ".cm-cursor": { borderLeftColor: "var(--fg)" },
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "var(--bg3)" },
-  ".cm-slot-line": { backgroundColor: "var(--bg2)" },
-  ".cm-slot": { color: "var(--ac)", fontWeight: "600", cursor: "default" },
+  ".cm-slot": { color: "var(--fg)", cursor: "default" },
+  ".cm-slot-chip": { display: "inline-block", padding: "0 6px", backgroundColor: "var(--bg2)", border: "1px solid var(--ln2)", color: "var(--fg)", fontWeight: "600", cursor: "default", lineHeight: "1.4" },
   ".cm-lintRange-error": { backgroundImage: "none", textDecoration: "underline wavy var(--alm)" },
   ".cm-diagnostic": { fontFamily: "var(--font-mono)", color: "var(--fg)", borderLeft: "3px solid var(--alm)", backgroundColor: "var(--bg1)" },
   ".cm-tooltip": { backgroundColor: "var(--bg1)", border: "1px solid var(--ln2)", color: "var(--fg)" },

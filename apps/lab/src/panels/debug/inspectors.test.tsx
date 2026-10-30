@@ -114,9 +114,9 @@ describe("the LLM inspector", () => {
     const user = userEvent.setup();
     expect(screen.getByTestId("llm-lane")).toHaveTextContent(/2.702 → 61 tok/);
     await user.click(screen.getByTestId(`llm-step-${r.call1.seq}`));
-    expect(screen.getByTestId("llm-metadata-note")).toHaveTextContent("kept `mind-io` at `metadata`");
+    expect(screen.getByTestId("llm-metadata-note")).toHaveTextContent("kept mind-io at metadata");
     expect(screen.getByTestId("llm-metadata-note")).toHaveTextContent("aaaaaaaaaaaaaaaa");
-    expect(screen.getByTestId("llm-metadata-note")).toHaveTextContent("At `full` the sections would be here");
+    expect(screen.getByTestId("llm-metadata-note")).toHaveTextContent("At full the sections would be here");
     await user.click(screen.getByTestId("llm-tab-answer"));
     expect(screen.getByTestId("llm-answer-text")).toHaveTextContent("bbbbbbbbbbbbbbbb");
     await user.click(screen.getByTestId("llm-tab-notebook"));

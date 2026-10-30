@@ -45,7 +45,7 @@ export function tileAgent(m: SimMindsMessage): AgentMinds | undefined {
 /** `used of max (102 %)` in the notice. */
 export const usedWords = (used: number, max: number, l: LimitName): string => {
   const fmt = (n: number) => (l === "costUsd" ? n.toFixed(4) : spaced(n));
-  return `${fmt(used)} of ${fmt(max)} (${max > 0 ? Math.round((used / max) * 100) : 0} %)`;
+  return `${fmt(used)} of ${fmt(max)} (${max > 0 ? Math.floor((used / max) * 100) : 0} %)`;
 };
 
 /** The presets of the raise dialog: +50 %, ×2 and ×5 of the limit in force (whole numbers; a cost keeps cents). */
