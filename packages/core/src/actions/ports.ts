@@ -209,9 +209,9 @@ export type Scope = "world" | "leader" | "self";
 /** Capability definitions from `tools-schema` (ADR-0007). */
 export interface CapabilityPort {
   /** Every capability, by name: the menu a mind is offered (its parameter schema comes from the generated manifest). */
-  list(): readonly { readonly name: string; readonly kind: "action" | "bookkeeping"; readonly paramsSchema: Readonly<Record<string, unknown>> }[];
-  /** `action` starts a behavior; `bookkeeping` (timers) changes agent state only and accompanies a decision. */
-  kind(name: string): "action" | "bookkeeping";
+  list(): readonly { readonly name: string; readonly kind: "action" | "bookkeeping" | "compute"; readonly paramsSchema: Readonly<Record<string, unknown>> }[];
+  /** `action` starts a behavior; `bookkeeping` (timers, the notebook) changes agent state only and accompanies a decision; `compute` answers a question from the agent's own map (ADR-0014 addition of 2026-10-29). */
+  kind(name: string): "action" | "bookkeeping" | "compute";
   /** In the closed set of world-scope commands a researcher can inject (ADR-0015 addition of 2026-10-12). */
   injectable(name: string): boolean;
   validate(name: string, params: unknown): Result<unknown, CodedError<"unknown_capability" | "invalid_params">>;

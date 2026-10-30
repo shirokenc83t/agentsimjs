@@ -10,6 +10,7 @@ describe("capability definitions (ADR-0007)", () => {
   it("defines the base actions (F1, and explore from F2)", () => {
     expect(CAPABILITIES.filter((c) => c.kind === "action").map((c) => c.name)).toEqual(["explore", "goTo", "hold", "land", "returnToBase", "takeoff"]);
     expect(CAPABILITIES.filter((c) => c.kind === "bookkeeping").map((c) => c.name)).toEqual(["cancelTimer", "note", "setTimer"]); // timers (F2 M2d) and the notebook (F4)
+    expect(CAPABILITIES.filter((c) => c.kind === "compute").map((c) => c.name)).toEqual(["estimateCost", "kShortestPaths", "planPath", "querySpace"]); // F4 M2
   });
 
   it("has unique camelCase names", () => {

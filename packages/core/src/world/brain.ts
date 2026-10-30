@@ -84,6 +84,21 @@ export type BrainTier = "S1" | "S2" | "baseline" | "script" | "external";
 export interface DecideContext {
   readonly requestRecordId?: string;
   readonly trace?: TraceSink;
+  /** Answers a compute tool the mind asked for (ADR-0014 addition of 2026-10-29) from the agent's own map, as of the request's tick; absent where the run has no compute tools. */
+  readonly compute?: ComputeCaller;
+}
+
+/** What one compute call came to: the result as the tool's schema describes it (with the `status` and the `expansions` the record keeps apart), or a refusal with a stable code. */
+export type ComputeOutcome =
+  | { readonly ok: true; readonly result: Readonly<Record<string, unknown>>; readonly status: string; readonly expansions: number }
+  | { readonly ok: false; readonly code: string; readonly message: string };
+
+/** The compute tools of one request: validated parameters in, outcome out; never throws for a bad call. */
+export type ComputeCaller = (tool: string, params: unknown) => ComputeOutcome;
+
+/** What the world asks the layer above core for to answer a mind's compute calls for an agent's request (the request carries the space summary of its tick). */
+export interface ComputePort {
+  call(agentId: string, tool: string, params: unknown, req: DecisionRequest): ComputeOutcome;
 }
 
 /** A mind that keeps state a snapshot must carry, as plain data (an LLM mind: what it has used of its limits). */

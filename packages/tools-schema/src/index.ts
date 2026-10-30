@@ -9,6 +9,7 @@ export {
 } from "./capability.ts";
 export { goTo, explore, hold, returnToBase, takeoff, land } from "./actions/base-actions.ts";
 export { setTimer, cancelTimer, note, NOTE_MAX_CHARS, TIMER_LIMITS } from "./actions/bookkeeping.ts";
+export { planPath, estimateCost, kShortestPaths, querySpace, COMPUTE_LIMITS, COMPUTE_STATUSES } from "./actions/compute.ts";
 export {
   CAPABILITIES,
   COMMON_FAILURE_CODES,

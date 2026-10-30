@@ -5,7 +5,7 @@ import { contentHash64 } from "../numerics/content-hash.ts";
 import { StateHasher } from "../numerics/state-hash.ts";
 import type { Steppable, TickContext } from "../time/scheduler.ts";
 import type { Scheduler } from "../time/scheduler.ts";
-import type { Brain, DecisionEnvelope, DecisionRequest, NoteOp, SelfView, TimerOp } from "./brain.ts";
+import type { Brain, ComputeCaller, ComputePort, DecisionEnvelope, DecisionRequest, NoteOp, SelfView, TimerOp } from "./brain.ts";
 import { Inbox, isControl, type AgentEvent, type DecisionEvent, type InboxSnapshot } from "./events.ts";
 import { EMPTY_MIND_VIEW, round2 as r2, round3 as r3, type MindViewPort } from "./mind-view.ts";
 
@@ -35,6 +35,8 @@ export interface WorldParts {
   readonly minDecisionIntervalS?: number;
   /** The beliefs and space parts of a request (F2 M2d), from the agent's own map. None = empty views (core tests). */
   readonly mindView?: MindViewPort;
+  /** The compute tools a mind may ask for while it decides (F4 M2); none = a mind that asks is told the tool is not available. */
+  readonly compute?: ComputePort;
   /**
    * Genesis (default true): at construction each agent with a brain gets a `start` event and its first decision request,
    * and both are traced. `false` builds the world as the target of a restore: none of that happens, and `restore` puts the
@@ -313,7 +315,7 @@ export class World implements Steppable {
   async decide(): Promise<void> {
     const open: Pending[] = [];
     for (const p of this.slots) if (p && !p.envelope) open.push(p);
-    const settled = await Promise.allSettled(open.map((p) => (this.brainAt[this.indexOf(p.agentId)] as Brain).decide(p.request, { ...(p.requestRecordId === undefined ? {} : { requestRecordId: p.requestRecordId }), trace: this.parts.trace })));
+    const settled = await Promise.allSettled(open.map((p) => (this.brainAt[this.indexOf(p.agentId)] as Brain).decide(p.request, { ...(p.requestRecordId === undefined ? {} : { requestRecordId: p.requestRecordId }), trace: this.parts.trace, ...(this.parts.compute === undefined ? {} : { compute: this.computeFor(p.request) }) })));
     const failures: string[] = [];
     for (let i = 0; i < open.length; i++) {
       const p = open[i] as Pending;
@@ -641,6 +643,12 @@ export class World implements Steppable {
       if (book !== "") h.str((this.agents[i] as SimAgent).id).str("notebook").str(book);
     }
     return h.hex();
+  }
+
+  /** The compute tools bound to one request: the agent, and the space summary the request carried. */
+  private computeFor(req: DecisionRequest): ComputeCaller {
+    const port = this.parts.compute as ComputePort;
+    return (tool, params) => port.call(req.agentId, tool, params, req);
   }
 
   private request(a: SimAgent, events: readonly DecisionEvent[], dropped: number, tick: number, simTimeS: number): DecisionRequest {

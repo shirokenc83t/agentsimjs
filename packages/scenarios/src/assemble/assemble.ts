@@ -8,6 +8,7 @@ import { toPlanningConfig, type ResolvedRunConfig } from "../run-config/resolve.
 import { traversalFor } from "../traversal.ts";
 import { GridSpatialAdapter, PlanningServiceAdapter, TraceBufferSink, toolsSchemaCapabilities } from "./adapters.ts";
 import { SensingService } from "./sensing.ts";
+import { ComputeToolsService } from "./compute-tools.ts";
 import { MindViewService } from "./mind-view.ts";
 import { TopologyService } from "./topology.ts";
 
@@ -39,6 +40,8 @@ export interface AssembledRun {
   readonly topology: TopologyService;
   /** The beliefs and space parts of a decision request (ADR-0005 addition of 2026-10-11). */
   readonly mindView: MindViewService;
+  /** The compute tools a mind may ask for while it decides (F4 M2): from the agent's own planning view. */
+  readonly compute: ComputeToolsService;
   /**
    * Each non-ideal agent's planning map and the ground truth, for the researcher's strategy sandbox (ADR-0037 seventh
    * addition, item 16), which copies the former and reads the latter. Nothing in a run reads them through this.
@@ -123,7 +126,8 @@ export function assembleRun(loaded: LoadedScenario, resolved: ResolvedRunConfig,
     opts.dtS,
   );
   const mindView = new MindViewService(agents, sensing, topology, planner);
-  return { agents, runtime, planner, spatial, sensing, topology, mindView, beliefGrids, truthGrid: loaded.grid };
+  const compute = new ComputeToolsService(agents, planner);
+  return { agents, runtime, planner, spatial, sensing, topology, mindView, compute, beliefGrids, truthGrid: loaded.grid };
 }
 
 /**

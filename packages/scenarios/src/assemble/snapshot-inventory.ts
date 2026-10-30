@@ -386,6 +386,10 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     planner: r(WIRING),
     byId: r(WIRING),
   },
+  ComputeToolsService: {
+    byId: r(WIRING),
+    planner: r(WIRING),
+  },
   GridSpatialAdapter: { grid: r("ground truth, immutable during a run") },
 };
 

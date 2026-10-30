@@ -53,6 +53,187 @@
       }
     },
     {
+      "name": "estimateCost",
+      "kind": "compute",
+      "description": "Ask what a tour would cost: the route goes through your points in order (at most 10), starting from from (default: where you are), each leg planned on your own map. It returns the total and, per leg, status, lengthM, etaS and energyPct; the total is found only if every leg is. Use it before you commit to a sequence of visits or to see whether you can get home. Failures: point_out_of_bounds, no_home.",
+      "vehicles": [
+        "uav",
+        "ugv"
+      ],
+      "scope": "self",
+      "preconditions": [],
+      "failureCodes": [
+        "point_out_of_bounds",
+        "no_home"
+      ],
+      "params": {
+        "type": "object",
+        "required": [
+          "route"
+        ],
+        "properties": {
+          "route": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "xM",
+                    "yM"
+                  ],
+                  "properties": {
+                    "xM": {
+                      "type": "number",
+                      "description": "East, metres, in the world frame."
+                    },
+                    "yM": {
+                      "type": "number",
+                      "description": "North, metres, in the world frame."
+                    },
+                    "zM": {
+                      "type": "number",
+                      "description": "Height in metres; ignored (a UAV plans at its cruise altitude)."
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "string",
+                  "const": "home",
+                  "description": "Your base."
+                }
+              ],
+              "description": "A point in metres, or the word home for your base."
+            },
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "The points to visit, in order."
+          },
+          "from": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "xM",
+                  "yM"
+                ],
+                "properties": {
+                  "xM": {
+                    "type": "number",
+                    "description": "East, metres, in the world frame."
+                  },
+                  "yM": {
+                    "type": "number",
+                    "description": "North, metres, in the world frame."
+                  },
+                  "zM": {
+                    "type": "number",
+                    "description": "Height in metres; ignored (a UAV plans at its cruise altitude)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "string",
+                "const": "home",
+                "description": "Your base."
+              }
+            ],
+            "description": "A point in metres, or the word home for your base."
+          }
+        },
+        "additionalProperties": false
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "status",
+          "lengthM",
+          "etaS",
+          "energyPct",
+          "legs"
+        ],
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "found"
+              },
+              {
+                "type": "string",
+                "const": "not_found"
+              },
+              {
+                "type": "string",
+                "const": "budget_exceeded"
+              }
+            ],
+            "description": "found, not_found (no route on your own map) or budget_exceeded (the search ran out of its node budget)."
+          },
+          "lengthM": {
+            "type": "number",
+            "description": "Length of the route in metres."
+          },
+          "etaS": {
+            "type": "number",
+            "description": "Time to drive it at your speed, in seconds."
+          },
+          "energyPct": {
+            "type": "number",
+            "description": "Share of a full battery it takes, in percent."
+          },
+          "legs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "status",
+                "lengthM",
+                "etaS",
+                "energyPct"
+              ],
+              "properties": {
+                "status": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "found"
+                    },
+                    {
+                      "type": "string",
+                      "const": "not_found"
+                    },
+                    {
+                      "type": "string",
+                      "const": "budget_exceeded"
+                    }
+                  ],
+                  "description": "found, not_found (no route on your own map) or budget_exceeded (the search ran out of its node budget)."
+                },
+                "lengthM": {
+                  "type": "number",
+                  "description": "Length of the route in metres."
+                },
+                "etaS": {
+                  "type": "number",
+                  "description": "Time to drive it at your speed, in seconds."
+                },
+                "energyPct": {
+                  "type": "number",
+                  "description": "Share of a full battery it takes, in percent."
+                }
+              },
+              "additionalProperties": false
+            },
+            "maxItems": 10
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "explore",
       "kind": "action",
       "description": "Explore unknown space on this agent's own map, in iterations: the frontiers (known free space next to unknown space) within radiusM of the agent first, then it travels to the nearest one left and starts the next iteration, until none is left in scope. Needs a range sensor (lidar or proximity); a UAV must be airborne and explores at its current altitude. region: a region ID from the space summary (e.g. r-03-05); omitted = the whole map. It limits which frontiers are targets, not the path. strategy: nearest (default) = nearest in a straight line; largest = most cells. radiusM: iteration radius in metres; omitted = the agent's configured radius. Searches are bounded to a window around the iteration, so an unreachable frontier costs the window, not the map: it is set aside for the iteration, retried from another centre with larger windows, and marked unreachable (until its map changes) after three centres. Succeeds with region_explored or frontier_exhausted (no reachable frontier left). Failures: unknown_region; no_map_data (no data at its own position after 2 s); geofence (a UAV would leave a geofence or its altitude limits).",
@@ -319,6 +500,165 @@
       }
     },
     {
+      "name": "kShortestPaths",
+      "kind": "compute",
+      "description": "Ask for up to k (at most 3) different routes to a place on your own map, best first, each with lengthM, etaS and energyPct and sharedPct, the share of its length it has in common with the best one. Use it when the best route may be risky or you want a way round. Fewer than k routes come back when the map has no more. from defaults to where you are. Failures: point_out_of_bounds, no_home.",
+      "vehicles": [
+        "uav",
+        "ugv"
+      ],
+      "scope": "self",
+      "preconditions": [],
+      "failureCodes": [
+        "point_out_of_bounds",
+        "no_home"
+      ],
+      "params": {
+        "type": "object",
+        "required": [
+          "to",
+          "k"
+        ],
+        "properties": {
+          "to": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "xM",
+                  "yM"
+                ],
+                "properties": {
+                  "xM": {
+                    "type": "number",
+                    "description": "East, metres, in the world frame."
+                  },
+                  "yM": {
+                    "type": "number",
+                    "description": "North, metres, in the world frame."
+                  },
+                  "zM": {
+                    "type": "number",
+                    "description": "Height in metres; ignored (a UAV plans at its cruise altitude)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "string",
+                "const": "home",
+                "description": "Your base."
+              }
+            ],
+            "description": "A point in metres, or the word home for your base."
+          },
+          "k": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "description": "How many routes, 1 to 3."
+          },
+          "from": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "xM",
+                  "yM"
+                ],
+                "properties": {
+                  "xM": {
+                    "type": "number",
+                    "description": "East, metres, in the world frame."
+                  },
+                  "yM": {
+                    "type": "number",
+                    "description": "North, metres, in the world frame."
+                  },
+                  "zM": {
+                    "type": "number",
+                    "description": "Height in metres; ignored (a UAV plans at its cruise altitude)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "string",
+                "const": "home",
+                "description": "Your base."
+              }
+            ],
+            "description": "A point in metres, or the word home for your base."
+          }
+        },
+        "additionalProperties": false
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "status",
+          "expansions",
+          "paths"
+        ],
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "found"
+              },
+              {
+                "type": "string",
+                "const": "not_found"
+              },
+              {
+                "type": "string",
+                "const": "budget_exceeded"
+              }
+            ],
+            "description": "found, not_found (no route on your own map) or budget_exceeded (the search ran out of its node budget)."
+          },
+          "expansions": {
+            "type": "integer",
+            "description": "Nodes the searches expanded in all."
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "lengthM",
+                "etaS",
+                "energyPct",
+                "sharedPct"
+              ],
+              "properties": {
+                "lengthM": {
+                  "type": "number",
+                  "description": "Length of the route in metres."
+                },
+                "etaS": {
+                  "type": "number",
+                  "description": "Time to drive it at your speed, in seconds."
+                },
+                "energyPct": {
+                  "type": "number",
+                  "description": "Share of a full battery it takes, in percent."
+                },
+                "sharedPct": {
+                  "type": "number",
+                  "description": "Percent of this route's length it shares with the best route (0 for the best itself)."
+                }
+              },
+              "additionalProperties": false
+            },
+            "maxItems": 3
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "land",
       "kind": "action",
       "description": "UAV only: descend vertically and land at the current position. Fails if the ground below is occupied.",
@@ -428,6 +768,203 @@
           "chars": {
             "type": "integer",
             "description": "Characters in the notebook now."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "planPath",
+      "kind": "compute",
+      "description": "Plan a route on your own map with your own planner and ask what it would cost, without moving. Use it to compare destinations before you choose one. from defaults to where you are. It returns status, lengthM, etaS and energyPct of the route and at most 32 simplified waypoints; the route avoids what you believe is blocked and prefers what you know. Failures: point_out_of_bounds, no_home (you have no base).",
+      "vehicles": [
+        "uav",
+        "ugv"
+      ],
+      "scope": "self",
+      "preconditions": [],
+      "failureCodes": [
+        "point_out_of_bounds",
+        "no_home"
+      ],
+      "params": {
+        "type": "object",
+        "required": [
+          "to"
+        ],
+        "properties": {
+          "to": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "xM",
+                  "yM"
+                ],
+                "properties": {
+                  "xM": {
+                    "type": "number",
+                    "description": "East, metres, in the world frame."
+                  },
+                  "yM": {
+                    "type": "number",
+                    "description": "North, metres, in the world frame."
+                  },
+                  "zM": {
+                    "type": "number",
+                    "description": "Height in metres; ignored (a UAV plans at its cruise altitude)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "string",
+                "const": "home",
+                "description": "Your base."
+              }
+            ],
+            "description": "A point in metres, or the word home for your base."
+          },
+          "from": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "xM",
+                  "yM"
+                ],
+                "properties": {
+                  "xM": {
+                    "type": "number",
+                    "description": "East, metres, in the world frame."
+                  },
+                  "yM": {
+                    "type": "number",
+                    "description": "North, metres, in the world frame."
+                  },
+                  "zM": {
+                    "type": "number",
+                    "description": "Height in metres; ignored (a UAV plans at its cruise altitude)."
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "string",
+                "const": "home",
+                "description": "Your base."
+              }
+            ],
+            "description": "A point in metres, or the word home for your base."
+          }
+        },
+        "additionalProperties": false
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "status",
+          "lengthM",
+          "etaS",
+          "energyPct",
+          "expansions",
+          "waypoints"
+        ],
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "found"
+              },
+              {
+                "type": "string",
+                "const": "not_found"
+              },
+              {
+                "type": "string",
+                "const": "budget_exceeded"
+              }
+            ],
+            "description": "found, not_found (no route on your own map) or budget_exceeded (the search ran out of its node budget)."
+          },
+          "lengthM": {
+            "type": "number",
+            "description": "Length of the route in metres."
+          },
+          "etaS": {
+            "type": "number",
+            "description": "Time to drive it at your speed, in seconds."
+          },
+          "energyPct": {
+            "type": "number",
+            "description": "Share of a full battery it takes, in percent."
+          },
+          "expansions": {
+            "type": "integer",
+            "description": "Nodes the search expanded."
+          },
+          "waypoints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "xM",
+                "yM"
+              ],
+              "properties": {
+                "xM": {
+                  "type": "number"
+                },
+                "yM": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": false
+            },
+            "maxItems": 32,
+            "description": "The route's turning points, start first."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "querySpace",
+      "kind": "compute",
+      "description": "Read your own topological summary of space again, or the detail of one region. Without region you get the summary your request already carried (regions, frontiers, what is left out); with a region id you get that region's known and free share, zones, waypoint and edges, and the frontiers that lie in it. It reads only your own map. Failure: unknown_region.",
+      "vehicles": [
+        "uav",
+        "ugv"
+      ],
+      "scope": "self",
+      "preconditions": [],
+      "failureCodes": [
+        "unknown_region"
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "A region id from the summary, e.g. R3."
+          }
+        },
+        "additionalProperties": false
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "description": "The whole summary (no region asked)."
+          },
+          "region": {
+            "description": "The region's entry."
+          },
+          "frontiers": {
+            "type": "array",
+            "items": {}
           }
         },
         "additionalProperties": false

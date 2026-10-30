@@ -102,6 +102,7 @@ export function createRun(loaded: LoadedScenario, resolved: ResolvedRunConfig, t
     sensing: senseThenTopology(assembled, observer),
     minDecisionIntervalS: resolved.minDecisionIntervalS,
     mindView: assembled.mindView,
+    compute: assembled.compute,
     ...(opts.genesis === false ? { genesis: false } : {}),
   });
   return { ...assembled, world, scheduler: new Scheduler(world, opts.dtS), brains, ...(observer ? { observer } : {}) };
