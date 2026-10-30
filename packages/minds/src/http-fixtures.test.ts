@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { replayFetch, runScenarios, type FixtureFile } from "./fixture-scenarios.ts";
+import ollama15 from "./fixtures/ollama-qwen2.5-1.5b-instruct.json";
+import ollama7 from "./fixtures/ollama-qwen2.5-7b-instruct.json";
+import vllm15 from "./fixtures/vllm-Qwen-Qwen2.5-1.5B-Instruct.json";
+import sglang15 from "./fixtures/sglang-Qwen-Qwen2.5-1.5B-Instruct.json";
 import syntheticDialect from "./fixtures/synthetic-dialect.json";
 import { OpenAiCompatibleProvider } from "./openai.ts";
 
@@ -9,7 +13,13 @@ import { OpenAiCompatibleProvider } from "./openai.ts";
 // the recording no longer holds it and the test says which request.
 
 // Each recording is listed here when it is added (the recorder prints the file it wrote).
-const FIXTURES: readonly (readonly [string, FixtureFile])[] = [["synthetic-dialect.json", syntheticDialect as unknown as FixtureFile]];
+const FIXTURES: readonly (readonly [string, FixtureFile])[] = [
+  ["ollama-qwen2.5-1.5b-instruct.json", ollama15 as unknown as FixtureFile],
+  ["ollama-qwen2.5-7b-instruct.json", ollama7 as unknown as FixtureFile],
+  ["vllm-Qwen-Qwen2.5-1.5B-Instruct.json", vllm15 as unknown as FixtureFile],
+  ["sglang-Qwen-Qwen2.5-1.5B-Instruct.json", sglang15 as unknown as FixtureFile],
+  ["synthetic-dialect.json", syntheticDialect as unknown as FixtureFile],
+];
 
 describe("the recorded HTTP exchanges", () => {
   it("there is at least the synthetic one", () => {
@@ -22,6 +32,7 @@ describe("the recorded HTTP exchanges", () => {
         const text = JSON.stringify(fx);
         expect(text).not.toMatch(/authorization|bearer|api[-_]?key/i);
         expect(text).not.toMatch(/https?:\/\/(?!localhost|127\.0\.0\.1)[a-z0-9.-]+/i);
+        expect(text).not.toMatch(/[A-Za-z]:\\|\/home\/|\/Users\/|\/root\//); // no path of a machine
         for (const e of fx.exchanges) expect(e.request.path).toMatch(/^\/v1\/(models|chat\/completions)$/);
       });
 
