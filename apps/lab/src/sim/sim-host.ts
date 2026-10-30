@@ -565,11 +565,30 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   };
 
   /** Runs `count` ticks now (paused afterwards). Lockstep semantics: decisions are awaited between ticks. */
+  /**
+   * Waits for the minds' decisions of this tick and, while it waits, keeps reporting what the minds are doing (the panel rate): a stepped run has no loop, and without this a limit passed inside a decision
+   * left the step waiting for an answer nobody could see asked (T-128: no notice, the records of the decision held back).
+   */
+  const decideReporting = async () => {
+    if (headless) return world.decide();
+    let timer: unknown;
+    const poll = () => {
+      postPanels(false);
+      timer = clock.setTimer(poll, pollMs());
+    };
+    timer = clock.setTimer(poll, pollMs());
+    try {
+      await world.decide();
+    } finally {
+      clock.clearTimer(timer);
+    }
+  };
+
   const step = async (count: number) => {
     if (running) pause();
     for (let i = 0; i < count; i++) {
       if (gated()) await gateOpen(); // no await when the run may step: a step stays synchronous
-      if (world.outstandingCount > 0) await world.decide();
+      if (world.outstandingCount > 0) await decideReporting();
       scheduler.step();
       // A recorded run's backlog is judged tick by tick, so a long step waits for the writer too.
       if (recorder) {

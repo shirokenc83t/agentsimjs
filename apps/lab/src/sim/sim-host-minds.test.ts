@@ -98,6 +98,27 @@ describe("the sim host and the System 2 minds", () => {
     expect(h.events().some((r) => (r.payload as { op?: string }).op === "limit-warning")).toBe(true);
   });
 
+  it("a step that waits for a decision whose call passes a limit still reports the pause: the notice's figures reach the main thread while the step waits, the records so far go out, and a raise lets the same step finish (T-128)", async () => {
+    // One call of 1 200 tokens against a limit of 1 000: the first decision itself crosses the limit. Nobody plays: the researcher steps.
+    const big = { content: JSON.stringify({ action: "idle", timers: [{ op: "set", tag: "wake", delayS: 1 }] }), usage: { inputTokens: 1100, outputTokens: 100 }, latencyMs: 5 };
+    const h = started(load({ limits: { tokens: 1000 }, script: Array.from({ length: 20 }, () => big) }));
+    h.send({ type: "control", op: "step", count: 1 });
+    await pump(h, 30);
+    const paused = minds(h).findLast((m) => m.pausedAt !== undefined);
+    expect(paused?.pausedAt).toMatchObject({ agentId: "uav-001", limit: "tokens", used: 1200, max: 1000 });
+    expect(paused?.waiting).toBeGreaterThan(0);
+    // The records of the decision so far (the request, the call, the hit) are with the main thread, not held back until the step ends.
+    expect(h.events().some((r) => (r.payload as { op?: string }).op === "limit-hit")).toBe(true);
+    expect(h.events().some((r) => (r.payload as { op?: string }).op === "llm-call")).toBe(true);
+    const tick = h.states().at(-1)?.tick ?? 0;
+    h.send({ type: "limitAnswer", runId: "run-000007", agentId: "uav-001", limit: "tokens", action: "raise", value: 50_000 });
+    await pump(h, 30);
+    expect(minds(h).at(-1)?.pausedAt).toBeUndefined();
+    expect(minds(h).at(-1)?.waiting).toBe(0);
+    expect(h.states().at(-1)?.tick ?? 0).toBeGreaterThan(tick);
+    expect(h.errors()).toEqual([]);
+  });
+
   it("a stop answer ends the run with the error (the interactive run pauses), and the clock does not move again", async () => {
     const h = started(load({ limits: { calls: 2 } }));
     h.send({ type: "control", op: "play" });
