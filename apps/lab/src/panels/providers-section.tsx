@@ -1,6 +1,7 @@
 import type { StorageClient } from "@agentsim/storage";
 import { useCallback, useEffect, useState } from "react";
-import { connectAllowed, connectSrcLine, originOf, readPagePolicy } from "../config/network-policy.ts";
+import { connectSrcLine, originOf } from "../config/network-policy.ts";
+import { allowedBy, usePagePolicy } from "../config/page-policy.ts";
 import { probeProvider, type ProbeResult } from "../config/provider-probe.ts";
 import { cleanAddress, PROVIDER_ID, providerStore, useProviders, type ProviderEntry } from "../config/providers.ts";
 
@@ -10,24 +11,6 @@ import { cleanAddress, PROVIDER_ID, providerStore, useProviders, type ProviderEn
 
 const EXTRA_NAMESPACE = "providers";
 const EXTRA_KEY = "extraEndpoints";
-
-/** The policy the page was served with (its `connect-src` tokens), read once; undefined while unknown. */
-function usePagePolicy(): readonly string[] | undefined {
-  const [tokens, setTokens] = useState<readonly string[] | undefined>(undefined);
-  useEffect(() => {
-    let live = true;
-    void readPagePolicy((u, i) => fetch(u, i), window.location.href).then((t) => live && setTokens(t));
-    return () => {
-      live = false;
-    };
-  }, []);
-  return tokens;
-}
-
-/** Whether this address would be allowed (undefined when the policy could not be read: the call is then tried). */
-function allowedBy(tokens: readonly string[] | undefined, url: string): boolean | undefined {
-  return tokens === undefined ? undefined : connectAllowed(url, tokens, window.location.origin);
-}
 
 async function reachable(baseUrl: string): Promise<boolean> {
   try {

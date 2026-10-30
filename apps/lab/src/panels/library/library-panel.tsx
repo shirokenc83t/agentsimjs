@@ -5,6 +5,7 @@ import { useProviders } from "../../config/providers.ts";
 import { useServices } from "../../services.tsx";
 import { LazyTemplateEditor } from "../../workspaces/registry.tsx";
 import { diffDocs, listItems, profileLines, storeOf, usedBy, versionsOf, type LibItem, type LibKind, type LibVersion, type UsedBy } from "./library-model.ts";
+import { bumpLibraryRevision } from "./library-revision.ts";
 import type { TemplateEditorHandle } from "./template-editor.tsx";
 import { lintTemplateText, sectionTokens, SLOT_NAMES, templateToText, textToTemplate, type TemplateDoc } from "./template-text.ts";
 
@@ -135,6 +136,7 @@ export function LibraryPanel() {
     if (!checked.ok) return setMessage({ ok: false, text: `${checked.error.code}: ${checked.error.message}` });
     const saved = await storeOf(ports, kind).saveVersion({ id, name: id, document });
     if (!saved.ok) return setMessage({ ok: false, text: `${saved.error.code}: ${saved.error.message}` });
+    bumpLibraryRevision();
     await refresh();
     setSelected(id);
     setEditing(undefined);
@@ -153,6 +155,7 @@ export function LibraryPanel() {
       const id = file.name.replace(/\.json$/i, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "imported";
       const saved = await storeOf(ports, k).saveVersion({ id, name: id, document: doc });
       if (!saved.ok) return setMessage({ ok: false, text: `${saved.error.code}: ${saved.error.message}` });
+      bumpLibraryRevision();
       await refresh();
       setKind(k);
       setSelected(id);

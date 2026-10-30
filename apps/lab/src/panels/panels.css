@@ -933,3 +933,16 @@
 .lib-actions, .lib-dup, .lib-slots { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
 .lib-issues { margin: 6px 0; padding-left: 16px; }
 .tpl-editor { margin: 0 0 6px; max-height: 360px; overflow: auto; }
+
+/* The minds table of the run configuration (F4 M4, T-125) */
+.rc-minds { width: 100%; border-collapse: collapse; margin: 0 0 8px; }
+.rc-minds th { text-align: left; font-weight: 400; color: var(--fg3); padding: 4px 8px; border-bottom: 1px solid var(--ln); }
+.rc-minds td { padding: 4px 8px; border-bottom: 1px solid var(--ln); vertical-align: top; }
+.rc-minds tr[data-state="error"] { box-shadow: inset 2px 0 0 var(--alm); }
+.rc-minds tr[data-state="warn"] { box-shadow: inset 2px 0 0 var(--warn); }
+.rc-overrides input { width: 7ch; }
+.rc-s2 { margin: 0 0 10px; }
+.rc-mission-text { display: block; width: 100%; max-width: 640px; background: var(--bg0); color: var(--fg); border: 1px solid var(--ln2); padding: 6px; font: inherit; }
+.rc-estimate { margin: 6px 0; padding: 6px 10px; border: 1px solid var(--ln2); background: var(--bg1); }
+.rc-runmode { margin: 8px 0; }
+.rc-mode { display: block; margin: 2px 0; }
