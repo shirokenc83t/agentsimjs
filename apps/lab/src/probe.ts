@@ -47,6 +47,8 @@ export interface LabProbe {
    * `scout` agent. Nothing but the run and the profile is changed; no key is read or passed here (it is in the provider store, where Settings put it).
    */
   startMindsRun?: (o: { provider: string; model: string; mission?: string; limits?: { calls?: number; tokens?: number } }) => Promise<void>;
+  /** A read-only SQL statement on the storage (the console's own path), for the acceptance run of F4 that reads the trace and exports the run's cache; the rows, at most `maxRows` (default 20 000). */
+  sql?: (statement: string, maxRows?: number) => Promise<{ columns: readonly string[]; rows: readonly (readonly (string | number | null)[])[]; cellsCut: boolean }>;
   /** Wall ms of each draw of a top-down map (the Scene's 2D tab, the Analysis workspace), newest last; written by the map, cleared by the bench. */
   map2dMs?: number[];
 }

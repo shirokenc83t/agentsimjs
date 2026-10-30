@@ -1,0 +1,994 @@
+[
+ {
+  "key": "16b734bb9bb8b50c",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\"action\": \"estimateCost\", \"params\": {\"from\": \"home\", \"route\": [\"home\", \"20.0\", \"40.0\", \"40.0\", \"60.0\", \"58.0\", \"20.0\"]}, \"note\": {\"text\": \"First cost estimate order: home -> P1 -> P2 -> P3 -> home\", \"mode\": \"replace\"}}"
+   },
+   "createdAtWallMs": 1793395543461,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "invalid",
+   "usage": {
+    "inputTokens": 2249,
+    "outputTokens": 91
+   },
+   "latencyMs": 1717
+  }
+ },
+ {
+  "key": "45fde8b1b9b60161",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_g5r6dv02",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395545443,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2545,
+    "outputTokens": 75
+   },
+   "latencyMs": 746
+  }
+ },
+ {
+  "key": "4e8b9cc04a003f9f",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_fqcc40lj",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        "home",
+        "20.0",
+        "40.0",
+        "40.0",
+        "60.0",
+        "58.0",
+        "20.0"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395445515,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2377,
+    "outputTokens": 63
+   },
+   "latencyMs": 638
+  }
+ },
+ {
+  "key": "591a7e1384ff742e",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_f53ua5w4",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395448878,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3227,
+    "outputTokens": 60
+   },
+   "latencyMs": 640
+  }
+ },
+ {
+  "key": "59b94fec256a205d",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_xssb2fxw",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395546077,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2773,
+    "outputTokens": 60
+   },
+   "latencyMs": 625
+  }
+ },
+ {
+  "key": "8143926ca8b1cde5",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_hmbqhq5c",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395547984,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3454,
+    "outputTokens": 60
+   },
+   "latencyMs": 623
+  }
+ },
+ {
+  "key": "98208f184101b917",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_vlkjtju4",
+      "name": "estimateCost",
+      "params": {
+       "route": [
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        "home"
+       ],
+       "from": "home"
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395546716,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3000,
+    "outputTokens": 60
+   },
+   "latencyMs": 634
+  }
+ },
+ {
+  "key": "a2f4553266c78cc6",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_hr9cb9vu",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395447594,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2771,
+    "outputTokens": 60
+   },
+   "latencyMs": 648
+  }
+ },
+ {
+  "key": "a594d796b1d78a70",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_zkjurvhy",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        "home",
+        "20.0",
+        "40.0",
+        "40.0",
+        "60.0",
+        "58.0",
+        "20.0"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395446159,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2460,
+    "outputTokens": 63
+   },
+   "latencyMs": 642
+  }
+ },
+ {
+  "key": "aa39e299c6ea96be",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\"action\": \"estimateCost\", \"params\": {\"from\": \"home\", \"route\": [{\"xM\": 20, \"yM\": 40}, {\"xM\": 40, \"yM\": 60}, {\"xM\": 58, \"yM\": 20}, \"home\"]}, \"note\": {\"text\": \"First order: home -> P1 -> P2 -> P3 -> home\", \"mode\": \"replace\"}, \"rationale\": \"Calculating the cost for the first order.\"}"
+   },
+   "createdAtWallMs": 1793395452025,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "invalid",
+   "usage": {
+    "inputTokens": 4020,
+    "outputTokens": 116
+   },
+   "latencyMs": 1176
+  }
+ },
+ {
+  "key": "aa5538832ef61cc9",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_y9m3wfbn",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395549283,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3908,
+    "outputTokens": 60
+   },
+   "latencyMs": 652
+  }
+ },
+ {
+  "key": "b6e0c0bfdfb97969",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_u802ud6b",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395448234,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2999,
+    "outputTokens": 60
+   },
+   "latencyMs": 635
+  }
+ },
+ {
+  "key": "c203868d339bbc4b",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_j6yae1e1",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395446930,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2543,
+    "outputTokens": 75
+   },
+   "latencyMs": 771
+  }
+ },
+ {
+  "key": "c3a9c0f6ec366b56",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_wakyizn7",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395449530,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3455,
+    "outputTokens": 60
+   },
+   "latencyMs": 648
+  }
+ },
+ {
+  "key": "c44e1c223cdac9e9",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_kmd9ohvc",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395547359,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3227,
+    "outputTokens": 60
+   },
+   "latencyMs": 639
+  }
+ },
+ {
+  "key": "cb50709bb660b947",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_5kzt7ikt",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        "home",
+        "20.0",
+        "40.0",
+        "40.0",
+        "60.0",
+        "58.0",
+        "20.0"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395544697,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2462,
+    "outputTokens": 63
+   },
+   "latencyMs": 620
+  }
+ },
+ {
+  "key": "cd0e4af0f425ae67",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_xev3mzks",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395548627,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3681,
+    "outputTokens": 60
+   },
+   "latencyMs": 635
+  }
+ },
+ {
+  "key": "dcc5e8bf91eeed4d",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_w2b4qx4a",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395450194,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3683,
+    "outputTokens": 60
+   },
+   "latencyMs": 659
+  }
+ },
+ {
+  "key": "e6e48e8fc72acdd3",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\"action\": \"idle\", \"note\": {\"text\": \"All cost estimates are the same, choosing the first order: home -> P1 -> P2 -> P3 -> home\", \"mode\": \"replace\"}}"
+   },
+   "createdAtWallMs": 1793395549758,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 4017,
+    "outputTokens": 45
+   },
+   "latencyMs": 475
+  }
+ },
+ {
+  "key": "ee3a54572d1470f8",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_mudahctq",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        "home",
+        "20.0",
+        "40.0",
+        "40.0",
+        "60.0",
+        "58.0",
+        "20.0"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395544076,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2379,
+    "outputTokens": 63
+   },
+   "latencyMs": 614
+  }
+ },
+ {
+  "key": "f008fbcd24e04bd5",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_88i1seoo",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793395450849,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3911,
+    "outputTokens": 60
+   },
+   "latencyMs": 651
+  }
+ },
+ {
+  "key": "tool:234d07a2094d60c8",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "98f8424c47b66e15"
+   },
+   "createdAtWallMs": 1793395547361,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:2e88b185dc0129db",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "79a9799aacb749a9"
+   },
+   "createdAtWallMs": 1793395548631,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:3195955804c69251",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "b51b1ece4f979393"
+   },
+   "createdAtWallMs": 1793395547992,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:59dd89ad8af09dba",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "b836619c35d6ab6c"
+   },
+   "createdAtWallMs": 1793395445515,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:6a16503a39940c3a",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "b836619c35d6ab6c"
+   },
+   "createdAtWallMs": 1793395544697,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:842e5fcb672518da",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "e929fc7144daa67b"
+   },
+   "createdAtWallMs": 1793395449534,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:916c39e83a64bd2f",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "e929fc7144daa67b"
+   },
+   "createdAtWallMs": 1793395450198,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:9891b230e0eacba3",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "b836619c35d6ab6c"
+   },
+   "createdAtWallMs": 1793395446159,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:a8b36d97fff8be71",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "e929fc7144daa67b"
+   },
+   "createdAtWallMs": 1793395545452,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:ba6875b1dfbf19c5",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "b836619c35d6ab6c"
+   },
+   "createdAtWallMs": 1793395544077,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:cc3534aa928eaf30",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "79a9799aacb749a9"
+   },
+   "createdAtWallMs": 1793395546720,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:d138daafc86123b9",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "e929fc7144daa67b"
+   },
+   "createdAtWallMs": 1793395448882,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:d1759b4d6bb57296",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "e929fc7144daa67b"
+   },
+   "createdAtWallMs": 1793395446946,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:d29e6cc8943317d2",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "e929fc7144daa67b"
+   },
+   "createdAtWallMs": 1793395447598,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:df984809597c4d09",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "e929fc7144daa67b"
+   },
+   "createdAtWallMs": 1793395448238,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:f486f2cb99afad05",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "b51b1ece4f979393"
+   },
+   "createdAtWallMs": 1793395546082,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ }
+]

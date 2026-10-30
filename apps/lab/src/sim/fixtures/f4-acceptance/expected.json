@@ -1,0 +1,170 @@
+{
+ "lockstep": {
+  "runMode": "live",
+  "timeMode": "lockstep",
+  "llmCalls": 11,
+  "outcomes": {
+   "invalid": 2,
+   "ok": 9
+  },
+  "fallbacks": 1,
+  "tools": [
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ]
+  ],
+  "decisions": [
+   {
+    "simTime": 0.1,
+    "decision": {
+     "kind": "idle"
+    }
+   }
+  ],
+  "actions": [],
+  "checkpoints": [
+   [
+    0,
+    0,
+    "3f1c2b2f"
+   ],
+   [
+    10,
+    100,
+    "665670e7"
+   ],
+   [
+    20,
+    200,
+    "5480c043"
+   ],
+   [
+    30,
+    300,
+    "bca7fd85"
+   ],
+   [
+    40,
+    400,
+    "ee57674e"
+   ]
+  ]
+ },
+ "latencyModeled": {
+  "runMode": "live",
+  "timeMode": "latency-modeled",
+  "llmCalls": 11,
+  "outcomes": {
+   "invalid": 1,
+   "ok": 10
+  },
+  "fallbacks": 0,
+  "tools": [
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ]
+  ],
+  "decisions": [
+   {
+    "simTime": 8,
+    "decision": {
+     "kind": "idle"
+    }
+   }
+  ],
+  "actions": [],
+  "checkpoints": [
+   [
+    0,
+    0,
+    "3f1c2b2f"
+   ],
+   [
+    10,
+    100,
+    "cfa14d03"
+   ],
+   [
+    20,
+    200,
+    "e1c9904e"
+   ],
+   [
+    30,
+    300,
+    "14aadf21"
+   ],
+   [
+    40,
+    400,
+    "1afa873c"
+   ]
+  ]
+ }
+}

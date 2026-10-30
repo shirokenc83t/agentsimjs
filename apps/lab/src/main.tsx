@@ -54,6 +54,11 @@ if (probeEnabled()) {
     executedPath: (id) => Array.from(sim.executedPath(id).points),
     records: () => sim.records(),
     mindsFixture: (state) => setMinds(mindsFixture(state)),
+    sql: async (statement, maxRows = 20_000) => {
+      const r = await storage.sql.run(statement, { maxRows, timeoutMs: 20_000 }).result;
+      if (!r.ok) throw new Error(`${r.error.code}: ${r.error.message}`);
+      return { columns: r.value.columns, rows: r.value.rows, cellsCut: r.value.cellsCut };
+    },
     startMindsRun: async (o) => {
       const saved = await storage.ports.mindProfiles.saveVersion({ id: "probe-llm", name: "Probe", document: { schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: o.provider, model: o.model, promptTemplate: { id: "default", version: 1 }, ...(o.limits === undefined ? {} : { limits: o.limits }) } } });
       if (!saved.ok) throw new Error(saved.error.message);
