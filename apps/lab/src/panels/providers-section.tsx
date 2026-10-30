@@ -261,7 +261,7 @@ export function ProvidersSection(props: { storage: StorageClient; ready: boolean
           <p className="muted rc-note">
             After saving, a key is shown only as ●●●● set, never again in full. It stays in memory for this session unless you tick "remember"; it is never exported, traced or readable from the SQL console.
           </p>
-          <div className="st-row">
+          <div className="st-row pv-prices">
             <span className="rc-label">prices <small>optional</small></span>
             <span className="rc-input">
               <input aria-label="USD per million input tokens" className="mono" inputMode="decimal" value={draft.priceIn} onChange={(e) => setDraft({ ...draft, priceIn: e.target.value })} placeholder="—" data-testid="pv-price-in" />
@@ -269,9 +269,10 @@ export function ProvidersSection(props: { storage: StorageClient; ready: boolean
             </span>
             <span className="rc-input">
               <input aria-label="USD per million output tokens" className="mono" inputMode="decimal" value={draft.priceOut} onChange={(e) => setDraft({ ...draft, priceOut: e.target.value })} placeholder="—" data-testid="pv-price-out" />
-              <span className="unit">USD / M output tok · enables the cost limit</span>
+              <span className="unit">USD / M output tok</span>
             </span>
           </div>
+          <p className="muted rc-note">Prices are what you pay your provider per million tokens; with them a run also has a cost limit. Without them there is none.</p>
           <div className="pv-buttons">
             <button type="button" className="btn" disabled={!valid || busy} onClick={() => void test(undefined, base as string, draft.key === "" ? (draft.editing === undefined ? undefined : providerStore.keyOf(draft.editing)) : draft.key)} data-testid="pv-test-new">
               Test connection

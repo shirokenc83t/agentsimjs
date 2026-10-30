@@ -875,7 +875,10 @@
 .pv-confirm .pv-actions { margin-left: auto; }
 .pv-form { margin: 0 0 10px; padding: 10px 12px; border: 1px solid var(--ln2); background: var(--bg1); }
 .pv-form h5 { margin: 0 0 8px; font-weight: 600; color: var(--fg2); }
-.pv-form .rc-input { min-width: 240px; }
+.pv-form .st-row { display: grid; grid-template-columns: 110px minmax(0, 340px) minmax(0, 1fr); gap: 4px 12px; align-items: center; margin: 0 0 6px; }
+.pv-form .rc-input { min-width: 0; }
+.pv-form .st-row .muted, .pv-form .st-row .st-warn { font-size: var(--type-label-size); }
+.pv-prices .rc-input .unit { white-space: nowrap; }
 .pv-remember { display: inline-flex; align-items: center; gap: 6px; color: var(--fg2); }
 .pv-buttons { display: flex; gap: 8px; margin-top: 8px; }
 .pv-result { margin: 8px 0; padding: 6px 10px; border: 1px solid var(--ln2); background: var(--bg1); line-height: 1.5; }
