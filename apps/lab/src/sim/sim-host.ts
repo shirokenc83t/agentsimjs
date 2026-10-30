@@ -131,6 +131,8 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   let recorderPort: RecorderPort | undefined;
   /** The minds' response cache over the channel the main thread gave (F4 M2): absent, a run keeps its cache in memory. */
   let mindCache: RemoteMindCache | undefined;
+  /** The provider keys the main thread gave, by entry id: in this closure and in the adapters made from it, nowhere else. */
+  let providerKeys: ReadonlyMap<string, string> = new Map();
   let recorder: RunRecorder | undefined;
   /** What a recorded run writes besides its components' records: checkpoints, snapshots, pose samples, belief keyframes and deltas. */
   let recording: RunRecording | undefined;
@@ -636,7 +638,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
       }
     }
     endReason = undefined;
-    const r = ScenarioHostedWorld.load(m, () => clock.epochNow(), m.minds === undefined ? {} : { minds: m.minds, headless: m.headless !== undefined, ...(mindCache === undefined ? {} : { mindCache }) });
+    const r = ScenarioHostedWorld.load(m, () => clock.epochNow(), m.minds === undefined ? {} : { minds: m.minds, headless: m.headless !== undefined, ...(mindCache === undefined ? {} : { mindCache }), keys: providerKeys });
     if (!r.ok) {
       scope.postMessage({ type: "error", code: r.error.code, message: r.error.message });
       return;
@@ -741,6 +743,9 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
         port.start?.();
         break;
       }
+      case "providerKeys":
+        providerKeys = new Map(Object.entries(m.keys));
+        break;
       case "cachePort":
         mindCache = new RemoteMindCache(m.port as CachePortLike);
         break;

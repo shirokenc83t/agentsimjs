@@ -367,6 +367,11 @@ export class SimClient {
     this.post({ type: "command", op, agentId, ...(params ? { params } : {}) });
   }
 
+  /** The provider keys, by entry id (replaces what the worker held). They travel in this message alone: never in a load, a record, a hash or an export. */
+  setProviderKeys(keys: Readonly<Record<string, string>>): void {
+    this.post({ type: "providerKeys", keys });
+  }
+
   /** The researcher's answer to a limit that paused the run (ADR-0044 section 5): raise it to `value`, or stop the run. */
   answerLimit(a: { readonly agentId: string; readonly limit: "calls" | "tokens" | "costUsd" } & ({ readonly action: "raise"; readonly value: number } | { readonly action: "stop" })): void {
     const runId = this.snap.run?.runId;

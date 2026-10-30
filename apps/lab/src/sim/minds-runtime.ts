@@ -1,5 +1,5 @@
 import type { Brain, SimLoadMessage, SimMindsMessage } from "@agentsim/core";
-import { InferenceQueue, LlmBrain, MemoryMindCache, ScriptedProvider, type LimitEvent, type LimitName, type LimitWarning, type LlmBrainHooks, type MindCache, type MindsRunMode, type Prices, type ProviderPort, type ProviderRequest, type ProviderResponse, type ScriptedAnswer } from "@agentsim/minds";
+import { InferenceQueue, LlmBrain, MemoryMindCache, OpenAiCompatibleProvider, ScriptedProvider, type LimitEvent, type LimitName, type LimitWarning, type LlmBrainHooks, type MindCache, type MindsRunMode, type Prices, type ProviderPort, type ProviderRequest, type ProviderResponse, type ScriptedAnswer } from "@agentsim/minds";
 import type { MindLibrary, MindsOptions, ProviderInfo, ResolvedRunConfig, ResolveOptions } from "@agentsim/scenarios";
 
 // What the sim worker holds for the System 2 minds of a run (F4 M1, T-110): the providers it was given, the response cache, the inference queue, the hooks of each mind (the limit warnings and the pause),
@@ -46,7 +46,7 @@ export class MindsRuntime {
   /** Set when a `replay-then-live` mind made a call the cache did not hold: from which tick, for which agent. */
   notReproducible: { readonly agentId: string; readonly tick: number } | undefined;
 
-  constructor(spec: Spec, readonly mode: MindsRunMode, private readonly headless = false, cacheStore?: MindCache) {
+  constructor(spec: Spec, readonly mode: MindsRunMode, private readonly headless = false, cacheStore?: MindCache, keys: ReadonlyMap<string, string> = new Map()) {
     const profiles = new Map(spec.profiles.map((p) => [`${p.id}@${p.version}`, p.document]));
     const templates = new Map(spec.templates.map((t) => [`${t.id}@${t.version}`, t.document]));
     const library: MindLibrary = { profile: (id, v) => profiles.get(`${id}@${v}`) as never, template: (id, v) => templates.get(`${id}@${v}`) as never };
@@ -60,8 +60,9 @@ export class MindsRuntime {
       providers: (id) => {
         const e = entries.get(id);
         if (e === undefined) return undefined;
-        // The adapter for OpenAI-compatible servers arrives with M3 (Providers and keys): until then only the scripted kind answers.
-        return e.kind === "scripted" ? new DelayedScripted((e.script ?? []) as ScriptedAnswer[], e.delayMs ?? 0) : undefined;
+        if (e.kind === "scripted") return new DelayedScripted((e.script ?? []) as ScriptedAnswer[], e.delayMs ?? 0);
+        // The adapter for OpenAI-compatible servers (M3): the worker's own `fetch` (called through a wrapper, not unbound), the entry's address, and the key the main thread gave for it, if any.
+        return new OpenAiCompatibleProvider({ baseUrl: e.baseUrl, apiKey: keys.get(e.id), fetch: (url, init) => fetch(url, init as never) as never });
       },
       prices: (id): Prices | undefined => entries.get(id)?.prices,
       hooks: (agentId) => this.hooksOf(agentId),

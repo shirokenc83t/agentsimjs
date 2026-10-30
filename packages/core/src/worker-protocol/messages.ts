@@ -256,7 +256,13 @@ export const SimLimitAnswer = Type.Union([
   Type.Object({ type: Type.Literal("limitAnswer"), runId: RunId, agentId: Type.String({ maxLength: 64 }), limit: Type.Union([Type.Literal("calls"), Type.Literal("tokens"), Type.Literal("costUsd")]), action: Type.Literal("stop") }, { additionalProperties: false }),
 ]);
 
-export const MainToSim = Type.Union([SimInit, SimControl, SimReturnBuffer, SimRecorderPort, SimCachePort, SimLoad, SimCommand, SimBuildPreset, SimView, SimResearcherWatch, SimCellWatch, SimBeliefWatch, SimOverlayWatch, SimStrategyTest, SimLimitAnswer]);
+/**
+ * The keys of the provider entries that have one, by entry id (F4 M3, ADR-0044 section 3): sent to the worker on their own, never inside `load` (which is validated, traced, hashed and exported), kept in the
+ * worker's memory for the adapter to put in the header of its calls, and replaced as a whole by the next message. Nothing the worker writes holds one.
+ */
+export const SimProviderKeys = Type.Object({ type: Type.Literal("providerKeys"), keys: Type.Record(Type.String({ maxLength: 64 }), Type.String({ maxLength: 1000 }), { maxProperties: 32 }) }, { additionalProperties: false });
+
+export const MainToSim = Type.Union([SimInit, SimControl, SimReturnBuffer, SimRecorderPort, SimCachePort, SimProviderKeys, SimLoad, SimCommand, SimBuildPreset, SimView, SimResearcherWatch, SimCellWatch, SimBeliefWatch, SimOverlayWatch, SimStrategyTest, SimLimitAnswer]);
 export type MainToSim = Static<typeof MainToSim>;
 
 // ---- worker → main ----------------------------------------------------------------------------

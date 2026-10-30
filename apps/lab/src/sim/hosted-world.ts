@@ -294,7 +294,7 @@ export class ScenarioHostedWorld implements HostedWorld {
   static load(
     m: { runId: string; scenario: unknown; scenarioVersion: number; runConfig: unknown },
     nowWallMs: () => number,
-    options: { readonly restore?: { readonly bytes: Uint8Array; readonly resolve: (hash: string) => Uint8Array | undefined }; readonly minds?: SimLoadMessage["minds"]; readonly headless?: boolean; readonly mindCache?: MindCache } = {},
+    options: { readonly restore?: { readonly bytes: Uint8Array; readonly resolve: (hash: string) => Uint8Array | undefined }; readonly minds?: SimLoadMessage["minds"]; readonly headless?: boolean; readonly mindCache?: MindCache; readonly keys?: ReadonlyMap<string, string> } = {},
   ): Result<ScenarioHostedWorld, CodedError> {
     const doc = parseScenarioValue(m.scenario);
     if (!doc.ok) return doc;
@@ -303,7 +303,7 @@ export class ScenarioHostedWorld implements HostedWorld {
     const rc = parseRunConfigValue(m.runConfig);
     if (!rc.ok) return rc;
     // The minds' runtime (F4): the providers and the library the load message carries; the mode is the run configuration's.
-    const mindsRuntime = options.minds === undefined ? undefined : new MindsRuntime(options.minds, rc.value.mindsRunMode ?? "live", options.headless === true, options.mindCache);
+    const mindsRuntime = options.minds === undefined ? undefined : new MindsRuntime(options.minds, rc.value.mindsRunMode ?? "live", options.headless === true, options.mindCache, options.keys);
     const resolved = resolveRunConfig(rc.value, { loaded: loaded.value, version: m.scenarioVersion }, mindsRuntime === undefined ? {} : mindsRuntime.resolve);
     if (!resolved.ok) return resolved;
     const rates = checkSensorRates(resolved.value, SCENARIO_DT_S);

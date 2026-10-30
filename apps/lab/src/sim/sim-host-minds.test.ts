@@ -183,4 +183,41 @@ describe("the sim host and the System 2 minds", () => {
     expect(flagged.length).toBeGreaterThan(0);
     expect(new Set(flagged.map((m) => m.notReproducibleFromTick)).size).toBe(1);
   });
+
+  it("an openai-compatible entry is answered by the adapter with the key the main thread gave apart from the load: the key is in the Authorization header of the calls to the entry's address and in nothing the host posts", async () => {
+    const KEY = "sk-planted-host-key-9876543210";
+    const seen: { url: string; auth: string | undefined }[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = ((url: string, init: { headers: Record<string, string> }) => {
+      seen.push({ url, auth: init.headers["authorization"] });
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify({ choices: [{ message: { role: "assistant", content: JSON.stringify({ action: "idle", timers: [{ op: "set", tag: "wake", delayS: 1 }] }) } }], usage: { prompt_tokens: 50, completion_tokens: 5 } })) });
+    }) as never;
+    try {
+      const h = harness();
+      init(h);
+      h.send({ type: "providerKeys", keys: { p: KEY } });
+      const l = load();
+      h.send({ ...l, minds: { ...l.minds, providers: [{ id: "p", kind: "openai-compatible", baseUrl: "http://localhost:11434" }] } });
+      h.send({ type: "control", op: "play" });
+      await pump(h, 40);
+      expect(h.errors()).toEqual([]);
+      expect(seen.length).toBeGreaterThan(1);
+      expect(seen.every((s) => s.url === "http://localhost:11434/v1/chat/completions" && s.auth === `Bearer ${KEY}`)).toBe(true);
+      const posted = JSON.stringify(h.out, (_k, v: unknown) => (v instanceof Float32Array || v instanceof Uint8Array || v instanceof ArrayBuffer ? undefined : v));
+      expect(posted).not.toContain(KEY);
+      expect(JSON.stringify(h.events())).not.toContain(KEY);
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+
+  it("a malformed message that carries a key is refused without echoing it", () => {
+    const KEY = "sk-planted-bad-" + "z".repeat(1100);
+    const h = harness();
+    init(h);
+    h.send({ type: "providerKeys", keys: { p: KEY } });
+    h.send({ type: "providerKeys", keys: { p: 7, q: KEY } });
+    expect(h.errors().map((e) => e.code)).toEqual(["invalid_message", "invalid_message"]);
+    expect(JSON.stringify(h.out)).not.toContain("sk-planted-bad");
+  });
 });

@@ -112,6 +112,13 @@ describe("sim worker protocol", () => {
     expect(validate(MainToSim, msg).ok).toBe(false);
   });
 
+  it("F4 M3: `providerKeys` carries the keys by entry id on their own, and a `load` cannot carry one in a provider entry", () => {
+    expect(validate(MainToSim, { type: "providerKeys", keys: { p: "sk-x" } }).ok).toBe(true);
+    expect(validate(MainToSim, { type: "providerKeys", keys: {} }).ok).toBe(true);
+    expect(validate(MainToSim, { type: "providerKeys", keys: { p: 5 } }).ok).toBe(false);
+    expect(validate(MainToSim, { type: "providerKeys", keys: { p: "x".repeat(1001) } }).ok).toBe(false);
+  });
+
   it("F4 M2: `cachePort` hands the sim worker its end of the response cache channel, and `minds` may say from which tick a run is not reproducible", () => {
     expect(validate(MainToSim, { type: "cachePort", port: {} }).ok).toBe(true);
     expect(validate(MainToSim, { type: "cachePort" }).ok).toBe(false);
