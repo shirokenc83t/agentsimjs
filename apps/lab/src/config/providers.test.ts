@@ -6,7 +6,7 @@ import { connectAllowed, connectSrcLine, parseConnectSrc, readPagePolicy } from 
 
 // The provider entries and keys of Settings (F4 M3), the test of a connection, and what the page's policy lets it call. No server, no real key.
 
-const KEY = "sk-planted-settings-key-424242";
+const KEY = "planted-settings-key-424242";
 const entry = { id: "local-ollama", kind: "openai-compatible" as const, baseUrl: "http://localhost:11434" };
 
 describe("the provider store", () => {

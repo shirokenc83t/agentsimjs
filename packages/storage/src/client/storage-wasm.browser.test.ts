@@ -163,7 +163,7 @@ describe("storage worker (browser)", () => {
   it("exports the database without the provider keys remembered on this device, and keeps the other user data (ADR-0044 section 3)", async () => {
     const c = spawn({ resetOnOpen: true });
     await c.ready();
-    const KEY = "sk-planted-export-key-5566778899";
+    const KEY = "planted-export-key-5566778899";
     await c.ports.userData.set("providerKeys", "local-ollama", KEY);
     await c.ports.userData.set("ui", "reducedMotion", true);
     await c.ports.runs.create(header("run-000001"));

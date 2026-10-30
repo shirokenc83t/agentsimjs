@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
 import { connectMindCache, connectRecorder, resolveEnvironment } from "./config/environment.ts";
 import { providerStore } from "./config/providers.ts";
+import { startPresetRun } from "./sim/run-controller.ts";
 import { probeEnabled } from "./probe.ts";
 import { mindsFixture } from "./shell/minds-fixture.ts";
 import { setMinds } from "./shell/minds-status.ts";
@@ -54,6 +55,11 @@ if (probeEnabled()) {
     executedPath: (id) => Array.from(sim.executedPath(id).points),
     records: () => sim.records(),
     mindsFixture: (state) => setMinds(mindsFixture(state)),
+    startMindsRun: async (o) => {
+      const saved = await storage.ports.mindProfiles.saveVersion({ id: "probe-llm", name: "Probe", document: { schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: o.provider, model: o.model, promptTemplate: { id: "default", version: 1 } } } });
+      if (!saved.ok) throw new Error(saved.error.message);
+      await startPresetRun(storage, sim, "f2-discovery", (cfg) => ({ ...(cfg as object), minds: { byAgent: { scout: { s2: { profile: { id: "probe-llm", version: saved.value.version }, mission: o.mission ?? "Wait for events." } } } } }));
+    },
   };
 }
 

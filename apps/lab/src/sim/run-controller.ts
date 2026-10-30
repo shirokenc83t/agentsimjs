@@ -206,12 +206,12 @@ export async function resimulatableRuns(storage: StorageClient): Promise<{ runId
 }
 
 /** Loads a built-in preset (built in the sim worker) with its default run configuration, as a new run. */
-export async function startPresetRun(storage: StorageClient, sim: SimClient, preset: PresetId): Promise<LabRun> {
+export async function startPresetRun(storage: StorageClient, sim: SimClient, preset: PresetId, patchRunConfig?: (runConfig: unknown) => unknown): Promise<LabRun> {
   if (storage.status().state !== "ready") throw new Error("storage_unavailable: runs need storage (see the status line)");
   const p = PRESETS[preset];
   const built = await sim.buildPreset(preset);
   const version = await presetVersion(storage, p.id, built.document, built.contentHash);
-  return startRun(storage, sim, built.document, version, p.runConfig(version), p.label);
+  return startRun(storage, sim, built.document, version, patchRunConfig === undefined ? p.runConfig(version) : patchRunConfig(p.runConfig(version)), p.label);
 }
 
 /** Loads the built-in F1 demo scenario with its default run configuration. */

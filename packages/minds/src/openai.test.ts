@@ -11,7 +11,7 @@ import type { ProviderRequest } from "./provider.ts";
 
 declare function setTimeout(fn: () => void, ms: number): unknown;
 
-const KEY = "sk-planted-secret-0123456789";
+const KEY = "planted-secret-0123456789";
 const BASE = "http://localhost:11434";
 
 interface Seen {

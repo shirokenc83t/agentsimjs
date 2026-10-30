@@ -185,7 +185,7 @@ describe("the sim host and the System 2 minds", () => {
   });
 
   it("an openai-compatible entry is answered by the adapter with the key the main thread gave apart from the load: the key is in the Authorization header of the calls to the entry's address and in nothing the host posts", async () => {
-    const KEY = "sk-planted-host-key-9876543210";
+    const KEY = "planted-host-key-9876543210";
     const seen: { url: string; auth: string | undefined }[] = [];
     const real = globalThis.fetch;
     globalThis.fetch = ((url: string, init: { headers: Record<string, string> }) => {
@@ -212,12 +212,12 @@ describe("the sim host and the System 2 minds", () => {
   });
 
   it("a malformed message that carries a key is refused without echoing it", () => {
-    const KEY = "sk-planted-bad-" + "z".repeat(1100);
+    const KEY = "planted-bad-" + "z".repeat(1100);
     const h = harness();
     init(h);
     h.send({ type: "providerKeys", keys: { p: KEY } });
     h.send({ type: "providerKeys", keys: { p: 7, q: KEY } });
     expect(h.errors().map((e) => e.code)).toEqual(["invalid_message", "invalid_message"]);
-    expect(JSON.stringify(h.out)).not.toContain("sk-planted-bad");
+    expect(JSON.stringify(h.out)).not.toContain("planted-bad");
   });
 });
