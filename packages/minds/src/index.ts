@@ -14,9 +14,16 @@ export {
   validateMindProfile,
   validatePromptTemplate,
   type EffectiveS2,
-  type MindError,
+  type MindError as MindDocumentError,
   type MindErrorCode,
   type MindSource,
   type Slot,
 } from "./documents.ts";
 export { canonicalJson, hash32Hex } from "./canonical.ts";
+export { answerSchema, parseAnswer, type ParsedAnswer } from "./answer.ts";
+export { MemoryMindCache, cacheKey, estimateUsage, type CacheEntry, type CacheKeyInput, type CacheOutcome, type MindCache } from "./cache.ts";
+export { buildPrompt, retryMessages, type DecisionNote, type PromptInput } from "./prompt.ts";
+export { ScriptedProvider, type ChatMessage, type JsonSchema, type ProviderOutcome, type ProviderPort, type ProviderRequest, type ProviderResponse, type ProviderUsage, type ScriptedAnswer } from "./provider.ts";
+export { LlmBrain, MindError, type LimitAnswer, type LimitEvent, type LimitName, type LimitWarning, type LlmBrainHooks, type LlmBrainOptions, type LlmBrainState, type MindsRunMode, type Prices } from "./llm-brain.ts";
+export { InferenceQueue, type QueueOptions, type QueueResult } from "./queue.ts";
+export { raisesFromRecords, replayRaises, type RaiseEntry } from "./raise-log.ts";

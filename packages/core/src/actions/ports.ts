@@ -232,7 +232,7 @@ export interface TraceSink {
     readonly causeIds?: readonly string[];
     readonly source: string;
     readonly simTime: number;
-    readonly kind: "action" | "reflex" | "thought" | "compute" | "injected" | "event" | "observation";
+    readonly kind: "action" | "reflex" | "thought" | "compute" | "injected" | "event" | "observation" | "lifecycle";
     readonly agentId: string;
     /** Mind slot of a decision record (`thought`). */
     readonly tier?: "S1" | "S2";

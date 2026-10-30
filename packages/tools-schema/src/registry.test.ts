@@ -9,7 +9,7 @@ const SNAKE = /^[a-z][a-z0-9_]*$/;
 describe("capability definitions (ADR-0007)", () => {
   it("defines the base actions (F1, and explore from F2)", () => {
     expect(CAPABILITIES.filter((c) => c.kind === "action").map((c) => c.name)).toEqual(["explore", "goTo", "hold", "land", "returnToBase", "takeoff"]);
-    expect(CAPABILITIES.filter((c) => c.kind === "bookkeeping").map((c) => c.name)).toEqual(["cancelTimer", "setTimer"]); // timers (F2 M2d)
+    expect(CAPABILITIES.filter((c) => c.kind === "bookkeeping").map((c) => c.name)).toEqual(["cancelTimer", "note", "setTimer"]); // timers (F2 M2d) and the notebook (F4)
   });
 
   it("has unique camelCase names", () => {
@@ -118,11 +118,16 @@ describe("timer capabilities (bookkeeping, ADR-0005 addition of 2026-10-09)", ()
     ["setTimer", { delayS: 5, tag: "wake-up" }],
     ["setTimer", { delayS: 0.1, tag: "a" }],
     ["cancelTimer", { tag: "wake-up" }],
+    ["note", { text: "visit B then C", mode: "replace" }],
+    ["note", { text: "", mode: "append" }],
   ])("%s accepts %j", (name, params) => {
     expect(validateParams(name, params).ok).toBe(true);
   });
 
   it.each([
+    ["note", { text: "x" }, "a note without a mode"],
+    ["note", { text: "x", mode: "prepend" }, "a mode that does not exist"],
+    ["note", { mode: "append" }, "a note without text"],
     ["setTimer", { tag: "wake" }, "missing delay"],
     ["setTimer", { delayS: "5", tag: "wake" }, "string delay"],
     ["setTimer", { delayS: 5, tag: "Wake Up" }, "tag with capitals and a space"],

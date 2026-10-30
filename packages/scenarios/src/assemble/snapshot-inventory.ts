@@ -44,6 +44,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     prevSoc: c("state of charge of the previous tick, for the batteryLow crossing"),
     minDecisionIntervalS: r("run configuration"),
     timers: c("active timers of each agent: tag -> due tick"),
+    notebooks: c("each agent's notebook (the `note` capability): captured only when one is not empty"),
     dtS: c("the last tick's step: timers and requests convert with it"),
     seenSpaces: c("space summaries already traced: decides whether the next request writes a space record"),
     slots: c("requests asked and not yet applied, with their envelopes when answered (outstanding decisions)"),
@@ -213,6 +214,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
   Pending: {
     agentId: c("a request of the World's slots"),
     request: c("plain data"),
+    requestRecordId: s("the id of the record that traced the request: what an S2 mind's records name as their parent; a restored request is answered or asked again, so it is not kept"),
     envelope: c("the answer, once received", true),
   },
   Active: {

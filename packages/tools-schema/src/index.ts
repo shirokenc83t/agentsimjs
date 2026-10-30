@@ -8,7 +8,7 @@ export {
   type PreconditionName,
 } from "./capability.ts";
 export { goTo, explore, hold, returnToBase, takeoff, land } from "./actions/base-actions.ts";
-export { setTimer, cancelTimer, TIMER_LIMITS } from "./actions/bookkeeping.ts";
+export { setTimer, cancelTimer, note, NOTE_MAX_CHARS, TIMER_LIMITS } from "./actions/bookkeeping.ts";
 export {
   CAPABILITIES,
   COMMON_FAILURE_CODES,

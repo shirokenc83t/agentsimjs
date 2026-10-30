@@ -104,6 +104,9 @@ export * from "./reflexes/index.ts";
 export {
   ScriptBrain,
   type Brain,
+  type DecideContext,
+  type StatefulBrain,
+  type NoteOp,
   type BrainTier,
   type Decision,
   type DecisionEnvelope,

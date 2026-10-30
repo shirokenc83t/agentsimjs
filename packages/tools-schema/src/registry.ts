@@ -5,7 +5,7 @@ import * as bookkeeping from "./actions/bookkeeping.ts";
 import type { CapabilityDef, PreconditionName } from "./capability.ts";
 
 /** Every capability, sorted by name (stable order for exposures and tests). */
-export const CAPABILITIES: readonly CapabilityDef[] = [...Object.values(baseActions), bookkeeping.setTimer, bookkeeping.cancelTimer].sort((a, b) => (a.name < b.name ? -1 : 1));
+export const CAPABILITIES: readonly CapabilityDef[] = [...Object.values(baseActions), bookkeeping.setTimer, bookkeeping.cancelTimer, bookkeeping.note].sort((a, b) => (a.name < b.name ? -1 : 1));
 
 export type BaseActionName = (typeof baseActions)[keyof typeof baseActions]["name"];
 /** Parameters of a base action, as validated. */

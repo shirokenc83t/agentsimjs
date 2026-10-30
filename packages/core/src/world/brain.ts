@@ -1,3 +1,4 @@
+import type { TraceSink } from "../actions/ports.ts";
 import type { DecisionEvent } from "./events.ts";
 import type { AllowedAction, BeliefSummary, SpaceSummary, UnavailableAction } from "./mind-view.ts";
 import type { MissionNote } from "./sequence.ts";
@@ -41,6 +42,8 @@ export interface SelfView {
   readonly running: { readonly actionId: string; readonly name: string; readonly phase: string } | null;
   /** Active timers set by this agent's mind, by tag (at most 8), with the sim seconds left (rounded to 0.01). */
   readonly timers: readonly { readonly tag: string; readonly dueInS: number }[];
+  /** The agent's notebook (ADR-0036 addition of 2026-10-29): what its mind wrote with `note`, at most 2,000 characters. Absent while it is empty, so a request of a run that never notes is as it was. */
+  readonly notebook?: string;
 }
 
 /** F1 decisions: start a base action, or stay idle until the next event. Plans, policies and protocol moves follow. */
@@ -54,9 +57,18 @@ export type Decision =
  */
 export type TimerOp = { readonly op: "set"; readonly tag: string; readonly delayS: number } | { readonly op: "cancel"; readonly tag: string };
 
+/** The notebook operation that may accompany any decision (the `note` capability): applied in the brain phase after the timers, before the decision's action. */
+export interface NoteOp {
+  readonly text: string;
+  readonly mode: "replace" | "append";
+}
+
 export interface DecisionEnvelope {
   readonly decision: Decision;
   readonly timers?: readonly TimerOp[];
+  readonly note?: NoteOp;
+  /** What an S2 mind says of how it decided (attempts, usage, whether it fell back): the world writes it into the decision record, under `mind`. */
+  readonly mind?: Readonly<Record<string, unknown>>;
   readonly confidence?: number;
   readonly rationale?: string;
   /** A mission's mind (`sequence`) says which step this decision is, or how the mission ended; the world writes it into the decision record (`step`, `of`, `done`, `stop`). */
@@ -65,10 +77,25 @@ export interface DecisionEnvelope {
 
 export type BrainTier = "S1" | "S2" | "baseline" | "script" | "external";
 
+/**
+ * What the world gives a mind besides the request, for a mind that writes records of its own (an LLM mind writes one per model call): the id of the request's record, which its records name as their
+ * parent, and the trace sink. A mind that writes nothing (a script) ignores it.
+ */
+export interface DecideContext {
+  readonly requestRecordId?: string;
+  readonly trace?: TraceSink;
+}
+
+/** A mind that keeps state a snapshot must carry, as plain data (an LLM mind: what it has used of its limits). */
+export interface StatefulBrain extends Brain {
+  snapshotState(): unknown;
+  restoreState(state: unknown): void;
+}
+
 export interface Brain {
   readonly id: string;
   readonly tier: BrainTier;
-  decide(req: DecisionRequest): Promise<DecisionEnvelope>;
+  decide(req: DecisionRequest, ctx?: DecideContext): Promise<DecisionEnvelope>;
 }
 
 export interface ScriptStep {

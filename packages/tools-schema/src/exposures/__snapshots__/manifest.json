@@ -380,6 +380,60 @@
       }
     },
     {
+      "name": "note",
+      "kind": "bookkeeping",
+      "description": "Keep a note for yourself: your notebook is returned to you in every later prompt, so use it for what you must not forget (the plan, the points still to visit, what you have seen). mode replace overwrites the whole notebook, mode append adds the text after what is there. It starts no action and may accompany any decision, including idle. The notebook holds at most 2000 characters in all; longer text is refused. Failure: note_too_long.",
+      "vehicles": [
+        "uav",
+        "ugv"
+      ],
+      "scope": "self",
+      "preconditions": [],
+      "failureCodes": [
+        "note_too_long"
+      ],
+      "params": {
+        "type": "object",
+        "required": [
+          "text",
+          "mode"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The note, at most 2000 characters (the whole notebook after an append)."
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "replace"
+              },
+              {
+                "type": "string",
+                "const": "append"
+              }
+            ],
+            "description": "replace overwrites the notebook, append adds to it."
+          }
+        },
+        "additionalProperties": false
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "chars"
+        ],
+        "properties": {
+          "chars": {
+            "type": "integer",
+            "description": "Characters in the notebook now."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "returnToBase",
       "kind": "action",
       "description": "Plan a path to this agent's base and follow it; a UAV flies at its cruise altitude and lands on arrival. Requires a base. Failures (the base is the target): target_blocked: the target itself cannot hold this vehicle (an obstacle, a no-fly volume at that altitude, or too close to an obstacle for the vehicle's footprint). unreachable: the target is free but no path to it exists. kinematically_infeasible: a path exists but this ground vehicle cannot follow it (it only drives forwards and has a minimum turning radius, e.g. there is no room to turn around). planning_budget: planning ran out of its budget before finding a path. landing_blocked: a UAV cannot land at the base.",
