@@ -8,7 +8,7 @@ import { checkRunRecording } from "../recording.ts";
 import { checkRunDerived, checkRunReferences } from "../run-references.ts";
 import { memoryRecordingStores } from "./memory-recording.ts";
 import { checkRunInputs, type StoredRunInput } from "../run-inputs.ts";
-import { checkRunConfigPreset, checkScenarioEnvelope } from "../scenario-envelope.ts";
+import { checkLibraryDocument, checkRunConfigPreset, checkScenarioEnvelope } from "../scenario-envelope.ts";
 
 const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
 
@@ -67,6 +67,18 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
   const udKey = (ns: string, k: string) => `${ns}\u0000${k}`;
   const scenarios = versionedDocs(nowWallMs);
   const runConfigs = versionedDocs(nowWallMs);
+  const library = (docs: ReturnType<typeof versionedDocs>): StoragePorts["mindProfiles"] => ({
+    list: async () => docs.list(),
+    get: async (id, version) => docs.get(id, version),
+    async saveVersion(doc) {
+      const env = checkLibraryDocument(doc);
+      if (!env.ok) return env;
+      return ok({ id: env.value.id, version: docs.insert(env.value.id, env.value.name, env.value.json, env.value.contentHash) });
+    },
+    async delete(id) {
+      return docs.tombstone(id) === 0 ? err({ code: "unknown_document" as const, message: `unknown document ${id}` }) : ok(undefined);
+    },
+  });
   const recording = memoryRecordingStores((runId) => runs.has(runId));
   /** Run IDs of deleted runs: never handed out again. */
   const deleted = new Set<string>();
@@ -90,6 +102,8 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
         return scenarios.tombstone(id) === 0 ? err({ code: "unknown_scenario" as const, message: `unknown scenario ${id}` }) : ok(undefined);
       },
     },
+    mindProfiles: library(versionedDocs(nowWallMs)),
+    promptTemplates: library(versionedDocs(nowWallMs)),
     runConfigs: {
       list: async () => runConfigs.list(),
       get: async (id, version) => runConfigs.get(id, version),

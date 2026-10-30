@@ -218,6 +218,8 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       saveVersion: (preset) => call("runConfigs.saveVersion", [preset]),
       delete: (id) => call("runConfigs.delete", [id]),
     },
+    mindProfiles: rpc("mindProfiles", ["list", "get", "saveVersion", "delete"]) as unknown as StoragePorts["mindProfiles"],
+    promptTemplates: rpc("promptTemplates", ["list", "get", "saveVersion", "delete"]) as unknown as StoragePorts["promptTemplates"],
     // The recording ports forward every call as it is (same arguments, in order): one table instead of a lambda each, to keep the initial chunk small.
     snapshots: rpc("snapshots", ["putBlobs", "getBlob", "write", "list", "read"]) as unknown as StoragePorts["snapshots"],
     beliefFrames: rpc("beliefFrames", ["append", "query", "keyframeAtOrBefore"]) as unknown as StoragePorts["beliefFrames"],

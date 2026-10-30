@@ -113,6 +113,7 @@ export function runHeader(i: RunHeaderInput): RunHeader {
     effectiveConfigHash: r.effectiveConfigHash,
     simulatorVersion: i.simulatorVersion,
     idealAgents: idealAgentsOf(r),
+    ...(r.mindsRunMode !== "live" || r.agents.some((a) => a.s2 !== undefined) ? { mindsRunMode: r.mindsRunMode } : {}),
   };
 }
 

@@ -308,6 +308,18 @@ importers:
         specifier: 1.3.34
         version: 1.3.34
 
+  packages/minds:
+    dependencies:
+      '@agentsim/core':
+        specifier: workspace:*
+        version: link:../core
+      '@agentsim/tools-schema':
+        specifier: workspace:*
+        version: link:../tools-schema
+      typebox:
+        specifier: 1.3.34
+        version: 1.3.34
+
   packages/scenarios:
     dependencies:
       '@agentsim/algorithms':
@@ -316,6 +328,9 @@ importers:
       '@agentsim/core':
         specifier: workspace:*
         version: link:../core
+      '@agentsim/minds':
+        specifier: workspace:*
+        version: link:../minds
       '@agentsim/spatial':
         specifier: workspace:*
         version: link:../spatial

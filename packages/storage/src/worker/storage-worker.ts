@@ -598,6 +598,14 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "runConfigs.get": value = await s.runConfigs.get(String(a), typeof b === "number" ? b : undefined); break;
         case "runConfigs.saveVersion": value = await s.runConfigs.saveVersion(a as { id: string; name: string; document: unknown }); break;
         case "runConfigs.delete": value = await s.runConfigs.delete(String(a)); break;
+        case "mindProfiles.list": value = await s.mindProfiles.list(); break;
+        case "mindProfiles.get": value = await s.mindProfiles.get(String(a), typeof b === "number" ? b : undefined); break;
+        case "mindProfiles.saveVersion": value = await s.mindProfiles.saveVersion(a as { id: string; name: string; document: unknown }); break;
+        case "mindProfiles.delete": value = await s.mindProfiles.delete(String(a)); break;
+        case "promptTemplates.list": value = await s.promptTemplates.list(); break;
+        case "promptTemplates.get": value = await s.promptTemplates.get(String(a), typeof b === "number" ? b : undefined); break;
+        case "promptTemplates.saveVersion": value = await s.promptTemplates.saveVersion(a as { id: string; name: string; document: unknown }); break;
+        case "promptTemplates.delete": value = await s.promptTemplates.delete(String(a)); break;
         case "snapshots.putBlobs": value = await s.snapshots.putBlobs(String(a), Array.isArray(b) ? (b as StoredBlob[]) : []); break;
         case "snapshots.getBlob": value = await s.snapshots.getBlob(String(a), String(b)); break;
         case "snapshots.write": value = await s.snapshots.write(String(a), b as SnapshotWrite); break;

@@ -149,6 +149,7 @@ export function traceConfigs(resolved: ResolvedRunConfig, trace: TraceBuffer): v
         beliefsSource: a.beliefsSource,
         topology: a.topology,
         ...(a.mind === undefined ? {} : { mind: a.mind }),
+        ...(a.s2 === undefined ? {} : { mindS2: a.s2 }),
       },
     });
   }

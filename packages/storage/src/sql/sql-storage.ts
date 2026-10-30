@@ -1,8 +1,10 @@
 import { err, isValid, ok, type Result } from "@agentsim/core";
 import { firstNonMonotonicRecord, formatRunId, isValidTraceRecord, RunHeader, type DerivedRun, type RunStatus, type TraceRecord } from "@agentsim/trace";
 import type {
+  CacheOutcome,
   CachedResponse,
   DocumentSummary,
+  LibraryStore,
   ResponseCache,
   RunConfigStore,
   RunConfigSummary,
@@ -20,7 +22,7 @@ import type {
   TraceStore,
   UserDataStore,
 } from "../ports.ts";
-import { checkRunConfigPreset, checkScenarioEnvelope } from "../scenario-envelope.ts";
+import { checkLibraryDocument, checkRunConfigPreset, checkScenarioEnvelope } from "../scenario-envelope.ts";
 import { checkRunInputs, RUN_INPUT_LIMITS, type RunInputError, type StoredRunInput } from "../run-inputs.ts";
 import { checkRunRecording } from "../recording.ts";
 import { checkRunDerived, checkRunReferences } from "../run-references.ts";
@@ -300,16 +302,26 @@ class SqlResponseCache implements ResponseCache {
   constructor(private readonly db: SqlDriver) {}
 
   async get(key: string): Promise<CachedResponse | undefined> {
-    const r = this.db.get<{ model: string; value: string; created_at_wall_ms: number }>(
-      "SELECT model, value, created_at_wall_ms FROM response_cache WHERE key = ?", [key],
+    const r = this.db.get<{ model: string; value: string; created_at_wall_ms: number; provider_kind: string | null; tools_hash: string | null; outcome: CacheOutcome | null; usage: string | null; latency_ms: number | null }>(
+      "SELECT model, value, created_at_wall_ms, provider_kind, tools_hash, outcome, usage, latency_ms FROM response_cache WHERE key = ?", [key],
     );
-    return r ? { model: r.model, value: JSON.parse(r.value) as unknown, createdAtWallMs: r.created_at_wall_ms } : undefined;
+    if (!r) return undefined;
+    return {
+      model: r.model,
+      value: JSON.parse(r.value) as unknown,
+      createdAtWallMs: r.created_at_wall_ms,
+      ...(r.provider_kind === null ? {} : { providerKind: r.provider_kind }),
+      ...(r.tools_hash === null ? {} : { toolsHash: r.tools_hash }),
+      ...(r.outcome === null ? {} : { outcome: r.outcome }),
+      ...(r.usage === null ? {} : { usage: JSON.parse(r.usage) as unknown }),
+      ...(r.latency_ms === null ? {} : { latencyMs: r.latency_ms }),
+    };
   }
 
   async put(key: string, entry: CachedResponse) {
     this.db.run(
-      "INSERT OR REPLACE INTO response_cache (key, model, value, created_at_wall_ms) VALUES (?, ?, ?, ?)",
-      [key, entry.model, JSON.stringify(entry.value ?? null), entry.createdAtWallMs],
+      "INSERT OR REPLACE INTO response_cache (key, model, value, created_at_wall_ms, provider_kind, tools_hash, outcome, usage, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [key, entry.model, JSON.stringify(entry.value ?? null), entry.createdAtWallMs, entry.providerKind ?? null, entry.toolsHash ?? null, entry.outcome ?? null, entry.usage === undefined ? null : JSON.stringify(entry.usage), entry.latencyMs ?? null],
     );
   }
 }
@@ -348,7 +360,7 @@ type DocumentRow = { id: string; version: number; name: string; document: string
 class SqlVersionedDocs {
   constructor(
     private readonly db: SqlDriver,
-    private readonly table: "scenarios" | "run_configs",
+    private readonly table: "scenarios" | "run_configs" | "mind_profiles" | "prompt_templates",
     private readonly nowWallMs: () => number,
   ) {}
 
@@ -455,6 +467,34 @@ class SqlRunConfigStore implements RunConfigStore {
   }
 }
 
+/** A library of versioned documents (mind profiles, prompt templates; schema v14): the run configuration presets' rules over its own table. */
+class SqlLibraryStore implements LibraryStore {
+  private readonly docs: SqlVersionedDocs;
+
+  constructor(db: SqlDriver, table: "mind_profiles" | "prompt_templates", nowWallMs: () => number) {
+    this.docs = new SqlVersionedDocs(db, table, nowWallMs);
+  }
+
+  async list(): Promise<DocumentSummary[]> {
+    return this.docs.list();
+  }
+
+  async get(id: string, version?: number): Promise<StoredDocument | undefined> {
+    return this.docs.get(id, version);
+  }
+
+  async saveVersion(doc: { readonly id: string; readonly name: string; readonly document: unknown }) {
+    const env = checkLibraryDocument(doc);
+    if (!env.ok) return env;
+    const { id, name, json, contentHash } = env.value;
+    return ok({ id, version: this.docs.insert(id, name, json, contentHash) });
+  }
+
+  async delete(id: string) {
+    return this.docs.tombstone(id) === 0 ? err({ code: "unknown_document" as const, message: `unknown document ${id}` }) : ok(undefined);
+  }
+}
+
 /** Builds the storage ports over a migrated SQL connection. */
 export function createSqlPorts(db: SqlDriver, nowWallMs: () => number): StoragePorts {
   return {
@@ -464,6 +504,8 @@ export function createSqlPorts(db: SqlDriver, nowWallMs: () => number): StorageP
     userData: new SqlUserDataStore(db, nowWallMs),
     scenarios: new SqlScenarioStore(db, nowWallMs),
     runConfigs: new SqlRunConfigStore(db, nowWallMs),
+    mindProfiles: new SqlLibraryStore(db, "mind_profiles", nowWallMs),
+    promptTemplates: new SqlLibraryStore(db, "prompt_templates", nowWallMs),
     snapshots: new SqlSnapshotStore(db),
     beliefFrames: new SqlBeliefFrameStore(db),
     metrics: new SqlMetricStore(db),

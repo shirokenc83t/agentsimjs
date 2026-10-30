@@ -1,4 +1,5 @@
 import { CostProfile, PlanningStrategyDocument, StrategyId } from "@agentsim/algorithms";
+import { S2Overrides, S2Profile } from "@agentsim/minds";
 import Type, { type Static } from "typebox";
 import { AgentKey, DriveFields, ScenarioId } from "../schema.ts";
 
@@ -85,15 +86,28 @@ export type DriveEntry = Static<typeof DriveEntry>;
  * against the capability manifest at resolution (their own error names the step), not by this schema, which only bounds what a document can hold.
  */
 export const MissionStep = Type.Object({ action: Type.String({ minLength: 1, maxLength: 64 }), args: Type.Optional(Type.Record(Type.String({ maxLength: 64 }), Type.Unknown(), { maxProperties: 16 })) }, { additionalProperties: false });
-export const MindEntry = Type.Object(
+const S1Entry = Type.Object(
+  { script: Type.Object({ name: Type.Literal("sequence"), params: Type.Object({ steps: Type.Array(MissionStep, { maxItems: 256 }) }, { additionalProperties: false }) }, { additionalProperties: false }) },
+  { additionalProperties: false },
+);
+export type S1Entry = Static<typeof S1Entry>;
+
+/**
+ * The `s2` entry of a mind (ADR-0036 addition of 2026-10-29): a profile of the library by `{ id, version }` or an inline `s2` profile, optional overrides of its fields, and the mission in
+ * natural language (at most 2,000 characters; it fills the prompt's mission slot and is part of both hashes).
+ */
+export const S2Entry = Type.Object(
   {
-    s1: Type.Object(
-      { script: Type.Object({ name: Type.Literal("sequence"), params: Type.Object({ steps: Type.Array(MissionStep, { maxItems: 256 }) }, { additionalProperties: false }) }, { additionalProperties: false }) },
-      { additionalProperties: false },
-    ),
+    profile: Type.Union([Type.Object({ id: Type.String({ pattern: "^[a-z][a-z0-9-]{0,63}$" }), version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false }), S2Profile]),
+    overrides: Type.Optional(S2Overrides),
+    mission: Type.Optional(Type.String({ maxLength: 2000 })),
   },
   { additionalProperties: false },
 );
+export type S2Entry = Static<typeof S2Entry>;
+
+/** An entry has `s1` or `s2`, not both until F5 (`mind_shape_mismatch`, checked at resolution) and not neither. */
+export const MindEntry = Type.Object({ s1: Type.Optional(S1Entry), s2: Type.Optional(S2Entry) }, { additionalProperties: false });
 export type MindEntry = Static<typeof MindEntry>;
 
 export const RunConfigDocument = Type.Object(
@@ -102,6 +116,11 @@ export const RunConfigDocument = Type.Object(
     scenario: Type.Object({ id: ScenarioId, version: Type.Integer({ minimum: 1, maximum: 0x7fffffff }) }, { additionalProperties: false }),
     /** Overrides the scenario's defaultSeed. */
     seed: Type.Optional(Type.Integer({ minimum: 0, maximum: 0xffffffff })),
+    /**
+     * Where the minds' answers come from (ADR-0036 section 7): `live` calls providers and keeps every answer in the response cache, `replay-strict` reads the cache only (a miss stops the run),
+     * `replay-then-live` reads the cache first and marks the run as not reproducible from the first call it has to make. Recorded in the run header, in neither hash.
+     */
+    mindsRunMode: Type.Optional(Type.Union([Type.Literal("live"), Type.Literal("replay-strict"), Type.Literal("replay-then-live")])),
     /** Default lockstep. `latency-modeled` arrives with minds. */
     timeMode: Type.Optional(Type.Union([Type.Literal("lockstep"), Type.Literal("realtime")])),
     /**

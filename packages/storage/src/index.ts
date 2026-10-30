@@ -7,6 +7,8 @@ export type {
   SizeEntry,
   ResponseCache,
   CachedResponse,
+  CacheOutcome,
+  LibraryStore,
   UserDataStore,
   ScenarioStore,
   ScenarioSummary,

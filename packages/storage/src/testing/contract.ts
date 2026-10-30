@@ -303,6 +303,44 @@ export function describeStorageContract(name: string, create: () => Promise<Cont
       });
     });
 
+    describe("ResponseCache columns (schema v14)", () => {
+      it("keeps what a model call left: provider kind, tools hash, outcome, usage and latency, and entries without them still read as before", async () => {
+        await h.ports.cache.put("old", { model: "m", value: { text: "x" }, createdAtWallMs: 1 });
+        expect(await h.ports.cache.get("old")).toEqual({ model: "m", value: { text: "x" }, createdAtWallMs: 1 });
+        const entry = { model: "llama", value: { message: { content: "go" } }, createdAtWallMs: 7, providerKind: "openai-compatible", toolsHash: "ab12cd34", outcome: "ok" as const, usage: { inputTokens: 12, outputTokens: 3 }, latencyMs: 840 };
+        await h.ports.cache.put("new", entry);
+        expect(await h.ports.cache.get("new")).toEqual(entry);
+        await h.ports.cache.put("slow", { model: "llama", value: null, createdAtWallMs: 8, outcome: "timeout", latencyMs: 60000 });
+        expect(await h.ports.cache.get("slow")).toEqual({ model: "llama", value: null, createdAtWallMs: 8, outcome: "timeout", latencyMs: 60000 });
+      });
+    });
+
+    describe.each(["mindProfiles", "promptTemplates"] as const)("%s (the library, schema v14)", (port) => {
+      const doc = (id: string, extra: Record<string, unknown> = {}) => ({ id, name: `Name of ${id}`, document: { schemaVersion: 1, kind: "x", ...extra } });
+
+      it("saves numbered versions that are never changed, lists the latest per id, gets any version, and never reuses a deleted number", async () => {
+        const lib = h.ports[port];
+        expect(await lib.list()).toEqual([]);
+        expect(await lib.saveVersion(doc("scout"))).toEqual({ ok: true, value: { id: "scout", version: 1 } });
+        expect(await lib.saveVersion(doc("scout", { n: 2 }))).toEqual({ ok: true, value: { id: "scout", version: 2 } });
+        expect(await lib.saveVersion(doc("alpha"))).toEqual({ ok: true, value: { id: "alpha", version: 1 } });
+        expect((await lib.list()).map((s) => [s.id, s.latestVersion, s.versionCount])).toEqual([["alpha", 1, 1], ["scout", 2, 2]]);
+        expect((await lib.get("scout"))?.document).toEqual({ schemaVersion: 1, kind: "x", n: 2 });
+        expect((await lib.get("scout", 1))?.document).toEqual({ schemaVersion: 1, kind: "x" });
+        expect(await lib.get("scout", 3)).toBeUndefined();
+        expect((await lib.delete("scout")).ok).toBe(true);
+        expect(await lib.get("scout")).toBeUndefined();
+        expect(await lib.saveVersion(doc("scout"))).toEqual({ ok: true, value: { id: "scout", version: 3 } });
+      });
+
+      it("refuses a document without an id, a name and a schemaVersion, and a delete of what is not there", async () => {
+        const lib = h.ports[port];
+        expect((await lib.saveVersion({ id: "Bad Id", name: "x", document: { schemaVersion: 1 } })).ok).toBe(false);
+        expect((await lib.saveVersion({ id: "ok", name: "x", document: {} })).ok).toBe(false);
+        expect((await lib.delete("nothing")).ok).toBe(false);
+      });
+    });
+
     describe("ScenarioStore", () => {
       const scenario = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
         schemaVersion: 0, id, name, world: { layers: { occupancy: { chunks: [{ ci: 0, cj: 0, rle: "gCAB" }] } } }, zones: [], agents: [], ...extra,
