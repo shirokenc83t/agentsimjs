@@ -18,10 +18,10 @@ async function settle(page: Page) {
   await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
 }
 
-async function shot(page: Page, target: Locator, name: string) {
+async function shot(page: Page, target: Locator, name: string, mask: Locator[] = []) {
   await settle(page);
   if (REVIEW !== undefined) await target.screenshot({ path: `${REVIEW}/${name}.png`, animations: "disabled", caret: "hide" });
-  if (process.env["AGENTSIM_VISUAL_IMAGE"] === "1") await expect(target).toHaveScreenshot(`${name}.png`);
+  if (process.env["AGENTSIM_VISUAL_IMAGE"] === "1") await expect(target).toHaveScreenshot(`${name}.png`, { mask });
 }
 
 for (const theme of THEMES) {
@@ -48,6 +48,7 @@ for (const theme of THEMES) {
     await page.keyboard.press("Escape");
 
     // The player's tiles at the limit (the wait's wall-clock figure is masked by taking the tiles only).
-    await shot(page, page.locator(".telem"), `minds-player-tiles-${theme}`);
+    // The meter of the tick cost under its figure is the machine's (its bar moves with the load): masked.
+    await shot(page, page.locator(".telem"), `minds-player-tiles-${theme}`, [page.locator(".telem .tile", { hasText: "Tick cost" })]);
   });
 }
