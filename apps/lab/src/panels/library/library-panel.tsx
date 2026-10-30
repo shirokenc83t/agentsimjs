@@ -67,6 +67,8 @@ function docOf(d: ProfileDraft, base: unknown): unknown {
   };
 }
 
+const EMPTY_VERSIONS: LibVersion[] = [];
+
 export function LibraryPanel() {
   const { storage } = useServices();
   const ports = storage.ports;
@@ -75,7 +77,8 @@ export function LibraryPanel() {
   const [items, setItems] = useState<Record<LibKind, LibItem[]>>({ profile: [], template: [] });
   const [templateItems, setTemplateItems] = useState<LibItem[]>([]);
   const [selected, setSelected] = useState<string | undefined>(undefined);
-  const [versions, setVersions] = useState<LibVersion[]>([]);
+  // The versions read for one item of one kind: what is drawn is only ever the versions of the item and the kind on show (a tab or an import changes both before the read is back).
+  const [read, setRead] = useState<{ readonly kind: LibKind; readonly id: string; readonly list: LibVersion[] } | undefined>(undefined);
   const [version, setVersion] = useState<number | undefined>(undefined);
   const [compare, setCompare] = useState(false);
   const [used, setUsed] = useState<UsedBy | undefined>(undefined);
@@ -93,16 +96,17 @@ export function LibraryPanel() {
   useEffect(() => void refresh().catch(() => undefined), [refresh]);
 
   const item = items[kind].find((i) => i.id === selected);
+  const versions = read !== undefined && read.kind === kind && read.id === item?.id ? read.list : EMPTY_VERSIONS;
   useEffect(() => {
     if (item === undefined) {
-      setVersions([]);
+      setRead(undefined);
       setVersion(undefined);
       return;
     }
     let live = true;
     void versionsOf(storeOf(ports, kind), item.id, item.latestVersion).then((v) => {
       if (!live) return;
-      setVersions(v);
+      setRead({ kind, id: item.id, list: v });
       setVersion((cur) => (cur !== undefined && v.some((x) => x.version === cur) ? cur : v[v.length - 1]?.version));
     });
     return () => {

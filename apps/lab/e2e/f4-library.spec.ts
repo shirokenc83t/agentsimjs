@@ -99,3 +99,14 @@ test("a template: the editor keeps the slots fixed, marks what the validator ref
   await page.getByTestId("lib-compare").check();
   await expect(page.getByTestId("lib-diff").locator('tr[data-change="changed"]').filter({ hasText: "system" })).toHaveCount(1);
 });
+
+test("a template imported while a profile is on show opens in the editor (the versions on show are those of the item and the kind)", async ({ page }) => {
+  await openLibrary(page);
+  await importJson(page, "scout-llm.json", PROFILE);
+  await expect(page.getByTestId("lib-profile-table")).toBeVisible();
+  await importJson(page, "inspect.json", TEMPLATE);
+  await expect(page.locator(".cm-content")).toContainText("You are a careful mind.");
+  await page.getByTestId("lib-tab-profile").click();
+  await page.getByTestId("lib-item-scout-llm").click();
+  await expect(page.getByTestId("lib-profile-table")).toContainText("llama3.1:8b");
+});

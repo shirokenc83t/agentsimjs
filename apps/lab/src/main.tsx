@@ -55,7 +55,7 @@ if (probeEnabled()) {
     records: () => sim.records(),
     mindsFixture: (state) => setMinds(mindsFixture(state)),
     startMindsRun: async (o) => {
-      const saved = await storage.ports.mindProfiles.saveVersion({ id: "probe-llm", name: "Probe", document: { schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: o.provider, model: o.model, promptTemplate: { id: "default", version: 1 } } } });
+      const saved = await storage.ports.mindProfiles.saveVersion({ id: "probe-llm", name: "Probe", document: { schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: o.provider, model: o.model, promptTemplate: { id: "default", version: 1 }, ...(o.limits === undefined ? {} : { limits: o.limits }) } } });
       if (!saved.ok) throw new Error(saved.error.message);
       const { startPresetRun } = await loadRunController();
       await startPresetRun(storage, sim, "f2-discovery", (cfg) => ({ ...(cfg as object), minds: { byAgent: { scout: { s2: { profile: { id: "probe-llm", version: saved.value.version }, mission: o.mission ?? "Wait for events." } } } } }));
