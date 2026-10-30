@@ -13,12 +13,12 @@ const MAX_MARKS = 40_000;
 export function useRunMarks(runId: string | undefined, headS: number): readonly Mark[] {
   const { storage } = useServices();
   const [marks, setMarks] = useState<readonly Mark[]>([]);
-  const state = useRef<{ runId: string | undefined; marks: Mark[]; through: { kinds: number; checkpoints: number }; busy: boolean }>({ runId: undefined, marks: [], through: { kinds: -1, checkpoints: -1 }, busy: false });
+  const state = useRef<{ runId: string | undefined; marks: Mark[]; through: { kinds: number; checkpoints: number; raises: number }; busy: boolean }>({ runId: undefined, marks: [], through: { kinds: -1, checkpoints: -1, raises: -1 }, busy: false });
 
   useEffect(() => {
     const s = state.current;
     if (s.runId !== runId) {
-      state.current = { runId, marks: [], through: { kinds: -1, checkpoints: -1 }, busy: false };
+      state.current = { runId, marks: [], through: { kinds: -1, checkpoints: -1, raises: -1 }, busy: false };
       setMarks([]);
     }
     const now = state.current;
@@ -27,14 +27,14 @@ export function useRunMarks(runId: string | undefined, headS: number): readonly 
     let alive = true;
     void (async () => {
       try {
-        for (const which of ["kinds", "checkpoints"] as const) {
+        for (const which of ["kinds", "checkpoints", "raises"] as const) {
           for (;;) {
             const page = await storage.ports.trace.query({
               runId,
               afterSeq: now.through[which],
               limit: PAGE,
               simTime: { to: headS },
-              ...(which === "kinds" ? { kinds: [...MARK_KINDS] } : { kinds: ["event"], op: "checkpoint" }),
+              ...(which === "kinds" ? { kinds: [...MARK_KINDS] } : which === "checkpoints" ? { kinds: ["event"], op: "checkpoint" } : { kinds: ["lifecycle"], op: "raiseLimit" }),
             });
             if (!alive || state.current !== now) return;
             for (const r of page) now.marks.push(markOf(r));

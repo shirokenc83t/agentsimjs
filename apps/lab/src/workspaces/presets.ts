@@ -51,6 +51,9 @@ export const TRACE_GRAPH_WINDOW: PresetPanel = { id: "traceGraph", floating: { w
 export const HISTORY_WINDOW: PresetPanel = { id: "agentHistory", floating: { width: 1240, height: 640, collapsed: false } };
 /** The history and audit of the selected agent (T-103): a tab beside the analysis view in Analysis; elsewhere a window like the history's. */
 export const AUDIT_WINDOW: PresetPanel = { id: "agentAudit", floating: { width: 1240, height: 700, collapsed: false } };
+/** The LLM inspector and the Compute inspector (F4 M4, T-123): windows opened from the palette or from a record of a System 2 mind, in no preset; "[6]" and "[7]" in the Debug as the designer numbers them. */
+export const LLM_WINDOW: PresetPanel = { id: "llmInspector", floating: { width: 980, height: 700, collapsed: false } };
+export const COMPUTE_WINDOW: PresetPanel = { id: "computeInspector", floating: { width: 760, height: 700, collapsed: false } };
 /** The SQL results pinned in a window (U-010 section 5): opened from the console, in no preset. */
 export const SQL_RESULT_WINDOW: PresetPanel = { id: "sqlResult", floating: { width: 760, height: 420, collapsed: false } };
 /** The windows of the Scene (ADR-0042 section 8): all start collapsed, in one row along the bottom edge of the map (the Overview at the left, the Legend and the Performance window at the right) so that they hide none of it; opened, each grows from there. */
@@ -163,6 +166,8 @@ export function panelNumber(preset: WorkspacePreset, id: PanelId): number | unde
 /** The tab title of a panel: `[2] Explorer`. */
 export function tabTitle(preset: WorkspacePreset, id: PanelId, title: string): string {
   if (id === "traceGraph") return `[5c] ${title}`;
+  if (id === "llmInspector") return `[6] ${title}`;
+  if (id === "computeInspector") return `[7] ${title}`;
   if (id === "agentHistory") return preset.id === "debug" ? `[5h] ${title}` : title;
   const n = panelNumber(preset, id);
   return n === undefined ? title : `[${n}] ${title}`;

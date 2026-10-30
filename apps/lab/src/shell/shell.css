@@ -64,6 +64,8 @@
 .kb-mark.reflex path { fill: currentColor; }
 .kb-mark.failure { color: var(--alm); }
 .kb-mark.failure path { fill: none; stroke: currentColor; stroke-width: 1.6; }
+.kb-mark.raise { color: var(--ac); }
+.kb-mark.raise path { fill: currentColor; }
 .track .gap { position: absolute; top: 0; bottom: 0; background-image: var(--hatch-pattern); }
 .track .tick { position: absolute; top: 2px; bottom: 2px; width: 2px; z-index: 1; }
 .track .hd { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: var(--ac); }
