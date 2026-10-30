@@ -200,3 +200,4 @@
 .raise-dialog .rd-presets button:hover { background: var(--bg3); color: var(--fg); }
 .raise-dialog .prose { margin: 14px 0 0; }
 .raise-dialog .rd-f { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--ln); }
+.limit-notice .btn, .raise-dialog .btn { white-space: nowrap; flex: none; }
