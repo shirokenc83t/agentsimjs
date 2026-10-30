@@ -3,9 +3,30 @@
 
 export type JsonSchema = Record<string, unknown>;
 
+/** A tool the model may call while it decides (a compute tool of the capability manifest). */
+export interface ToolDefinition {
+  readonly name: string;
+  readonly description: string;
+  readonly paramsSchema: JsonSchema;
+}
+
+/** One call a model asked for: the provider's id for it (the answer names it), the tool and its parameters. */
+export interface ToolCall {
+  readonly id: string;
+  readonly name: string;
+  readonly params: unknown;
+}
+
+/**
+ * One message of the conversation. An assistant message that asked for tools carries its `toolCalls`; the answer to each is a `tool` message naming the call it answers. A message without these fields is
+ * what it always was, so a decision that calls no tool keeps the messages (and the cache keys) it had before tools.
+ */
 export interface ChatMessage {
-  readonly role: "system" | "user" | "assistant";
+  readonly role: "system" | "user" | "assistant" | "tool";
   readonly content: string;
+  readonly toolCalls?: readonly ToolCall[];
+  readonly toolCallId?: string;
+  readonly name?: string;
 }
 
 export interface ProviderRequest {
@@ -14,6 +35,8 @@ export interface ProviderRequest {
   /** The JSON Schema the final answer must satisfy (generated from the allowed actions, the timers and the notebook); a server that cannot enforce it still gets it in the prompt. */
   readonly answerSchema: JsonSchema;
   readonly params: { readonly temperature?: number; readonly maxOutputTokens?: number; readonly topP?: number };
+  /** The tools the model may call before it answers; absent when the mind offers none (structured output only). */
+  readonly tools?: readonly ToolDefinition[];
   /** Wall-clock limit of the call, in milliseconds. */
   readonly timeoutMs: number;
   /** The attempt of this decision (1 is the first). */
@@ -34,6 +57,8 @@ export interface ProviderResponse {
   readonly outcome: ProviderOutcome;
   /** The text of the answer (a JSON document, when the call went well). */
   readonly content?: string;
+  /** The tools the model asked for instead of answering: each is answered, and the model is called again with the answers. */
+  readonly toolCalls?: readonly ToolCall[];
   readonly usage?: ProviderUsage;
   /** Wall latency of the call in milliseconds. */
   readonly latencyMs: number;
@@ -49,7 +74,10 @@ export interface ProviderPort {
 // ---- the scripted fake provider ----------------------------------------------------------------------------------------------------------------
 
 /** One scripted answer: the content as the model would give it, or how the call fails. */
-export type ScriptedAnswer = { readonly content: string; readonly usage?: ProviderUsage; readonly latencyMs?: number } | { readonly fail: "timeout" | "error"; readonly latencyMs?: number; readonly error?: string };
+export type ScriptedAnswer =
+  | { readonly content: string; readonly usage?: ProviderUsage; readonly latencyMs?: number }
+  | { readonly toolCalls: readonly { readonly name: string; readonly params: unknown }[]; readonly content?: string; readonly usage?: ProviderUsage; readonly latencyMs?: number }
+  | { readonly fail: "timeout" | "error"; readonly latencyMs?: number; readonly error?: string };
 
 /**
  * The provider of every automated test (Max's rule for F4: no test calls a paid provider or uses a real key): it answers from a script, in order, or from a function of the request, with no network.
@@ -76,6 +104,13 @@ export class ScriptedProvider implements ProviderPort {
     this.requests.push(req);
     const answer = typeof this.script === "function" ? this.script(req, this.n++) : (this.script[this.n++] ?? { fail: "error" as const, error: "the script has no more answers" });
     if ("fail" in answer) return Promise.resolve({ outcome: answer.fail, latencyMs: answer.latencyMs ?? 1, ...(answer.error === undefined ? {} : { error: answer.error }) });
-    return Promise.resolve({ outcome: "ok", content: answer.content, latencyMs: answer.latencyMs ?? 50, ...(answer.usage === undefined ? {} : { usage: answer.usage }) });
+    const calls = "toolCalls" in answer ? answer.toolCalls.map((c, i) => ({ id: `call-${this.n}-${i + 1}`, name: c.name, params: c.params })) : undefined;
+    return Promise.resolve({
+      outcome: "ok",
+      ...(answer.content === undefined ? {} : { content: answer.content }),
+      ...(calls === undefined ? {} : { toolCalls: calls }),
+      latencyMs: answer.latencyMs ?? 50,
+      ...(answer.usage === undefined ? {} : { usage: answer.usage }),
+    });
   }
 }

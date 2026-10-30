@@ -6,6 +6,9 @@ import { DEFAULT_PROMPT_TEMPLATE, MIND_DEFAULTS, type EffectiveS2 } from "./docu
 import { LlmBrain, MindError, type LlmBrainOptions } from "./llm-brain.ts";
 import { buildPrompt } from "./prompt.ts";
 import { ScriptedProvider, type ScriptedAnswer } from "./provider.ts";
+import { contentHash64 } from "@agentsim/core";
+import { canonicalJson } from "./canonical.ts";
+const contentHashOf = (v: unknown): string => contentHash64(canonicalJson(v));
 
 // The System 2 mind with the scripted provider (no network, no key): the prompt, the answer schema, the loop of attempts, the cache and the records it writes.
 
@@ -336,5 +339,120 @@ describe("the limits of a run (ADR-0044 section 5): they pause, they do not fall
     b.brain.restoreState(JSON.parse(JSON.stringify(a.brain.snapshotState())));
     await b.brain.decide(request({ tick: 13 }), { trace: b.trace });
     await expect(b.brain.decide(request({ tick: 14 }), { trace: b.trace })).rejects.toMatchObject({ code: "limit_reached" });
+  });
+});
+
+describe("the tool-call loop (F4 M2, T-114)", () => {
+  const withLimits = (limits: Partial<EffectiveS2["limits"]>) => effective({ limits: { ...MIND_DEFAULTS.limits, ...limits } });
+  const calls = (...c: { name: string; params: unknown }[]): ScriptedAnswer => ({ toolCalls: c, usage: { inputTokens: 100, outputTokens: 10 }, latencyMs: 40 }) as ScriptedAnswer;
+  const GO = ok({ action: "goTo", params: { xM: 9, yM: 9 } });
+  /** A compute stub: planPath and estimateCost succeed with figures, anything else refuses; it counts what it was asked. */
+  function stub() {
+    const asked: string[] = [];
+    const compute = (tool: string, params: unknown) => {
+      asked.push(`${tool} ${JSON.stringify(params)}`);
+      if (tool === "estimateCost") return { ok: true as const, status: "found", expansions: 12, result: { status: "found", lengthM: 30, etaS: 15, energyPct: 1.5, legs: [] } };
+      if (tool === "planPath") return { ok: true as const, status: "found", expansions: 40, result: { status: "found", lengthM: 22.5, etaS: 11.25, energyPct: 1.1, expansions: 40, waypoints: [] } };
+      return { ok: false as const, code: "point_out_of_bounds", message: "a point lies outside your map" };
+    };
+    return { asked, compute };
+  }
+
+  it("offers the compute tools to the provider (generated from the manifest), answers the calls and calls the model again with the answers, then takes the final answer", async () => {
+    const { brain, provider, records, trace } = setup([calls({ name: "estimateCost", params: { route: ["home"] } }, { name: "planPath", params: { to: { xM: 9, yM: 9 } } }), GO]);
+    const s = stub();
+    const env = await brain.decide(request(), { requestRecordId: "run-000001#7", trace, compute: s.compute });
+    expect(env.decision).toEqual({ kind: "action", name: "goTo", params: { xM: 9, yM: 9 } });
+    expect(s.asked).toEqual(['estimateCost {"route":["home"]}', 'planPath {"to":{"xM":9,"yM":9}}']);
+    expect(provider.calls).toBe(2);
+    expect(provider.requests[0]?.tools?.map((t) => t.name)).toEqual(["estimateCost", "kShortestPaths", "planPath", "querySpace"]);
+    // The second call carries the model's request and the two answers, each naming its call.
+    const second = provider.requests[1]?.messages ?? [];
+    expect(second.at(-3)).toMatchObject({ role: "assistant", toolCalls: [{ name: "estimateCost" }, { name: "planPath" }] });
+    expect(second.at(-2)).toMatchObject({ role: "tool", name: "estimateCost" });
+    expect(second.at(-1)).toMatchObject({ role: "tool", name: "planPath" });
+    expect(JSON.parse(second.at(-1)?.content ?? "{}")).toMatchObject({ lengthM: 22.5 });
+    // The record chain: the request, then the first call, the two tools as children of it, then the second call (also a child of the request).
+    const firstCall = records.find((r) => payload(r)["op"] === "llm-call");
+    const tools = records.filter((r) => r.r.kind === "compute");
+    expect(tools.map((t) => [payload(t)["op"], payload(t)["tool"], payload(t)["status"], payload(t)["expansions"]])).toEqual([
+      ["tool", "estimateCost", "found", 12],
+      ["tool", "planPath", "found", 40],
+    ]);
+    expect(tools.every((t) => t.r.parentId === firstCall?.id)).toBe(true);
+    expect(records.filter((r) => payload(r)["op"] === "llm-call").map((r) => r.r.parentId)).toEqual(["run-000001#7", "run-000001#7"]);
+    expect(env.mind).toMatchObject({ attempts: 2 });
+  });
+
+  it("counts every model call of the loop against the limits (two calls of the loop are two calls)", async () => {
+    const { brain, provider, trace } = setup([calls({ name: "planPath", params: { to: "home" } }), GO], { effective: withLimits({ calls: 1 }) });
+    await expect(brain.decide(request(), { trace, compute: stub().compute })).rejects.toMatchObject({ code: "limit_reached" });
+    expect(provider.calls).toBe(1);
+  });
+
+  it("returns a tool error to the model as a result (the call is still answered, and the loop goes on)", async () => {
+    const { brain, provider, records, trace } = setup([calls({ name: "kShortestPaths", params: { to: { xM: 9999, yM: 0 }, k: 2 } }), GO]);
+    const env = await brain.decide(request(), { trace, compute: stub().compute });
+    expect(env.decision.kind).toBe("action");
+    expect(JSON.parse(provider.requests[1]?.messages.at(-1)?.content ?? "{}")).toEqual({ error: "point_out_of_bounds", message: "a point lies outside your map" });
+    const t = records.find((r) => r.r.kind === "compute");
+    expect(payload(t as never)).toMatchObject({ op: "tool", tool: "kShortestPaths", ok: false, code: "point_out_of_bounds" });
+  });
+
+  it("refuses a call beyond tools.maxCallsPerDecision with a message to the model, without running it; the allow list narrows the offer", async () => {
+    const { brain, provider, records, trace } = setup([calls({ name: "planPath", params: { to: "home" } }, { name: "planPath", params: { to: "home" } }, { name: "querySpace", params: {} }), GO], {
+      effective: effective({ tools: { maxCallsPerDecision: 1, allow: ["goTo", "hold", "planPath"] } }),
+    });
+    const s = stub();
+    await brain.decide(request(), { trace, compute: s.compute });
+    expect(s.asked).toHaveLength(1); // the first planPath only
+    const results = (provider.requests[1]?.messages ?? []).filter((m) => m.role === "tool").map((m) => JSON.parse(m.content) as { error?: string });
+    expect(results[0]?.error).toBeUndefined();
+    expect(results[1]?.error).toBe("tool_call_limit");
+    expect(results[2]?.error).toBe("tool_call_limit");
+    expect(provider.requests[0]?.tools?.map((t) => t.name)).toEqual(["planPath"]); // of the compute tools, only the one the list names
+    expect(records.filter((r) => r.r.kind === "compute").map((r) => payload(r)["ok"])).toEqual([true, false, false]);
+  });
+
+  it("a tool the profile does not offer is refused by name", async () => {
+    const { brain, provider, trace } = setup([calls({ name: "querySpace", params: {} }), GO], { effective: effective({ tools: { maxCallsPerDecision: 8, allow: ["goTo", "hold", "planPath"] } }) });
+    const s = stub();
+    await brain.decide(request(), { trace, compute: s.compute });
+    expect(s.asked).toEqual([]);
+    expect(JSON.parse(provider.requests[1]?.messages.at(-1)?.content ?? "{}")).toMatchObject({ error: "tool_not_available" });
+  });
+
+  it("offers no tool when maxCallsPerDecision is 0 or the run has no compute port, and a model that asks anyway is told and retried", async () => {
+    const none = setup([GO], { effective: effective({ tools: { maxCallsPerDecision: 0 } }) });
+    await none.brain.decide(request(), { trace: none.trace, compute: stub().compute });
+    expect(none.provider.requests[0]?.tools).toBeUndefined();
+    const noPort = setup([calls({ name: "planPath", params: { to: "home" } }), GO]);
+    const env = await noPort.brain.decide(request(), { trace: noPort.trace });
+    expect(noPort.provider.requests[0]?.tools).toBeUndefined();
+    expect(env.decision.kind).toBe("action"); // the second attempt answered
+    expect(noPort.provider.requests[1]?.messages.at(-1)?.content).toContain("tools are not available");
+  });
+
+  it("a decision that calls no tool has the messages and the cache keys it had before tools existed", async () => {
+    const { brain, cache, trace } = setup([GO]);
+    await brain.decide(request(), { trace });
+    const schema = answerSchema(request().allowedActions);
+    const key = cacheKey({ providerKind: "openai-compatible", model: "m1", params: { temperature: 0 }, messages: buildPrompt({ template: DEFAULT_PROMPT_TEMPLATE, mission: "Hold position.", request: request(), history: [] }), toolsHash: contentHashOf(schema), attempt: 1 });
+    expect(cache.entries.has(key)).toBe(true);
+  });
+
+  it("replay-strict of a looped decision makes no call and gives the same answer and records; a tool result that differs from the recorded one stops the run as divergent", async () => {
+    const live = setup([calls({ name: "planPath", params: { to: "home" } }), GO]);
+    const first = await live.brain.decide(request(), { requestRecordId: "run-000001#7", trace: live.trace, compute: stub().compute });
+    const strict = setup([], { cache: live.cache, mode: "replay-strict" });
+    const again = await strict.brain.decide(request(), { requestRecordId: "run-000001#7", trace: strict.trace, compute: stub().compute });
+    expect(strict.provider.calls).toBe(0);
+    expect(again.decision).toEqual(first.decision);
+    const norm = (rs: typeof live.records) => rs.map((r) => ({ ...r, r: { ...r.r, payload: { ...payload(r), cacheHit: undefined } } }));
+    expect(norm(strict.records)).toEqual(norm(live.records));
+    // The maps differ now: the same call gives another result.
+    const changed = () => ({ ok: true as const, status: "found", expansions: 40, result: { status: "found", lengthM: 99, etaS: 1, energyPct: 1 } });
+    const diverge = setup([], { cache: live.cache, mode: "replay-strict" });
+    await expect(diverge.brain.decide(request(), { requestRecordId: "run-000001#7", trace: diverge.trace, compute: changed })).rejects.toMatchObject({ code: "replay_divergent" });
   });
 });
