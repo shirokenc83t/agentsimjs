@@ -122,7 +122,7 @@ export const RunConfigDocument = Type.Object(
      */
     mindsRunMode: Type.Optional(Type.Union([Type.Literal("live"), Type.Literal("replay-strict"), Type.Literal("replay-then-live")])),
     /** Default lockstep. `latency-modeled` arrives with minds. */
-    timeMode: Type.Optional(Type.Union([Type.Literal("lockstep"), Type.Literal("realtime")])),
+    timeMode: Type.Optional(Type.Union([Type.Literal("lockstep"), Type.Literal("realtime"), Type.Literal("latency-modeled")])),
     /**
      * Minimum sim time between decision requests for perception events (ADR-0005 addition of 2026-10-09), at run
      * level only: the same for every agent and every mind. Default 1 s; 0 = no limit.

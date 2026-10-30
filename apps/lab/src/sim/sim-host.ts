@@ -680,7 +680,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     }
     scheduler = new Scheduler(world, world.dtS);
     // The run's declared time mode (run configuration, in its header and runConfigHash), not the previous one.
-    mode = r.value.loaded.timeMode;
+    mode = r.value.loaded.timeMode === "realtime" ? "realtime" : "lockstep"; // a latency-modeled run is paced as lockstep
     driver = makeDriver();
     degradations = 0;
     headless = m.headless === undefined ? undefined : { untilS: m.headless.untilS };

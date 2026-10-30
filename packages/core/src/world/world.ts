@@ -38,6 +38,12 @@ export interface WorldParts {
   /** The compute tools a mind may ask for while it decides (F4 M2); none = a mind that asks is told the tool is not available. */
   readonly compute?: ComputePort;
   /**
+   * The latency model of the `latency-modeled` time mode (ADR-0003 addition of 2026-10-29): how many seconds of sim time a mind's decision took, from the answer and the request. A decision is then applied at
+   * `requestTick + max(1, ceil(latencyS / dtS))` instead of at the next tick; meanwhile the world runs, the agent's action goes on, its events wait in its inbox and no new request is made for it.
+   * Absent: every decision is applied at the next tick (lockstep).
+   */
+  readonly latency?: (agentId: string, envelope: DecisionEnvelope, request: DecisionRequest) => number;
+  /**
    * Genesis (default true): at construction each agent with a brain gets a `start` event and its first decision request,
    * and both are traced. `false` builds the world as the target of a restore: none of that happens, and `restore` puts the
    * snapshot's inboxes, requests and timing in place (ADR-0035 addition of 2026-10-17, item 8).
@@ -71,7 +77,7 @@ export interface WorldSnapshot {
   /** Space summaries already traced, by hash, sorted. */
   readonly seenSpaces: readonly string[];
   /** Decision requests asked and not yet applied, by agent index, with the answer once it arrived. */
-  readonly slots: readonly ({ readonly agentId: string; readonly request: DecisionRequest; readonly envelope?: DecisionEnvelope } | undefined)[];
+  readonly slots: readonly ({ readonly agentId: string; readonly request: DecisionRequest; readonly envelope?: DecisionEnvelope; readonly applyTick?: number } | undefined)[];
   readonly unanswered: number;
   readonly inputLog: readonly RunInput[];
   readonly nextInput: number;
@@ -96,6 +102,8 @@ interface Pending {
   /** The id of the record that traced the request: what the records of the mind's call and of the decision name. Not kept in a snapshot (a restored request is answered already or asked again). */
   readonly requestRecordId?: string;
   envelope?: DecisionEnvelope;
+  /** `latency-modeled` only: the tick at which the answer is applied; absent, at the next tick. */
+  applyTick?: number;
 }
 
 function deepRound(v: unknown): unknown {
@@ -227,7 +235,7 @@ export class World implements Steppable {
       timers: this.timers.map((m) => [...m].sort(byTag)),
       ...(this.notebooks.some((t) => t !== "") ? { notebooks: [...this.notebooks] } : {}),
       seenSpaces: [...this.seenSpaces].sort(),
-      slots: this.slots.map((p) => (p ? { agentId: p.agentId, request: p.request, ...(p.envelope ? { envelope: p.envelope } : {}) } : undefined)),
+      slots: this.slots.map((p) => (p ? { agentId: p.agentId, request: p.request, ...(p.envelope ? { envelope: p.envelope } : {}), ...(p.applyTick === undefined ? {} : { applyTick: p.applyTick }) } : undefined)),
       unanswered: this.unanswered,
       inputLog: this.inputLog.map((i) => ({ ...i })),
       nextInput: this.nextInput,
@@ -261,7 +269,7 @@ export class World implements Steppable {
       this.notebooks[i] = s.notebooks?.[i] ?? "";
       const slot = s.slots[i];
       if (slot && slot.agentId !== a.id) throw new RangeError(`snapshot request of slot ${i} is for ${slot.agentId}, the world's agent is ${a.id}`);
-      this.slots[i] = slot ? { agentId: slot.agentId, request: slot.request, ...(slot.envelope ? { envelope: slot.envelope } : {}) } : undefined;
+      this.slots[i] = slot ? { agentId: slot.agentId, request: slot.request, ...(slot.envelope ? { envelope: slot.envelope } : {}), ...(slot.applyTick === undefined ? {} : { applyTick: slot.applyTick }) } : undefined;
     }
     this.seenSpaces.clear();
     for (const h of s.seenSpaces) this.seenSpaces.add(h);
@@ -322,6 +330,8 @@ export class World implements Steppable {
       const r = settled[i] as PromiseSettledResult<DecisionEnvelope>;
       if (r.status === "fulfilled") {
         p.envelope = r.value;
+        // The tick the answer is applied at: the next one, or later when the run models the mind's latency.
+        if (this.parts.latency !== undefined) p.applyTick = p.request.tick + Math.max(1, Math.ceil(this.parts.latency(p.agentId, r.value, p.request) / this.dtS - 1e-9));
         this.unanswered--;
       } else failures.push(p.agentId);
     }
@@ -368,6 +378,8 @@ export class World implements Steppable {
     for (let i = 0; i < n; i++) {
       const p = this.slots[i];
       if (!p) continue;
+      // An answer that is not due yet waits where it is: the agent keeps what it is doing and no new request is made for it.
+      if (p.applyTick !== undefined && p.applyTick > tick) continue;
       this.slots[i] = undefined;
       const agent = this.agents[i] as SimAgent;
       const brain = this.brainAt[i] as Brain;
@@ -393,6 +405,7 @@ export class World implements Steppable {
           decision: d,
           ...(env.rationale === undefined ? {} : { rationale: env.rationale }),
           ...(env.mind === undefined ? {} : { mind: env.mind }),
+          ...(p.applyTick === undefined ? {} : { requestTick: p.request.tick, applyTick: p.applyTick, ...(typeof env.mind?.["latencyMs"] === "number" ? { latencyMs: env.mind["latencyMs"] } : {}) }),
           ...(env.mission === undefined ? {} : { step: env.mission.step, of: env.mission.of, ...(env.mission.done ? { done: true } : {}), ...(env.mission.stop ? { stop: env.mission.stop } : {}) }),
         },
       });

@@ -1,4 +1,4 @@
-import { Scheduler, SequenceBrain, World, type AgentEvent, type Brain } from "@agentsim/core";
+import { Scheduler, SequenceBrain, World, type AgentEvent, type Brain, type DecisionEnvelope } from "@agentsim/core";
 import { LlmBrain, type InferenceQueue, type LlmBrainHooks, type MindCache, type Prices, type ProviderPort } from "@agentsim/minds";
 import { TRACE_SCHEMA_VERSION, type RunHeader, type TraceBuffer } from "@agentsim/trace";
 import type { LoadedScenario } from "../load.ts";
@@ -103,9 +103,24 @@ export function createRun(loaded: LoadedScenario, resolved: ResolvedRunConfig, t
     minDecisionIntervalS: resolved.minDecisionIntervalS,
     mindView: assembled.mindView,
     compute: assembled.compute,
+    ...(resolved.timeMode === "latency-modeled" ? { latency: latencyModel(resolved) } : {}),
     ...(opts.genesis === false ? { genesis: false } : {}),
   });
   return { ...assembled, world, scheduler: new Scheduler(world, opts.dtS), brains, ...(observer ? { observer } : {}) };
+}
+
+/**
+ * The latency of a decision in `latency-modeled` time (ADR-0003 addition of 2026-10-29), by the agent's mind: a `fixed` model is the profile's milliseconds, a `measured` one the wall latency of the model calls of the
+ * decision as the mind reports it (summed over its calls, from the cache in a replay); a mind without an S2 profile answers at once.
+ */
+function latencyModel(resolved: ResolvedRunConfig): (agentId: string, env: DecisionEnvelope) => number {
+  const byAgent = new Map(resolved.agents.map((a) => [a.agentId, a.s2?.effective.latency]));
+  return (agentId, env) => {
+    const l = byAgent.get(agentId);
+    if (l === undefined) return 0;
+    const ms = l.model === "fixed" ? (l.fixedMs ?? 0) : typeof env.mind?.["latencyMs"] === "number" ? env.mind["latencyMs"] : 0;
+    return ms / 1000;
+  };
 }
 
 /** The world's sensing phase: readings first, then each agent's topological layer from what changed (ADR-0039 §4). */

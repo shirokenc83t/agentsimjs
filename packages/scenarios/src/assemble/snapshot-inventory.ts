@@ -216,6 +216,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     request: c("plain data"),
     requestRecordId: s("the id of the record that traced the request: what an S2 mind's records name as their parent; a restored request is answered or asked again, so it is not kept"),
     envelope: c("the answer, once received", true),
+    applyTick: c("`latency-modeled` only: the tick the answer is applied at", true),
   },
   Active: {
     info: c("actionId, agentId, name, startedTick"),

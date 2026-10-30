@@ -18,6 +18,7 @@ export {
   SimStats,
   SimDegradation,
   TimeMode,
+  RunTimeMode,
   SimError,
   SimLoad,
   SimLoaded,

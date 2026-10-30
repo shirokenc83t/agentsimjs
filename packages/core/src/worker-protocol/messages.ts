@@ -34,9 +34,12 @@ const ArrayBufferType = Type.Refine(
 const TickRateHz = Type.Number({ exclusiveMinimum: 0, maximum: 1000 });
 const RunId = Type.String({ pattern: "^run-[0-9]{6}$" });
 const Hash8 = Type.String({ pattern: "^[0-9a-f]{8}$" });
-/** Time mode (ADR-0003). `latency-modeled` arrives with minds (F4/F5). */
+/** How the worker's clock is driven (ADR-0003): the pace, which a `latency-modeled` run shares with lockstep. */
 export const TimeMode = Type.Union([Type.Literal("lockstep"), Type.Literal("realtime")]);
 export type TimeMode = Static<typeof TimeMode>;
+/** The time mode a run declares (its run configuration's `timeMode`): `latency-modeled` is lockstep in which a decision is applied after the latency of the mind that made it (ADR-0003 addition of 2026-10-29). */
+export const RunTimeMode = Type.Union([Type.Literal("lockstep"), Type.Literal("realtime"), Type.Literal("latency-modeled")]);
+export type RunTimeMode = Static<typeof RunTimeMode>;
 
 // ---- main → worker ----------------------------------------------------------------------------
 
@@ -316,7 +319,7 @@ export const SimLoaded = Type.Object({
   scenarioId: Type.String({ maxLength: 64 }),
   scenarioVersion: Type.Integer({ minimum: 1 }),
   seed: Type.Integer(),
-  timeMode: TimeMode,
+  timeMode: RunTimeMode,
   runConfigHash: Hash8,
   effectiveConfigHash: Hash8,
   /** Agents with `ideal` beliefs as resolved by the worker, sorted: copied into the run header (ADR-0028 addition of 2026-10-10). */

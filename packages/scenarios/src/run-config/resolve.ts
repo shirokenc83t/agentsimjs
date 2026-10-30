@@ -165,7 +165,7 @@ export interface ResolvedRunConfig {
   readonly document: RunConfigDocument;
   readonly scenario: { readonly id: string; readonly version: number };
   readonly seed: number;
-  readonly timeMode: "lockstep" | "realtime";
+  readonly timeMode: "lockstep" | "realtime" | "latency-modeled";
   /** Where the minds' answers come from (run header; in neither hash). */
   readonly mindsRunMode: "live" | "replay-strict" | "replay-then-live";
   /** Minimum sim time between decision requests for perception events (ADR-0005 addition); default 1 s. */
@@ -237,7 +237,7 @@ export function canonicalRunConfig(doc: RunConfigDocument): string {
   // `mindsRunMode` says where the minds' answers come from, not what they decide: it is in no hash.
   const { timeMode, minDecisionIntervalS, mindsRunMode: _runMode, ...rest } = doc;
   // Defaults are omitted: an explicit lockstep or an explicit 1 s hashes like an absent field.
-  return canonicalJson(prune({ ...rest, ...(timeMode === "realtime" ? { timeMode } : {}), ...(minDecisionIntervalS !== undefined && minDecisionIntervalS !== 1 ? { minDecisionIntervalS } : {}) }));
+  return canonicalJson(prune({ ...rest, ...(timeMode === "realtime" || timeMode === "latency-modeled" ? { timeMode } : {}), ...(minDecisionIntervalS !== undefined && minDecisionIntervalS !== 1 ? { minDecisionIntervalS } : {}) }));
 }
 
 export function toPlanningAlgorithm(a: AlgorithmSpec): PlanningAlgorithm {
