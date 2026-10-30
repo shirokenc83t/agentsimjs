@@ -1,4 +1,4 @@
-import { GridSearch, SearchSpace, smoothPath, type GridAlgorithm } from "@agentsim/algorithms";
+import { GridSearch, smoothPath, type GridAlgorithm, type SearchSpace } from "@agentsim/algorithms";
 import { round2, type ComputeOutcome, type ComputePort, type DecisionRequest, type SimAgent } from "@agentsim/core";
 import { COMPUTE_LIMITS, getCapability, validateParams } from "@agentsim/tools-schema";
 import { toPlanningConfig } from "../run-config/resolve.ts";
@@ -81,7 +81,7 @@ export class ComputeToolsService implements ComputePort {
   }
 
   /** One search between two points on a view; the cells of the route and the metre waypoints of its smoothed form. */
-  private search(space: SearchSpace, from: Point, to: Point, algorithm: Algorithm, budget: number): Leg | ComputeOutcome {
+  private search(space: SearchSpace, from: Point, to: Point, algorithm: Algorithm, budget: number, blocked?: ReadonlySet<number>): Leg | ComputeOutcome {
     const g = space.grid;
     const si = g.cellI(from.xM);
     const sj = g.cellJ(from.yM);
@@ -93,7 +93,7 @@ export class ComputeToolsService implements ComputePort {
     const start = sj * space.sizeX + si;
     const goal = tj * space.sizeX + ti;
     if (start === goal) return { status: "found", cells: [start], expansions: 0, waypoints: [[from.xM, from.yM]], lengthM: 0 };
-    const gs = new GridSearch(space, start, goal, algorithm, budget);
+    const gs = new GridSearch(space, start, goal, algorithm, budget, blocked === undefined ? {} : { blocked });
     gs.step(budget);
     const status: Status = gs.status === "found" ? "found" : gs.status === "not_found" ? "not_found" : "budget_exceeded";
     if (status !== "found") return none(status, gs.expanded);
@@ -167,15 +167,15 @@ export class ComputeToolsService implements ComputePort {
     let expansions = first.expansions;
     const found: Leg[] = first.status === "found" ? [first] : [];
     if (first.status === "found" && k > 1) {
-      // Alternatives on a copy of the view with the earlier routes closed (but for their ends): the live view is never touched.
-      const copy = new SearchSpace(plan.space.grid, plan.space.traversal, plan.space.profile);
-      const sx = copy.sizeX;
+      // Alternatives are searched with the earlier routes' cells blocked (but for their ends) in the search itself: the live view is neither copied nor touched.
+      const blocked = new Set<number>();
+      const sx = plan.space.sizeX;
       const open = (c: number, ends: readonly number[]) => ends.some((e) => Math.max(Math.abs((c % sx) - (e % sx)), Math.abs(Math.floor(c / sx) - Math.floor(e / sx))) <= ENDS_OPEN_CELLS);
       for (let n = 1; n < k; n++) {
         const last = found[found.length - 1] as Leg;
         const ends = [last.cells[0] as number, last.cells[last.cells.length - 1] as number];
-        for (const c of last.cells) if (!open(c, ends)) copy.mask[c] = 0;
-        const alt = this.search(copy, from, to, plan.algorithm, plan.budget);
+        for (const c of last.cells) if (!open(c, ends)) blocked.add(c);
+        const alt = this.search(plan.space, from, to, plan.algorithm, plan.budget, blocked);
         if ("ok" in alt) return alt;
         expansions += alt.expansions;
         if (alt.status !== "found") break;
