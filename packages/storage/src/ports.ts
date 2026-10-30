@@ -62,6 +62,8 @@ export interface RunStore {
   get(runId: string): Promise<RunHeader | undefined>;
   list(): Promise<RunSummary[]>;
   setStatus(runId: string, status: RunStatus): Promise<Result<void, CodedError<"unknown_run">>>;
+  /** Sets the header's `notReproducibleFromTick` (a replay-then-live run made a call the cache did not hold, from this tick) unless it is already set: the first miss stays. */
+  markNotReproducible(runId: string, fromTick: number): Promise<Result<void, CodedError<"unknown_run">>>;
   /**
    * Appends run inputs (researcher commands, ADR-0015 clarification): part of what the run ran, replayed to
    * reproduce it. Append-only; rejects the whole batch if one input is invalid, already stored, or out of order.

@@ -191,6 +191,7 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       get: (id) => call("runs.get", [id]),
       list: () => call("runs.list"),
       setStatus: (id, s) => call("runs.setStatus", [id, s]),
+      markNotReproducible: (id, tick) => call("runs.markNotReproducible", [id, tick]),
       appendInputs: (id, inputs) => call("runs.appendInputs", [id, inputs]),
       inputs: (id) => call("runs.inputs", [id]),
       sizes: (id) => call("runs.sizes", [id]),

@@ -19,6 +19,7 @@ import { f1DemoScenario, f1ReferenceWorldScenario, f2DiscoveryScenario, f2PriorR
 import { parseRecordingProfile, RunRecorder, type FlowControl, type PersistedHead, type RecorderItem, type TraceBuffer } from "@agentsim/trace";
 import { DummyHostedWorld, ScenarioHostedWorld, type HostedWorld } from "./hosted-world.ts";
 import { RunRecording } from "./run-recording.ts";
+import { RemoteMindCache, type CachePortLike } from "./remote-cache.ts";
 
 /** The scenario document of a preset, built here (off the main thread): the large ones take tens of ms. */
 function buildPresetDocument(preset: PresetId): unknown {
@@ -128,6 +129,8 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   let windowStart = clock.now();
   /** Recording: the channel to the storage worker (from the main thread), and the recorder of the loaded run when it is recorded. */
   let recorderPort: RecorderPort | undefined;
+  /** The minds' response cache over the channel the main thread gave (F4 M2): absent, a run keeps its cache in memory. */
+  let mindCache: RemoteMindCache | undefined;
   let recorder: RunRecorder | undefined;
   /** What a recorded run writes besides its components' records: checkpoints, snapshots, pose samples, belief keyframes and deltas. */
   let recording: RunRecording | undefined;
@@ -633,7 +636,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
       }
     }
     endReason = undefined;
-    const r = ScenarioHostedWorld.load(m, () => clock.epochNow(), m.minds === undefined ? {} : { minds: m.minds, headless: m.headless !== undefined });
+    const r = ScenarioHostedWorld.load(m, () => clock.epochNow(), m.minds === undefined ? {} : { minds: m.minds, headless: m.headless !== undefined, ...(mindCache === undefined ? {} : { mindCache }) });
     if (!r.ok) {
       scope.postMessage({ type: "error", code: r.error.code, message: r.error.message });
       return;
@@ -738,6 +741,9 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
         port.start?.();
         break;
       }
+      case "cachePort":
+        mindCache = new RemoteMindCache(m.port as CachePortLike);
+        break;
       case "load":
         load(m);
         break;

@@ -71,6 +71,16 @@ describe("the player's tiles and the status bar's chips", () => {
   });
 });
 
+describe("a replay that is no longer reproducible", () => {
+  it("says from which tick, in the status bar, once the worker reports it", () => {
+    render(<MindsStatusSegments />);
+    act(() => setMinds(mindsFixture("quiet")));
+    expect(screen.queryByTestId("status-not-reproducible")).toBeNull();
+    act(() => setMinds({ ...mindsFixture("quiet"), mode: "replay-then-live", notReproducibleFromTick: 41 }));
+    expect(screen.getByTestId("status-not-reproducible").textContent).toBe("▲ not reproducible from tick 41");
+  });
+});
+
 describe("the notice of a limit", () => {
   const props = () => ({ dtS: 0.1, onRaise: vi.fn(), onStop: vi.fn() });
 

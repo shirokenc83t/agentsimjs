@@ -144,6 +144,12 @@ export const SimLoad = Type.Object({
 export const SimRecorderPort = Type.Object({ type: Type.Literal("recorderPort"), port: Type.Unknown() });
 
 /**
+ * The channel of the System 2 minds' response cache (F4 M2, ADR-0020 addition of 2026-10-29): the main thread keeps one end and answers from the storage worker's `cache` (a `get` is answered with a
+ * `value`, a `put` is stored); the sim worker holds the other. Entries are answers and figures, never a key. The port is transferred.
+ */
+export const SimCachePort = Type.Object({ type: Type.Literal("cachePort"), port: Type.Unknown() });
+
+/**
  * Researcher command (ADR-0015 clarification of 2026-10-04 and addition of 2026-10-12): world scope, recorded by the
  * worker as a run input applied at the next tick boundary, traced as `injected`. `op` is one of the closed set of
  * injectable actions (tools-schema `INJECTABLE_COMMANDS`; the worker refuses any other with `not_injectable`) and
@@ -247,7 +253,7 @@ export const SimLimitAnswer = Type.Union([
   Type.Object({ type: Type.Literal("limitAnswer"), runId: RunId, agentId: Type.String({ maxLength: 64 }), limit: Type.Union([Type.Literal("calls"), Type.Literal("tokens"), Type.Literal("costUsd")]), action: Type.Literal("stop") }, { additionalProperties: false }),
 ]);
 
-export const MainToSim = Type.Union([SimInit, SimControl, SimReturnBuffer, SimRecorderPort, SimLoad, SimCommand, SimBuildPreset, SimView, SimResearcherWatch, SimCellWatch, SimBeliefWatch, SimOverlayWatch, SimStrategyTest, SimLimitAnswer]);
+export const MainToSim = Type.Union([SimInit, SimControl, SimReturnBuffer, SimRecorderPort, SimCachePort, SimLoad, SimCommand, SimBuildPreset, SimView, SimResearcherWatch, SimCellWatch, SimBeliefWatch, SimOverlayWatch, SimStrategyTest, SimLimitAnswer]);
 export type MainToSim = Static<typeof MainToSim>;
 
 // ---- worker → main ----------------------------------------------------------------------------
@@ -648,6 +654,8 @@ export const SimMinds = Type.Object({
       { additionalProperties: false },
     ),
   ),
+  /** The tick from which a `replay-then-live` run stopped being reproducible (its first call that missed the cache); the main thread writes it into the run header. */
+  notReproducibleFromTick: Type.Optional(Type.Integer({ minimum: 0 })),
   /** A limit that paused the run, waiting for a raise or a stop. */
   pausedAt: Type.Optional(Type.Object({ agentId: Type.String({ maxLength: 64 }), limit: Type.Union([Type.Literal("calls"), Type.Literal("tokens"), Type.Literal("costUsd")]), used: Type.Number(), max: Type.Number(), tick: Type.Integer({ minimum: 0 }) }, { additionalProperties: false })),
 });

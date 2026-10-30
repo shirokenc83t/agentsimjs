@@ -96,6 +96,11 @@ export function StatusBar(props: StatusBarProps) {
         {snap.hashTick !== undefined && <span className="k">@{snap.hashTick}</span>}{" "}
         <span className="k">cfg</span> {short(header?.runConfigHash)} <span className="k">eff</span> {short(header?.effectiveConfigHash)}
       </span>
+      {header?.notReproducibleFromTick !== undefined && (
+        <span className="seg s2-chip warn" data-prio="3" data-testid="status-header-not-reproducible" title="The run header says: from this tick a call was made that the response cache did not hold">
+          ▲ not reproducible from tick {header.notReproducibleFromTick}
+        </span>
+      )}
       <span className={`seg${persistent ? "" : " warn"}`} data-prio="9" data-testid="status-storage">
         db: {status.state === "ready" ? status.mode : status.state}
       </span>

@@ -1,6 +1,7 @@
 import { DEFAULT_PROMPT_TEMPLATE } from "@agentsim/minds";
 import { F2_DISCOVERY_ID, f2DiscoveryScenario, f2RunConfig } from "@agentsim/scenarios";
 import { describe, expect, it } from "vitest";
+import { serveMindCache, type CachePortLike } from "./remote-cache.ts";
 import { flush, harness, init, stored, type Harness } from "./sim-host-harness.ts";
 
 // F4 M1 (T-110) in the sim host: an S2 mind is a decision the lockstep world waits for. The host reports what the minds are doing (decisions waiting, what each has used of its limits, a pause at a limit),
@@ -9,18 +10,18 @@ import { flush, harness, init, stored, type Harness } from "./sim-host-harness.t
 const answer = (o: unknown) => ({ content: JSON.stringify(o), usage: { inputTokens: 100, outputTokens: 10 }, latencyMs: 5 });
 const WAKE = answer({ action: "idle", timers: [{ op: "set", tag: "wake", delayS: 1 }] });
 
-function load(over: { limits?: Record<string, number>; delayMs?: number; headless?: boolean; recording?: unknown } = {}) {
+function load(over: { limits?: Record<string, number>; delayMs?: number; headless?: boolean; recording?: unknown; mode?: string; script?: unknown[] } = {}) {
   const profile = { schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: "p", model: "m", promptTemplate: { id: "default", version: 1 }, ...(over.limits === undefined ? {} : { limits: over.limits }) } };
   return {
     type: "load",
     runId: "run-000007",
     scenario: f2DiscoveryScenario(),
     scenarioVersion: 1,
-    runConfig: { ...f2RunConfig(F2_DISCOVERY_ID, 1), minds: { byAgent: { scout: { s2: { profile: { id: "scout-llm", version: 1 }, mission: "Wake every second." } } } } },
+    runConfig: { ...f2RunConfig(F2_DISCOVERY_ID, 1), ...(over.mode === undefined ? {} : { mindsRunMode: over.mode }), minds: { byAgent: { scout: { s2: { profile: { id: "scout-llm", version: 1 }, mission: "Wake every second." } } } } },
     minds: {
       profiles: [{ id: "scout-llm", version: 1, document: profile }],
       templates: [{ id: "default", version: 1, document: DEFAULT_PROMPT_TEMPLATE }],
-      providers: [{ id: "p", kind: "scripted", baseUrl: "http://localhost:1", script: Array.from({ length: 60 }, () => WAKE), delayMs: over.delayMs ?? 0 }],
+      providers: [{ id: "p", kind: "scripted", baseUrl: "http://localhost:1", script: over.script ?? Array.from({ length: 60 }, () => WAKE), delayMs: over.delayMs ?? 0 }],
     },
     ...(over.recording === undefined ? {} : { recording: over.recording }),
     ...(over.headless === true ? { headless: { untilS: 60 } } : {}),
@@ -128,5 +129,58 @@ describe("the sim host and the System 2 minds", () => {
     const l = load();
     const h = started({ ...l, minds: { ...l.minds, providers: [] } });
     expect(h.errors().map((e) => e.code)).toContain("provider_not_configured");
+  });
+
+  it("the response cache is the storage's: a run recorded in one session replays in a new session with replay-strict and no provider call, with the same decisions at the same ticks (T-112)", async () => {
+    // The main thread's end of the channel, answering from one store that outlives the sessions (what the storage worker's cache is).
+    const store = new Map<string, unknown>();
+    const wire = (h: Harness) => {
+      const ends: [((e: MessageEvent<unknown>) => void)[], ((e: MessageEvent<unknown>) => void)[]] = [[], []];
+      const end = (me: 0 | 1): CachePortLike => ({ postMessage: (m) => queueMicrotask(() => (ends[1 - me] ?? []).forEach((l) => l({ data: m } as MessageEvent<unknown>))), addEventListener: (_t, l) => void (ends[me] ?? []).push(l), start: () => {} });
+      serveMindCache(end(1), { get: async (k) => store.get(k) as never, put: async (k, v) => void store.set(k, v) });
+      h.send({ type: "cachePort", port: end(0) });
+    };
+
+    const a = harness();
+    init(a);
+    wire(a);
+    a.send(load());
+    a.send({ type: "control", op: "play" });
+    await pump(a, 60);
+    expect(store.size).toBeGreaterThan(3);
+    expect(a.errors()).toEqual([]);
+
+    // A new session: the provider has nothing to say, so any call would be an error or a fallback; every answer must come from the cache.
+    const b = harness();
+    init(b);
+    wire(b);
+    b.send(load({ mode: "replay-strict", script: [] }));
+    b.send({ type: "control", op: "play" });
+    await pump(b, 60);
+    expect(b.errors()).toEqual([]);
+    expect(b.events().filter((r) => ["fallback", "cache-miss"].includes((r.payload as { op?: string }).op ?? ""))).toEqual([]);
+    // The same decisions and actions at the same ticks, record for record (the replay's run is shorter or longer only by where the clock stood when each pump ended).
+    const mine = (h: Harness) =>
+      h
+        .events()
+        .filter((r) => ["request", "llm-call", "decision", "timer-set"].includes((r.payload as { op?: string }).op ?? ""))
+        .map((r) => {
+          const { cacheHit: _hit, ...rest } = r.payload as Record<string, unknown>; // the one field that says where the answer came from
+          return { id: r.id, simTime: r.simTime, kind: r.kind, payload: rest };
+        });
+    const ra = mine(a);
+    const rb = mine(b);
+    const n = Math.min(ra.length, rb.length);
+    expect(n).toBeGreaterThan(3);
+    expect(rb.slice(0, n)).toEqual(ra.slice(0, n));
+  });
+
+  it("a replay-then-live run that misses the cache says from which tick it is not reproducible, once, in the minds' report (the lab writes it into the header)", async () => {
+    const h = started(load({ mode: "replay-then-live" }));
+    h.send({ type: "control", op: "play" });
+    await pump(h, 30);
+    const flagged = minds(h).filter((m) => m.notReproducibleFromTick !== undefined);
+    expect(flagged.length).toBeGreaterThan(0);
+    expect(new Set(flagged.map((m) => m.notReproducibleFromTick)).size).toBe(1);
   });
 });

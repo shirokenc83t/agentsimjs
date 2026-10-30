@@ -1,5 +1,5 @@
 import type { Brain, SimLoadMessage, SimMindsMessage } from "@agentsim/core";
-import { InferenceQueue, LlmBrain, MemoryMindCache, ScriptedProvider, type LimitEvent, type LimitName, type LimitWarning, type LlmBrainHooks, type MindsRunMode, type Prices, type ProviderPort, type ProviderRequest, type ProviderResponse, type ScriptedAnswer } from "@agentsim/minds";
+import { InferenceQueue, LlmBrain, MemoryMindCache, ScriptedProvider, type LimitEvent, type LimitName, type LimitWarning, type LlmBrainHooks, type MindCache, type MindsRunMode, type Prices, type ProviderPort, type ProviderRequest, type ProviderResponse, type ScriptedAnswer } from "@agentsim/minds";
 import type { MindLibrary, MindsOptions, ProviderInfo, ResolvedRunConfig, ResolveOptions } from "@agentsim/scenarios";
 
 // What the sim worker holds for the System 2 minds of a run (F4 M1, T-110): the providers it was given, the response cache, the inference queue, the hooks of each mind (the limit warnings and the pause),
@@ -46,14 +46,14 @@ export class MindsRuntime {
   /** Set when a `replay-then-live` mind made a call the cache did not hold: from which tick, for which agent. */
   notReproducible: { readonly agentId: string; readonly tick: number } | undefined;
 
-  constructor(spec: Spec, readonly mode: MindsRunMode, private readonly headless = false) {
+  constructor(spec: Spec, readonly mode: MindsRunMode, private readonly headless = false, cacheStore?: MindCache) {
     const profiles = new Map(spec.profiles.map((p) => [`${p.id}@${p.version}`, p.document]));
     const templates = new Map(spec.templates.map((t) => [`${t.id}@${t.version}`, t.document]));
     const library: MindLibrary = { profile: (id, v) => profiles.get(`${id}@${v}`) as never, template: (id, v) => templates.get(`${id}@${v}`) as never };
     const entries = new Map(spec.providers.map((p) => [p.id, p]));
     this.resolve = { library, providers: (id): ProviderInfo | undefined => (entries.get(id) === undefined ? undefined : { kind: entries.get(id)?.kind ?? "", baseUrl: entries.get(id)?.baseUrl ?? "" }) };
     this.queue = new InferenceQueue({ ...(spec.queue?.concurrency === undefined ? {} : { concurrency: spec.queue.concurrency }), ...(spec.queue?.backoffMs === undefined ? {} : { backoffMs: spec.queue.backoffMs }) });
-    const cache = new MemoryMindCache();
+    const cache = cacheStore ?? new MemoryMindCache();
     this.options = {
       cache,
       queue: this.queue,
@@ -130,6 +130,7 @@ export class MindsRuntime {
         warnings: (this.warnings.get(agentId) ?? []).map((w) => ({ limit: w.limit as LimitName, pct: w.pct })),
       })),
       ...(this.pausedAt === undefined ? {} : { pausedAt: { ...this.pausedAt.event } }),
+      ...(this.notReproducible === undefined ? {} : { notReproducibleFromTick: this.notReproducible.tick }),
     };
     // `tick` moves every poll: the report is compared without it.
     const { tick: _t, ...rest } = s;

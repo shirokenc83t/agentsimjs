@@ -112,6 +112,11 @@ describe("sim worker protocol", () => {
     expect(validate(MainToSim, msg).ok).toBe(false);
   });
 
+  it("F4 M2: `cachePort` hands the sim worker its end of the response cache channel, and `minds` may say from which tick a run is not reproducible", () => {
+    expect(validate(MainToSim, { type: "cachePort", port: {} }).ok).toBe(true);
+    expect(validate(MainToSim, { type: "cachePort" }).ok).toBe(false);
+  });
+
   it("F4: `minds` reports what the S2 minds are doing (worker → main), `limitAnswer` raises or stops (main → worker), `load` may carry the library and the providers, and a provider entry holds no key", () => {
     const status = {
       type: "minds",

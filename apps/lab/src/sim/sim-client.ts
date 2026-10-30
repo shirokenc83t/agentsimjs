@@ -176,6 +176,7 @@ export class SimClient {
       case "minds":
         // What the S2 minds are doing (F4): the player's tiles, the status bar, the notice and the dialog read the store.
         setMinds(m);
+        if (m.notReproducibleFromTick !== undefined) this.notReproducibleListener?.(m.runId, m.notReproducibleFromTick);
         break;
       case "degradation":
         this.snap = { ...this.snap, degradations: this.snap.degradations + 1, lastSkippedTicks: m.skippedTicks };
@@ -286,6 +287,17 @@ export class SimClient {
   attachRecorderPort(port: MessagePort): void {
     this.post({ type: "recorderPort", port }, [port]);
     this.recorderAttached = true;
+  }
+
+  /** Told once per post that says a run is not reproducible from a tick (the lab writes it into the stored header; storing it twice leaves the first). */
+  private notReproducibleListener: ((runId: string, tick: number) => void) | undefined;
+  onNotReproducible(listener: (runId: string, tick: number) => void): void {
+    this.notReproducibleListener = listener;
+  }
+
+  /** Hands the sim worker its end of the minds' response cache channel (the main thread serves the other end from storage). The port is transferred. */
+  attachCachePort(port: MessagePort): void {
+    this.post({ type: "cachePort", port }, [port]);
   }
 
   load(m: Omit<SimLoadMessage, "type">): Promise<SimLoadedMessage> {

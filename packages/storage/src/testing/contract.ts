@@ -315,6 +315,20 @@ export function describeStorageContract(name: string, create: () => Promise<Cont
       });
     });
 
+    describe("the header's minds fields (schema v15)", () => {
+      it("keeps where the answers came from and the first tick that missed the cache (set once), and refuses an unknown run", async () => {
+        await h.ports.runs.create(header("run-000001", { mindsRunMode: "replay-then-live" }));
+        expect((await h.ports.runs.get("run-000001"))?.mindsRunMode).toBe("replay-then-live");
+        expect((await h.ports.runs.get("run-000001"))?.notReproducibleFromTick).toBeUndefined();
+        expect((await h.ports.runs.markNotReproducible("run-000001", 40)).ok).toBe(true);
+        expect((await h.ports.runs.markNotReproducible("run-000001", 90)).ok).toBe(true);
+        expect((await h.ports.runs.get("run-000001"))?.notReproducibleFromTick).toBe(40);
+        expect((await h.ports.runs.list())[0]?.notReproducibleFromTick).toBe(40);
+        const unk = await h.ports.runs.markNotReproducible("run-000009", 1);
+        expect(unk.ok ? null : unk.error.code).toBe("unknown_run");
+      });
+    });
+
     describe.each(["mindProfiles", "promptTemplates"] as const)("%s (the library, schema v14)", (port) => {
       const doc = (id: string, extra: Record<string, unknown> = {}) => ({ id, name: `Name of ${id}`, document: { schemaVersion: 1, kind: "x", ...extra } });
 

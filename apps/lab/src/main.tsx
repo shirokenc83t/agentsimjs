@@ -4,7 +4,7 @@ import { initTheme, initTooltips, UiThemeProvider, useUiContext } from "@agentsi
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
-import { connectRecorder, resolveEnvironment } from "./config/environment.ts";
+import { connectMindCache, connectRecorder, resolveEnvironment } from "./config/environment.ts";
 import { probeEnabled } from "./probe.ts";
 import { mindsFixture } from "./shell/minds-fixture.ts";
 import { setMinds } from "./shell/minds-status.ts";
@@ -23,6 +23,7 @@ const env = resolveEnvironment(import.meta.env["VITE_AGENTSIM_ENV"] as string | 
 const storage = env.createStorage();
 const sim = env.createSim(10);
 connectRecorder(sim, storage);
+connectMindCache(sim, storage);
 
 /** The panels' run source: the live run, or a recorded run while a replay session is open. */
 function Root() {

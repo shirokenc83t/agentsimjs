@@ -44,6 +44,7 @@ type RunRow = {
   scenario_id: string | null; scenario_version: number | null; run_config: string | null;
   run_config_hash: string | null; effective_config_hash: string | null; simulator_version: string | null;
   ideal_agents: string | null; recording: string | null; recording_profile: string | null; recording_profile_hash: string | null; imported_from: string | null; derived: string | null;
+  minds_run_mode: string | null; not_reproducible_from_tick: number | null;
 };
 
 const opt = <K extends string, V>(key: K, v: V | null | undefined): { [P in K]?: V } =>
@@ -74,6 +75,8 @@ function rowToRun(r: RunRow): RunHeader {
     ...opt("recordingProfileHash", r.recording_profile_hash),
     ...opt("importedFrom", r.imported_from),
     ...opt("derived", r.derived === null ? null : (JSON.parse(r.derived) as DerivedRun)),
+    ...opt("mindsRunMode", r.minds_run_mode as RunHeader["mindsRunMode"] | null),
+    ...opt("notReproducibleFromTick", r.not_reproducible_from_tick),
   };
 }
 
@@ -211,8 +214,8 @@ class SqlRunStore implements RunStore {
     this.db.run(
       `INSERT INTO runs (run_id, schema_version, created_at_wall_ms, label, scenario, seed, status,
                          scenario_id, scenario_version, run_config, run_config_hash, effective_config_hash, simulator_version, ideal_agents,
-                         recording, recording_profile, recording_profile_hash, imported_from, derived)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                         recording, recording_profile, recording_profile_hash, imported_from, derived, minds_run_mode, not_reproducible_from_tick)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         header.runId, header.schemaVersion, header.createdAtWallMs, header.label, header.scenario ?? null, header.seed ?? null, header.status,
         header.scenarioId ?? null, header.scenarioVersion ?? null, header.runConfig === undefined ? null : JSON.stringify(header.runConfig),
@@ -220,6 +223,7 @@ class SqlRunStore implements RunStore {
         header.idealAgents === undefined ? null : JSON.stringify(header.idealAgents),
         header.recording ?? null, header.recordingProfile === undefined ? null : JSON.stringify(header.recordingProfile), header.recordingProfileHash ?? null,
         header.importedFrom ?? null, header.derived === undefined ? null : JSON.stringify(header.derived),
+        header.mindsRunMode ?? null, header.notReproducibleFromTick ?? null,
       ],
     );
     return ok(undefined);
@@ -241,6 +245,13 @@ class SqlRunStore implements RunStore {
   async setStatus(runId: string, status: RunStatus) {
     const { changes } = this.db.run("UPDATE runs SET status = ? WHERE run_id = ?", [status, runId]);
     return changes === 0 ? err({ code: "unknown_run" as const, message: `unknown run ${runId}` }) : ok(undefined);
+  }
+
+  async markNotReproducible(runId: string, fromTick: number) {
+    if (!this.db.get("SELECT 1 AS x FROM runs WHERE run_id = ?", [runId])) return err({ code: "unknown_run" as const, message: `unknown run ${runId}` });
+    // The first call that missed the cache is the one the header names: a later mark does not move it.
+    this.db.run("UPDATE runs SET not_reproducible_from_tick = ? WHERE run_id = ? AND not_reproducible_from_tick IS NULL", [fromTick, runId]);
+    return ok(undefined);
   }
 
   async appendInputs(runId: string, inputs: readonly StoredRunInput[]): Promise<Result<void, RunInputError>> {

@@ -195,6 +195,12 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
         runs.set(runId, { ...r, status });
         return ok(undefined);
       },
+      async markNotReproducible(runId: string, fromTick: number) {
+        const r = runs.get(runId);
+        if (!r) return err({ code: "unknown_run" as const, message: `unknown run ${runId}` });
+        if (r.notReproducibleFromTick === undefined) runs.set(runId, { ...r, notReproducibleFromTick: fromTick });
+        return ok(undefined);
+      },
       async sizes(runId) {
         if (!runs.has(runId)) return undefined;
         const payloadBytes = (records.get(runId) ?? []).map((r) => JSON.stringify(r.payload ?? null).length);

@@ -98,6 +98,11 @@ export function MindsStatusSegments() {
           </span>
         )
       )}
+      {status.notReproducibleFromTick !== undefined && (
+        <span className="seg s2-chip warn" data-prio="3" data-testid="status-not-reproducible" title="From this tick a call was made that the response cache did not hold: the run cannot be replayed from the cache alone">
+          ▲ not reproducible from tick {status.notReproducibleFromTick}
+        </span>
+      )}
       {a !== undefined && (
         <span className="seg mono" data-prio="6" data-testid="status-s2-minds" title={`${a.provider} · ${a.model}${a.profile === undefined ? "" : ` · ${a.profile}`}`}>
           {status.mode === "live" ? "live" : status.mode} · {a.provider} · {a.model}

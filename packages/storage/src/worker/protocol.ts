@@ -30,7 +30,7 @@ export type StorageInit = Static<typeof StorageInit>;
 
 export const OPS = [
   "trace.append", "trace.flush", "trace.query", "trace.count",
-  "runs.allocateRunId", "runs.create", "runs.get", "runs.list", "runs.setStatus", "runs.appendInputs", "runs.inputs", "runs.sizes", "runs.delete",
+  "runs.allocateRunId", "runs.create", "runs.get", "runs.list", "runs.setStatus", "runs.markNotReproducible", "runs.appendInputs", "runs.inputs", "runs.sizes", "runs.delete",
   "cache.get", "cache.put",
   "userData.get", "userData.set", "userData.delete", "userData.keys",
   "scenarios.list", "scenarios.get", "scenarios.saveVersion", "scenarios.delete",

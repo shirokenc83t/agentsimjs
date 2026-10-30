@@ -564,6 +564,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "runs.get": value = await s.runs.get(String(a)); break;
         case "runs.list": value = await s.runs.list(); break;
         case "runs.setStatus": value = await s.runs.setStatus(String(a), b as RunStatus); break;
+        case "runs.markNotReproducible": value = await s.runs.markNotReproducible(String(a), Number(b)); break;
         case "runs.appendInputs": value = await s.runs.appendInputs(String(a), Array.isArray(b) ? (b as StoredRunInput[]) : []); break;
         case "runs.inputs": value = await s.runs.inputs(String(a)); break;
         case "runs.sizes": value = await s.runs.sizes(String(a)); break;
