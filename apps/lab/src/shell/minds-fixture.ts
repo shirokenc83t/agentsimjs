@@ -28,7 +28,7 @@ export function mindsFixture(state: "quiet" | "waiting" | "waiting-several" | "w
     case "warning":
       return { ...head, tick: 338, waiting: 0, agents: [{ ...BASE, calls: 13, tokens: 32_818, warnings: [{ limit: "tokens", pct: 82 }] }] };
     case "paused":
-      return { ...head, tick: 342, waiting: 1, agents: [{ ...BASE, warnings: [{ limit: "tokens", pct: 82 }] }], pausedAt: { agentId: "uav-001", limit: "tokens", used: 40_912, max: 40_000, tick: 342 } };
+      return { ...head, tick: 342, waiting: 0, agents: [{ ...BASE, warnings: [{ limit: "tokens", pct: 82 }] }], pausedAt: { agentId: "uav-001", limit: "tokens", used: 40_912, max: 40_000, tick: 342 } };
     case "raised":
       return { ...head, tick: 350, waiting: 0, agents: [{ ...BASE, limits: { calls: 20, tokens: 80_000, costUsd: 0.05 } }] };
   }

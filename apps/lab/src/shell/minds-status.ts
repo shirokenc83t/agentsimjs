@@ -10,12 +10,15 @@ export interface MindsView {
   /** Wall time (performance.now) at which the minds began to be waited for, while they are. */
   readonly waitingSinceMs: number | undefined;
   /** The warning notice to show now (each warning is shown once, without buttons, and closes after `WARNING_NOTICE_MS`). */
-  readonly warningNotice: { readonly agentId: string; readonly limit: LimitName; readonly pct: number; readonly shownAtMs: number } | undefined;
+  readonly warningNotice: { readonly agentId: string; readonly limit: LimitName; readonly pct: number; readonly max: number; readonly shownAtMs: number } | undefined;
+  /** Wall time at which Play (or Space) was pressed while the run was paused by a limit: the status bar says why nothing happened, for `PLAY_HINT_MS`. */
+  readonly playBlockedAtMs: number | undefined;
 }
 
 export const WARNING_NOTICE_MS = 8000;
+export const PLAY_HINT_MS = 4000;
 
-const EMPTY: MindsView = { status: undefined, waitingSinceMs: undefined, warningNotice: undefined };
+const EMPTY: MindsView = { status: undefined, waitingSinceMs: undefined, warningNotice: undefined, playBlockedAtMs: undefined };
 let view: MindsView = EMPTY;
 const listeners = new Set<() => void>();
 const shown = new Set<string>();
@@ -36,11 +39,17 @@ export function setMinds(m: SimMindsMessage, nowMs = performance.now()): void {
       const key = `${m.runId}|${a.agentId}|${w.limit}|${a.limits[w.limit]}`;
       if (shown.has(key)) continue;
       shown.add(key);
-      warningNotice = { agentId: a.agentId, limit: w.limit, pct: w.pct, shownAtMs: nowMs };
+      warningNotice = { agentId: a.agentId, limit: w.limit, pct: w.pct, max: a.limits[w.limit], shownAtMs: nowMs };
     }
   }
+  // A raise clears the warning of that limit: a notice for a limit that has been raised, or whose warning is gone, goes with it (its title and its body must come from the same numbers).
+  if (warningNotice !== undefined) {
+    const n = warningNotice;
+    const a = m.agents.find((x) => x.agentId === n.agentId);
+    if (a === undefined || a.limits[n.limit] !== n.max || !a.warnings.some((w) => w.limit === n.limit)) warningNotice = undefined;
+  }
   const waitingSinceMs = m.waiting > 0 ? (view.waitingSinceMs ?? nowMs) : undefined;
-  view = { status: m, waitingSinceMs, warningNotice };
+  view = { status: m, waitingSinceMs, warningNotice, playBlockedAtMs: m.pausedAt === undefined ? undefined : view.playBlockedAtMs };
   emit();
 }
 
@@ -48,6 +57,12 @@ export function setMinds(m: SimMindsMessage, nowMs = performance.now()): void {
 export function closeWarningNotice(): void {
   if (view.warningNotice === undefined) return;
   view = { ...view, warningNotice: undefined };
+  emit();
+}
+
+/** Play or Space was pressed while a limit holds the run: the status bar says what resumes it. */
+export function notePlayBlocked(nowMs = performance.now()): void {
+  view = { ...view, playBlockedAtMs: nowMs };
   emit();
 }
 

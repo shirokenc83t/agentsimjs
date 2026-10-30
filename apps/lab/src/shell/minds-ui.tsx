@@ -1,7 +1,7 @@
 import type { SimMindsMessage } from "@agentsim/core";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { allowsWords, kilo, LIMIT_WORDS, pctOf, rateWords, raisePresets, spaced, tileAgent, usedOf, usedWords, validRaise, worstLimit, type AgentMinds, type LimitName } from "./minds-limits.ts";
-import { closeWarningNotice, useMinds, WARNING_NOTICE_MS } from "./minds-status.ts";
+import { closeWarningNotice, PLAY_HINT_MS, useMinds, WARNING_NOTICE_MS } from "./minds-status.ts";
 
 // The System 2 minds in the shell (F4 T-110, the designer's LimitsPause): the player's tiles, the chips of the status bar, "waiting for S2" under the clock, the 80 % notice, the pause notice and the dialog
 // that raises a limit. All of it reads the one store the worker's `minds` messages fill; none of it touches a run: a raise or a stop is an answer sent to the worker.
@@ -32,7 +32,8 @@ export function waitingWords(m: SimMindsMessage, elapsedMs: number): string {
 export function WaitingNote() {
   const { status, waitingSinceMs } = useMinds();
   const now = useNow(waitingSinceMs !== undefined);
-  if (status === undefined || status.waiting === 0 || waitingSinceMs === undefined) return null;
+  // A pause by a limit waits for the researcher, not for a model: no note then.
+  if (status === undefined || status.waiting === 0 || waitingSinceMs === undefined || status.pausedAt !== undefined) return null;
   return (
     <span className="s2-wait mono" data-testid="player-s2-wait" title={status.agents.map((a) => `${a.agentId} · ${a.model}`).join("\n")}>
       {waitingWords(status, now - waitingSinceMs)}
@@ -72,15 +73,15 @@ export function MindsTiles() {
 
 /** What the status bar says of the minds: the wait, the 80 % chip, the pause, and where the answers come from. */
 export function MindsStatusSegments() {
-  const { status, waitingSinceMs } = useMinds();
-  const now = useNow(waitingSinceMs !== undefined);
+  const { status, waitingSinceMs, playBlockedAtMs } = useMinds();
+  const now = useNow(waitingSinceMs !== undefined || playBlockedAtMs !== undefined);
   if (status === undefined) return null;
   const a = tileAgent(status);
   const w = a === undefined ? undefined : worstLimit(a);
   const p = status.pausedAt;
   return (
     <>
-      {status.waiting > 0 && waitingSinceMs !== undefined && (
+      {status.waiting > 0 && waitingSinceMs !== undefined && p === undefined && (
         <span className="seg s2-chip run" data-prio="2" data-testid="status-s2-wait">
           {waitingWords(status, now - waitingSinceMs)}
         </span>
@@ -98,6 +99,11 @@ export function MindsStatusSegments() {
           </span>
         )
       )}
+      {playBlockedAtMs !== undefined && p !== undefined && now - playBlockedAtMs < PLAY_HINT_MS && (
+        <span className="seg s2-chip warn" data-prio="1" data-testid="status-s2-play-hint">
+          paused by a limit: resumes after the limit is raised
+        </span>
+      )}
       {status.notReproducibleFromTick !== undefined && (
         <span className="seg s2-chip warn" data-prio="3" data-testid="status-not-reproducible" title="From this tick a call was made that the response cache did not hold: the run cannot be replayed from the cache alone">
           ▲ not reproducible from tick {status.notReproducibleFromTick}
@@ -113,6 +119,33 @@ export function MindsStatusSegments() {
 }
 
 // ---- the notice ------------------------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Where the notice sits: under the Scene's toolbar, at the top left of the map area, so that it covers map and never a control (the toolbar wraps to two rows at a narrow width: it is measured, not assumed).
+ * Without a Scene on the screen it sits under the player.
+ */
+export function useNoticeAnchor(active: boolean): { top: number; left: number } {
+  const [at, setAt] = useState({ top: 128, left: 16 });
+  useLayoutEffect(() => {
+    if (!active) return;
+    const measure = () => {
+      const bar = document.querySelector('[data-testid="scene-toolbar"]');
+      if (bar === null) return setAt({ top: 128, left: 16 });
+      const r = bar.getBoundingClientRect();
+      const top = Math.round(r.bottom + 8);
+      const left = Math.max(16, Math.round(r.left + 8));
+      setAt((old) => (old.top === top && old.left === left ? old : { top, left }));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const id = setInterval(measure, 500); // the dock moves under the notice (a panel dragged, a workspace changed)
+    return () => {
+      window.removeEventListener("resize", measure);
+      clearInterval(id);
+    };
+  }, [active]);
+  return at;
+}
 
 export interface LimitNoticeProps {
   /** The step of the run in seconds, for the clock in the notice's header. */
@@ -139,6 +172,7 @@ export function LimitNotice(props: LimitNoticeProps) {
   useEffect(() => {
     if (p === undefined) setRaising(false);
   }, [p]);
+  const anchor = useNoticeAnchor(p !== undefined || warningNotice !== undefined);
   if (status === undefined) return null;
   if (p !== undefined) {
     const a = status.agents.find((x) => x.agentId === p.agentId);
@@ -147,7 +181,7 @@ export function LimitNotice(props: LimitNoticeProps) {
     const others = (["calls", "tokens", "costUsd"] as const).filter((l) => l !== p.limit).map((l) => (l === "costUsd" ? (a.pricesKnown ? `cost ${a.costUsd.toFixed(4)} / ${a.limits.costUsd.toFixed(2)}` : `cost — (no prices for ${a.provider})`) : `${LIMIT_WORDS[l].short} ${spaced(usedOf(a, l))} / ${spaced(a.limits[l])}`));
     return (
       <>
-        <div className="limit-notice" role="alertdialog" aria-label="Run paused by a limit" data-testid="limit-notice" data-limit={p.limit}>
+        <div className="limit-notice" role="alertdialog" aria-label="Run paused by a limit" data-testid="limit-notice" data-limit={p.limit} style={anchor}>
           <div className="ln-h">
             <span className="warn">■</span>
             <b>Run paused: {words.title.replace(" limit", "")} limit reached</b>
@@ -206,12 +240,14 @@ export function LimitNotice(props: LimitNoticeProps) {
   const a = status.agents.find((x) => x.agentId === warningNotice.agentId);
   if (a === undefined) return null;
   const used = usedOf(a, warningNotice.limit);
+  // The title's share is computed from the numbers of the body: they can never disagree.
+  const pct = Math.floor((used / Math.max(a.limits[warningNotice.limit], 1e-9)) * 100);
   return (
-    <div className="limit-notice warning" role="status" aria-label="Limit warning" data-testid="limit-warning-notice">
+    <div className="limit-notice warning" role="status" aria-label="Limit warning" data-testid="limit-warning-notice" style={anchor}>
       <div className="ln-h">
         <span className="warn">▲</span>
         <b>
-          {LIMIT_WORDS[warningNotice.limit].title.replace(" limit", "")} limit at {warningNotice.pct} %
+          {LIMIT_WORDS[warningNotice.limit].title.replace(" limit", "")} limit at {pct} %
         </b>
         <span className="sp" />
         <span className="muted mono">{a.agentId}</span>

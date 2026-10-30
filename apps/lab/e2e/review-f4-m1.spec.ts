@@ -56,7 +56,7 @@ for (const theme of THEMES) {
       await expect(page.getByTestId("limit-notice")).toBeVisible();
       await expect(page.getByTestId("player-state")).toContainText("PAUSED · LIMIT");
       await expect(page.getByTestId("attention-limit")).toHaveText("▲ limit");
-      await expect(page.getByTestId("play-limit-paused")).toBeDisabled();
+      await expect(page.getByTestId("play-limit-paused")).toHaveAttribute("aria-disabled", "true");
       await shot(page, "pause", theme, width);
 
       await page.getByTestId("limit-raise").click();

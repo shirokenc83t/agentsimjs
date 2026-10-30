@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mindsFixture } from "./minds-fixture.ts";
 import { LimitNotice, MindsStatusSegments, MindsTiles, WaitingNote, waitingWords } from "./minds-ui.tsx";
-import { clearMinds, setMinds, WARNING_NOTICE_MS } from "./minds-status.ts";
+import { clearMinds, notePlayBlocked, setMinds, WARNING_NOTICE_MS } from "./minds-status.ts";
 
 // The System 2 minds in the shell, with the states of the designer's board LimitsPause: the wait, the tiles, the chips, the 80 % notice, the pause notice and the dialog that raises a limit.
 
@@ -78,6 +78,57 @@ describe("a replay that is no longer reproducible", () => {
     expect(screen.queryByTestId("status-not-reproducible")).toBeNull();
     act(() => setMinds({ ...mindsFixture("quiet"), mode: "replay-then-live", notReproducibleFromTick: 41 }));
     expect(screen.getByTestId("status-not-reproducible").textContent).toBe("▲ not reproducible from tick 41");
+  });
+});
+
+describe("after a raise and under a pause (designer's U-020)", () => {
+  it("a raise clears the warning notice of that limit: no title from the old share over the numbers of the new limit; the next warning is of the new limit", () => {
+    render(<LimitNotice dtS={0.1} onRaise={vi.fn()} onStop={vi.fn()} />);
+    act(() => setMinds(mindsFixture("warning"), performance.now()));
+    expect(screen.getByTestId("limit-warning-notice").textContent).toContain("token limit at 82 %");
+    act(() => setMinds(mindsFixture("raised"), performance.now())); // 40 912 of 80 000 now
+    expect(screen.queryByTestId("limit-warning-notice")).toBeNull();
+    // 80 % of the new limit: warned again, with the share of the new limit in title and body alike.
+    const again = mindsFixture("raised");
+    const agent = again.agents[0];
+    if (agent === undefined) throw new Error("fixture");
+    act(() => setMinds({ ...again, agents: [{ ...agent, tokens: 65_000, warnings: [{ limit: "tokens", pct: 81 }] }] }, performance.now()));
+    const n = screen.getByTestId("limit-warning-notice");
+    expect(n.textContent).toContain("token limit at 81 %");
+    expect(n.textContent).toContain(`65${NBSP}000 of 80${NBSP}000 (81 %)`);
+  });
+
+  it("the title's share comes from the numbers of the body, whatever the warning said when it was raised", () => {
+    render(<LimitNotice dtS={0.1} onRaise={vi.fn()} onStop={vi.fn()} />);
+    const w = mindsFixture("warning");
+    const agent = w.agents[0];
+    if (agent === undefined) throw new Error("fixture");
+    act(() => setMinds({ ...w, agents: [{ ...agent, tokens: 36_000, warnings: [{ limit: "tokens", pct: 82 }] }] }, performance.now()));
+    expect(screen.getByTestId("limit-warning-notice").textContent).toContain("token limit at 90 %");
+  });
+
+  it("a pause never shows the wait for a model, even when the decision is still outstanding", () => {
+    render(
+      <>
+        <WaitingNote />
+        <MindsStatusSegments />
+      </>,
+    );
+    act(() => setMinds({ ...mindsFixture("paused"), waiting: 1 }, performance.now()));
+    expect(screen.queryByTestId("player-s2-wait")).toBeNull();
+    expect(screen.queryByTestId("status-s2-wait")).toBeNull();
+    expect(mindsFixture("paused").waiting).toBe(0);
+  });
+
+  it("Space (or Play) under a pause says in the status bar what resumes the run, for a few seconds", () => {
+    vi.useFakeTimers();
+    render(<MindsStatusSegments />);
+    act(() => setMinds(mindsFixture("paused"), performance.now()));
+    expect(screen.queryByTestId("status-s2-play-hint")).toBeNull();
+    act(() => notePlayBlocked(performance.now()));
+    expect(screen.getByTestId("status-s2-play-hint").textContent).toBe("paused by a limit: resumes after the limit is raised");
+    act(() => setMinds(mindsFixture("raised"), performance.now()));
+    expect(screen.queryByTestId("status-s2-play-hint")).toBeNull();
   });
 });
 

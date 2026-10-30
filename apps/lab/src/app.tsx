@@ -13,6 +13,7 @@ import { LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, l
 import { Player } from "./shell/player.tsx";
 import { shellKey } from "./shell/shortcuts.ts";
 import { LimitNotice } from "./shell/minds-ui.tsx";
+import { getMinds, notePlayBlocked } from "./shell/minds-status.ts";
 import { StatusBar } from "./shell/status-bar.tsx";
 import { TopBar } from "./shell/top-bar.tsx";
 import "./shell/shell.css";
@@ -231,6 +232,7 @@ export function App() {
       e.preventDefault();
       if (k.kind === "workspace") setWorkspace((WORKSPACES[k.index] as (typeof WORKSPACES)[number]).id);
       else if (k.kind === "step") sim.step();
+      else if (getMinds().status?.pausedAt !== undefined) notePlayBlocked(); // a limit holds the run: Space does what the dimmed Play does, and says so in the status bar
       else if (sim.snapshot().running) sim.pause();
       else sim.play();
     };

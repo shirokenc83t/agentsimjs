@@ -7,7 +7,7 @@ import type { RunSnapshot } from "../sim/run-source.ts";
 import type { SimClient, SimSnapshot } from "../sim/sim-client.ts";
 import { LazyAttentionTile, LazyMissionNote } from "../workspaces/registry.tsx";
 import { MindsTiles, WaitingNote } from "./minds-ui.tsx";
-import { useMinds } from "./minds-status.ts";
+import { notePlayBlocked, useMinds } from "./minds-status.ts";
 import { isFailure, type Mark } from "../panels/debug/marks.ts";
 import { useRunMarks } from "../panels/debug/use-run-marks.ts";
 import { KnowledgeStrip } from "./knowledge-band-view.tsx";
@@ -119,7 +119,7 @@ function Transport(props: PlayerProps & { replay: boolean }) {
         </span>
       ) : limitPaused ? (
         // Paused by a limit (F4): Play is dimmed; the run resumes after the limit is raised in the notice (or stops there).
-        <button type="button" className="pb pri" disabled aria-label="Play (resumes only after the limit is raised)" data-tip="Resumes only after the limit is raised" data-testid="play-limit-paused">
+        <button type="button" className="pb pri" aria-disabled="true" aria-label="Play (resumes after the limit is raised)" data-tip="Resumes after the limit is raised" data-testid="play-limit-paused" onClick={() => notePlayBlocked()}>
           {GLYPH.running}
         </button>
       ) : snap.running ? (
