@@ -112,6 +112,32 @@ describe("sim worker protocol", () => {
     expect(validate(MainToSim, msg).ok).toBe(false);
   });
 
+  it("F4: `minds` reports what the S2 minds are doing (worker → main), `limitAnswer` raises or stops (main → worker), `load` may carry the library and the providers, and a provider entry holds no key", () => {
+    const status = {
+      type: "minds",
+      runId: "run-000001",
+      tick: 120,
+      mode: "live",
+      waiting: 1,
+      queue: { active: 1, waiting: 0 },
+      agents: [{ agentId: "uav-001", profile: "scout-llm v3", provider: "local-ollama", model: "qwen2.5:7b", calls: 16, tokens: 4200, costUsd: 0, limits: { calls: 20, tokens: 40000, costUsd: 0.05 }, pricesKnown: false, warnings: [{ limit: "calls", pct: 80 }] }],
+      pausedAt: { agentId: "uav-001", limit: "calls", used: 20, max: 20, tick: 120 },
+    };
+    expect(validate(SimToMain, status).ok).toBe(true);
+    expect(validate(MainToSim, status).ok).toBe(false);
+    expect(validate(SimToMain, { ...status, waiting: -1 }).ok).toBe(false);
+    expect(validate(SimToMain, { ...status, pausedAt: { ...status.pausedAt, limit: "wallClock" } }).ok).toBe(false);
+    const raise = { type: "limitAnswer", runId: "run-000001", agentId: "uav-001", limit: "calls", action: "raise", value: 60 };
+    expect(validate(MainToSim, raise).ok).toBe(true);
+    expect(validate(MainToSim, { type: "limitAnswer", runId: "run-000001", agentId: "uav-001", limit: "calls", action: "stop" }).ok).toBe(true);
+    expect(validate(MainToSim, { type: "limitAnswer", runId: "run-000001", agentId: "uav-001", limit: "calls", action: "raise" }).ok).toBe(false); // a raise states its value
+    expect(validate(SimToMain, raise).ok).toBe(false);
+    const load = { type: "load", runId: "run-000001", scenario: {}, scenarioVersion: 1, runConfig: {}, minds: { profiles: [{ id: "scout", version: 1, document: {} }], templates: [], providers: [{ id: "local", kind: "openai-compatible", baseUrl: "http://localhost:11434" }] } };
+    expect(validate(MainToSim, load).ok).toBe(true);
+    expect(validate(MainToSim, { ...load, minds: { ...load.minds, providers: [{ id: "local", kind: "openai-compatible", baseUrl: "http://localhost:11434", apiKey: "sk-secret" }] } }).ok).toBe(false);
+    expect(validate(MainToSim, { ...load, minds: { ...load.minds, providers: [{ id: "x", kind: "anthropic", baseUrl: "https://example.org" }] } }).ok).toBe(false);
+  });
+
   it("`cellWatch` asks for one cell (or stops), and what comes back, `cellBeliefs`, goes worker → main only", () => {
     expect(validate(MainToSim, { type: "cellWatch", cell: { i: 3, j: 4 } }).ok).toBe(true);
     expect(validate(MainToSim, { type: "cellWatch", cell: null }).ok).toBe(true);

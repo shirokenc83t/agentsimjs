@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@agentsim/core": "workspace:*",
+    "@agentsim/minds": "workspace:*",
     "@agentsim/scenarios": "workspace:*",
     "@agentsim/spatial": "workspace:*",
     "@agentsim/storage": "workspace:*",

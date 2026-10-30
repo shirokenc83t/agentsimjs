@@ -6,6 +6,8 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
 import { connectRecorder, resolveEnvironment } from "./config/environment.ts";
 import { probeEnabled } from "./probe.ts";
+import { mindsFixture } from "./shell/minds-fixture.ts";
+import { setMinds } from "./shell/minds-status.ts";
 import type { RunSource } from "./sim/run-source.ts";
 import { ServicesProvider } from "./services.tsx";
 import { loadLiveSource } from "./workspaces/registry.tsx";
@@ -46,6 +48,7 @@ if (probeEnabled()) {
     selection: () => useUiContext.getState().selection,
     executedPath: (id) => Array.from(sim.executedPath(id).points),
     records: () => sim.records(),
+    mindsFixture: (state) => setMinds(mindsFixture(state)),
   };
 }
 

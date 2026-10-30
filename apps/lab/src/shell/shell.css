@@ -162,3 +162,41 @@
 .clock .mission-note { display: block; font-size: 11px; white-space: nowrap; width: max-content; max-width: 210px; overflow: hidden; text-overflow: ellipsis; }
 /* The mark of the product (ADR-0043 section 6) is drawn larger than the text beside it: at the size of the text it reads as the plain boxed glyph it replaces. */
 .top .brand .mark { font-size: 24px; line-height: 1; }
+
+/* The System 2 minds (F4 T-110, the designer's LimitsPause): the notice at the dock's top left, the dialog that raises a limit, the player's tiles, the wait under the clock, the chips of the status bar. */
+.s2-wait { display: block; font-size: var(--type-label-size); color: var(--run); white-space: nowrap; }
+.s2-tile .v.warn { color: var(--warn); }
+.live.limit { border-color: var(--warn); color: var(--warn); }
+.bot .s2-chip { font-size: 11px; }
+.bot .s2-chip.warn { color: var(--warn); }
+.bot .s2-chip.run { color: var(--run); }
+.limit-notice { position: fixed; left: 16px; top: 128px; z-index: var(--z-popover); width: min(560px, calc(100vw - 32px)); background: var(--bg1); border: 1px solid var(--warn); box-shadow: var(--float); font-size: var(--type-mono-size); }
+.limit-notice .ln-h { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-bottom: 1px solid var(--ln); background: color-mix(in srgb, var(--warn) 10%, var(--bg1)); }
+.limit-notice .sp, .raise-dialog .sp { flex: 1; }
+.limit-notice .muted { color: var(--fg3); }
+.limit-notice .ln-b { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 6px 10px; padding: 10px 12px; }
+.limit-notice .ln-b.one { grid-template-columns: minmax(0, 1fr); }
+.limit-notice .prose, .raise-dialog .prose { font-family: var(--font-ui, inherit); line-height: 1.5; color: var(--fg2); }
+.limit-notice .ln-meter { height: 6px; margin-top: 4px; background: var(--bg0); border: 1px solid var(--ln); position: relative; }
+.limit-notice .ln-meter i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--warn); }
+.limit-notice .ln-f { display: flex; align-items: center; gap: 8px; padding: 8px 12px 10px; border-top: 1px solid var(--ln); }
+.limit-notice .btn, .raise-dialog .btn { height: 28px; padding: 0 12px; border: 1px solid var(--ln2); background: transparent; color: var(--fg); font: inherit; font-size: var(--type-label-size); border-radius: 0; cursor: pointer; }
+.limit-notice .btn.pri, .raise-dialog .btn.pri { background: var(--fg); border-color: var(--fg); color: var(--bg0); font-weight: 600; }
+.limit-notice .btn.dang { color: var(--alm); border-color: var(--alm); }
+.raise-dialog .btn:disabled { opacity: 0.45; cursor: default; }
+.limit-notice .btn:focus-visible, .raise-dialog .btn:focus-visible, .raise-dialog button:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: 1px; }
+.s2-scrim { position: fixed; inset: 0; z-index: var(--z-popover); }
+.raise-dialog { position: fixed; left: 50%; top: 150px; transform: translateX(-50%); z-index: calc(var(--z-popover) + 1); width: min(600px, calc(100vw - 32px)); background: var(--bg1); border: 1px solid var(--ln2); box-shadow: var(--float); font-size: var(--type-mono-size); }
+.raise-dialog .rd-h { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-bottom: 1px solid var(--ln); font-weight: 600; }
+.raise-dialog .rd-h .muted, .raise-dialog .rd-f .muted { color: var(--fg3); font-weight: 400; }
+.raise-dialog .rd-b { padding: 14px; }
+.raise-dialog .rd-kv { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 7px 12px; align-items: center; }
+.raise-dialog .rd-kv .k { color: var(--fg2); }
+.raise-dialog .rd-new { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.raise-dialog .rd-input { height: 28px; width: 150px; padding: 0 8px; background: var(--bg0); color: var(--fg); border: 1px solid var(--ac); box-shadow: inset 0 0 0 1px var(--ac); border-radius: 0; font: inherit; }
+.raise-dialog .rd-input[aria-invalid="true"] { border-color: var(--alm); box-shadow: inset 0 0 0 1px var(--alm); }
+.raise-dialog .rd-presets { display: flex; gap: 6px; }
+.raise-dialog .rd-presets button { height: 24px; padding: 0 8px; border: 1px solid var(--ln2); background: transparent; color: var(--fg2); font: inherit; font-size: 11.5px; border-radius: 0; cursor: pointer; }
+.raise-dialog .rd-presets button:hover { background: var(--bg3); color: var(--fg); }
+.raise-dialog .prose { margin: 14px 0 0; }
+.raise-dialog .rd-f { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--ln); }

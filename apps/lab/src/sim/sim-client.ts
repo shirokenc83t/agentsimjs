@@ -1,6 +1,7 @@
 import { SIM_PROTOCOL_VERSION, type MainToSim, type PresetId, type SimInputMessage, type SimProgressMessage, type SimLoadedMessage, type SimLoadMessage, type SimStrategyTestMessage, type SimStrategyTestResultMessage, type SimToMain, type TimeMode } from "@agentsim/core";
 import type { TraceRecord } from "@agentsim/trace";
 import { ChunkQueue, RollingStats, StateInterpolator, type GridSpec } from "@agentsim/ui";
+import { clearMinds, setMinds } from "../shell/minds-status.ts";
 import { TrailStore, type ExecutedPath } from "./trail-store.ts";
 
 /** A preset built by the worker: the document to store and load, and its content hash (as storage records it). */
@@ -113,6 +114,7 @@ export class SimClient {
         break;
       case "loaded": {
         this.recordList = [];
+        clearMinds();
         this.trails = new TrailStore(m.agents.length);
         this.trailIndex = new Map(m.agents.map((a, i) => [a.id, i]));
         for (const l of this.trailListeners) l();
@@ -170,6 +172,10 @@ export class SimClient {
         this.recordList.push(...(m.records as TraceRecord[]));
         if (this.recordList.length > MAX_RECORDS) this.recordList = this.recordList.slice(-MAX_RECORDS);
         for (const l of this.recordListeners) l();
+        break;
+      case "minds":
+        // What the S2 minds are doing (F4): the player's tiles, the status bar, the notice and the dialog read the store.
+        setMinds(m);
         break;
       case "degradation":
         this.snap = { ...this.snap, degradations: this.snap.degradations + 1, lastSkippedTicks: m.skippedTicks };
@@ -347,6 +353,13 @@ export class SimClient {
    */
   command(agentId: string, op: string, params?: Record<string, number | string | boolean>): void {
     this.post({ type: "command", op, agentId, ...(params ? { params } : {}) });
+  }
+
+  /** The researcher's answer to a limit that paused the run (ADR-0044 section 5): raise it to `value`, or stop the run. */
+  answerLimit(a: { readonly agentId: string; readonly limit: "calls" | "tokens" | "costUsd" } & ({ readonly action: "raise"; readonly value: number } | { readonly action: "stop" })): void {
+    const runId = this.snap.run?.runId;
+    if (runId === undefined) return;
+    this.post(a.action === "raise" ? { type: "limitAnswer", runId, agentId: a.agentId, limit: a.limit, action: "raise", value: a.value } : { type: "limitAnswer", runId, agentId: a.agentId, limit: a.limit, action: "stop" });
   }
 
   private readonly streams = new Map<string, Set<(m: never) => void>>();

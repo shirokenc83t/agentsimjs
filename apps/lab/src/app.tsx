@@ -12,6 +12,7 @@ import { PANELS, type PanelId } from "./workspaces/registry.tsx";
 import { LazyReplayHost, LazyRunPopover, LazyWorkspaceHost, loadAgentCommands, loadResimController, loadRunController } from "./workspaces/registry.tsx";
 import { Player } from "./shell/player.tsx";
 import { shellKey } from "./shell/shortcuts.ts";
+import { LimitNotice } from "./shell/minds-ui.tsx";
 import { StatusBar } from "./shell/status-bar.tsx";
 import { TopBar } from "./shell/top-bar.tsx";
 import "./shell/shell.css";
@@ -610,6 +611,8 @@ export function App() {
         </div>
 
         <StatusBar snap={snap} status={status} info={info} header={run?.header} replaying={view?.mode === "replay"} onOpenPerf={openPerformance} />
+
+        <LimitNotice dtS={view?.run?.dtS ?? snap.run?.dtS ?? 0.1} onRaise={(a) => sim.answerLimit({ ...a, action: "raise" })} onStop={(a) => sim.answerLimit({ ...a, action: "stop" })} />
 
         <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
       </div>

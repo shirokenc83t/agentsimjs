@@ -7,6 +7,7 @@ import type { SimSnapshot } from "../sim/sim-client.ts";
 import type { StorageStatus } from "@agentsim/storage";
 import { LazyRecordingStatus } from "../workspaces/registry.tsx";
 import { getFrameStats } from "./frame-stats.ts";
+import { MindsStatusSegments } from "./minds-ui.tsx";
 
 export interface StatusBarProps {
   readonly snap: SimSnapshot;
@@ -108,6 +109,7 @@ export function StatusBar(props: StatusBarProps) {
           <LazyRecordingStatus header={header} snap={snap} />
         </Suspense>
       )}
+      <MindsStatusSegments />
       {snap.preparing && (
         <span className="seg" data-prio="3" data-testid="status-preparing" title="Planning views and HPA* graphs are built before tick 0 (ADR-0024)">
           ⧗ preparing planning graphs {snap.preparing.done}/{snap.preparing.total}

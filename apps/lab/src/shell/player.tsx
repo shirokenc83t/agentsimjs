@@ -6,6 +6,8 @@ import { gapLabel, resolveGapClick } from "../sim/gap-click.ts";
 import type { RunSnapshot } from "../sim/run-source.ts";
 import type { SimClient, SimSnapshot } from "../sim/sim-client.ts";
 import { LazyAttentionTile, LazyMissionNote } from "../workspaces/registry.tsx";
+import { MindsTiles, WaitingNote } from "./minds-ui.tsx";
+import { useMinds } from "./minds-status.ts";
 import { isFailure, type Mark } from "../panels/debug/marks.ts";
 import { useRunMarks } from "../panels/debug/use-run-marks.ts";
 import { KnowledgeStrip } from "./knowledge-band-view.tsx";
@@ -65,6 +67,7 @@ export function Player(props: PlayerProps) {
         <Suspense fallback={null}>
           <LazyMissionNote />
         </Suspense>
+        <WaitingNote />
       </div>
       {replay && view ? <ReplayScrub view={view} dtS={dtS} onBackToLive={props.onBackToLive} /> : <LiveScrub snap={snap} view={view} dtS={dtS} recorded={recorded} />}
       <Telemetry snap={snap} recorded={recorded} />
@@ -88,6 +91,7 @@ function Transport(props: PlayerProps & { replay: boolean }) {
   // (a way of going live, paused); what is replaced is the play button, which becomes the launch group.
   const queued = useQueuedText(snap.simTimeS);
   const summaryText = snap.run ? `${snap.mode} · ${snap.run.scenarioId} v${snap.run.scenarioVersion} · seed ${snap.run.seed} · profile ${props.recordingLabel}` : "";
+  const limitPaused = useMinds().status?.pausedAt !== undefined;
   const ready = !replay && snap.run !== undefined && snap.tick === 0 && !snap.running && snap.headless !== true && snap.progress === undefined && !busy;
   return (
     <div className="ply" role="toolbar" aria-label="Run control">
@@ -113,6 +117,11 @@ function Transport(props: PlayerProps & { replay: boolean }) {
             </span>
           )}
         </span>
+      ) : limitPaused ? (
+        // Paused by a limit (F4): Play is dimmed; the run resumes after the limit is raised in the notice (or stops there).
+        <button type="button" className="pb pri" disabled aria-label="Play (resumes only after the limit is raised)" data-tip="Resumes only after the limit is raised" data-testid="play-limit-paused">
+          {GLYPH.running}
+        </button>
       ) : snap.running ? (
         <button type="button" className="pb pri" onClick={() => sim.pause()} aria-label="Pause" data-tip="Pause · Space" data-testid="pause">
           {GLYPH.paused}
@@ -169,12 +178,13 @@ function LiveScrub(props: { snap: SimSnapshot; view: RunSnapshot | undefined; dt
   const runId = recorded ? view?.runId : undefined;
   const band = useKnowledgeBand(runId, savedS, dtS);
   const marks = useRunMarks(runId, savedS);
+  const limitPaused = useMinds().status?.pausedAt !== undefined;
   const strip = runId !== undefined;
   return (
     <div className="scrub">
       <div className="row">
-        <span className="live" data-testid="player-state">
-          {snap.headless ? `${GLYPH.running} HEADLESS` : "● LIVE"}
+        <span className={`live${limitPaused ? " limit" : ""}`} data-testid="player-state">
+          {limitPaused ? "❚❚ PAUSED · LIMIT" : snap.headless ? `${GLYPH.running} HEADLESS` : "● LIVE"}
         </span>
         <span className="hide-1100" data-testid="player-tick">tick {snap.tick}</span>
         <KnowledgeLabel band={band} marks={marks} atS={Math.min(snap.simTimeS, savedS)} />
@@ -358,6 +368,7 @@ function Telemetry(props: { snap: SimSnapshot; recorded: boolean }) {
           <i style={{ width: `${load}%`, background: load > 80 ? "var(--warn)" : "var(--ok)" }} />
         </div>
       </div>
+      <MindsTiles />
       {snap.run && (
         <Suspense fallback={null}>
           <LazyAttentionTile />

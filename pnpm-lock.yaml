@@ -238,6 +238,9 @@ importers:
       '@agentsim/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentsim/minds':
+        specifier: workspace:*
+        version: link:../../packages/minds
       '@agentsim/scenarios':
         specifier: workspace:*
         version: link:../../packages/scenarios

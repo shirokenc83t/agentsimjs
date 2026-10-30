@@ -37,6 +37,11 @@ export interface LabProbe {
   dock?: () => { id: string; title: string; location: string; maximized: boolean; collapsed: boolean; active: boolean; height: number }[];
   /** The shared UI context's selection (read-only). */
   selection?: () => { kind: string; id: string } | undefined;
+  /**
+   * A fixture for the review captures of the System 2 minds' states (F4): puts the state the designer's LimitsPause draws in the store the player, the status bar and the notice read, as the worker's `minds`
+   * message would. It changes nothing in any run.
+   */
+  mindsFixture?: (state: "quiet" | "waiting" | "waiting-several" | "warning" | "paused" | "raised") => void;
   /** Wall ms of each draw of a top-down map (the Scene's 2D tab, the Analysis workspace), newest last; written by the map, cleared by the bench. */
   map2dMs?: number[];
 }

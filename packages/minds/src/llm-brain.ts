@@ -116,6 +116,16 @@ export class LlmBrain implements Brain, StatefulBrain {
     return { calls: this.calls, inputTokens: this.inputTokens, outputTokens: this.outputTokens, costUsd: this.costUsd };
   }
 
+  /** The limits in force now (the profile's, or the value the researcher raised them to). */
+  get limitsInForce(): { readonly calls: number; readonly tokens: number; readonly costUsd: number } {
+    return { calls: this.max("calls"), tokens: this.max("tokens"), costUsd: this.max("costUsd") };
+  }
+
+  /** Whether the provider entry has prices: only then are cost and the cost limit counted. */
+  get pricesKnown(): boolean {
+    return this.o.prices !== undefined;
+  }
+
   snapshotState(): LlmBrainState {
     return {
       calls: this.calls,
