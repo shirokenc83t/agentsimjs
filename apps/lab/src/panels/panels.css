@@ -908,7 +908,7 @@
 .llm-action { margin: 0 0 6px; color: var(--fg); }
 .llm-lane { list-style: none; margin: 0 0 8px; padding: 0; border-top: 1px solid var(--ln); }
 .llm-lane li { border-bottom: 1px solid var(--ln); }
-.llm-lane li.sel { background: var(--bg3); box-shadow: inset 2px 0 0 var(--ac); }
+.llm-lane li.sel { background: var(--bg3); box-shadow: inset 1px 0 0 var(--ac); }
 .llm-lane button { display: flex; gap: 8px; width: 100%; padding: 4px 6px; text-align: left; background: transparent; border: 0; color: var(--fg); font: inherit; cursor: pointer; }
 .llm-lane .llm-step-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .llm-lane .llm-ms { white-space: nowrap; }
@@ -932,7 +932,7 @@
 .lib-list { border-right: 1px solid var(--ln); overflow: auto; }
 .lib-list ul { list-style: none; margin: 0; padding: 0; }
 .lib-list li button { display: block; width: 100%; padding: 6px 12px; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--ln); color: var(--fg); font: inherit; cursor: pointer; }
-.lib-list li button.sel { background: var(--bg3); box-shadow: inset 2px 0 0 var(--ac); }
+.lib-list li button.sel { background: var(--bg3); box-shadow: inset 1px 0 0 var(--ac); }
 .lib-empty { padding: 8px 12px; }
 .lib-detail { overflow: auto; padding: 8px 12px; }
 .lib-versions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; }
@@ -951,8 +951,8 @@
 .rc-minds { width: 100%; border-collapse: collapse; margin: 0 0 8px; }
 .rc-minds th { text-align: left; font-weight: 400; color: var(--fg3); padding: 4px 8px; border-bottom: 1px solid var(--ln); }
 .rc-minds td { padding: 4px 8px; border-bottom: 1px solid var(--ln); vertical-align: top; }
-.rc-minds tr[data-state="error"] { box-shadow: inset 2px 0 0 var(--alm); }
-.rc-minds tr[data-state="warn"] { box-shadow: inset 2px 0 0 var(--warn); }
+.rc-minds tr[data-state="error"] { box-shadow: inset 1px 0 0 var(--alm); }
+.rc-minds tr[data-state="warn"] { box-shadow: inset 1px 0 0 var(--warn); }
 .rc-overrides input { width: 7ch; }
 .rc-s2 { margin: 0 0 10px; }
 .rc-mission-text { display: block; width: 100%; max-width: 640px; background: var(--bg0); color: var(--fg); border: 1px solid var(--ln2); padding: 6px; font: inherit; }

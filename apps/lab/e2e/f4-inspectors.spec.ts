@@ -82,7 +82,7 @@ test("the LLM inspector shows the chain of a looped decision in order, after a f
   try {
     await startRun(page, f.port);
     await pickFirst(page, "agent:uav-001 kind:thought text:llm-call", /llm-call/);
-    await runCommand(page, "Open panel: LLM inspector (the decision of a language-model mind)");
+    await runCommand(page, "Open panel: LLM decision (what a language-model mind was asked and did)");
     const lane = page.getByTestId("llm-lane");
     await expect(lane).toBeVisible({ timeout: 30_000 });
     // The lane: the request, the model calls (the first failed and was retried), the compute calls the model asked for, the answer and the action.
@@ -106,7 +106,7 @@ test("the LLM inspector shows the chain of a looped decision in order, after a f
 
     // The compute call: pick it in the lane (it becomes the selected record) and open the Compute inspector.
     await lane.locator('li[data-kind="tool"] button').last().click();
-    await runCommand(page, "Open panel: Compute inspector (a compute call of a mind)");
+    await runCommand(page, "Open panel: Compute call (a tool a mind called)");
     await expect(page.getByTestId("compute-title")).toHaveText("planPath", { timeout: 30_000 });
     await expect(page.getByTestId("compute-result")).toContainText("waypoint");
     await expect(page.getByTestId("compute-params")).toContainText('"to"');

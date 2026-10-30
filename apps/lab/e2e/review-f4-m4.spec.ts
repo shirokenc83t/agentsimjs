@@ -88,7 +88,7 @@ async function openDecision(page: Page) {
     await page.locator('[data-testid^="event-row-"]').first().click({ timeout: 5_000 });
     await expect(page.getByTestId("trace-tree-selected")).toBeVisible({ timeout: 5_000 });
   }).toPass({ timeout: 60_000 });
-  await runCommand(page, "Open panel: LLM inspector (the decision of a language-model mind)");
+  await runCommand(page, "Open panel: LLM decision (what a language-model mind was asked and did)");
   await expect(page.getByTestId("llm-lane")).toBeVisible({ timeout: 30_000 });
 }
 
@@ -132,7 +132,7 @@ for (const theme of ["dark", "light"] as const) {
         await expect(page.getByTestId("llm-detail")).toBeVisible();
         await shot(page, "workspace-debug", "llm-inspector-looped", theme, width);
         await page.getByTestId("llm-lane").locator('li[data-kind="tool"] button').last().click();
-        await runCommand(page, "Open panel: Compute inspector (a compute call of a mind)");
+        await runCommand(page, "Open panel: Compute call (a tool a mind called)");
         await expect(page.getByTestId("compute-map")).toBeVisible({ timeout: 30_000 });
         await shot(page, "workspace-debug", "compute-inspector", theme, width);
 
