@@ -132,7 +132,7 @@
   ],
   "decisions": [
    {
-    "simTime": 8,
+    "simTime": 8.200000000000001,
     "decision": {
      "kind": "idle"
     }

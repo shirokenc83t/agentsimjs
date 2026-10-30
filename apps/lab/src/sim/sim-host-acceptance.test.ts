@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import cacheLatency from "./fixtures/f4-acceptance/cache-latency-modeled.json";
 import cacheLockstep from "./fixtures/f4-acceptance/cache-lockstep.json";
 import expected from "./fixtures/f4-acceptance/expected.json";
-import profile from "./fixtures/f4-acceptance/profile.json";
-import template from "./fixtures/f4-acceptance/template.json";
+import profile from "./fixtures/f4-acceptance/scout-llm.json";
+import template from "./fixtures/f4-acceptance/inspect-order.json";
 import mission from "./fixtures/f4-acceptance/mission.txt?raw";
 import { serveMindCache, type CachePortLike } from "./remote-cache.ts";
 import { flush, harness, init, stored, type Harness } from "./sim-host-harness.ts";
@@ -85,9 +85,9 @@ describe("the acceptance run replayed from its cache", () => {
       const calls = events.filter((r) => payloadOf(r)["op"] === "llm-call");
       expect(calls).toHaveLength(want.llmCalls);
       expect(calls.every((r) => payloadOf(r)["cacheHit"] === true)).toBe(true);
-      expect(events.filter((r) => payloadOf(r)["op"] === "tool").map((r) => [Math.round(r.simTime * 10) / 10, payloadOf(r)["tool"]])).toEqual(want.tools.map(([t, n]) => [t, n]));
+      expect(events.filter((r) => payloadOf(r)["op"] === "tool").map((r) => [Math.round(r.simTime * 10) / 10, payloadOf(r)["tool"]])).toEqual(want.tools.map(([t, n]) => [Math.round(Number(t) * 10) / 10, n]));
       const decisions = events.filter((r) => payloadOf(r)["op"] === "decision" && r.agentId === "uav-001");
-      expect(decisions.map((r) => [Math.round(r.simTime * 10) / 10, (payloadOf(r)["decision"] as { kind: string }).kind])).toEqual(want.decisions.map((d) => [d.simTime, d.decision?.kind]));
+      expect(decisions.map((r) => [Math.round(r.simTime * 10) / 10, (payloadOf(r)["decision"] as { kind: string }).kind])).toEqual(want.decisions.map((d) => [Math.round(d.simTime * 10) / 10, d.decision?.kind]));
       // The checkpoints the recorder writes every 100 ticks carry the state hash: the same ones the recorded run wrote at the same ticks.
       const checkpoints = h.batches().flatMap((b) => b.records).filter((r) => payloadOf(r)["op"] === "checkpoint").map((r) => [payloadOf(r)["tick"], payloadOf(r)["stateHash"]]);
       const shared = want.checkpoints.map(([, tick, hash]) => [tick, hash]).filter(([tick]) => checkpoints.some(([t]) => t === tick));

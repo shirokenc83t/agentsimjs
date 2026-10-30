@@ -6,7 +6,7 @@
    "value": {
     "content": "{\"action\": \"estimateCost\", \"params\": {\"from\": \"home\", \"route\": [\"home\", \"20.0\", \"40.0\", \"40.0\", \"60.0\", \"58.0\", \"20.0\"]}, \"note\": {\"text\": \"First order: home -> P1 -> P2 -> P3 -> home\", \"mode\": \"replace\"}}"
    },
-   "createdAtWallMs": 1793395444876,
+   "createdAtWallMs": 1793396539220,
    "providerKind": "openai-compatible",
    "toolsHash": "202c87f3e27dcc29",
    "outcome": "invalid",
@@ -14,7 +14,48 @@
     "inputTokens": 2249,
     "outputTokens": 89
    },
-   "latencyMs": 6018
+   "latencyMs": 10862
+  }
+ },
+ {
+  "key": "18a8cdc38c166dfe",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_anaf9j5q",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793396541221,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2543,
+    "outputTokens": 75
+   },
+   "latencyMs": 739
   }
  },
  {
@@ -24,10 +65,9 @@
    "value": {
     "toolCalls": [
      {
-      "id": "call_fqcc40lj",
+      "id": "call_s2nm70sb",
       "name": "estimateCost",
       "params": {
-       "from": "home",
        "route": [
         "home",
         "20.0",
@@ -36,12 +76,13 @@
         "60.0",
         "58.0",
         "20.0"
-       ]
+       ],
+       "from": "home"
       }
      }
     ]
    },
-   "createdAtWallMs": 1793395445515,
+   "createdAtWallMs": 1793396539844,
    "providerKind": "openai-compatible",
    "toolsHash": "202c87f3e27dcc29",
    "outcome": "ok",
@@ -49,17 +90,58 @@
     "inputTokens": 2377,
     "outputTokens": 63
    },
-   "latencyMs": 638
+   "latencyMs": 623
   }
  },
  {
-  "key": "591a7e1384ff742e",
+  "key": "8b54dd281fd19af8",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "toolCalls": [
      {
-      "id": "call_f53ua5w4",
+      "id": "call_u3682ysm",
+      "name": "estimateCost",
+      "params": {
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ],
+       "from": "home"
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793396542480,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2999,
+    "outputTokens": 60
+   },
+   "latencyMs": 624
+  }
+ },
+ {
+  "key": "a5d3839083f585c3",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_z28hua6y",
       "name": "estimateCost",
       "params": {
        "from": "home",
@@ -82,25 +164,25 @@
      }
     ]
    },
-   "createdAtWallMs": 1793395448878,
+   "createdAtWallMs": 1793396544972,
    "providerKind": "openai-compatible",
    "toolsHash": "202c87f3e27dcc29",
    "outcome": "ok",
    "usage": {
-    "inputTokens": 3227,
+    "inputTokens": 3911,
     "outputTokens": 60
    },
-   "latencyMs": 640
+   "latencyMs": 620
   }
  },
  {
-  "key": "a2f4553266c78cc6",
+  "key": "c5f07d54c6621735",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "toolCalls": [
      {
-      "id": "call_hr9cb9vu",
+      "id": "call_5y9v3tmo",
       "name": "estimateCost",
       "params": {
        "from": "home",
@@ -123,25 +205,25 @@
      }
     ]
    },
-   "createdAtWallMs": 1793395447594,
+   "createdAtWallMs": 1793396544349,
    "providerKind": "openai-compatible",
    "toolsHash": "202c87f3e27dcc29",
    "outcome": "ok",
    "usage": {
-    "inputTokens": 2771,
+    "inputTokens": 3683,
     "outputTokens": 60
    },
-   "latencyMs": 648
+   "latencyMs": 629
   }
  },
  {
-  "key": "a594d796b1d78a70",
+  "key": "c744b6181bd7489a",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "toolCalls": [
      {
-      "id": "call_zkjurvhy",
+      "id": "call_milq5dxp",
       "name": "estimateCost",
       "params": {
        "from": "home",
@@ -158,7 +240,7 @@
      }
     ]
    },
-   "createdAtWallMs": 1793395446159,
+   "createdAtWallMs": 1793396540481,
    "providerKind": "openai-compatible",
    "toolsHash": "202c87f3e27dcc29",
    "outcome": "ok",
@@ -166,35 +248,17 @@
     "inputTokens": 2460,
     "outputTokens": 63
    },
-   "latencyMs": 642
+   "latencyMs": 636
   }
  },
  {
-  "key": "aa39e299c6ea96be",
-  "entry": {
-   "model": "qwen2.5:7b-instruct",
-   "value": {
-    "content": "{\"action\": \"estimateCost\", \"params\": {\"from\": \"home\", \"route\": [{\"xM\": 20, \"yM\": 40}, {\"xM\": 40, \"yM\": 60}, {\"xM\": 58, \"yM\": 20}, \"home\"]}, \"note\": {\"text\": \"First order: home -> P1 -> P2 -> P3 -> home\", \"mode\": \"replace\"}, \"rationale\": \"Calculating the cost for the first order.\"}"
-   },
-   "createdAtWallMs": 1793395452025,
-   "providerKind": "openai-compatible",
-   "toolsHash": "202c87f3e27dcc29",
-   "outcome": "invalid",
-   "usage": {
-    "inputTokens": 4020,
-    "outputTokens": 116
-   },
-   "latencyMs": 1176
-  }
- },
- {
-  "key": "b6e0c0bfdfb97969",
+  "key": "d05544a282a46fde",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "toolCalls": [
      {
-      "id": "call_u802ud6b",
+      "id": "call_axel62o2",
       "name": "estimateCost",
       "params": {
        "from": "home",
@@ -217,89 +281,7 @@
      }
     ]
    },
-   "createdAtWallMs": 1793395448234,
-   "providerKind": "openai-compatible",
-   "toolsHash": "202c87f3e27dcc29",
-   "outcome": "ok",
-   "usage": {
-    "inputTokens": 2999,
-    "outputTokens": 60
-   },
-   "latencyMs": 635
-  }
- },
- {
-  "key": "c203868d339bbc4b",
-  "entry": {
-   "model": "qwen2.5:7b-instruct",
-   "value": {
-    "toolCalls": [
-     {
-      "id": "call_j6yae1e1",
-      "name": "estimateCost",
-      "params": {
-       "from": "home",
-       "route": [
-        {
-         "xM": 20,
-         "yM": 40
-        },
-        {
-         "xM": 40,
-         "yM": 60
-        },
-        {
-         "xM": 58,
-         "yM": 20
-        },
-        "home"
-       ]
-      }
-     }
-    ]
-   },
-   "createdAtWallMs": 1793395446930,
-   "providerKind": "openai-compatible",
-   "toolsHash": "202c87f3e27dcc29",
-   "outcome": "ok",
-   "usage": {
-    "inputTokens": 2543,
-    "outputTokens": 75
-   },
-   "latencyMs": 771
-  }
- },
- {
-  "key": "c3a9c0f6ec366b56",
-  "entry": {
-   "model": "qwen2.5:7b-instruct",
-   "value": {
-    "toolCalls": [
-     {
-      "id": "call_wakyizn7",
-      "name": "estimateCost",
-      "params": {
-       "from": "home",
-       "route": [
-        {
-         "xM": 20,
-         "yM": 40
-        },
-        {
-         "xM": 40,
-         "yM": 60
-        },
-        {
-         "xM": 58,
-         "yM": 20
-        },
-        "home"
-       ]
-      }
-     }
-    ]
-   },
-   "createdAtWallMs": 1793395449530,
+   "createdAtWallMs": 1793396543716,
    "providerKind": "openai-compatible",
    "toolsHash": "202c87f3e27dcc29",
    "outcome": "ok",
@@ -307,17 +289,17 @@
     "inputTokens": 3455,
     "outputTokens": 60
    },
-   "latencyMs": 648
+   "latencyMs": 617
   }
  },
  {
-  "key": "dcc5e8bf91eeed4d",
+  "key": "e562a76ebe7214a3",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "toolCalls": [
      {
-      "id": "call_w2b4qx4a",
+      "id": "call_fopj16ks",
       "name": "estimateCost",
       "params": {
        "from": "home",
@@ -340,25 +322,25 @@
      }
     ]
    },
-   "createdAtWallMs": 1793395450194,
+   "createdAtWallMs": 1793396543095,
    "providerKind": "openai-compatible",
    "toolsHash": "202c87f3e27dcc29",
    "outcome": "ok",
    "usage": {
-    "inputTokens": 3683,
+    "inputTokens": 3227,
     "outputTokens": 60
    },
-   "latencyMs": 659
+   "latencyMs": 610
   }
  },
  {
-  "key": "f008fbcd24e04bd5",
+  "key": "f14ec3116cf98b03",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "toolCalls": [
      {
-      "id": "call_88i1seoo",
+      "id": "call_dabpbd7q",
       "name": "estimateCost",
       "params": {
        "from": "home",
@@ -381,25 +363,43 @@
      }
     ]
    },
-   "createdAtWallMs": 1793395450849,
+   "createdAtWallMs": 1793396541853,
    "providerKind": "openai-compatible",
    "toolsHash": "202c87f3e27dcc29",
    "outcome": "ok",
    "usage": {
-    "inputTokens": 3911,
+    "inputTokens": 2771,
     "outputTokens": 60
    },
-   "latencyMs": 651
+   "latencyMs": 622
   }
  },
  {
-  "key": "tool:59dd89ad8af09dba",
+  "key": "fd6adec5ca941f42",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\"action\": \"estimateCost\", \"params\": {\"from\": \"home\", \"route\": [{\"xM\": 20, \"yM\": 40}, {\"xM\": 40, \"yM\": 60}, {\"xM\": 58, \"yM\": 20}, \"home\"]}, \"note\": {\"text\": \"First order: home -> P1 -> P2 -> P3 -> home\", \"mode\": \"replace\"}, \"rationale\": \"Calculating the cost for the first order.\"}"
+   },
+   "createdAtWallMs": 1793396546097,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "invalid",
+   "usage": {
+    "inputTokens": 4020,
+    "outputTokens": 116
+   },
+   "latencyMs": 1125
+  }
+ },
+ {
+  "key": "tool:05dfa9ab5eac1cc7",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "resultHash": "b836619c35d6ab6c"
    },
-   "createdAtWallMs": 1793395445515,
+   "createdAtWallMs": 1793396540482,
    "providerKind": null,
    "toolsHash": null,
    "outcome": null,
@@ -407,13 +407,13 @@
   }
  },
  {
-  "key": "tool:842e5fcb672518da",
+  "key": "tool:27b48c21a116a404",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "resultHash": "e929fc7144daa67b"
    },
-   "createdAtWallMs": 1793395449534,
+   "createdAtWallMs": 1793396542484,
    "providerKind": null,
    "toolsHash": null,
    "outcome": null,
@@ -421,27 +421,13 @@
   }
  },
  {
-  "key": "tool:916c39e83a64bd2f",
-  "entry": {
-   "model": "qwen2.5:7b-instruct",
-   "value": {
-    "resultHash": "e929fc7144daa67b"
-   },
-   "createdAtWallMs": 1793395450198,
-   "providerKind": null,
-   "toolsHash": null,
-   "outcome": null,
-   "latencyMs": null
-  }
- },
- {
-  "key": "tool:9891b230e0eacba3",
+  "key": "tool:974f78a60e57828d",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "resultHash": "b836619c35d6ab6c"
    },
-   "createdAtWallMs": 1793395446159,
+   "createdAtWallMs": 1793396539845,
    "providerKind": null,
    "toolsHash": null,
    "outcome": null,
@@ -449,13 +435,13 @@
   }
  },
  {
-  "key": "tool:d138daafc86123b9",
+  "key": "tool:b2716b699bb8eb26",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "resultHash": "e929fc7144daa67b"
    },
-   "createdAtWallMs": 1793395448882,
+   "createdAtWallMs": 1793396544352,
    "providerKind": null,
    "toolsHash": null,
    "outcome": null,
@@ -463,13 +449,13 @@
   }
  },
  {
-  "key": "tool:d1759b4d6bb57296",
+  "key": "tool:b4f10b23a7650c13",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "resultHash": "e929fc7144daa67b"
    },
-   "createdAtWallMs": 1793395446946,
+   "createdAtWallMs": 1793396543099,
    "providerKind": null,
    "toolsHash": null,
    "outcome": null,
@@ -477,13 +463,13 @@
   }
  },
  {
-  "key": "tool:d29e6cc8943317d2",
+  "key": "tool:c853c9db748ac93d",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "resultHash": "e929fc7144daa67b"
    },
-   "createdAtWallMs": 1793395447598,
+   "createdAtWallMs": 1793396541856,
    "providerKind": null,
    "toolsHash": null,
    "outcome": null,
@@ -491,13 +477,27 @@
   }
  },
  {
-  "key": "tool:df984809597c4d09",
+  "key": "tool:ca83c611fc2c4842",
   "entry": {
    "model": "qwen2.5:7b-instruct",
    "value": {
     "resultHash": "e929fc7144daa67b"
    },
-   "createdAtWallMs": 1793395448238,
+   "createdAtWallMs": 1793396541231,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null
+  }
+ },
+ {
+  "key": "tool:e84934806c2befff",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "e929fc7144daa67b"
+   },
+   "createdAtWallMs": 1793396543719,
    "providerKind": null,
    "toolsHash": null,
    "outcome": null,
