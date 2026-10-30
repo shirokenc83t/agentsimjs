@@ -910,3 +910,26 @@
 .compute-kv { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 4px 12px; margin: 0 0 8px; }
 .compute-kv dt { color: var(--fg3); }
 .compute-kv dd { margin: 0; overflow-wrap: anywhere; }
+
+/* The Library (F4 M4, T-124) */
+.library { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.lib-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--ln); }
+.lib-head .sp { flex: 1; }
+.lib-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 0; flex: 1; }
+.lib-list { border-right: 1px solid var(--ln); overflow: auto; }
+.lib-list ul { list-style: none; margin: 0; padding: 0; }
+.lib-list li button { display: block; width: 100%; padding: 6px 12px; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--ln); color: var(--fg); font: inherit; cursor: pointer; }
+.lib-list li button.sel { background: var(--bg3); box-shadow: inset 2px 0 0 var(--ac); }
+.lib-empty { padding: 8px 12px; }
+.lib-detail { overflow: auto; padding: 8px 12px; }
+.lib-versions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; }
+.lib-compare { display: inline-flex; gap: 6px; margin: 0 0 6px; color: var(--fg2); }
+.lib-diff { border-collapse: collapse; margin: 0 0 8px; width: 100%; }
+.lib-diff td { padding: 2px 8px; border-bottom: 1px solid var(--ln); overflow-wrap: anywhere; }
+.lib-diff tr[data-change="same"] { color: var(--fg3); }
+.lib-diff tr[data-change="added"] td:first-child, .lib-diff tr[data-change="changed"] td:last-child { color: var(--ok); }
+.lib-diff tr[data-change="removed"] td:first-child, .lib-diff tr[data-change="changed"] td:first-child { color: var(--alm); }
+.lib-form .st-row { display: grid; grid-template-columns: 180px minmax(0, 320px); gap: 4px 12px; align-items: center; margin: 0 0 6px; }
+.lib-actions, .lib-dup, .lib-slots { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.lib-issues { margin: 6px 0; padding-left: 16px; }
+.tpl-editor { margin: 0 0 6px; max-height: 360px; overflow: auto; }

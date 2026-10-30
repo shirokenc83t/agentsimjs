@@ -82,7 +82,7 @@ export const WORKSPACES: readonly WorkspacePreset[] = [
   {
     id: "configurations",
     title: "Configurations",
-    panels: [{ id: "runConfig" }, { id: "scenarioEditor", background: true }],
+    panels: [{ id: "runConfig" }, { id: "scenarioEditor", background: true }, { id: "library", background: true }],
   },
   {
     id: "scene",
