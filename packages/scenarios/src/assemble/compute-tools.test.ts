@@ -149,6 +149,20 @@ describe("planPath", () => {
     expect(call(b, id, "planPath", { to: { xM: 1, yM: 1 }, extra: 1 })).toMatchObject({ ok: false, code: "invalid_params" });
   });
 
+  it("says where a parameter is wrong and what a point looks like (a model told only \"must be object\" asks again with the same fault)", () => {
+    const b = build();
+    const id = idOf(b, "believer");
+    const bad = call(b, id, "estimateCost", { route: ["p1", "p2"] });
+    expect(bad).toMatchObject({ ok: false, code: "invalid_params" });
+    const message = bad.ok ? "" : bad.message;
+    expect(message).toContain("/route/0: must be object");
+    expect(message).toContain('{"xM": 20, "yM": 40}');
+    expect(message).toContain("never a string or a name");
+    // A fault that is not about a point does not get the hint.
+    const other = call(b, id, "kShortestPaths", { to: { xM: 1, yM: 1 }, k: 9 });
+    expect(other.ok ? "" : other.message).not.toContain("a point is an object");
+  });
+
   it("is deterministic: the same call twice gives the same answer", () => {
     const b = build();
     const id = idOf(b, "oracle");

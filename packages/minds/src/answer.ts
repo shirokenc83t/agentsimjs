@@ -46,16 +46,49 @@ export interface ParsedAnswer {
   readonly rationale?: string;
 }
 
-/** Takes the JSON out of an answer: the whole text, or the first fenced block (a model that wraps its JSON in a code fence still answers). */
+/** The first JSON object of a text: from the first `{` to the brace that closes it (braces inside a string do not count). */
+function firstObject(text: string): string | undefined {
+  const start = text.indexOf("{");
+  if (start < 0) return undefined;
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inString) {
+      if (c === "\\") i++;
+      else if (c === '"') inString = false;
+    } else if (c === '"') inString = true;
+    else if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return text.slice(start, i + 1);
+  }
+  return undefined;
+}
+
+/** Takes the JSON out of an answer: the whole text, the first fenced block (a model that wraps its JSON in a code fence still answers), or the first object of a text with words around it. */
 function jsonOf(text: string): unknown {
   const t = text.trim();
   try {
     return JSON.parse(t);
   } catch {
     const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(t);
-    if (fenced?.[1] === undefined) throw new SyntaxError("the answer is not JSON");
-    return JSON.parse(fenced[1].trim());
+    const piece = fenced?.[1]?.trim() ?? firstObject(t);
+    if (piece === undefined) throw new SyntaxError("the answer is not JSON");
+    return JSON.parse(piece);
   }
+}
+
+/** A compute tool written as the action of an answer (`{"action": "estimateCost", "params": {...}}`): what a model does that does not use the function-calling channel. The tool and its parameters, or undefined. */
+export function toolWrittenAsAction(text: string, toolNames: readonly string[]): { readonly name: string; readonly params: unknown } | undefined {
+  let raw: unknown;
+  try {
+    raw = jsonOf(text);
+  } catch {
+    return undefined;
+  }
+  const o = raw as { action?: unknown; params?: unknown } | null;
+  if (o === null || typeof o !== "object" || typeof o.action !== "string" || !toolNames.includes(o.action)) return undefined;
+  if (o.params !== undefined && (o.params === null || typeof o.params !== "object" || Array.isArray(o.params))) return undefined;
+  return { name: o.action, params: o.params ?? {} };
 }
 
 /** Parses and validates an answer against the schema made for the request; the message of a failure is what the model is told in the retry. */

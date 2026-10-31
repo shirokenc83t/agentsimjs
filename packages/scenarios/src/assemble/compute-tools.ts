@@ -42,7 +42,12 @@ export class ComputeToolsService implements ComputePort {
     const cap = getCapability(tool);
     if (cap === undefined || cap.kind !== "compute") return fail("unknown_tool", `"${tool.slice(0, 64)}" is not a compute tool`);
     const valid = validateParams(tool, params);
-    if (!valid.ok) return fail("invalid_params", valid.error.message);
+    if (!valid.ok) {
+      // What is wrong and where, and, for a point, what a point looks like (a model that is only told "must be object" asks again with the same fault).
+      const where = valid.error.issues.slice(0, 3).map((i) => `${i.path === "" ? "parameters" : i.path}: ${i.message}`);
+      const point = valid.error.issues.some((i) => /(^|\/)(route|to|from)(\/|$)/.test(i.path));
+      return fail("invalid_params", `${where.join("; ")}${point ? ' (a point is an object {"xM": 20, "yM": 40}: two numbers in metres, never a string or a name; "home" is the base)' : ""}`);
+    }
     const agent = this.byId.get(agentId);
     if (agent === undefined) return fail("unknown_agent", `no agent ${agentId}`);
     const p = valid.value as Record<string, unknown>;

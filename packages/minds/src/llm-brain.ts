@@ -1,6 +1,6 @@
 import type { Brain, ComputeOutcome, DecideContext, DecisionEnvelope, DecisionRequest, StatefulBrain } from "@agentsim/core";
 import { contentHash64 } from "@agentsim/core";
-import { answerSchema, parseAnswer, type ParsedAnswer } from "./answer.ts";
+import { answerSchema, parseAnswer, toolWrittenAsAction, type ParsedAnswer } from "./answer.ts";
 import { cacheKey, estimateUsage, type CacheOutcome, type MindCache } from "./cache.ts";
 import { canonicalJson } from "./canonical.ts";
 import type { EffectiveS2, PromptTemplateDocument } from "./documents.ts";
@@ -222,6 +222,7 @@ export class LlmBrain implements Brain, StatefulBrain {
     const toolDefs = compute === undefined || maxTools <= 0 ? [] : offeredComputeTools(allow);
     const toolsHash = toolDefs.length === 0 ? contentHash64(canonicalJson(schema)) : contentHash64(canonicalJson({ answer: schema, tools: toolDefs }));
     let toolsAnswered = 0;
+    const asked_before = new Map<string, string>();
     let toolRounds = 0;
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -258,7 +259,10 @@ export class LlmBrain implements Brain, StatefulBrain {
           }
         }
         const usage: ProviderUsage = resp.usage ?? estimateUsage(messages, resp.content);
-        const asked = resp.outcome === "ok" && resp.toolCalls !== undefined && resp.toolCalls.length > 0 ? resp.toolCalls : undefined;
+        const native = resp.outcome === "ok" && resp.toolCalls !== undefined && resp.toolCalls.length > 0 ? resp.toolCalls : undefined;
+        // A tool written as the action of the text answer is the tool call it means (the model did not use the function-calling channel): it is run, and no retry is spent on it.
+        const written = native === undefined && resp.outcome === "ok" && compute !== undefined && toolDefs.length > 0 ? toolWrittenAsAction(resp.content ?? "", toolDefs.map((d) => d.name)) : undefined;
+        const asked: readonly ToolCall[] | undefined = native ?? (written === undefined ? undefined : [{ id: `text-${toolRounds + 1}`, name: written.name, params: written.params }]);
         let outcome: CacheOutcome = resp.outcome;
         let parsed: ParsedAnswer | undefined;
         let why = resp.error ?? "";
@@ -317,12 +321,20 @@ export class LlmBrain implements Brain, StatefulBrain {
           const results: ChatMessage[] = [];
           for (const tc of asked) {
             let out: ComputeOutcome;
-            if (toolsAnswered >= maxTools) out = { ok: false, code: "tool_call_limit", message: `you have used your ${maxTools} tool calls for this decision: answer now with one of the allowed actions or idle` };
+            if (toolsAnswered >= maxTools) out = { ok: false, code: "tool_call_limit", message: `you have used your ${maxTools} tool calls for this decision: answer now with one JSON object, one of the allowed actions: ${allowed.map((a) => a.name).join(", ")}, or idle` };
             else if (!toolDefs.some((d) => d.name === tc.name)) out = { ok: false, code: "tool_not_available", message: `${tc.name.slice(0, 64)} is not a tool you can call` };
             else {
               toolsAnswered++;
-              out = compute(tc.name, tc.params);
-              await this.checkReplay(key, tc, out, req, eff.model);
+              const same = `${tc.name} ${canonicalJson(tc.params)}`;
+              const earlier = asked_before.get(same);
+              if (earlier !== undefined) {
+                // The same question again: it is answered with the answer it already has, and it counts against the cap (a model that asks the same again is not getting anywhere).
+                out = { ok: false, code: "already_asked", message: `you asked exactly this already and the answer was ${earlier}: ask something different, or answer with an action` };
+              } else {
+                out = compute(tc.name, tc.params);
+                await this.checkReplay(key, tc, out, req, eff.model);
+                if (out.ok) asked_before.set(same, canonicalJson(out.result));
+              }
             }
             ctx?.trace?.emit({
               source,
