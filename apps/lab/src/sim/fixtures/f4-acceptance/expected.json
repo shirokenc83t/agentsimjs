@@ -1,0 +1,293 @@
+{
+ "lockstep": {
+  "runId": "run-000002",
+  "runMode": "live",
+  "timeMode": "lockstep",
+  "llmCalls": 16,
+  "outcomes": {
+   "ok": 14,
+   "invalid": 2
+  },
+  "fallbacks": 1,
+  "tools": [
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    11.100000000000001,
+    "estimateCost"
+   ],
+   [
+    11.100000000000001,
+    "estimateCost"
+   ],
+   [
+    11.100000000000001,
+    "estimateCost"
+   ],
+   [
+    11.100000000000001,
+    "estimateCost"
+   ],
+   [
+    11.100000000000001,
+    "estimateCost"
+   ],
+   [
+    11.100000000000001,
+    "estimateCost"
+   ],
+   [
+    11.100000000000001,
+    "estimateCost"
+   ],
+   [
+    11.100000000000001,
+    "estimateCost"
+   ]
+  ],
+  "decisions": [
+   {
+    "simTime": 0.1,
+    "decision": {
+     "kind": "action"
+    }
+   },
+   {
+    "simTime": 10.200000000000001,
+    "decision": {
+     "kind": "action"
+    }
+   },
+   {
+    "simTime": 11.200000000000001,
+    "decision": {
+     "kind": "action"
+    }
+   },
+   {
+    "simTime": 12.600000000000001,
+    "decision": {
+     "kind": "idle"
+    }
+   }
+  ],
+  "actions": [
+   [
+    0.1,
+    "{\"op\":\"start\",\"actionId\":\"act-000001\",\"name\":\"takeoff\",\"params\":{\"altitudeM\":20}}"
+   ],
+   [
+    10.100000000000001,
+    "{\"op\":\"end\",\"actionId\":\"act-000001\",\"name\":\"takeoff\",\"status\":\"succeeded\",\"result\":{\"altitudeM\":20}}"
+   ],
+   [
+    10.200000000000001,
+    "{\"op\":\"start\",\"actionId\":\"act-000002\",\"name\":\"goTo\",\"params\":{\"xM\":40,\"yM\":60}}"
+   ],
+   [
+    10.3,
+    "{\"op\":\"phase\",\"actionId\":\"act-000002\",\"from\":\"planning\",\"to\":\"following\"}"
+   ],
+   [
+    11.200000000000001,
+    "{\"op\":\"end\",\"actionId\":\"act-000002\",\"name\":\"goTo\",\"status\":\"preempted\",\"failure\":{\"code\":\"preempted\",\"message\":\"replaced\"}}"
+   ],
+   [
+    11.200000000000001,
+    "{\"op\":\"start\",\"actionId\":\"act-000003\",\"name\":\"hold\",\"params\":{}}"
+   ]
+  ],
+  "checkpoints": [
+   [
+    0,
+    0,
+    "3f1c2b2f"
+   ],
+   [
+    10,
+    100,
+    "59344561"
+   ],
+   [
+    20,
+    200,
+    "963f28f8"
+   ],
+   [
+    30,
+    300,
+    "2f182421"
+   ],
+   [
+    40,
+    400,
+    "17ec36d9"
+   ],
+   [
+    50,
+    500,
+    "88db7646"
+   ]
+  ]
+ },
+ "latencyModeled": {
+  "runId": "run-000004",
+  "runMode": "live",
+  "timeMode": "latency-modeled",
+  "llmCalls": 17,
+  "outcomes": {
+   "ok": 15,
+   "invalid": 2
+  },
+  "fallbacks": 1,
+  "tools": [
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    0,
+    "estimateCost"
+   ],
+   [
+    16,
+    "estimateCost"
+   ],
+   [
+    16,
+    "estimateCost"
+   ],
+   [
+    16,
+    "estimateCost"
+   ],
+   [
+    16,
+    "estimateCost"
+   ],
+   [
+    16,
+    "estimateCost"
+   ],
+   [
+    16,
+    "estimateCost"
+   ],
+   [
+    16,
+    "estimateCost"
+   ],
+   [
+    16,
+    "estimateCost"
+   ],
+   [
+    16,
+    "estimateCost"
+   ]
+  ],
+  "decisions": [
+   {
+    "simTime": 5,
+    "decision": {
+     "kind": "action"
+    }
+   },
+   {
+    "simTime": 15.8,
+    "decision": {
+     "kind": "action"
+    }
+   },
+   {
+    "simTime": 23.700000000000003,
+    "decision": {
+     "kind": "action"
+    }
+   },
+   {
+    "simTime": 24.6,
+    "decision": {
+     "kind": "idle"
+    }
+   }
+  ],
+  "actions": [
+   [
+    5,
+    "{\"op\":\"start\",\"actionId\":\"act-000001\",\"name\":\"takeoff\",\"params\":{\"altitudeM\":20}}"
+   ],
+   [
+    15,
+    "{\"op\":\"end\",\"actionId\":\"act-000001\",\"name\":\"takeoff\",\"status\":\"succeeded\",\"result\":{\"altitudeM\":20}}"
+   ],
+   [
+    15.8,
+    "{\"op\":\"start\",\"actionId\":\"act-000002\",\"name\":\"goTo\",\"params\":{\"xM\":40,\"yM\":60}}"
+   ],
+   [
+    15.9,
+    "{\"op\":\"phase\",\"actionId\":\"act-000002\",\"from\":\"planning\",\"to\":\"following\"}"
+   ],
+   [
+    23.200000000000003,
+    "{\"op\":\"end\",\"actionId\":\"act-000002\",\"name\":\"goTo\",\"status\":\"succeeded\",\"result\":{\"position\":{\"xM\":40.25,\"yM\":60.25,\"zM\":20},\"pathLengthM\":56.906282688665094}}"
+   ],
+   [
+    23.700000000000003,
+    "{\"op\":\"start\",\"actionId\":\"act-000003\",\"name\":\"hold\",\"params\":{}}"
+   ]
+  ],
+  "checkpoints": [
+   [
+    0,
+    0,
+    "3f1c2b2f"
+   ],
+   [
+    10,
+    100,
+    "00df354e"
+   ],
+   [
+    20,
+    200,
+    "275eb34d"
+   ],
+   [
+    30,
+    300,
+    "d10abb17"
+   ],
+   [
+    40,
+    400,
+    "2d100e2a"
+   ],
+   [
+    50,
+    500,
+    "c518d7f3"
+   ],
+   [
+    60,
+    600,
+    "743fb11a"
+   ]
+  ]
+ }
+}

@@ -303,6 +303,75 @@ export function describeStorageContract(name: string, create: () => Promise<Cont
       });
     });
 
+    describe("ResponseCache columns (schema v14)", () => {
+      it("keeps what a model call left: provider kind, tools hash, outcome, usage and latency, and entries without them still read as before", async () => {
+        await h.ports.cache.put("old", { model: "m", value: { text: "x" }, createdAtWallMs: 1 });
+        expect(await h.ports.cache.get("old")).toEqual({ model: "m", value: { text: "x" }, createdAtWallMs: 1 });
+        const entry = { model: "llama", value: { message: { content: "go" } }, createdAtWallMs: 7, providerKind: "openai-compatible", toolsHash: "ab12cd34", outcome: "ok" as const, usage: { inputTokens: 12, outputTokens: 3 }, latencyMs: 840 };
+        await h.ports.cache.put("new", entry);
+        expect(await h.ports.cache.get("new")).toEqual(entry);
+        await h.ports.cache.put("slow", { model: "llama", value: null, createdAtWallMs: 8, outcome: "timeout", latencyMs: 60000 });
+        expect(await h.ports.cache.get("slow")).toEqual({ model: "llama", value: null, createdAtWallMs: 8, outcome: "timeout", latencyMs: 60000 });
+      });
+    });
+
+    describe("ResponseCache per run (schema v16)", () => {
+      it("keeps the answers of two runs for the same key side by side, reads the preferred run's first, and the latest of any run without a preference", async () => {
+        await h.ports.cache.put("k", { model: "m", value: { n: 1 }, createdAtWallMs: 10, runId: "run-000001" });
+        await h.ports.cache.put("k", { model: "m", value: { n: 2 }, createdAtWallMs: 20, runId: "run-000002" });
+        expect(((await h.ports.cache.get("k", "run-000001"))?.value as { n: number }).n).toBe(1);
+        expect(((await h.ports.cache.get("k", "run-000002"))?.value as { n: number }).n).toBe(2);
+        expect((await h.ports.cache.get("k", "run-000001"))?.runId).toBe("run-000001");
+        // No preference, or a run that has no entry for the key: the latest one.
+        expect(((await h.ports.cache.get("k"))?.value as { n: number }).n).toBe(2);
+        expect(((await h.ports.cache.get("k", "run-000009"))?.value as { n: number }).n).toBe(2);
+        // The same run writing the same key again replaces its own entry only.
+        await h.ports.cache.put("k", { model: "m", value: { n: 3 }, createdAtWallMs: 30, runId: "run-000001" });
+        expect(((await h.ports.cache.get("k", "run-000001"))?.value as { n: number }).n).toBe(3);
+        expect(((await h.ports.cache.get("k", "run-000002"))?.value as { n: number }).n).toBe(2);
+      });
+    });
+
+    describe("the header's minds fields (schema v15)", () => {
+      it("keeps where the answers came from and the first tick that missed the cache (set once), and refuses an unknown run", async () => {
+        await h.ports.runs.create(header("run-000001", { mindsRunMode: "replay-then-live" }));
+        expect((await h.ports.runs.get("run-000001"))?.mindsRunMode).toBe("replay-then-live");
+        expect((await h.ports.runs.get("run-000001"))?.notReproducibleFromTick).toBeUndefined();
+        expect((await h.ports.runs.markNotReproducible("run-000001", 40)).ok).toBe(true);
+        expect((await h.ports.runs.markNotReproducible("run-000001", 90)).ok).toBe(true);
+        expect((await h.ports.runs.get("run-000001"))?.notReproducibleFromTick).toBe(40);
+        expect((await h.ports.runs.list())[0]?.notReproducibleFromTick).toBe(40);
+        const unk = await h.ports.runs.markNotReproducible("run-000009", 1);
+        expect(unk.ok ? null : unk.error.code).toBe("unknown_run");
+      });
+    });
+
+    describe.each(["mindProfiles", "promptTemplates"] as const)("%s (the library, schema v14)", (port) => {
+      const doc = (id: string, extra: Record<string, unknown> = {}) => ({ id, name: `Name of ${id}`, document: { schemaVersion: 1, kind: "x", ...extra } });
+
+      it("saves numbered versions that are never changed, lists the latest per id, gets any version, and never reuses a deleted number", async () => {
+        const lib = h.ports[port];
+        expect(await lib.list()).toEqual([]);
+        expect(await lib.saveVersion(doc("scout"))).toEqual({ ok: true, value: { id: "scout", version: 1 } });
+        expect(await lib.saveVersion(doc("scout", { n: 2 }))).toEqual({ ok: true, value: { id: "scout", version: 2 } });
+        expect(await lib.saveVersion(doc("alpha"))).toEqual({ ok: true, value: { id: "alpha", version: 1 } });
+        expect((await lib.list()).map((s) => [s.id, s.latestVersion, s.versionCount])).toEqual([["alpha", 1, 1], ["scout", 2, 2]]);
+        expect((await lib.get("scout"))?.document).toEqual({ schemaVersion: 1, kind: "x", n: 2 });
+        expect((await lib.get("scout", 1))?.document).toEqual({ schemaVersion: 1, kind: "x" });
+        expect(await lib.get("scout", 3)).toBeUndefined();
+        expect((await lib.delete("scout")).ok).toBe(true);
+        expect(await lib.get("scout")).toBeUndefined();
+        expect(await lib.saveVersion(doc("scout"))).toEqual({ ok: true, value: { id: "scout", version: 3 } });
+      });
+
+      it("refuses a document without an id, a name and a schemaVersion, and a delete of what is not there", async () => {
+        const lib = h.ports[port];
+        expect((await lib.saveVersion({ id: "Bad Id", name: "x", document: { schemaVersion: 1 } })).ok).toBe(false);
+        expect((await lib.saveVersion({ id: "ok", name: "x", document: {} })).ok).toBe(false);
+        expect((await lib.delete("nothing")).ok).toBe(false);
+      });
+    });
+
     describe("ScenarioStore", () => {
       const scenario = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
         schemaVersion: 0, id, name, world: { layers: { occupancy: { chunks: [{ ci: 0, cj: 0, rle: "gCAB" }] } } }, zones: [], agents: [], ...extra,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Mark } from "../panels/debug/marks.ts";
+import type { TraceRecord } from "@agentsim/trace";
+import { glyphOf, isRaise, markOf, type Mark } from "../panels/debug/marks.ts";
 import { bandMarks } from "./band-marks.ts";
 
 const reflex = (seq: number, t: number, agentId = "ugv-007", code = "obstacle_ahead"): Mark => ({ seq, t, kind: "reflex", op: undefined, agentId, code });
@@ -22,5 +23,25 @@ describe("the marks on the swarm knowledge band", () => {
 
   it("a hover on a single mark names its agent, its code and its time", () => {
     expect(bandMarks([failure(2, 12)], args)[0]?.summary).toBe("ugv-002 unreachable at 12.0 s");
+  });
+});
+
+describe("the raise of a limit on the band and in the marks (F4 M4, T-123)", () => {
+  const raised = (seq: number, t: number): TraceRecord => ({ id: `run-000001#${seq}`, runId: "run-000001", seq, simTime: t, wallTime: 1, source: "uav-001/s2", kind: "lifecycle", agentId: "uav-001", payload: { op: "raiseLimit", caller: "world", limit: "tokens", before: 40000, after: 80000, tick: 342 } }) as TraceRecord;
+  it("is a mark of the run (the run lane), written ◆, whose hover says which limit went from what to what", () => {
+    const m = markOf(raised(9, 34.2));
+    expect(isRaise(m)).toBe(true);
+    expect(m.agentId).toBeUndefined();
+    expect(glyphOf(m)).toBe("◆");
+    expect(m.code).toBe("uav-001 tokens 40000 → 80000");
+    expect(isRaise(markOf({ ...raised(1, 1), kind: "event" } as TraceRecord))).toBe(false);
+  });
+  it("is a glyph of its own on the band, apart from a reflex and a failure, a click selecting its record", () => {
+    const marks = [markOf(raised(9, 34.2)), reflex(3, 34.1)];
+    const out = bandMarks(marks, args);
+    expect(out.map((b) => b.kind).sort()).toEqual(["raise", "reflex"]);
+    const raise = out.find((b) => b.kind === "raise");
+    expect(raise?.seq).toBe(9);
+    expect(raise?.summary).toBe("limit raised: uav-001 tokens 40000 → 80000 at 34.2 s");
   });
 });

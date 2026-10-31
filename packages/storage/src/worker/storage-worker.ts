@@ -23,7 +23,7 @@ import {
 import { QuotaGuard, MEMORY_FALLBACK_LIMIT_BYTES, type QuotaMeasure } from "./quota.ts";
 import { recorderAppend, recorderSide, reportCommit, type RecorderAppend, type RecorderSide } from "./recorder-ingest.ts";
 import type { QuotaMessage, RecorderPortLike, RecorderPortMessage, RecorderToStorage } from "./recorder-protocol.ts";
-import { deserializeToMemory, exportRun, validateImport, type ImportErrorCode } from "./transfer.ts";
+import { deserializeToMemory, exportRun, validateImport, withoutProviderKeys, type ImportErrorCode } from "./transfer.ts";
 
 /** The subset of a DedicatedWorkerGlobalScope the storage worker needs (keeps it testable). */
 export interface WorkerScope {
@@ -194,7 +194,9 @@ class Engine {
   }
 
   exportDb(): Uint8Array {
-    return this.pool ? this.pool.exportFile(this.init.dbFile) : this.sqlite3.capi.sqlite3_js_db_export(this.raw);
+    const bytes = this.pool ? this.pool.exportFile(this.init.dbFile) : this.sqlite3.capi.sqlite3_js_db_export(this.raw);
+    // A key remembered on this device never leaves it (ADR-0044 §3): the export is made without it.
+    return withoutProviderKeys(this.sqlite3, bytes);
   }
 
   exportRun(runId: string) {
@@ -564,6 +566,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "runs.get": value = await s.runs.get(String(a)); break;
         case "runs.list": value = await s.runs.list(); break;
         case "runs.setStatus": value = await s.runs.setStatus(String(a), b as RunStatus); break;
+        case "runs.markNotReproducible": value = await s.runs.markNotReproducible(String(a), Number(b)); break;
         case "runs.appendInputs": value = await s.runs.appendInputs(String(a), Array.isArray(b) ? (b as StoredRunInput[]) : []); break;
         case "runs.inputs": value = await s.runs.inputs(String(a)); break;
         case "runs.sizes": value = await s.runs.sizes(String(a)); break;
@@ -584,7 +587,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
           }
           break;
         }
-        case "cache.get": value = await s.cache.get(String(a)); break;
+        case "cache.get": value = await s.cache.get(String(a), b === undefined ? undefined : String(b)); break;
         case "cache.put": value = await s.cache.put(String(a), b as CachedResponse); break;
         case "userData.get": value = await s.userData.get(String(a), String(b)); break;
         case "userData.set": value = await s.userData.set(String(a), String(b), req.args[2]); break;
@@ -598,6 +601,14 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
         case "runConfigs.get": value = await s.runConfigs.get(String(a), typeof b === "number" ? b : undefined); break;
         case "runConfigs.saveVersion": value = await s.runConfigs.saveVersion(a as { id: string; name: string; document: unknown }); break;
         case "runConfigs.delete": value = await s.runConfigs.delete(String(a)); break;
+        case "mindProfiles.list": value = await s.mindProfiles.list(); break;
+        case "mindProfiles.get": value = await s.mindProfiles.get(String(a), typeof b === "number" ? b : undefined); break;
+        case "mindProfiles.saveVersion": value = await s.mindProfiles.saveVersion(a as { id: string; name: string; document: unknown }); break;
+        case "mindProfiles.delete": value = await s.mindProfiles.delete(String(a)); break;
+        case "promptTemplates.list": value = await s.promptTemplates.list(); break;
+        case "promptTemplates.get": value = await s.promptTemplates.get(String(a), typeof b === "number" ? b : undefined); break;
+        case "promptTemplates.saveVersion": value = await s.promptTemplates.saveVersion(a as { id: string; name: string; document: unknown }); break;
+        case "promptTemplates.delete": value = await s.promptTemplates.delete(String(a)); break;
         case "snapshots.putBlobs": value = await s.snapshots.putBlobs(String(a), Array.isArray(b) ? (b as StoredBlob[]) : []); break;
         case "snapshots.getBlob": value = await s.snapshots.getBlob(String(a), String(b)); break;
         case "snapshots.write": value = await s.snapshots.write(String(a), b as SnapshotWrite); break;

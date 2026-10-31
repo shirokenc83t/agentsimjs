@@ -35,7 +35,7 @@ describe("the mission step editor", () => {
     await add("goTo");
     await add("explore");
     expect(steps()).toEqual(["takeoff", "goTo", "explore"]);
-    expect(latest.minds?.byAgent?.["scout"]?.s1.script.name).toBe("sequence");
+    expect(latest.minds?.byAgent?.["scout"]?.s1?.script.name).toBe("sequence");
     expect(screen.getByTestId("ms-valid")).toHaveTextContent("✓ valid · 3 steps · uav-001");
     expect(screen.getByTestId("ms-glyph-0")).toHaveTextContent("✓");
     expect(screen.getByTestId("ms-after-1")).toHaveTextContent("→ airborne");

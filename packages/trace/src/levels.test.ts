@@ -1,5 +1,6 @@
 import { contentHash64 } from "@agentsim/core";
 import { describe, expect, it } from "vitest";
+import { channelOf } from "./channels.ts";
 import { dropsRecord, filterRecord, metadataMindIo, summarizeCompute } from "./levels.ts";
 import { RECORDING_PRESETS } from "./recording-profile.ts";
 import type { TraceRecord } from "./trace-record.ts";
@@ -129,5 +130,40 @@ describe("filterRecord and dropsRecord under a profile", () => {
       rec("thought", "uav-001/s1", { op: "space", hash: "x", summary: "{}" }),
     ];
     for (const [name, p] of Object.entries(RECORDING_PRESETS)) for (const s of samples) expect(filterRecord(p, s), `${name} ${s.kind}`).toBeDefined();
+  });
+});
+
+describe("mind-io in F4 (ADR-0035 addition of 2026-10-29)", () => {
+  const call = (): TraceRecord =>
+    rec("thought", "uav-001/s2", {
+      op: "llm-call",
+      attempt: 1,
+      model: "m1",
+      providerKind: "openai-compatible",
+      cacheKey: "0123456789abcdef",
+      cacheHit: false,
+      outcome: "ok",
+      latencyMs: 812,
+      usage: { inputTokens: 900, outputTokens: 30 },
+      toolsHash: "fedcba9876543210",
+      messages: [{ role: "system", content: "You fly." }, { role: "user", content: "## Your mission - Inspect B." }],
+      response: { content: '{"action":"idle"}' },
+    });
+
+  it("every op of the mind's records is on the mind-io channel", () => {
+    for (const op of ["llm-call", "fallback", "cache-miss", "not-reproducible", "limit-warning", "limit-hit", "limit-raised"]) expect(channelOf(rec("thought", "uav-001/s2", { op })), op).toBe("mind-io");
+    expect(channelOf(rec("thought", "uav-001/s2", { op: "decision" }))).toBe("events");
+  });
+
+  it("at full a model call keeps its prompt and its answer; at metadata they become their content hash and every figure stays", () => {
+    const full = filterRecord(RECORDING_PRESETS["default-research"], call()) as TraceRecord;
+    expect((full.payload as { messages: unknown[] }).messages).toHaveLength(2);
+    const meta = metadataMindIo(call()).payload as Record<string, unknown>;
+    expect(meta["messages"]).toBe(contentHash64(JSON.stringify((call().payload as { messages: unknown }).messages)));
+    expect(meta["response"]).toBe(contentHash64(JSON.stringify({ content: '{"action":"idle"}' })));
+    expect(meta).toMatchObject({ op: "llm-call", attempt: 1, model: "m1", outcome: "ok", latencyMs: 812, usage: { inputTokens: 900, outputTokens: 30 }, cacheKey: "0123456789abcdef", toolsHash: "fedcba9876543210" });
+    // Records of the other ops are returned as they are.
+    const fallback = rec("thought", "uav-001/s2", { op: "fallback", reason: "x" });
+    expect(metadataMindIo(fallback)).toBe(fallback);
   });
 });

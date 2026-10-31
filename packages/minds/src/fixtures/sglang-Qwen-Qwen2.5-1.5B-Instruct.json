@@ -1,0 +1,442 @@
+{
+  "server": "sglang",
+  "version": "0.5.23",
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "summary": {
+    "models": [
+      "Qwen/Qwen2.5-1.5B-Instruct"
+    ],
+    "plain": {
+      "ok": true,
+      "text": "Hello! How can I assist you today?"
+    },
+    "structured": {
+      "ok": true,
+      "valid": true
+    },
+    "tools": {
+      "asked": true,
+      "answered": true
+    },
+    "usage": {
+      "reported": true
+    },
+    "wrongModel": {}
+  },
+  "exchanges": [
+    {
+      "name": "GET /v1/models#1",
+      "request": {
+        "method": "GET",
+        "path": "/v1/models"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "object": "list",
+          "data": [
+            {
+              "id": "Qwen/Qwen2.5-1.5B-Instruct",
+              "object": "model",
+              "created": 1793356450,
+              "owned_by": "sglang",
+              "root": "Qwen/Qwen2.5-1.5B-Instruct",
+              "parent": null,
+              "max_model_len": 8192
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#2",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Say hello in one short sentence."
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "28d98c9f1bc14612ad9c2a55122ee3f2",
+          "object": "chat.completion",
+          "created": 1793356453,
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Hello! How can I assist you today?",
+                "reasoning_content": null
+              },
+              "logprobs": null,
+              "finish_reason": "stop",
+              "matched_stop": 151645
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 36,
+            "total_tokens": 46,
+            "completion_tokens": 10,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "metadata": {
+            "weight_version": "default",
+            "weight_versions": [
+              {
+                "version": "default",
+                "start": 0,
+                "end": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#3",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Answer with the JSON object {\"ok\": true}."
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64,
+          "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "answer",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "cfabba99e58f4db78dede802676bc4e7",
+          "object": "chat.completion",
+          "created": 1793356453,
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "{\"ok\": true}",
+                "reasoning_content": null
+              },
+              "logprobs": null,
+              "finish_reason": "stop",
+              "matched_stop": 151645
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 39,
+            "total_tokens": 45,
+            "completion_tokens": 6,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "metadata": {
+            "weight_version": "default",
+            "weight_versions": [
+              {
+                "version": "default",
+                "start": 0,
+                "end": 6
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#4",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "messages": [
+            {
+              "role": "user",
+              "content": "How many apples are there? Use the tool get_number to find out."
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_number",
+                "description": "Returns the number the user asks about.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "1e41d034b5b345eeb833b8a7ffac20b3",
+          "object": "chat.completion",
+          "created": 1793356453,
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "",
+                "reasoning_content": null,
+                "tool_calls": [
+                  {
+                    "id": "call_4a81000904154d65a55d83f9",
+                    "index": 0,
+                    "type": "function",
+                    "function": {
+                      "name": "get_number",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              "logprobs": null,
+              "finish_reason": "tool_calls",
+              "matched_stop": null
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 174,
+            "total_tokens": 190,
+            "completion_tokens": 16,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "metadata": {
+            "weight_version": "default",
+            "weight_versions": [
+              {
+                "version": "default",
+                "start": 0,
+                "end": 16
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#5",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "messages": [
+            {
+              "role": "user",
+              "content": "How many apples are there? Use the tool get_number to find out."
+            },
+            {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "id": "call_4a81000904154d65a55d83f9",
+                  "type": "function",
+                  "function": {
+                    "name": "get_number",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "call_4a81000904154d65a55d83f9",
+              "name": "get_number",
+              "content": "{\"number\":7}"
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_number",
+                "description": "Returns the number the user asks about.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "da2b140f967745e4b47c6109f40c876a",
+          "object": "chat.completion",
+          "created": 1793356453,
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "There are 7 apples.",
+                "reasoning_content": null
+              },
+              "logprobs": null,
+              "finish_reason": "stop",
+              "matched_stop": 151645
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 212,
+            "total_tokens": 219,
+            "completion_tokens": 7,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "metadata": {
+            "weight_version": "default",
+            "weight_versions": [
+              {
+                "version": "default",
+                "start": 0,
+                "end": 7
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#6",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "no-such-model-xyz",
+          "messages": [
+            {
+              "role": "user",
+              "content": "hi"
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64,
+          "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "answer",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "c630351bf95e459299514df73be5d1f3",
+          "object": "chat.completion",
+          "created": 1793356453,
+          "model": "no-such-model-xyz",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "{ \"ok\": true }",
+                "reasoning_content": null
+              },
+              "logprobs": null,
+              "finish_reason": "stop",
+              "matched_stop": 151645
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 30,
+            "total_tokens": 37,
+            "completion_tokens": 7,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "metadata": {
+            "weight_version": "default",
+            "weight_versions": [
+              {
+                "version": "default",
+                "start": 0,
+                "end": 7
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

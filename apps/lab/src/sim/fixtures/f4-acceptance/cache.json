@@ -1,0 +1,1392 @@
+[
+ {
+  "key": "0a095a56a1e013f3",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_qruskv47",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430638111,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3048,
+    "outputTokens": 58
+   },
+   "latencyMs": 1267,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "0de3019ec20e6f89",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n    \"action\": \"takeoff\",\n    \"altitudeM\": 20\n}"
+   },
+   "createdAtWallMs": 1793430641314,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "invalid",
+   "usage": {
+    "inputTokens": 2847,
+    "outputTokens": 20
+   },
+   "latencyMs": 526,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "27ddc48ad9dffe57",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\"action\": \"goTo\", \"params\": {\"xM\": 40, \"yM\": 60}, \"note\": {\"text\": \"Starting journey to P2\", \"mode\": \"replace\"}}"
+   },
+   "createdAtWallMs": 1793430631315,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2651,
+    "outputTokens": 46
+   },
+   "latencyMs": 870,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "6328024fc9088250",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n  \"action\": \"estimateCost\",\n  \"params\": {\n    \"route\": [\n      {\"xM\": 40, \"yM\": 60},\n      {\"xM\": 20, \"yM\": 40},\n      {\"xM\": 58, \"yM\": 20},\n      \"home\"\n    ]\n  },\n  \"note\": {\n    \"text\": \"Estimated cost for visiting P2, P1, P3 in order.\",\n    \"mode\": \"replace\"\n  }\n}",
+    "toolCalls": [
+     {
+      "id": "text-3",
+      "name": "estimateCost",
+      "params": {
+       "route": [
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430619547,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2853,
+    "outputTokens": 114
+   },
+   "latencyMs": 1209,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "6dde93b8f0a74b45",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n    \"action\": \"takeoff\",\n    \"altitudeM\": 20,\n    \"note\": {\n        \"text\": \"The cheapest route is visiting points in the order P1, P2, P3.\",\n        \"mode\": \"replace\"\n    }\n}"
+   },
+   "createdAtWallMs": 1793430640786,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "invalid",
+   "usage": {
+    "inputTokens": 3281,
+    "outputTokens": 57
+   },
+   "latencyMs": 769,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "758c4a0294f57e5e",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_akc725g6",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430635514,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3469,
+    "outputTokens": 58
+   },
+   "latencyMs": 657,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "7f04433d80f59faa",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n  \"action\": \"estimateCost\",\n  \"params\": {\n    \"route\": [\n      {\"xM\": 20, \"yM\": 40},\n      {\"xM\": 40, \"yM\": 60},\n      {\"xM\": 58, \"yM\": 20},\n      \"home\"\n    ]\n  },\n  \"note\": {\n    \"text\": \"Estimated cost for visiting P1, P2, P3 in order.\",\n    \"mode\": \"replace\"\n  }\n}",
+    "toolCalls": [
+     {
+      "id": "text-1",
+      "name": "estimateCost",
+      "params": {
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430617047,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2294,
+    "outputTokens": 114
+   },
+   "latencyMs": 1576,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "946dd8f99fdb7383",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n  \"action\": \"estimateCost\",\n  \"params\": {\n    \"route\": [\n      {\"xM\": 20, \"yM\": 40},\n      {\"xM\": 58, \"yM\": 20},\n      {\"xM\": 40, \"yM\": 60},\n      \"home\"\n    ]\n  },\n  \"note\": {\n    \"text\": \"Estimated cost for visiting P1, P3, P2 in order.\",\n    \"mode\": \"replace\"\n  }\n}",
+    "toolCalls": [
+     {
+      "id": "text-2",
+      "name": "estimateCost",
+      "params": {
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430618334,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2574,
+    "outputTokens": 114
+   },
+   "latencyMs": 1273,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "ae0f35c5c67ef2c3",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_xc04wmef",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430636844,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3895,
+    "outputTokens": 58
+   },
+   "latencyMs": 678,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "b794daa14851cc13",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n  \"action\": \"takeoff\",\n  \"params\": {\n    \"altitudeM\": 20\n  },\n  \"note\": {\n    \"text\": \"Chosen order: P2, P1, P3, home. Total length: 237.05m.\",\n    \"mode\": \"replace\"\n  }\n}"
+   },
+   "createdAtWallMs": 1793430620334,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3135,
+    "outputTokens": 73
+   },
+   "latencyMs": 783,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "b952c3dd7b70a943",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_ek1uqoov",
+      "name": "estimateCost",
+      "params": {
+       "route": [
+        "P1",
+        "P2",
+        "P3"
+       ],
+       "from": "home"
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430632957,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2752,
+    "outputTokens": 36
+   },
+   "latencyMs": 636,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "bde1ab4612f2011a",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\"action\": \"idle\", \"note\": {\"text\": \"Comparing routes to visit points in different orders.\", \"mode\": \"replace\"}}"
+   },
+   "createdAtWallMs": 1793430643295,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2761,
+    "outputTokens": 30
+   },
+   "latencyMs": 571,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "eb51682ee4a251f7",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_nycuxfox",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430634232,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3078,
+    "outputTokens": 58
+   },
+   "latencyMs": 628,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "f66752c8b42026a4",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_s9y9ao28",
+      "name": "estimateCost",
+      "params": {
+       "route": [
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        }
+       ],
+       "from": "home"
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430636166,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3664,
+    "outputTokens": 58
+   },
+   "latencyMs": 650,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "f76cb5d5e36f4eb6",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_phazftte",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430634854,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3272,
+    "outputTokens": 58
+   },
+   "latencyMs": 619,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "fc105514e0546826",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_2lhl5abj",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430633602,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2882,
+    "outputTokens": 59
+   },
+   "latencyMs": 643,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "tool:0ea55576aeee4a4e",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "2c16a47775abb55c"
+   },
+   "createdAtWallMs": 1793430617060,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "tool:583133111511388a",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "b836619c35d6ab6c"
+   },
+   "createdAtWallMs": 1793430632959,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "tool:8ac6286f73122047",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "38ed12b69fb56a0f"
+   },
+   "createdAtWallMs": 1793430634235,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "tool:8b12301abf574916",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "d36cb9317ff02ec1"
+   },
+   "createdAtWallMs": 1793430619551,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "tool:b46c01063141098b",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "3882cf911083515d"
+   },
+   "createdAtWallMs": 1793430634857,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "tool:d880c324bb572e41",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "73d55f5b4f957947"
+   },
+   "createdAtWallMs": 1793430633604,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "tool:ed4a19a601ff4d01",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "bf7df67aacd5180d"
+   },
+   "createdAtWallMs": 1793430635516,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "tool:f37d501bcbd4a11f",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "eb45f7e400a11a30"
+   },
+   "createdAtWallMs": 1793430618338,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000002"
+  }
+ },
+ {
+  "key": "0461da358c2fa1ea",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n  \"action\": \"takeoff\",\n  \"altitudeM\": 20\n}"
+   },
+   "createdAtWallMs": 1793430776196,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "invalid",
+   "usage": {
+    "inputTokens": 3352,
+    "outputTokens": 20
+   },
+   "latencyMs": 253,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "0a450fe38843a650",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_mbi5zvx2",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        {
+         "xM": "home"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430769603,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2935,
+    "outputTokens": 64
+   },
+   "latencyMs": 680,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "1365864dc85582f4",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n  \"action\": \"idle\",\n  \"note\": {\n    \"text\": \"Comparing routes for P1, P2, P3\",\n    \"mode\": \"replace\"\n  }\n}"
+   },
+   "createdAtWallMs": 1793430785455,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2800,
+    "outputTokens": 42
+   },
+   "latencyMs": 866,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "171ce351afd032f8",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_knyso3v3",
+      "name": "estimateCost",
+      "params": {
+       "route": [
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        }
+       ],
+       "from": "home"
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430775942,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3228,
+    "outputTokens": 58
+   },
+   "latencyMs": 1130,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "3ad2528f8f6ecf31",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_az3ijlgz",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430771682,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3417,
+    "outputTokens": 58
+   },
+   "latencyMs": 624,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "5aacf7fadaf3b3df",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_hk4uprkm",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430772308,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3611,
+    "outputTokens": 58
+   },
+   "latencyMs": 624,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "60de6b31f7d8bef6",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_msh7i2q7",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        }
+       ],
+       "text": "Comparing routes: 1-2-3, 1-3-2, 2-1-3"
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430770461,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3097,
+    "outputTokens": 85
+   },
+   "latencyMs": 858,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "6328024fc9088250",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n  \"action\": \"estimateCost\",\n  \"params\": {\n    \"route\": [\n      {\"xM\": 40, \"yM\": 60},\n      {\"xM\": 20, \"yM\": 40},\n      {\"xM\": 58, \"yM\": 20},\n      \"home\"\n    ]\n  },\n  \"note\": {\n    \"text\": \"Estimated cost for visiting P2, P1, P3 in order.\",\n    \"mode\": \"replace\"\n  }\n}",
+    "toolCalls": [
+     {
+      "id": "text-3",
+      "name": "estimateCost",
+      "params": {
+       "route": [
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430750304,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2853,
+    "outputTokens": 114
+   },
+   "latencyMs": 1175,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "693031f50347aff3",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_e7rs5oza",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430773561,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 4041,
+    "outputTokens": 58
+   },
+   "latencyMs": 639,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "7c7d6894e8fc0b34",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_kj60hw18",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430771057,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3221,
+    "outputTokens": 58
+   },
+   "latencyMs": 595,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "7f04433d80f59faa",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n  \"action\": \"estimateCost\",\n  \"params\": {\n    \"route\": [\n      {\"xM\": 20, \"yM\": 40},\n      {\"xM\": 40, \"yM\": 60},\n      {\"xM\": 58, \"yM\": 20},\n      \"home\"\n    ]\n  },\n  \"note\": {\n    \"text\": \"Estimated cost for visiting P1, P2, P3 in order.\",\n    \"mode\": \"replace\"\n  }\n}",
+    "toolCalls": [
+     {
+      "id": "text-1",
+      "name": "estimateCost",
+      "params": {
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430747924,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2294,
+    "outputTokens": 114
+   },
+   "latencyMs": 1680,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "80b1fbd9e59c84da",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\"action\": \"goTo\", \"params\": {\"xM\": 40, \"yM\": 60}, \"note\": {\"text\": \"Starting journey to P2\", \"mode\": \"replace\"}}"
+   },
+   "createdAtWallMs": 1793430766941,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2631,
+    "outputTokens": 46
+   },
+   "latencyMs": 748,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "867dc280c7a1151b",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_xlwxj8wx",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430772922,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3808,
+    "outputTokens": 58
+   },
+   "latencyMs": 611,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "8ac8094c0bec79ef",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n  \"action\": \"takeoff\",\n  \"params\": {\n    \"altitudeM\": 20\n  }\n}"
+   },
+   "createdAtWallMs": 1793430776876,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "invalid",
+   "usage": {
+    "inputTokens": 2773,
+    "outputTokens": 27
+   },
+   "latencyMs": 679,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "946dd8f99fdb7383",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n  \"action\": \"estimateCost\",\n  \"params\": {\n    \"route\": [\n      {\"xM\": 20, \"yM\": 40},\n      {\"xM\": 58, \"yM\": 20},\n      {\"xM\": 40, \"yM\": 60},\n      \"home\"\n    ]\n  },\n  \"note\": {\n    \"text\": \"Estimated cost for visiting P1, P3, P2 in order.\",\n    \"mode\": \"replace\"\n  }\n}",
+    "toolCalls": [
+     {
+      "id": "text-2",
+      "name": "estimateCost",
+      "params": {
+       "route": [
+        {
+         "xM": 20,
+         "yM": 40
+        },
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        "home"
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430749126,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2574,
+    "outputTokens": 114
+   },
+   "latencyMs": 1192,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "b794daa14851cc13",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "content": "{\n  \"action\": \"takeoff\",\n  \"params\": {\n    \"altitudeM\": 20\n  },\n  \"note\": {\n    \"text\": \"Chosen order: P2, P1, P3. Total cost is 237.05m.\",\n    \"mode\": \"replace\"\n  }\n}"
+   },
+   "createdAtWallMs": 1793430751179,
+   "providerKind": "openai-compatible",
+   "toolsHash": "202c87f3e27dcc29",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 3135,
+    "outputTokens": 71
+   },
+   "latencyMs": 870,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "fb4578b88405cfea",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "toolCalls": [
+     {
+      "id": "call_ha1gcnif",
+      "name": "estimateCost",
+      "params": {
+       "from": "home",
+       "route": [
+        "home",
+        {
+         "xM": 58,
+         "yM": 20
+        },
+        {
+         "xM": 40,
+         "yM": 60
+        },
+        {
+         "xM": 20,
+         "yM": 40
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "createdAtWallMs": 1793430768921,
+   "providerKind": "openai-compatible",
+   "toolsHash": "7f006082e5e50295",
+   "outcome": "ok",
+   "usage": {
+    "inputTokens": 2715,
+    "outputTokens": 75
+   },
+   "latencyMs": 964,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "tool:0ea55576aeee4a4e",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "2c16a47775abb55c"
+   },
+   "createdAtWallMs": 1793430747934,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "tool:49c5b3dadbd0d51d",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "b836619c35d6ab6c"
+   },
+   "createdAtWallMs": 1793430770462,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "tool:4fc5320189d2bae3",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "dc1c48692c4e87d3"
+   },
+   "createdAtWallMs": 1793430768923,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "tool:6012dbb63bb61b81",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "b836619c35d6ab6c"
+   },
+   "createdAtWallMs": 1793430769603,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "tool:8b12301abf574916",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "d36cb9317ff02ec1"
+   },
+   "createdAtWallMs": 1793430750309,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "tool:9a219db69d634799",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "38ed12b69fb56a0f"
+   },
+   "createdAtWallMs": 1793430771684,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "tool:b174873b62f5c7f9",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "3882cf911083515d"
+   },
+   "createdAtWallMs": 1793430772311,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "tool:e1aa6571508ed1b9",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "73d55f5b4f957947"
+   },
+   "createdAtWallMs": 1793430771058,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000004"
+  }
+ },
+ {
+  "key": "tool:f37d501bcbd4a11f",
+  "entry": {
+   "model": "qwen2.5:7b-instruct",
+   "value": {
+    "resultHash": "eb45f7e400a11a30"
+   },
+   "createdAtWallMs": 1793430749129,
+   "providerKind": null,
+   "toolsHash": null,
+   "outcome": null,
+   "latencyMs": null,
+   "runId": "run-000004"
+  }
+ }
+]

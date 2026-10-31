@@ -123,6 +123,7 @@ describe("run header (ADR-0028)", () => {
         scenario: { id: "f1-reference", version: 1 },
         seed: 9,
         timeMode: "lockstep",
+        mindsRunMode: "live",
         minDecisionIntervalS: 1,
         agents: [],
         warnings: [],

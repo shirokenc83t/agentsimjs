@@ -15,6 +15,8 @@ import {
   type SimCellBeliefsMessage,
   type SimResearcherDataMessage,
   type SimLoadedMessage,
+  type SimLoadMessage,
+  type SimMindsMessage,
   type SimTrailMessage,
   type Steppable,
   type TickContext,
@@ -22,6 +24,8 @@ import {
 import { ATLAS_BYTES_PER_CELL, atlasScratch, encodeAtlasChunk, type GridSpace } from "@agentsim/spatial";
 import { startStrategyTest, type StrategyTestError, type StrategyTestRequest, type StrategyTestRun, agentWarnings, checkSensorNoise, checkSensorRates, createRun, idealAgentsOf, loadScenario, parseRunConfigValue, parseScenarioValue, preparePlanning, resolveRunConfig, restoreRun, type CreatedRun, type ResolvedRunConfig } from "@agentsim/scenarios";
 import { TraceBuffer, type TraceRecord } from "@agentsim/trace";
+import { MindsRuntime, type LimitAnswerBody } from "./minds-runtime.ts";
+import { RunMindCache, type MindCache } from "@agentsim/minds";
 import { DUMMY_DT_S, DUMMY_ENTITY_IDS, DUMMY_POSE_FLOATS, writeDummyPoses } from "./dummy-world.ts";
 import type { HealthSample, RecordingTarget } from "./run-recording.ts";
 import { SCENARIO_DT_S } from "./sim-constants.ts";
@@ -78,6 +82,12 @@ export interface HostedWorld extends Steppable {
    * layer, each only when asked and new (rays: a new reading; topology: changed). `agentId: null` stops both and forgets.
    */
   drainOverlays(w: { agentId: string | null; rays: boolean; topology: boolean }): (SimRaysMessage | SimTopologyMessage)[];
+  /** What the System 2 minds are doing (decisions waiting, the queue, the limits used, a pause at a limit), when it changed since the last call (or `force`); none without S2 minds. */
+  mindStatus(force?: boolean): Omit<SimMindsMessage, "type" | "runId"> | undefined;
+  /** The researcher's answer to the limit that paused the run; false when nothing waits for it. */
+  answerLimit(a: LimitAnswerBody): boolean;
+  /** The first call a `replay-then-live` mind made that the cache did not hold (the run is not reproducible from that tick), once it happened. */
+  readonly notReproducible: { readonly agentId: string; readonly tick: number } | undefined;
   /** The run's budget use for the HUD (sensing wall time, rays per tick, planning expansions), or none without a scenario run. */
   budget(): Omit<SimBudgetMessage, "type" | "runId"> | undefined;
   /**
@@ -161,6 +171,16 @@ export class DummyHostedWorld implements HostedWorld {
     return undefined;
   }
 
+  mindStatus(): undefined {
+    return undefined;
+  }
+
+  answerLimit(): boolean {
+    return false;
+  }
+
+  readonly notReproducible = undefined;
+
   startStrategyTest(): { ok: false; error: StrategyTestError } {
     return { ok: false, error: { code: "no_run", message: "load a scenario run before testing a strategy" } };
   }
@@ -199,6 +219,7 @@ export class ScenarioHostedWorld implements HostedWorld {
     readonly trace: TraceBuffer,
     readonly runId: string,
     readonly loaded: SimLoadedMessage,
+    private readonly minds?: MindsRuntime,
   ) {
     this.entityIds = run.agents.map((a) => a.id);
     this.instrumentBudgets();
@@ -273,7 +294,7 @@ export class ScenarioHostedWorld implements HostedWorld {
   static load(
     m: { runId: string; scenario: unknown; scenarioVersion: number; runConfig: unknown },
     nowWallMs: () => number,
-    options: { readonly restore?: { readonly bytes: Uint8Array; readonly resolve: (hash: string) => Uint8Array | undefined } } = {},
+    options: { readonly restore?: { readonly bytes: Uint8Array; readonly resolve: (hash: string) => Uint8Array | undefined }; readonly minds?: SimLoadMessage["minds"]; readonly headless?: boolean; readonly mindCache?: MindCache; readonly keys?: ReadonlyMap<string, string> } = {},
   ): Result<ScenarioHostedWorld, CodedError> {
     const doc = parseScenarioValue(m.scenario);
     if (!doc.ok) return doc;
@@ -281,14 +302,24 @@ export class ScenarioHostedWorld implements HostedWorld {
     if (!loaded.ok) return loaded;
     const rc = parseRunConfigValue(m.runConfig);
     if (!rc.ok) return rc;
-    const resolved = resolveRunConfig(rc.value, { loaded: loaded.value, version: m.scenarioVersion });
+    // The minds' runtime (F4): the providers and the library the load message carries; the mode is the run configuration's.
+    const mindsRuntime = options.minds === undefined ? undefined : new MindsRuntime(options.minds, rc.value.mindsRunMode ?? "live", options.headless === true, options.mindCache === undefined ? undefined : new RunMindCache(options.mindCache, m.runId), options.keys);
+    const resolved = resolveRunConfig(rc.value, { loaded: loaded.value, version: m.scenarioVersion }, mindsRuntime === undefined ? {} : mindsRuntime.resolve);
     if (!resolved.ok) return resolved;
     const rates = checkSensorRates(resolved.value, SCENARIO_DT_S);
     if (!rates.ok) return rates;
     const noise = checkSensorNoise(resolved.value, loaded.value.grid.resolutionM);
     if (!noise.ok) return noise;
     const trace = new TraceBuffer(m.runId, nowWallMs, TRACE_CAPACITY);
-    const run = createRun(loaded.value, resolved.value, trace, { dtS: SCENARIO_DT_S, beliefVsTruth: {}, ...(options.restore ? { genesis: false } : {}) });
+    let run: CreatedRun;
+    try {
+      run = createRun(loaded.value, resolved.value, trace, { dtS: SCENARIO_DT_S, beliefVsTruth: {}, ...(mindsRuntime === undefined ? {} : { minds: mindsRuntime.options }), ...(options.restore ? { genesis: false } : {}) });
+    } catch (e) {
+      // A mind the host cannot build (a provider that was not given: `provider_not_configured`) is a typed error of the load, not a crash of the worker.
+      const text = e instanceof Error ? e.message : String(e);
+      return { ok: false, error: { code: /^provider_not_configured/.test(text) ? "provider_not_configured" : "mind_not_built", message: text } };
+    }
+    mindsRuntime?.attach(run.brains, resolved.value);
     if (options.restore) {
       try {
         restoreRun({ ...run, trace }, options.restore.bytes, { resolve: options.restore.resolve });
@@ -326,7 +357,19 @@ export class ScenarioHostedWorld implements HostedWorld {
         };
       }),
     };
-    return { ok: true, value: new ScenarioHostedWorld(run, r, trace, m.runId, info) };
+    return { ok: true, value: new ScenarioHostedWorld(run, r, trace, m.runId, info, mindsRuntime) };
+  }
+
+  mindStatus(force = false): Omit<SimMindsMessage, "type" | "runId"> | undefined {
+    return this.minds?.status(this.run.world.tick, this.run.world.outstandingCount, force);
+  }
+
+  answerLimit(a: LimitAnswerBody): boolean {
+    return this.minds?.answer(a) ?? false;
+  }
+
+  get notReproducible(): { readonly agentId: string; readonly tick: number } | undefined {
+    return this.minds?.notReproducible;
   }
 
   /** Every run input the world holds, in input-ID order: after a restore, the ones the snapshot carried. */

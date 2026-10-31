@@ -44,5 +44,16 @@ export function checkRunConfigPreset(preset: unknown): Result<{ id: string; name
   return ok({ id: preset.id, name: preset.name, json, contentHash: contentHash(json) });
 }
 
+/** The most a library document (a mind profile or a prompt template) may hold. */
+const MAX_LIBRARY_DOCUMENT_CHARS = 256 * 1024;
+
+/** Envelope of a library document (ADR-0036): an id, a name and a document with its schemaVersion; the document itself is validated by `@agentsim/minds`. */
+export function checkLibraryDocument(doc: unknown): Result<{ id: string; name: string; json: string; contentHash: string }, ScenarioSaveError> {
+  if (!isValid(PresetEnvelope, doc) || Array.isArray(doc.document)) return err({ code: "invalid_document", message: "a library document needs an id, a name and a document with schemaVersion" });
+  const json = JSON.stringify(doc.document);
+  if (json.length > MAX_LIBRARY_DOCUMENT_CHARS) return err({ code: "too_large", message: "a library document is limited to 256 KiB" });
+  return ok({ id: doc.id, name: doc.name, json, contentHash: contentHash(json) });
+}
+
 /** xxHash32 of the UTF-8 text as 8 hex digits (identifies a stored version's exact content); one definition in core. */
 export { contentHash };

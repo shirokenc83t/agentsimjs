@@ -1,6 +1,6 @@
 import type { DockviewApi, DockviewGroupPanel, IDockviewPanel } from "dockview-react";
 import type { PanelId } from "./registry.tsx";
-import { AUDIT_WINDOW, HISTORY_WINDOW, panelNumber, PERF_WINDOW, SQL_RESULT_WINDOW, TRACE_GRAPH_WINDOW, tabTitle, type PresetPanel, type WorkspacePreset } from "./presets.ts";
+import { AUDIT_WINDOW, COMPUTE_WINDOW, HISTORY_WINDOW, LLM_WINDOW, panelNumber, PERF_WINDOW, SQL_RESULT_WINDOW, TRACE_GRAPH_WINDOW, tabTitle, type PresetPanel, type WorkspacePreset } from "./presets.ts";
 import { PANELS } from "./registry.tsx";
 
 /**
@@ -127,7 +127,7 @@ export function openPanel(api: DockviewApi, preset: WorkspacePreset, id: PanelId
     return;
   }
   // The Performance window is in no workspace but the Scene and the Debug: opened from the status bar or the palette, it is open, at the bottom right of the dock.
-  const p: PresetPanel = preset.panels.find((x) => x.id === id) ?? (id === "perf" && PERF_WINDOW.floating ? { id, floating: { ...PERF_WINDOW.floating, collapsed: false, host: undefined } } : id === "traceGraph" ? TRACE_GRAPH_WINDOW : id === "agentHistory" ? HISTORY_WINDOW : id === "agentAudit" ? (preset.id === "analysis" ? { id, position: { referencePanel: "analysisView", direction: "within" } } : AUDIT_WINDOW) : id === "sqlResult" ? SQL_RESULT_WINDOW : { id });
+  const p: PresetPanel = preset.panels.find((x) => x.id === id) ?? (id === "perf" && PERF_WINDOW.floating ? { id, floating: { ...PERF_WINDOW.floating, collapsed: false, host: undefined } } : id === "traceGraph" ? TRACE_GRAPH_WINDOW : id === "llmInspector" ? LLM_WINDOW : id === "computeInspector" ? COMPUTE_WINDOW : id === "agentHistory" ? HISTORY_WINDOW : id === "agentAudit" ? (preset.id === "analysis" ? { id, position: { referencePanel: "analysisView", direction: "within" } } : AUDIT_WINDOW) : id === "sqlResult" ? SQL_RESULT_WINDOW : { id });
   addPresetPanel(api, preset, p);
 }
 

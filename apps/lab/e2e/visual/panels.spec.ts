@@ -317,9 +317,11 @@ for (const theme of THEMES) {
       await page.getByTestId("event-scroller").evaluate((el) => {
         el.scrollTop = 0;
       });
-      // A click that cannot settle (the list reloads under it) gives up after 20 s so that the retry of the test starts at once, not after the test's 4 minutes.
-      await page.locator('[data-testid^="event-row-"]').filter({ hasText: "start" }).first().click({ timeout: 20_000 });
-      await expect(page.getByTestId("trace-tree-selected")).toBeVisible();
+      // A click that cannot settle (the list reloads under it) is tried again, from a fresh look at the list, for up to a minute; the test's own retry starts only after that.
+      await expect(async () => {
+        await page.locator('[data-testid^="event-row-"]').filter({ hasText: "start" }).first().click({ timeout: 5_000 });
+        await expect(page.getByTestId("trace-tree-selected")).toBeVisible({ timeout: 5_000 });
+      }).toPass({ timeout: 60_000 });
     }
 
     test("Debug: the Log, the Trace and the Timeline of an exploring rover, and the Log row's menu", async ({ page }) => {

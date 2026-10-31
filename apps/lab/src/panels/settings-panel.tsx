@@ -3,7 +3,10 @@ import { formatBytes, isThemePreference, THEME_PREFERENCES, useTheme } from "@ag
 import { useEffect, useRef, useState } from "react";
 import { applyAppearance, DEFAULT_APPEARANCE, loadAppearance, saveAppearance, type Appearance } from "../config/appearance.ts";
 import { readQuotaThreshold, writeQuotaThreshold } from "../config/environment.ts";
+import { allowedBy, usePagePolicy } from "../config/page-policy.ts";
+import { useProviders } from "../config/providers.ts";
 import { useAppActions, useServices, useStorageStatus } from "../services.tsx";
+import { EndpointsSection, ProvidersSection } from "./providers-section.tsx";
 
 const KEYS: readonly (readonly [string, string])[] = [
   ["Space", "play or pause"],
@@ -61,6 +64,9 @@ export function SettingsPanel() {
   useEffect(() => {
     if (ready) void storage.admin?.info?.().then((i) => setPersisted(i.persisted), () => undefined);
   }, [ready, storage]);
+  const { entries: providerEntries } = useProviders();
+  const pagePolicy = usePagePolicy();
+  const endpointsBlocked = providerEntries.some((e) => allowedBy(pagePolicy, e.baseUrl) === false);
   const notPersistent = ready && status.state === "ready" && (status.mode === "memory-fallback" || persisted === false);
   const set = (patch: Partial<Appearance>) => {
     const next = { ...appearance, ...patch };
@@ -77,12 +83,14 @@ export function SettingsPanel() {
             {[
               ["appearance", "APPEARANCE"],
               ["providers", "PROVIDERS AND KEYS"],
+              ["endpoints", "ENDPOINTS"],
               ["storage", "STORAGE"],
               ["layouts", "LAYOUTS"],
               ["keyboard", "KEYBOARD"],
             ].map(([id, title]) => (
               <button key={id} type="button" className="kt" onClick={() => jumpTo(id as string)} data-testid={`st-jump-${id}`}>
                 {title}
+                {id === "endpoints" && endpointsBlocked ? <span className="st st-warn" title="An address of a provider is not allowed by this page's policy yet"> ▲</span> : null}
                 {id === "storage" && notPersistent ? <span className="st st-warn" title="The data is kept in memory only: it is gone when the page closes"> ▲</span> : null}
               </button>
             ))}
@@ -120,14 +128,20 @@ export function SettingsPanel() {
               <b>2 · Providers and keys</b>
               <span className="rule" />
             </h4>
-            <p className="prose">
-              No provider is configured: the agents here plan with algorithms, not with a language model. When providers arrive, each key is shown only as <span className="keystate mono" data-testid="key-state-set">●●●● set</span> or <span className="keystate mono" data-testid="key-state-unset">○ not set</span>, with Replace and Remove; the value is never rendered.
-            </p>
+            <ProvidersSection storage={storage} ready={ready} />
+          </section>
+
+          <section className="fs" data-section="endpoints">
+            <h4 className="sec">
+              <b>3 · Endpoints</b>
+              <span className="rule" />
+            </h4>
+            <EndpointsSection storage={storage} ready={ready} />
           </section>
 
           <section className="fs" data-section="storage">
             <h4 className="sec">
-              <b>3 · Storage</b>
+              <b>4 · Storage</b>
               <span className="rule" />
             </h4>
             <div className="st-row">
@@ -173,7 +187,7 @@ export function SettingsPanel() {
 
           <section className="fs" data-section="layouts">
             <h4 className="sec">
-              <b>4 · Layouts</b>
+              <b>5 · Layouts</b>
               <span className="rule" />
             </h4>
             <div className="st-row">
@@ -187,7 +201,7 @@ export function SettingsPanel() {
 
           <section className="fs" data-section="keyboard">
             <h4 className="sec">
-              <b>5 · Keyboard</b>
+              <b>6 · Keyboard</b>
               <span className="rule" />
             </h4>
             <dl className="kv st-keys">

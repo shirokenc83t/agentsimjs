@@ -7,9 +7,12 @@ export const VEHICLE_KINDS: readonly VehicleKind[] = ["uav", "ugv", "none"];
 /** Authority level of a capability (ADR-0015). Minds never get `world`. */
 export type Scope = "world" | "leader" | "self";
 
-/** What a capability is, for exposures and the UI (more kinds arrive with F4, F6, F8, F9). */
-/** `action`: starts a behavior with a lifecycle. `bookkeeping`: changes agent state only (timers) and accompanies a decision. */
-export type CapabilityKind = "action" | "bookkeeping";
+/** What a capability is, for exposures and the UI (more kinds arrive with F6, F8, F9). */
+/**
+ * `action`: starts a behavior with a lifecycle. `bookkeeping`: changes agent state only (timers, the notebook) and accompanies a decision. `compute` (ADR-0014 addition of 2026-10-29): answers a question
+ * from the agent's own map and planner while it decides, and changes nothing.
+ */
+export type CapabilityKind = "action" | "bookkeeping" | "compute";
 
 /**
  * A named precondition, evaluated by the runtime (core) and described here so every exposure explains it

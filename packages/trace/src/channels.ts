@@ -46,6 +46,15 @@ export const CHANNEL_RULES: readonly ChannelRule[] = [
   // mind-io: requests and the space summaries they refer to (item 2)
   { kind: "thought", op: "request", channel: "mind-io" },
   { kind: "thought", op: "space", channel: "mind-io" },
+  // mind-io in F4 (ADR-0035 addition of 2026-10-29): each model call with its prompt and answer, the fallback after the retries, a miss of a strict replay, the flag of a run that stopped being
+  // reproducible, and the limit warnings, hits and raises (an op of its own each, from `<agent>/s2` or the run's own source).
+  { kind: "thought", op: "llm-call", channel: "mind-io" },
+  { kind: "thought", op: "fallback", channel: "mind-io" },
+  { kind: "thought", op: "cache-miss", channel: "mind-io" },
+  { kind: "thought", op: "not-reproducible", channel: "mind-io" },
+  { kind: "thought", op: "limit-warning", channel: "mind-io" },
+  { kind: "thought", op: "limit-hit", channel: "mind-io" },
+  { kind: "thought", op: "limit-raised", channel: "mind-io" },
   // poses: samples from the agent's body (item 9)
   { kind: "observation", component: "body", op: "pose", channel: "poses" },
   // beliefs: the observer's samples (item 4)

@@ -7,6 +7,7 @@ import {
   type BeliefsEntry,
   type DriveEntry,
   type PlanningEntry,
+  type ResolveOptions,
   type ResolvedRunConfig,
   type RunConfigDocument,
   type RunConfigErrorCode,
@@ -99,10 +100,10 @@ export type Validation = { readonly ok: true; readonly resolved: ResolvedRunConf
  * Validates a draft as a run would: schema (`parseRunConfigValue`), then resolution of every agent's effective
  * configuration with the ADR-0028 ranges and the cost-profile compiler. Errors carry their stable codes.
  */
-export function validateDraft(doc: unknown, scenario: ScenarioAgentsView, version: number): Validation {
+export function validateDraft(doc: unknown, scenario: ScenarioAgentsView, version: number, minds?: Pick<ResolveOptions, "library" | "providers">): Validation {
   const parsed = parseRunConfigValue(doc);
   if (!parsed.ok) return { ok: false, error: parsed.error };
-  const r = resolveRunConfig(parsed.value, { loaded: scenario, version });
+  const r = resolveRunConfig(parsed.value, { loaded: scenario, version }, minds ?? {});
   return r.ok ? { ok: true, resolved: r.value } : { ok: false, error: r.error };
 }
 
