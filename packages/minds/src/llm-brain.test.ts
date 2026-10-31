@@ -1,7 +1,7 @@
 import type { DecisionRequest, TraceSink } from "@agentsim/core";
 import { describe, expect, it } from "vitest";
 import { answerSchema, parseAnswer } from "./answer.ts";
-import { MemoryMindCache, cacheKey } from "./cache.ts";
+import { MemoryMindCache, RunMindCache, cacheKey } from "./cache.ts";
 import { DEFAULT_PROMPT_TEMPLATE, MIND_DEFAULTS, type EffectiveS2 } from "./documents.ts";
 import { LlmBrain, MindError, type LlmBrainOptions } from "./llm-brain.ts";
 import { buildPrompt } from "./prompt.ts";
@@ -75,6 +75,15 @@ describe("the answer schema and its validation", () => {
       value: { decision: { kind: "idle" }, rationale: "wait", note: { text: "hi", mode: "append" }, timers: [{ op: "set", tag: "wake", delayS: 3 }] },
     });
     expect(parseAnswer('```json\n{"action":"hold","params":{}}\n```', schema).ok).toBe(true);
+  });
+
+  it("takes the first JSON object out of a text that has words around it (a model that explains itself still answers), validated like any other answer", () => {
+    expect(parseAnswer('I will go now. {"action":"goTo","params":{"xM":5,"yM":6}} That is my answer.', schema)).toEqual({ ok: true, value: { decision: { kind: "action", name: "goTo", params: { xM: 5, yM: 6 } } } });
+    // Braces inside a string do not end the object; a second object after the first is not read.
+    expect(parseAnswer('Answer: {"action":"idle","rationale":"wait for } the rain"} {"action":"hold"}', schema)).toEqual({ ok: true, value: { decision: { kind: "idle" }, rationale: "wait for } the rain" } });
+    // The same schema judges it: an object that does not fit is refused, and so is a text with no object.
+    expect(parseAnswer('Sure: {"action":"fly"}', schema).ok).toBe(false);
+    expect(parseAnswer("no object here", schema)).toEqual({ ok: false, message: "the answer is not JSON" });
   });
 
   it("refuses an action that is not allowed, parameters that do not fit, and text that is not JSON, with a message the model can act on", () => {
@@ -399,6 +408,41 @@ describe("the tool-call loop (F4 M2, T-114)", () => {
     expect(payload(t as never)).toMatchObject({ op: "tool", tool: "kShortestPaths", ok: false, code: "point_out_of_bounds" });
   });
 
+  it("takes a compute tool written as an action in the text as the tool call it is (a model that does not use the function-calling channel), runs it and goes on", async () => {
+    const { brain, provider, records, trace } = setup([ok({ action: "planPath", params: { to: { xM: 9, yM: 9 } }, note: { text: "plan first", mode: "replace" } }), GO]);
+    const s = stub();
+    const env = await brain.decide(request(), { trace, compute: s.compute });
+    expect(env.decision).toEqual({ kind: "action", name: "goTo", params: { xM: 9, yM: 9 } });
+    expect(s.asked).toEqual(['planPath {"to":{"xM":9,"yM":9}}']);
+    expect(provider.calls).toBe(2);
+    const second = provider.requests[1]?.messages ?? [];
+    expect(second.at(-2)).toMatchObject({ role: "assistant", toolCalls: [{ name: "planPath", params: { to: { xM: 9, yM: 9 } } }] });
+    expect(second.at(-1)).toMatchObject({ role: "tool", name: "planPath" });
+    expect(records.filter((r) => r.r.kind === "compute").map((r) => payload(r)["tool"])).toEqual(["planPath"]);
+    // The first call was not an invalid answer: no retry was spent on it.
+    expect(records.filter((r) => payload(r)["op"] === "llm-call").map((r) => [payload(r)["attempt"], payload(r)["outcome"]])).toEqual([[1, "ok"], [1, "ok"]]);
+  });
+
+  it("answers the same question asked again with the answer it already has, counts it against the cap, and does not run it twice", async () => {
+    const same = { name: "estimateCost", params: { route: ["home"] } };
+    const { brain, provider, trace } = setup([calls(same), calls(same), GO]);
+    const s = stub();
+    await brain.decide(request(), { trace, compute: s.compute });
+    expect(s.asked).toEqual(['estimateCost {"route":["home"]}']);
+    const again = JSON.parse(provider.requests[2]?.messages.at(-1)?.content ?? "{}") as { error?: string; message?: string };
+    expect(again.error).toBe("already_asked");
+    expect(again.message).toContain('"lengthM":30');
+    expect(again.message).toContain("ask something different, or answer with an action");
+  });
+
+  it("tells the model at the cap which actions it may answer with", async () => {
+    const { brain, provider, trace } = setup([calls({ name: "planPath", params: { to: "home" } }, { name: "planPath", params: { to: "home" } }), GO], { effective: effective({ tools: { maxCallsPerDecision: 1 } }) });
+    await brain.decide(request(), { trace, compute: stub().compute });
+    const refused = (provider.requests[1]?.messages ?? []).filter((m) => m.role === "tool").map((m) => JSON.parse(m.content) as { error?: string; message?: string })[1];
+    expect(refused?.error).toBe("tool_call_limit");
+    expect(refused?.message).toMatch(/allowed actions: .*goTo.*or idle/);
+  });
+
   it("refuses a call beyond tools.maxCallsPerDecision with a message to the model, without running it; the allow list narrows the offer", async () => {
     const { brain, provider, records, trace } = setup([calls({ name: "planPath", params: { to: "home" } }, { name: "planPath", params: { to: "home" } }, { name: "querySpace", params: {} }), GO], {
       effective: effective({ tools: { maxCallsPerDecision: 1, allow: ["goTo", "hold", "planPath"] } }),
@@ -454,5 +498,22 @@ describe("the tool-call loop (F4 M2, T-114)", () => {
     const changed = () => ({ ok: true as const, status: "found", expansions: 40, result: { status: "found", lengthM: 99, etaS: 1, energyPct: 1 } });
     const diverge = setup([], { cache: live.cache, mode: "replay-strict" });
     await expect(diverge.brain.decide(request(), { requestRecordId: "run-000001#7", trace: diverge.trace, compute: changed })).rejects.toMatchObject({ code: "replay_divergent" });
+  });
+});
+
+describe("the cache of one run", () => {
+  it("stamps what the run writes with its run ID, remembers what it read or wrote (a retry does not ask twice), and leaves the store to say which entry a read gets", async () => {
+    const store = new MemoryMindCache();
+    let reads = 0;
+    const counting = { get: (k: string) => (reads++, store.get(k)), put: (k: string, e: Parameters<MemoryMindCache["put"]>[1]) => store.put(k, e) };
+    const run = new RunMindCache(counting, "run-000005");
+    await run.put("k", { model: "m", value: { content: "x" }, createdAtWallMs: 1 });
+    expect(store.entries.get("k")?.runId).toBe("run-000005");
+    expect((await run.get("k"))?.runId).toBe("run-000005");
+    expect(reads).toBe(0); // its own write is remembered
+    store.entries.set("other", { model: "m", value: null, createdAtWallMs: 2, runId: "run-000001" });
+    expect((await run.get("other"))?.runId).toBe("run-000001");
+    await run.get("other");
+    expect(reads).toBe(1); // read once from the store, then remembered
   });
 });

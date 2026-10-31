@@ -1,7 +1,6 @@
 import { F2_DISCOVERY_ID, f2DiscoveryScenario, f2RunConfig } from "@agentsim/scenarios";
 import { describe, expect, it } from "vitest";
-import cacheLatency from "./fixtures/f4-acceptance/cache-latency-modeled.json";
-import cacheLockstep from "./fixtures/f4-acceptance/cache-lockstep.json";
+import cache from "./fixtures/f4-acceptance/cache.json";
 import expected from "./fixtures/f4-acceptance/expected.json";
 import profile from "./fixtures/f4-acceptance/scout-llm.json";
 import template from "./fixtures/f4-acceptance/inspect-order.json";
@@ -15,10 +14,11 @@ import { flush, harness, init, stored, type Harness } from "./sim-host-harness.t
 // What the 7B did is in the fixture as it was: it chose its order with estimateCost and then fell back to idle (it did not complete the mission).
 
 type Mode = "lockstep" | "latencyModeled";
-type Entries = readonly { key: string; entry: unknown }[];
-// The two live runs start from the same first request and a live run writes over the answer of the one before: each replay has the cache as it was when its own run had just been checked.
-const CACHES: Record<Mode, Entries> = { lockstep: cacheLockstep as Entries, latencyModeled: cacheLatency as Entries };
+type Entry = { key: string; entry: { runId?: string } & Record<string, unknown> };
+const entries = cache as readonly Entry[];
+// The two live runs start from the same first request; the cache keeps each run's answers, and a replay follows the run it replays (the main thread's rule: the latest earlier run of the same configuration).
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const FOLLOWS: Record<Mode, string> = { lockstep: expected.lockstep.runId, latencyModeled: expected.latencyModeled.runId };
 
 function load(timeMode: Mode) {
   return {
@@ -44,32 +44,37 @@ function load(timeMode: Mode) {
 }
 
 async function replay(timeMode: Mode) {
-  const entries = CACHES[timeMode];
-  const store = new Map<string, unknown>(entries.map((e) => [e.key, e.entry]));
+  // A store like the storage worker's: one entry per key and run, a read prefers the run it follows.
+  const store = new Map<string, Map<string, unknown>>();
+  for (const e of entries) (store.get(e.key) ?? store.set(e.key, new Map()).get(e.key))?.set(e.entry.runId ?? "", e.entry);
+  let written = 0;
   const h: Harness = harness();
   init(h);
   const ends: [((e: MessageEvent<unknown>) => void)[], ((e: MessageEvent<unknown>) => void)[]] = [[], []];
   const end = (me: 0 | 1): CachePortLike => ({ postMessage: (m) => queueMicrotask(() => (ends[1 - me] ?? []).forEach((l) => l({ data: m } as MessageEvent<unknown>))), addEventListener: (_t, l) => void (ends[me] ?? []).push(l), start: () => {} });
-  serveMindCache(end(1), { get: async (k) => store.get(k) as never, put: async (k, v) => void store.set(k, v) });
+  serveMindCache(end(1), { get: async (k, prefer) => (store.get(k)?.get(prefer ?? "") ?? [...(store.get(k)?.values() ?? [])][0]) as never, put: async () => void written++ }, () => FOLLOWS[timeMode]);
   h.send({ type: "cachePort", port: end(0) });
   h.send({ type: "recorderPort", port: h.port });
   h.send(load(timeMode));
   h.fromStorage({ type: "header", runId: "run-000009" });
   h.send({ type: "control", op: "play" });
   let acked = 0;
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 120; i++) {
     h.advance(1000);
     await flush();
     await sleep(1);
+    // The live run was raised through the dialog when a limit paused it (the driver's values); a replay meets the same pause and is answered the same way.
+    const paused = h.out.filter((m) => m.type === "minds").at(-1) as { pausedAt?: { agentId: string; limit: string } } | undefined;
+    if (paused?.pausedAt !== undefined) h.send({ type: "limitAnswer", runId: "run-000009", agentId: paused.pausedAt.agentId, limit: paused.pausedAt.limit, action: "raise", value: paused.pausedAt.limit === "calls" ? 60 : paused.pausedAt.limit === "tokens" ? 160_000 : 0.5 });
     // The storage worker's end of a recorded run: every batch handed over is acknowledged as persisted.
     const batches = h.batches();
     for (; acked < batches.length; acked++) {
       const b = batches[acked];
       if (b !== undefined) h.fromStorage({ type: "persisted", head: { runId: b.runId, throughSeq: b.throughSeq, tick: b.tick, simTimeS: b.simTimeS } });
     }
-    if ((h.states().at(-1)?.tick ?? 0) >= 400) break;
+    if ((h.states().at(-1)?.tick ?? 0) >= 800) break;
   }
-  return { h, writes: store.size, size: entries.length };
+  return { h, writes: written };
 }
 
 const payloadOf = (r: { payload?: unknown }) => (r.payload ?? {}) as Record<string, unknown>;
@@ -78,9 +83,9 @@ describe("the acceptance run replayed from its cache", () => {
   for (const [name, mode] of [["lockstep", "lockstep"], ["latency-modeled with the measured latencies", "latencyModeled"]] as const) {
     it(`${name}: no provider call, the same decisions at the same sim times, the same state hash at every checkpoint`, async () => {
       const want = expected[mode];
-      const { h, writes, size } = await replay(mode);
+      const { h, writes } = await replay(mode);
       expect(h.errors()).toEqual([]);
-      expect(writes).toBe(size); // nothing was added to the cache: every model call was answered from it
+      expect(writes).toBe(0); // nothing was written: every model call was answered from the cache
       const events = h.events();
       const calls = events.filter((r) => payloadOf(r)["op"] === "llm-call");
       expect(calls).toHaveLength(want.llmCalls);

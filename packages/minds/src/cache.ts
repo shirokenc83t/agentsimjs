@@ -17,11 +17,37 @@ export interface CacheEntry {
   readonly outcome?: CacheOutcome;
   readonly usage?: unknown;
   readonly latencyMs?: number;
+  /** The run the entry was recorded in (ADR-0036 addition of 2026-10-31): a store keeps one entry per key and run, and a replay reads its own run's first. Absent on an entry written before. */
+  readonly runId?: string;
 }
 
 export interface MindCache {
   get(key: string): Promise<CacheEntry | undefined>;
   put(key: string, entry: CacheEntry): Promise<void>;
+}
+
+/**
+ * The cache of one run over a cache that outlives it: what the run writes carries its run ID (so a later run's answers never write over it), and what it already read or wrote is kept, so a retry of a
+ * decision or a replay does not ask twice. What the store gives for a key when it is asked is up to the store (the entry of the run the replay follows, else the latest).
+ */
+export class RunMindCache implements MindCache {
+  private readonly front = new Map<string, CacheEntry>();
+  constructor(
+    private readonly inner: MindCache,
+    private readonly runId: string,
+  ) {}
+  async get(key: string): Promise<CacheEntry | undefined> {
+    const own = this.front.get(key);
+    if (own !== undefined) return own;
+    const e = await this.inner.get(key);
+    if (e !== undefined) this.front.set(key, e);
+    return e;
+  }
+  put(key: string, entry: CacheEntry): Promise<void> {
+    const e = { ...entry, runId: this.runId };
+    this.front.set(key, e);
+    return this.inner.put(key, e);
+  }
 }
 
 /** The cache of a test or of a run that is not stored: a map. */

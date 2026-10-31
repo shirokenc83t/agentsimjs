@@ -312,15 +312,16 @@ class SqlRunStore implements RunStore {
 class SqlResponseCache implements ResponseCache {
   constructor(private readonly db: SqlDriver) {}
 
-  async get(key: string): Promise<CachedResponse | undefined> {
-    const r = this.db.get<{ model: string; value: string; created_at_wall_ms: number; provider_kind: string | null; tools_hash: string | null; outcome: CacheOutcome | null; usage: string | null; latency_ms: number | null }>(
-      "SELECT model, value, created_at_wall_ms, provider_kind, tools_hash, outcome, usage, latency_ms FROM response_cache WHERE key = ?", [key],
+  async get(key: string, preferRunId?: string): Promise<CachedResponse | undefined> {
+    const r = this.db.get<{ run_id: string; model: string; value: string; created_at_wall_ms: number; provider_kind: string | null; tools_hash: string | null; outcome: CacheOutcome | null; usage: string | null; latency_ms: number | null }>(
+      "SELECT run_id, model, value, created_at_wall_ms, provider_kind, tools_hash, outcome, usage, latency_ms FROM response_cache WHERE key = ? ORDER BY (run_id = ?) DESC, created_at_wall_ms DESC LIMIT 1", [key, preferRunId ?? ""],
     );
     if (!r) return undefined;
     return {
       model: r.model,
       value: JSON.parse(r.value) as unknown,
       createdAtWallMs: r.created_at_wall_ms,
+      ...(r.run_id === "" ? {} : { runId: r.run_id }),
       ...(r.provider_kind === null ? {} : { providerKind: r.provider_kind }),
       ...(r.tools_hash === null ? {} : { toolsHash: r.tools_hash }),
       ...(r.outcome === null ? {} : { outcome: r.outcome }),
@@ -331,8 +332,8 @@ class SqlResponseCache implements ResponseCache {
 
   async put(key: string, entry: CachedResponse) {
     this.db.run(
-      "INSERT OR REPLACE INTO response_cache (key, model, value, created_at_wall_ms, provider_kind, tools_hash, outcome, usage, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [key, entry.model, JSON.stringify(entry.value ?? null), entry.createdAtWallMs, entry.providerKind ?? null, entry.toolsHash ?? null, entry.outcome ?? null, entry.usage === undefined ? null : JSON.stringify(entry.usage), entry.latencyMs ?? null],
+      "INSERT OR REPLACE INTO response_cache (key, run_id, model, value, created_at_wall_ms, provider_kind, tools_hash, outcome, usage, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [key, entry.runId ?? "", entry.model, JSON.stringify(entry.value ?? null), entry.createdAtWallMs, entry.providerKind ?? null, entry.toolsHash ?? null, entry.outcome ?? null, entry.usage === undefined ? null : JSON.stringify(entry.usage), entry.latencyMs ?? null],
     );
   }
 }

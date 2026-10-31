@@ -109,10 +109,14 @@ export interface CachedResponse {
   readonly outcome?: CacheOutcome;
   readonly usage?: unknown;
   readonly latencyMs?: number;
+  /** Schema v16: the run the entry was recorded in (a replay reads its own run's entries first). Absent on an entry written before v16. */
+  readonly runId?: string;
 }
 
 export interface ResponseCache {
-  get(key: string): Promise<CachedResponse | undefined>;
+  /** The entry for the key: the one of `preferRunId` when it has one, else the latest of any run. */
+  get(key: string, preferRunId?: string): Promise<CachedResponse | undefined>;
+  /** Stored under the key and the run in the entry (`runId`, empty when absent): an entry of another run for the same key is kept. */
   put(key: string, entry: CachedResponse): Promise<void>;
 }
 

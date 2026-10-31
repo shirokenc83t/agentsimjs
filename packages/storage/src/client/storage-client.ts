@@ -198,7 +198,7 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       delete: (id) => call("runs.delete", [id]),
     },
     cache: {
-      get: (k) => call("cache.get", [k]),
+      get: (k, preferRunId) => call("cache.get", preferRunId === undefined ? [k] : [k, preferRunId]),
       put: (k, v) => call("cache.put", [k, v]),
     },
     userData: {

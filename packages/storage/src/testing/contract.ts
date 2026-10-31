@@ -315,6 +315,23 @@ export function describeStorageContract(name: string, create: () => Promise<Cont
       });
     });
 
+    describe("ResponseCache per run (schema v16)", () => {
+      it("keeps the answers of two runs for the same key side by side, reads the preferred run's first, and the latest of any run without a preference", async () => {
+        await h.ports.cache.put("k", { model: "m", value: { n: 1 }, createdAtWallMs: 10, runId: "run-000001" });
+        await h.ports.cache.put("k", { model: "m", value: { n: 2 }, createdAtWallMs: 20, runId: "run-000002" });
+        expect(((await h.ports.cache.get("k", "run-000001"))?.value as { n: number }).n).toBe(1);
+        expect(((await h.ports.cache.get("k", "run-000002"))?.value as { n: number }).n).toBe(2);
+        expect((await h.ports.cache.get("k", "run-000001"))?.runId).toBe("run-000001");
+        // No preference, or a run that has no entry for the key: the latest one.
+        expect(((await h.ports.cache.get("k"))?.value as { n: number }).n).toBe(2);
+        expect(((await h.ports.cache.get("k", "run-000009"))?.value as { n: number }).n).toBe(2);
+        // The same run writing the same key again replaces its own entry only.
+        await h.ports.cache.put("k", { model: "m", value: { n: 3 }, createdAtWallMs: 30, runId: "run-000001" });
+        expect(((await h.ports.cache.get("k", "run-000001"))?.value as { n: number }).n).toBe(3);
+        expect(((await h.ports.cache.get("k", "run-000002"))?.value as { n: number }).n).toBe(2);
+      });
+    });
+
     describe("the header's minds fields (schema v15)", () => {
       it("keeps where the answers came from and the first tick that missed the cache (set once), and refuses an unknown run", async () => {
         await h.ports.runs.create(header("run-000001", { mindsRunMode: "replay-then-live" }));

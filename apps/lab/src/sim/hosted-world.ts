@@ -25,7 +25,7 @@ import { ATLAS_BYTES_PER_CELL, atlasScratch, encodeAtlasChunk, type GridSpace } 
 import { startStrategyTest, type StrategyTestError, type StrategyTestRequest, type StrategyTestRun, agentWarnings, checkSensorNoise, checkSensorRates, createRun, idealAgentsOf, loadScenario, parseRunConfigValue, parseScenarioValue, preparePlanning, resolveRunConfig, restoreRun, type CreatedRun, type ResolvedRunConfig } from "@agentsim/scenarios";
 import { TraceBuffer, type TraceRecord } from "@agentsim/trace";
 import { MindsRuntime, type LimitAnswerBody } from "./minds-runtime.ts";
-import type { MindCache } from "@agentsim/minds";
+import { RunMindCache, type MindCache } from "@agentsim/minds";
 import { DUMMY_DT_S, DUMMY_ENTITY_IDS, DUMMY_POSE_FLOATS, writeDummyPoses } from "./dummy-world.ts";
 import type { HealthSample, RecordingTarget } from "./run-recording.ts";
 import { SCENARIO_DT_S } from "./sim-constants.ts";
@@ -303,7 +303,7 @@ export class ScenarioHostedWorld implements HostedWorld {
     const rc = parseRunConfigValue(m.runConfig);
     if (!rc.ok) return rc;
     // The minds' runtime (F4): the providers and the library the load message carries; the mode is the run configuration's.
-    const mindsRuntime = options.minds === undefined ? undefined : new MindsRuntime(options.minds, rc.value.mindsRunMode ?? "live", options.headless === true, options.mindCache, options.keys);
+    const mindsRuntime = options.minds === undefined ? undefined : new MindsRuntime(options.minds, rc.value.mindsRunMode ?? "live", options.headless === true, options.mindCache === undefined ? undefined : new RunMindCache(options.mindCache, m.runId), options.keys);
     const resolved = resolveRunConfig(rc.value, { loaded: loaded.value, version: m.scenarioVersion }, mindsRuntime === undefined ? {} : mindsRuntime.resolve);
     if (!resolved.ok) return resolved;
     const rates = checkSensorRates(resolved.value, SCENARIO_DT_S);

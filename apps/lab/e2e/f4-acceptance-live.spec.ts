@@ -1,4 +1,6 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { expect, test, type Page } from "@playwright/test";
 import { closeFloats, loadF2, openPanelTab, openWorkspace, runCommand } from "./helpers.ts";
 
@@ -10,10 +12,16 @@ const OUT = process.env["AGENTSIM_ACCEPTANCE_DIR"];
 test.skip(!OUT, "the acceptance run needs a local Ollama server and AGENTSIM_ACCEPTANCE_DIR");
 
 const MODEL = process.env["AGENTSIM_ACCEPTANCE_MODEL"] ?? "qwen2.5:7b-instruct";
+/** Hand-run options of the diagnosis (T-132): the stages to run (default all four), a tap that logs every request body to the server, the temperature and a mission text from a file. */
+const STAGES = process.env["AGENTSIM_ACCEPTANCE_STAGES"] ?? "ABCD";
+const TAP = process.env["AGENTSIM_ACCEPTANCE_TAP"] === "1";
+const TEMPERATURE = Number(process.env["AGENTSIM_ACCEPTANCE_TEMPERATURE"] ?? "0");
 const ADDRESS = process.env["AGENTSIM_ACCEPTANCE_ADDRESS"] ?? "http://localhost:11434";
-const MISSION =
+const DEFAULT_MISSION =
   "Inspect these three points (x, y in metres): P1 (20, 40), P2 (40, 60) and P3 (58, 20), and return to base. Procedure: (1) choose the order of the visits with the lowest total cost: call the function tool estimateCost for three different orders and keep the order with the smallest lengthM; " +
   "(2) take off with altitudeM 20; (3) goTo each point in the chosen order, one goTo for each turn; (4) returnToBase; (5) land.";
+
+const MISSION = process.env["AGENTSIM_ACCEPTANCE_MISSION_FILE"] === undefined ? DEFAULT_MISSION : readFileSync(process.env["AGENTSIM_ACCEPTANCE_MISSION_FILE"], "utf8").trim();
 
 const TEMPLATE = {
   schemaVersion: 1,
@@ -21,7 +29,7 @@ const TEMPLATE = {
   system:
     "You are the mind of one vehicle in a simulation. You see only what the vehicle senses and believes, never the world itself. Each turn you receive what happened, what you may do, and your own notes. " +
     "You have function tools (estimateCost, planPath, kShortestPaths, querySpace): call them with a function call when you need to know something; never write a tool call inside your answer. " +
-    "Your answer, when you have what you need, is exactly one JSON object with one of the allowed actions, and nothing else: no sentence around it, and no params for an action that has none. Answer idle only to wait for the next event. " +
+    "Your answer, when you have what you need, is exactly one JSON object with one of the allowed actions, and nothing else: no sentence around it, and no params for an action that has none. Answer idle only to wait for the next event: idle ends your turn and nothing happens until an event arrives, so while the mission is not finished and no action of yours is running, never answer idle: choose the next action (takeoff while you are on the ground). " +
     "You may keep notes for yourself; they are returned to you in every prompt. " +
     "When the mission names several places to visit, your first step, before any action, is to choose the order: call estimateCost for three different orders (at most), each time with the points in another order, compare the lengthM they return, and keep the cheapest order in the note of your takeoff answer, (the note is an object with a text and the mode replace). " +
     "After the tool results you always answer with the JSON action: if you want to say something, put it in the note of the answer, not around it. " +
@@ -29,7 +37,7 @@ const TEMPLATE = {
     "Then answer with an action: takeoff with altitudeM 20, then goTo the first place, and so on, one action each turn, and after the last place returnToBase and land.",
   sections: ["role", "mission", "notebook", "decisions", "self", "beliefs", "space", "events", "actions"],
 };
-const PROFILE = { schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: "local-ollama", model: MODEL, promptTemplate: { id: "inspect-order", version: 1 }, params: { temperature: 0 } } };
+const PROFILE = { schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: "local-ollama", model: MODEL, promptTemplate: { id: "inspect-order", version: 1 }, params: { temperature: TEMPERATURE } } };
 
 async function importJson(page: Page, name: string, doc: unknown) {
   await page.evaluate(
@@ -139,7 +147,31 @@ test("a UAV with a language-model mind on a local server: inspect three points, 
   await openWorkspace(page, "settings");
   await page.getByTestId("pv-add").click();
   await page.getByTestId("pv-name").fill("local-ollama");
-  await page.getByTestId("pv-address").fill(ADDRESS);
+  let address = ADDRESS;
+  let tap: ReturnType<typeof createServer> | undefined;
+  if (TAP) {
+    // A tap in front of the model server: every request body the lab sends is written to a file (localhost only, no key is involved), and the answer is passed on as it is.
+    tap = createServer((req, res) => {
+      const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, OPTIONS" };
+      if (req.method === "OPTIONS") return void res.writeHead(204, cors).end();
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
+      req.on("end", () => {
+        const body = Buffer.concat(chunks).toString();
+        if (req.method === "POST") appendFileSync(`${OUT}/requests.jsonl`, `${JSON.stringify({ url: req.url, body: JSON.parse(body || "{}") })}
+`);
+        void fetch(`${ADDRESS}${req.url}`, { method: req.method ?? "GET", headers: { "content-type": "application/json" }, ...(req.method === "POST" ? { body } : {}) }).then(async (r) => {
+          const text = await r.text();
+          if (req.method === "POST") appendFileSync(`${OUT}/responses.jsonl`, `${JSON.stringify({ url: req.url, status: r.status, body: text.slice(0, 20000) })}
+`);
+          res.writeHead(r.status, { "content-type": "application/json", ...cors }).end(text);
+        });
+      });
+    });
+    await new Promise<void>((r) => (tap as ReturnType<typeof createServer>).listen(0, "127.0.0.1", r));
+    address = `http://localhost:${((tap as ReturnType<typeof createServer>).address() as AddressInfo).port}`;
+  }
+  await page.getByTestId("pv-address").fill(address);
   await page.getByTestId("pv-test-new").click();
   await expect(page.getByTestId("pv-result")).toHaveAttribute("data-kind", "ok", { timeout: 60_000 });
   log.push(`provider test: ${(await page.getByTestId("pv-result").textContent())?.trim()}`);
@@ -186,14 +218,20 @@ test("a UAV with a language-model mind on a local server: inspect three points, 
 
   /** The response cache as it is now: the lockstep run and the latency-modeled one start from the same first request, and a live run writes over the answer of the one before, so each is exported when its replay has just checked it. */
   const exportCache = async (file: string) => {
-    const c = await sql(page, "SELECT key, model, value, created_at_wall_ms, provider_kind, tools_hash, outcome, usage, latency_ms FROM response_cache");
-    writeFileSync(`${OUT}/${file}`, JSON.stringify(c.rows.map((r) => ({ key: r[0], entry: { model: r[1], value: json(r[2]), createdAtWallMs: r[3], providerKind: r[4], toolsHash: r[5], outcome: r[6], usage: r[7] === null ? undefined : json(r[7]), latencyMs: r[8] } })), null, 2));
+    const c = await sql(page, "SELECT key, model, value, created_at_wall_ms, provider_kind, tools_hash, outcome, usage, latency_ms, run_id FROM response_cache ORDER BY run_id, key");
+    writeFileSync(`${OUT}/${file}`, JSON.stringify(c.rows.map((r) => ({ key: r[0], entry: { model: r[1], value: json(r[2]), createdAtWallMs: r[3], providerKind: r[4], toolsHash: r[5], outcome: r[6], usage: r[7] === null ? undefined : json(r[7]), latencyMs: r[8], runId: r[9] } })), null, 2));
     return c.rows.length;
   };
   const A = await stage("A-live-lockstep", "live", "lockstep");
+  if (STAGES === "A") {
+    // The diagnosis asks only for the live run: how many calls, which orders were asked, how it ended.
+    const orders = new Set(A.tools.map((t) => JSON.stringify((t.params as { route?: unknown } | undefined)?.route ?? t.params)));
+    writeFileSync(`${OUT}/run-summary.json`, JSON.stringify({ llmCalls: A.llmCalls, outcomes: A.outcomes, tools: A.tools.length, distinctRoutes: orders.size, fallbacks: A.fallbacks, actions: A.actions.length, decisions: A.decisions.map((d) => d.head.slice(0, 300)) }, null, 2));
+    tap?.close();
+    return;
+  }
   writeFileSync(`${OUT}/log.txt`, log.join(String.fromCharCode(10)));
   const B = await stage("B-replay-lockstep", "replay-strict", "lockstep");
-  await exportCache("cache-lockstep.json");
   // The captures of the run just made (A): the LLM inspector at its decision (the model calls with their tool calls and the answer), the Compute inspector at one estimateCost, and the Log filtered to the queries.
   await openWorkspace(page, "debug");
   await closeFloats(page);
@@ -218,15 +256,17 @@ test("a UAV with a language-model mind on a local server: inspect three points, 
   await page.getByTestId("workspace-debug").screenshot({ path: `${OUT}/capture-trace-of-the-queries.png` });
   const C = await stage("C-live-latency", "live", "latency-modeled");
   const D = await stage("D-replay-latency", "replay-strict", "latency-modeled");
-  await exportCache("cache-latency-modeled.json");
+  await exportCache("cache.json");
   writeFileSync(`${OUT}/log.txt`, log.join(String.fromCharCode(10)));
 
   // What replay must reproduce: the decisions and actions at their sim times, and the checkpoints (the state hash) at the ticks they share.
   const shape = (r: typeof A) => ({ tools: r.tools.map((t) => [t.simTime, t.tool, JSON.stringify(t.params)]), decisions: r.decisions.map((d) => [d.simTime, d.head.replace(/"latencyMs":[0-9]+/g, "")]), actions: r.actions.map((x) => [x.simTime, x.head]) });
   const common = (x: typeof A, y: typeof A) => {
-    const m = new Map(y.checkpoints.map((c) => [String(c[0]), c[1]]));
+    // The state hash of each checkpoint (the snapshot's own hash is of a blob that also holds what a live run and a replay of it do not share, such as where each answer came from).
+    const hashOf = (c: string | number | null | undefined): string => (/"stateHash":"([0-9a-f]+)"/.exec(text(c)) ?? [])[1] ?? text(c);
+    const m = new Map(y.checkpoints.map((c) => [String(c[0]), hashOf(c[1])]));
     const shared = x.checkpoints.filter((c) => m.has(String(c[0])));
-    return { shared: shared.length, equal: shared.filter((c) => m.get(String(c[0])) === c[1]).length };
+    return { shared: shared.length, equal: shared.filter((c) => m.get(String(c[0])) === hashOf(c[1])).length };
   };
   const verdict = {
     A: { runId: A.runId, llmCalls: A.llmCalls, cacheHits: A.cacheHits, outcomes: A.outcomes, fallbacks: A.fallbacks, limitRecords: A.limitRecords },
@@ -236,12 +276,9 @@ test("a UAV with a language-model mind on a local server: inspect three points, 
   };
   writeFileSync(`${OUT}/verdict.json`, JSON.stringify(verdict, null, 2));
 
-  // The run's documents and its cache, as files (CI fixtures).
-  const cache = await sql(page, "SELECT key, model, value, created_at_wall_ms, provider_kind, tools_hash, outcome, usage, latency_ms FROM response_cache");
-  writeFileSync(`${OUT}/cache.json`, JSON.stringify(cache.rows.map((r) => ({ key: r[0], entry: { model: r[1], value: json(r[2]), createdAtWallMs: r[3], providerKind: r[4], toolsHash: r[5], outcome: r[6], usage: r[7] === null ? undefined : json(r[7]), latencyMs: r[8] } })), null, 2));
+  // The run's documents (the cache was exported above, per run).
   writeFileSync(`${OUT}/profile.json`, JSON.stringify(PROFILE, null, 2));
   writeFileSync(`${OUT}/template.json`, JSON.stringify(TEMPLATE, null, 2));
   writeFileSync(`${OUT}/mission.txt`, MISSION);
-  expect(cache.rows.length).toBeGreaterThan(0);
   expect(A.llmCalls).toBeGreaterThan(0);
 });

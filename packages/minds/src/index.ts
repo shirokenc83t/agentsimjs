@@ -21,7 +21,7 @@ export {
 } from "./documents.ts";
 export { canonicalJson, hash32Hex } from "./canonical.ts";
 export { answerSchema, parseAnswer, type ParsedAnswer } from "./answer.ts";
-export { MemoryMindCache, cacheKey, estimateUsage, type CacheEntry, type CacheKeyInput, type CacheOutcome, type MindCache } from "./cache.ts";
+export { MemoryMindCache, RunMindCache, cacheKey, estimateUsage, type CacheEntry, type CacheKeyInput, type CacheOutcome, type MindCache } from "./cache.ts";
 export { buildPrompt, retryMessages, type DecisionNote, type PromptInput } from "./prompt.ts";
 export { computeToolDefinitions, offeredComputeTools } from "./tools.ts";
 export { ScriptedProvider, type ChatMessage, type ToolCall, type ToolDefinition, type JsonSchema, type ProviderOutcome, type ProviderPort, type ProviderRequest, type ProviderResponse, type ProviderUsage, type ScriptedAnswer } from "./provider.ts";

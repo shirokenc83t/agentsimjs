@@ -62,7 +62,8 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
   const runs = new Map<string, RunHeader>();
   const records = new Map<string, TraceRecord[]>();
   const inputs = new Map<string, StoredRunInput[]>();
-  const cache = new Map<string, CachedResponse>();
+  // Per key, the entries of each run (the empty run is an entry written with no run): a read prefers the run it is given, else the latest.
+  const cache = new Map<string, Map<string, CachedResponse>>();
   const userData = new Map<string, unknown>();
   const udKey = (ns: string, k: string) => `${ns}\u0000${k}`;
   const scenarios = versionedDocs(nowWallMs);
@@ -228,11 +229,17 @@ export function createMemoryPorts(nowWallMs: () => number = Date.now): StoragePo
       },
     },
     cache: {
-      async get(key) {
-        return clone(cache.get(key));
+      async get(key, preferRunId) {
+        const runs = cache.get(key);
+        if (runs === undefined) return undefined;
+        const own = preferRunId === undefined ? undefined : runs.get(preferRunId);
+        if (own !== undefined) return clone(own);
+        return clone([...runs.values()].sort((a, b) => b.createdAtWallMs - a.createdAtWallMs)[0]);
       },
       async put(key, entry) {
-        cache.set(key, clone({ ...entry, value: entry.value ?? null }));
+        const runs = cache.get(key) ?? new Map<string, CachedResponse>();
+        runs.set(entry.runId ?? "", clone({ ...entry, value: entry.value ?? null }));
+        cache.set(key, runs);
       },
     },
     userData: {

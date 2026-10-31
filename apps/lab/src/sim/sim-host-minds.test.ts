@@ -10,11 +10,11 @@ import { flush, harness, init, stored, type Harness } from "./sim-host-harness.t
 const answer = (o: unknown) => ({ content: JSON.stringify(o), usage: { inputTokens: 100, outputTokens: 10 }, latencyMs: 5 });
 const WAKE = answer({ action: "idle", timers: [{ op: "set", tag: "wake", delayS: 1 }] });
 
-function load(over: { limits?: Record<string, number>; delayMs?: number; headless?: boolean; recording?: unknown; mode?: string; script?: unknown[] } = {}) {
+function load(over: { limits?: Record<string, number>; delayMs?: number; headless?: boolean; recording?: unknown; mode?: string; script?: unknown[]; runId?: string } = {}) {
   const profile = { schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: "p", model: "m", promptTemplate: { id: "default", version: 1 }, ...(over.limits === undefined ? {} : { limits: over.limits }) } };
   return {
     type: "load",
-    runId: "run-000007",
+    runId: over.runId ?? "run-000007",
     scenario: f2DiscoveryScenario(),
     scenarioVersion: 1,
     runConfig: { ...f2RunConfig(F2_DISCOVERY_ID, 1), ...(over.mode === undefined ? {} : { mindsRunMode: over.mode }), minds: { byAgent: { scout: { s2: { profile: { id: "scout-llm", version: 1 }, mission: "Wake every second." } } } } },
@@ -194,6 +194,57 @@ describe("the sim host and the System 2 minds", () => {
     const n = Math.min(ra.length, rb.length);
     expect(n).toBeGreaterThan(3);
     expect(rb.slice(0, n)).toEqual(ra.slice(0, n));
+  });
+
+  it("the cache is per run: two live runs that start from the same request each replay strictly, because a replay reads the entries of the run it follows (T-133)", async () => {
+    // A store like the storage worker's: one entry per key and run; a read prefers the run it is given, else the latest.
+    const store = new Map<string, Map<string, { createdAtWallMs: number } & Record<string, unknown>>>();
+    let follow: string | undefined;
+    const wire = (h: Harness) => {
+      const ends: [((e: MessageEvent<unknown>) => void)[], ((e: MessageEvent<unknown>) => void)[]] = [[], []];
+      const end = (me: 0 | 1): CachePortLike => ({ postMessage: (m) => queueMicrotask(() => (ends[1 - me] ?? []).forEach((l) => l({ data: m } as MessageEvent<unknown>))), addEventListener: (_t, l) => void (ends[me] ?? []).push(l), start: () => {} });
+      serveMindCache(
+        end(1),
+        {
+          get: async (k, prefer) => {
+            const runs = store.get(k);
+            return (runs?.get(prefer ?? "") ?? [...(runs?.values() ?? [])].sort((a, b) => b.createdAtWallMs - a.createdAtWallMs)[0]) as never;
+          },
+          put: async (k, v) => void (store.get(k) ?? store.set(k, new Map()).get(k))?.set((v as { runId?: string }).runId ?? "", v as never),
+        },
+        () => follow,
+      );
+      h.send({ type: "cachePort", port: end(0) });
+    };
+    const decisionTimes = (h: Harness) => h.events().filter((r) => (r.payload as { op?: string }).op === "decision").map((r) => Math.round(r.simTime * 10) / 10);
+    const WAKE_SLOW = answer({ action: "idle", timers: [{ op: "set", tag: "wake", delayS: 3 }] });
+    const live = async (runId: string, script: unknown[]) => {
+      const h = harness();
+      init(h);
+      wire(h);
+      h.send(load({ runId, script }));
+      h.send({ type: "control", op: "play" });
+      await pump(h, 60);
+      expect(h.errors()).toEqual([]);
+      return decisionTimes(h);
+    };
+    // Two live runs from the same first request: the first wakes every second, the second every three. The later one writes over nothing of the earlier one.
+    const first = await live("run-000001", Array.from({ length: 60 }, () => WAKE));
+    const second = await live("run-000002", Array.from({ length: 60 }, () => WAKE_SLOW));
+    expect(first.length).toBeGreaterThan(second.length);
+    const replayOf = async (runId: string, following: string) => {
+      follow = following;
+      const h = harness();
+      init(h);
+      wire(h);
+      h.send(load({ runId, mode: "replay-strict", script: [] }));
+      h.send({ type: "control", op: "play" });
+      await pump(h, 60);
+      expect(h.errors()).toEqual([]);
+      return decisionTimes(h);
+    };
+    expect(await replayOf("run-000003", "run-000001")).toEqual(first);
+    expect(await replayOf("run-000004", "run-000002")).toEqual(second);
   });
 
   it("a replay-then-live run that misses the cache says from which tick it is not reproducible, once, in the minds' report (the lab writes it into the header)", async () => {

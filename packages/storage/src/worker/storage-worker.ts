@@ -587,7 +587,7 @@ export function runStorageWorker(scope: WorkerScope, checks?: StorageMessageChec
           }
           break;
         }
-        case "cache.get": value = await s.cache.get(String(a)); break;
+        case "cache.get": value = await s.cache.get(String(a), b === undefined ? undefined : String(b)); break;
         case "cache.put": value = await s.cache.put(String(a), b as CachedResponse); break;
         case "userData.get": value = await s.userData.get(String(a), String(b)); break;
         case "userData.set": value = await s.userData.set(String(a), String(b), req.args[2]); break;
