@@ -39,6 +39,8 @@ export function dockPanel(api: DockviewApi, panel: IDockviewPanel, preset?: Work
   const beside = place ? api.getPanel(place.referencePanel) : undefined;
   if (place && beside && !isFloating(beside)) {
     panel.api.moveTo({ group: beside.group, position: POSITION[place.direction] });
+    // The panel that was just docked is the active one, as the window that was just floated is: the next command on "the active panel" acts on it, whichever panel of its group the dock made active.
+    panel.api.setActive();
     return true;
   }
   const target = api.groups.find((g) => g.api.location.type === "grid");
@@ -52,6 +54,7 @@ export function dockPanel(api: DockviewApi, panel: IDockviewPanel, preset?: Work
     return true;
   }
   panel.api.moveTo({ group: target });
+  panel.api.setActive();
   return true;
 }
 

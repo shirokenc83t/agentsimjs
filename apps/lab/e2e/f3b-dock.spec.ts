@@ -35,19 +35,8 @@ test("every panel action is a palette command, and Alt+number focuses a panel", 
 
   await runCommand(page, "Float the active panel");
   await expect.poll(async () => (await panel(page, "explorer"))?.location).toBe("floating");
-  // Which panel is the active one after a window is floated depends on the order the dock settles in (on the CI machine the Legend, a collapsed window of the Scene, was the active one by then): the Explorer is made the
-  // active panel by its number (Alt+2, the key the next part of this test uses too) and the command is given to it.
-  await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
-  await page.keyboard.press("Alt+2");
-  await expect.poll(async () => (await panel(page, "explorer"))?.active).toBe(true);
   await runCommand(page, "Dock the active panel");
-  try {
-    await expect.poll(async () => (await panel(page, "explorer"))?.location, { timeout: 5_000 }).toBe("grid");
-  } catch (e) {
-    // What a CI log needs (T-137): the dock as the page sees it when the panel did not dock.
-    console.log(`DOCK-FACTS ${JSON.stringify(await page.evaluate(() => ({ dock: window.__agentsim?.dock?.(), active: document.activeElement?.tagName, palette: document.querySelectorAll('[role="dialog"]').length })))}`);
-    throw e;
-  }
+  await expect.poll(async () => (await panel(page, "explorer"))?.location).toBe("grid");
   await runCommand(page, "Maximize or restore the active panel");
   await expect.poll(async () => (await panel(page, "explorer"))?.maximized).toBe(true);
   await runCommand(page, "Maximize or restore the active panel");
