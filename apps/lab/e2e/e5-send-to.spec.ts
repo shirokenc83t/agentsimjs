@@ -22,8 +22,8 @@ test("send the rover behind the wall from the UI: planned and executed paths dra
 });
 
 /** The rover's executed path after the same commands, as received from the worker. */
-async function executedPathAfterRun(page: Page): Promise<readonly number[]> {
-  await loadDemo(page);
+async function executedPathAfterRun(page: Page, afterBoot?: () => Promise<void>): Promise<readonly number[]> {
+  await loadDemo(page, afterBoot);
   await sendTo(page, "ugv-001", 50, 10);
   await step(page, 3);
   return page.evaluate(() => window.__agentsim?.executedPath?.("ugv-001") ?? []);
@@ -39,8 +39,8 @@ test("the executed path is identical across runs and render rates (CPU throttled
   const ctx = await browser.newContext();
   const slow = await ctx.newPage();
   const cdp = await ctx.newCDPSession(slow);
-  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
-  const throttled = await executedPathAfterRun(slow);
+  // The throttle is on from the moment the app is up: what is slowed is the run and its rendering, not the boot of the page (which on a runner takes longer than any wait that makes sense: the test is about the frame rate).
+  const throttled = await executedPathAfterRun(slow, () => cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 }).then(() => undefined));
   const fps = await slow.evaluate(() => {
     const f = window.__agentsim?.frameIntervalMs();
     return f && f.mean > 0 ? 1000 / f.mean : 0;

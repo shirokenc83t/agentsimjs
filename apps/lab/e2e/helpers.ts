@@ -32,10 +32,11 @@ export async function openWorkspace(page: Page, id: "scene" | "debug" | "configu
   await expect(page.getByTestId(`workspace-${id}`)).toBeVisible();
 }
 
-/** Opens the lab with the probe and loads the F1 demo as a new run (paused at tick 0, atlas uploaded). */
-export async function loadDemo(page: Page) {
+/** Opens the lab with the probe and loads the F1 demo as a new run (paused at tick 0, atlas uploaded). `afterBoot` runs once the app is up and its storage is ready, before the run is loaded. */
+export async function loadDemo(page: Page, afterBoot?: () => Promise<void>) {
   await page.goto("/?probe");
   await waitForStorageReady(page);
+  await afterBoot?.();
   await page.getByTestId("run-label").click();
   await page.getByTestId("load-demo").click();
   await expect(page.getByTestId("run-scenario")).toHaveText(/^f1-demo v\d+$/);
