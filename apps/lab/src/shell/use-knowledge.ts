@@ -5,6 +5,8 @@ import { knowledgeBand, type KnowledgeBand } from "./knowledge-band.ts";
 import { useBandWithUnion } from "./use-union.ts";
 
 const PAGE = 5_000;
+/** Time (ms) between a read of the samples and the next one for a head that moved meanwhile. */
+const REREAD_MS = 500;
 /** Samples kept: a run with more is drawn from its first ones (20 agents every 10 s is 7,200 an hour). */
 const MAX_SAMPLES = 40_000;
 const NONE: KnowledgeBand = { points: [], observed: 0, agentIds: [], ideal: 0, everyS: undefined, gaps: [] };
@@ -42,6 +44,9 @@ export function useKnowledgeBand(runId: string | undefined, headS: number, dtS =
           }
           if (state.current === now) setBand(knowledgeBand(now.records));
           if (now.head === reached) break;
+          // The head moved while this was read: the next read is not at once (a run that is live moves its head at every frame, and a read after read would hold the storage worker from the panels that read beside this).
+          await new Promise<void>((resolve) => setTimeout(resolve, REREAD_MS));
+          if (state.current !== now) return;
         }
       } catch {
         // A failed read shows when the head moves again.
