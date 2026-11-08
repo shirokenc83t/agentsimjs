@@ -158,6 +158,9 @@
   .ready-sum { max-width: 110px; }
   /* The note of the queued commands is cut shorter (its whole text is the title): where a font draws a character wider than another, the launch cell must not push the telemetry out of the window. */
   .queued-note, .ready-block .ready-sum.queued-note { max-width: 4em; }
+  /* The launch row is what sets the first column of the player (the other cells keep their widths): its buttons and the cell give up some padding, so a font that draws wider than the one it was set with keeps a margin before the telemetry. */
+  .ready-start .pb { padding: 0 6px; }
+  .ply { padding: 0 8px; }
   .player { grid-template-columns: auto minmax(128px, auto) minmax(200px, 1fr) auto; }
   .clock { padding: 0 8px; }
   .clock .big { font-size: 18px; }
