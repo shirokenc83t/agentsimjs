@@ -205,8 +205,11 @@ function placeAfterLayout(api: DockviewApi, preset: WorkspacePreset): void {
       if (!host || host.width === 0 || !win) continue;
       // Already on the host's bottom edge: nothing to do.
       if (Math.abs(host.bottom - win.bottom) <= STACK_GAP_PX + 4 && win.left >= host.left - 1 && win.right <= host.right + 1) continue;
+      // A window that is placed again is added again, and a panel that is added is the active one: the panel that was in front stays in front (on a slow machine this runs after the researcher, or a test, has floated or docked a panel).
+      const front = api.activePanel;
       panel.api.close();
       addPresetPanel(api, preset, p);
+      if (front && front.id !== p.id) api.getPanel(front.id)?.api.setActive();
     }
   };
   requestAnimationFrame(() => requestAnimationFrame(again));
