@@ -16,36 +16,39 @@ const NONE: KnowledgeBand = { points: [], observed: 0, agentIds: [], ideal: 0, e
 export function useKnowledgeBand(runId: string | undefined, headS: number, dtS = 0.1): KnowledgeBand {
   const { storage } = useServices();
   const [band, setBand] = useState<KnowledgeBand>(NONE);
-  const state = useRef<{ runId: string | undefined; records: TraceRecord[]; after: number | undefined; busy: boolean }>({ runId: undefined, records: [], after: undefined, busy: false });
+  const state = useRef<{ runId: string | undefined; records: TraceRecord[]; after: number | undefined; busy: boolean; head: number }>({ runId: undefined, records: [], after: undefined, busy: false, head: 0 });
 
   useEffect(() => {
     if (state.current.runId !== runId) {
-      state.current = { runId, records: [], after: undefined, busy: false };
+      state.current = { runId, records: [], after: undefined, busy: false, head: headS };
       setBand(NONE);
     }
     const now = state.current;
+    // The head the reading has to reach: a head that moves while a read is on its way is read next, by the same loop (the read is never thrown away, and a head that moves no more, as the one of a run that is done, is read
+    // all the same).
+    now.head = headS;
     if (runId === undefined || now.busy) return;
     now.busy = true;
-    let alive = true;
     void (async () => {
       try {
         for (;;) {
-          const page = await storage.ports.trace.query({ runId, kinds: ["event"], op: "belief-vs-truth", simTime: { to: headS }, limit: PAGE, ...(now.after === undefined ? {} : { afterSeq: now.after }) });
-          if (!alive || state.current !== now) return;
-          now.records.push(...page);
-          if (page.length > 0) now.after = page[page.length - 1]?.seq ?? now.after;
-          if (page.length < PAGE || now.records.length >= MAX_SAMPLES) break;
+          const reached = now.head;
+          for (;;) {
+            const page = await storage.ports.trace.query({ runId, kinds: ["event"], op: "belief-vs-truth", simTime: { to: reached }, limit: PAGE, ...(now.after === undefined ? {} : { afterSeq: now.after }) });
+            if (state.current !== now) return;
+            now.records.push(...page);
+            if (page.length > 0) now.after = page[page.length - 1]?.seq ?? now.after;
+            if (page.length < PAGE || now.records.length >= MAX_SAMPLES) break;
+          }
+          if (state.current === now) setBand(knowledgeBand(now.records));
+          if (now.head === reached) break;
         }
-        if (alive && state.current === now) setBand(knowledgeBand(now.records));
       } catch {
         // A failed read shows when the head moves again.
       } finally {
         now.busy = false;
       }
     })();
-    return () => {
-      alive = false;
-    };
   }, [storage, runId, headS]);
 
   return useBandWithUnion(band, runId, headS, dtS);
