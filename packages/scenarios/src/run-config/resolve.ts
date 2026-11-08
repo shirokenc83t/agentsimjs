@@ -18,11 +18,12 @@ import { err, ok, validate, type CodedError, type Result } from "@agentsim/core"
 import { BUILTIN_BODY_DEFAULTS, resolveBody, type BodyDefaults, type ResolvedUavBody, type ResolvedUgvBody } from "../body-defaults.ts";
 import { DEFAULT_TOPOLOGY, TOPOLOGY_LIMITS, type TopologyConfig } from "@agentsim/spatial";
 import { validateSequence } from "@agentsim/core";
+import { checkRanges, resolveS2, validateMindProfile, validatePromptTemplate, type EffectiveS2, type MindProfileDocument, type MindSource, type PromptTemplateDocument, type S2Profile } from "@agentsim/minds";
 import { toolsSchemaCapabilities } from "../assemble/capabilities.ts";
 import { canonicalJson, hash32Hex } from "../canonical.ts";
 import type { ScenarioAgentsView } from "../load.ts";
 import { utf8Length } from "../validate.ts";
-import { PlanningEntry, type MindEntry, RUN_CONFIG_MAX_BYTES, RUN_CONFIG_SCHEMA_VERSION, RunConfigDocument, type AlgorithmSpec, type BeliefInit } from "./schema.ts";
+import { PlanningEntry, type MindEntry, type S1Entry, RUN_CONFIG_MAX_BYTES, RUN_CONFIG_SCHEMA_VERSION, RunConfigDocument, type AlgorithmSpec, type BeliefInit } from "./schema.ts";
 
 /** Stable codes (ADR-0028), plus document-level ones and the cost-profile codes of ADR-0014/0026. */
 export type RunConfigErrorCode =
@@ -45,6 +46,12 @@ export type RunConfigErrorCode =
   | "strategy_not_found"
   | "strategy_and_algorithm_both_set"
   | "invalid_mission"
+  | "mind_profile_not_found"
+  | "prompt_template_not_found"
+  | "provider_not_configured"
+  | "mind_shape_mismatch"
+  | "limit_out_of_range"
+  | "template_slot_unknown"
   | StrategyErrorCode;
 
 export type RunConfigError = CodedError<RunConfigErrorCode> & { readonly path?: string };
@@ -109,7 +116,38 @@ export interface EffectiveAgentConfig {
   /** Topological layer (ADR-0039 §3), resolved field by field: built-in → default → byKind → byAgent. */
   readonly topology: TopologyConfig;
   /** The agent's mind when the run configuration gives it one (a mission, validated against the capability manifest); absent otherwise, and then in no hash. */
-  readonly mind?: MindEntry;
+  readonly mind?: { readonly s1: S1Entry };
+  /** The agent's System 2 mind (F4) when the run configuration gives it one: absent otherwise, and then in no hash, so a configuration without one hashes as before. */
+  readonly s2?: ResolvedS2Mind;
+}
+
+/**
+ * The effective System 2 mind of an agent (ADR-0036 section 6): the profile resolved over the defaults and the overrides (each field with the level that supplied it), the prompt template's
+ * content, the mission, and the provider as far as a hash may know it: its id, kind and the host of its endpoint. Never a key, a price or a path of the endpoint.
+ */
+export interface ResolvedS2Mind {
+  /** The level of the run configuration that gave the entry. */
+  readonly source: ConfigLevel;
+  /** The library reference, absent for an inline profile. */
+  readonly profileRef?: { readonly id: string; readonly version: number };
+  readonly effective: Omit<EffectiveS2, "sources">;
+  /** Where each field came from: `default`, `profile` or `override`. */
+  readonly sources: Readonly<Record<string, MindSource>>;
+  readonly template: { readonly id: string; readonly version: number; readonly content: PromptTemplateDocument };
+  readonly mission?: string;
+  readonly provider: { readonly id: string; readonly kind: string; readonly host: string };
+}
+
+/** The library the resolution reads profiles and templates from (a lookup the caller made ready from storage; the default has none). */
+export interface MindLibrary {
+  profile(id: string, version: number): MindProfileDocument | undefined;
+  template(id: string, version: number): PromptTemplateDocument | undefined;
+}
+
+/** What the resolution knows of a provider entry of Settings: its kind and its endpoint. Anything else the entry holds (a key, prices) is not read. */
+export interface ProviderInfo {
+  readonly kind: string;
+  readonly baseUrl: string;
 }
 
 /**
@@ -127,7 +165,9 @@ export interface ResolvedRunConfig {
   readonly document: RunConfigDocument;
   readonly scenario: { readonly id: string; readonly version: number };
   readonly seed: number;
-  readonly timeMode: "lockstep" | "realtime";
+  readonly timeMode: "lockstep" | "realtime" | "latency-modeled";
+  /** Where the minds' answers come from (run header; in neither hash). */
+  readonly mindsRunMode: "live" | "replay-strict" | "replay-then-live";
   /** Minimum sim time between decision requests for perception events (ADR-0005 addition); default 1 s. */
   readonly minDecisionIntervalS: number;
   /** Sorted by agent ID. */
@@ -146,6 +186,10 @@ export interface ResolveOptions {
   readonly builtinBodies?: BodyDefaults;
   /** Finds a strategy by reference: the shipped presets by default (the library arrives with F5). */
   readonly strategies?: (ref: StrategyRef) => PlanningStrategy | undefined;
+  /** Mind profiles and prompt templates by `{ id, version }`: needed by an `s2` entry that names a library profile (`mind_profile_not_found` without it). */
+  readonly library?: MindLibrary;
+  /** The provider entries of Settings by id (`provider_not_configured` when an `s2` mind names one this does not know). */
+  readonly providers?: (id: string) => ProviderInfo | undefined;
 }
 
 const fail = (code: RunConfigErrorCode, message: string, path?: string): { ok: false; error: RunConfigError } =>
@@ -190,9 +234,10 @@ export function canonicalRunConfig(doc: RunConfigDocument): string {
     }
     return out;
   };
-  const { timeMode, minDecisionIntervalS, ...rest } = doc;
+  // `mindsRunMode` says where the minds' answers come from, not what they decide: it is in no hash.
+  const { timeMode, minDecisionIntervalS, mindsRunMode: _runMode, ...rest } = doc;
   // Defaults are omitted: an explicit lockstep or an explicit 1 s hashes like an absent field.
-  return canonicalJson(prune({ ...rest, ...(timeMode === "realtime" ? { timeMode } : {}), ...(minDecisionIntervalS !== undefined && minDecisionIntervalS !== 1 ? { minDecisionIntervalS } : {}) }));
+  return canonicalJson(prune({ ...rest, ...(timeMode === "realtime" || timeMode === "latency-modeled" ? { timeMode } : {}), ...(minDecisionIntervalS !== undefined && minDecisionIntervalS !== 1 ? { minDecisionIntervalS } : {}) }));
 }
 
 export function toPlanningAlgorithm(a: AlgorithmSpec): PlanningAlgorithm {
@@ -382,12 +427,26 @@ export function resolveRunConfig(
     if (topology.regionChunks < rcMin || topology.regionChunks > rcMax) {
       return fail("region_size_out_of_range", `${a.id}: topology.regionChunks must be in [${rcMin}, ${rcMax}], got ${topology.regionChunks}`, "/topology");
     }
-    // The mind (ADR-0036 section 6): an entry replaces the one before it (default → byKind → byAgent); a mission is checked against the capability manifest for this kind of vehicle.
-    const mind: MindEntry | undefined = (a.key === undefined ? undefined : doc.minds?.byAgent?.[a.key]) ?? doc.minds?.byKind?.[a.kind] ?? doc.minds?.default;
+    // The mind (ADR-0036 section 6): an entry replaces the one before it (default → byKind → byAgent). An `s1` mission is checked against the capability manifest for this kind of vehicle; an `s2`
+    // entry is resolved over the library and the provider entries (the profile's fields, the overrides, the template, the endpoint's host), field by field.
+    const byAgent = a.key === undefined ? undefined : doc.minds?.byAgent?.[a.key];
+    const mind: MindEntry | undefined = byAgent ?? doc.minds?.byKind?.[a.kind] ?? doc.minds?.default;
+    let s1: { s1: S1Entry } | undefined;
+    let s2: ResolvedS2Mind | undefined;
     if (mind !== undefined) {
-      const path = a.key !== undefined && doc.minds?.byAgent?.[a.key] !== undefined ? `/minds/byAgent/${a.key}` : doc.minds?.byKind?.[a.kind] !== undefined ? `/minds/byKind/${a.kind}` : "/minds/default";
-      const v = validateSequence(mind.s1.script.params.steps, toolsSchemaCapabilities, a.kind);
-      if (!v.ok) return fail("invalid_mission", `${a.id}: ${v.error.message}`, `${path}/s1/script/params/steps${v.error.step === undefined ? "" : `/${v.error.step - 1}`}`);
+      const level: ConfigLevel = byAgent !== undefined ? "byAgent" : doc.minds?.byKind?.[a.kind] !== undefined ? "byKind" : "default";
+      const path = level === "byAgent" ? `/minds/byAgent/${a.key}` : level === "byKind" ? `/minds/byKind/${a.kind}` : "/minds/default";
+      if (mind.s1 !== undefined && mind.s2 !== undefined) return fail("mind_shape_mismatch", `${a.id}: an entry has s1 or s2, not both (s1+s2 is F5)`, path);
+      if (mind.s1 === undefined && mind.s2 === undefined) return fail("invalid_document", `${a.id}: a mind entry needs s1 or s2`, path);
+      if (mind.s1 !== undefined) {
+        const v = validateSequence(mind.s1.script.params.steps, toolsSchemaCapabilities, a.kind);
+        if (!v.ok) return fail("invalid_mission", `${a.id}: ${v.error.message}`, `${path}/s1/script/params/steps${v.error.step === undefined ? "" : `/${v.error.step - 1}`}`);
+        s1 = { s1: mind.s1 };
+      } else if (mind.s2 !== undefined) {
+        const r = resolveS2Entry(a.id, mind.s2, level, `${path}/s2`, opts);
+        if (!r.ok) return r;
+        s2 = r.value;
+      }
     }
     const eff: EffectiveAgentConfig = {
       agentId: a.id,
@@ -399,7 +458,8 @@ export function resolveRunConfig(
       beliefs: { init, idealized: init === "ideal", ...(priorHash === undefined ? {} : { priorHash }) },
       beliefsSource,
       topology,
-      ...(mind === undefined ? {} : { mind }),
+      ...(s1 === undefined ? {} : { mind: s1 }),
+      ...(s2 === undefined ? {} : { s2 }),
     };
     const c = checkAgent(eff);
     if (!c.ok) return c;
@@ -410,6 +470,7 @@ export function resolveRunConfig(
     scenario: { id: doc.scenario.id, version: doc.scenario.version },
     seed: doc.seed ?? sdoc.defaultSeed,
     timeMode: doc.timeMode ?? "lockstep",
+    mindsRunMode: doc.mindsRunMode ?? "live",
     minDecisionIntervalS: doc.minDecisionIntervalS ?? 1,
     agents,
     warnings: warningsOf(agents),
@@ -442,7 +503,7 @@ export function agentWarnings(a: Pick<EffectiveAgentConfig, "agentId" | "plannin
 
 /** xxHash32 over the resolved per-agent configurations, agents in ID order (sources are not hashed). */
 export function effectiveConfigHash(agents: readonly EffectiveAgentConfig[], minDecisionIntervalS = 1): string {
-  return hash32Hex(canonicalJson({ minDecisionIntervalS, agents: agents.map((a) => ({ agentId: a.agentId, key: a.key, kind: a.kind, planning: a.planning, body: a.body, beliefs: a.beliefs, topology: a.topology, ...(a.mind === undefined ? {} : { mind: a.mind }) })) }));
+  return hash32Hex(canonicalJson({ minDecisionIntervalS, agents: agents.map((a) => ({ agentId: a.agentId, key: a.key, kind: a.kind, planning: a.planning, body: a.body, beliefs: a.beliefs, topology: a.topology, ...(a.mind === undefined ? {} : { mind: a.mind }), ...(a.s2 === undefined ? {} : { s2: s2HashInput(a.s2) }) })) }));
 }
 
 /**
@@ -460,4 +521,55 @@ export function withRuntimeChange(agent: EffectiveAgentConfig, entry: PlanningEn
   const next: EffectiveAgentConfig = { ...agent, planning, planningSources: sources };
   const c = checkAgent(next);
   return c.ok ? ok(next) : c;
+}
+
+
+/** What of an `s2` mind a hash sees (ADR-0036 section 6): the effective fields, the template's content, the mission and the provider's kind and host; never a key or a price, never where a field came from. */
+export function s2HashInput(m: ResolvedS2Mind): unknown {
+  return { effective: m.effective, template: m.template.content, mission: m.mission, provider: { kind: m.provider.kind, host: m.provider.host } };
+}
+
+/** The host of an endpoint (`localhost:11434`), or undefined for a text that is not a URL. Only the host is part of a hash: the path and anything after it may name a deployment, never a secret. */
+function hostOf(baseUrl: string): string | undefined {
+  const m = /^https?:\/\/(?:[^/?#@]*@)?([^/?#]+)/i.exec(baseUrl);
+  return m?.[1]?.toLowerCase();
+}
+
+function resolveS2Entry(agentId: string, entry: NonNullable<MindEntry["s2"]>, source: ConfigLevel, path: string, opts: ResolveOptions): Result<ResolvedS2Mind, RunConfigError> {
+  let profile: S2Profile;
+  let profileRef: { id: string; version: number } | undefined;
+  if ("id" in entry.profile) {
+    const ref = entry.profile;
+    const doc = opts.library?.profile(ref.id, ref.version);
+    if (doc === undefined) return fail("mind_profile_not_found", `${agentId}: no mind profile ${ref.id} version ${ref.version} in the library`, `${path}/profile`);
+    const v = validateMindProfile(doc);
+    if (!v.ok) return fail(v.error.code, `${agentId}: profile ${ref.id}: ${v.error.message}`, `${path}/profile`);
+    profile = v.value.s2;
+    profileRef = { id: ref.id, version: ref.version };
+  } else {
+    const v = validateMindProfile({ schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: entry.profile });
+    if (!v.ok) return fail(v.error.code, `${agentId}: ${v.error.message}`, `${path}/profile${v.error.path === undefined ? "" : `/${v.error.path}`}`);
+    profile = v.value.s2;
+  }
+  // The overrides are checked like the profile's own fields: a value out of range is refused with its path.
+  const range = checkRanges(entry.overrides ?? {}, `${path}/overrides/`);
+  if (range !== undefined) return fail(range.code, `${agentId}: ${range.message}`, range.path);
+  const eff = resolveS2(profile, entry.overrides);
+  const tdoc = opts.library?.template(eff.promptTemplate.id, eff.promptTemplate.version);
+  if (tdoc === undefined) return fail("prompt_template_not_found", `${agentId}: no prompt template ${eff.promptTemplate.id} version ${eff.promptTemplate.version} in the library`, `${path}/profile`);
+  const t = validatePromptTemplate(tdoc);
+  if (!t.ok) return fail(t.error.code, `${agentId}: template ${eff.promptTemplate.id}: ${t.error.message}`, `${path}/profile`);
+  const info = opts.providers?.(eff.provider);
+  const host = info === undefined ? undefined : hostOf(info.baseUrl);
+  if (info === undefined || host === undefined) return fail("provider_not_configured", `${agentId}: provider "${eff.provider}" is not configured in Settings`, `${path}/profile`);
+  const { sources, ...effective } = eff;
+  return ok({
+    source,
+    ...(profileRef === undefined ? {} : { profileRef }),
+    effective,
+    sources,
+    template: { id: eff.promptTemplate.id, version: eff.promptTemplate.version, content: t.value },
+    ...(entry.mission === undefined ? {} : { mission: entry.mission }),
+    provider: { id: eff.provider, kind: info.kind, host },
+  });
 }

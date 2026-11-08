@@ -4,6 +4,6 @@ export { PlanningServiceAdapter, GridSpatialAdapter, TraceBufferSink, toolsSchem
 export { SensingService, type SensingSnapshot } from "./sensing.ts";
 export { TopologyService, type TopologySnapshot } from "./topology.ts";
 export { startStrategyTest, StrategyTestRun, type StrategyTestError, type StrategyTestLeg, type StrategyTestRequest, type StrategyTestResult } from "./strategy-test.ts";
-export { createRun, runHeader, idealAgentsOf, formatSimulatorVersion, type CreateRunOptions, type CreatedRun, type RunHeaderInput } from "./run.ts";
+export { createRun, runHeader, idealAgentsOf, formatSimulatorVersion, type CreateRunOptions, type CreatedRun, type MindsOptions, type RunHeaderInput } from "./run.ts";
 export { BELIEF_GROUP_CHUNKS, checkBeliefManifest, readBeliefSections, writeBeliefSections } from "./belief-sections.ts";
 export { snapshotRun, restoreRun, snapshotSize, RUN_SNAPSHOT_FORMAT, type SnapshotableRun, type SnapshotSize } from "./snapshot-run.ts";

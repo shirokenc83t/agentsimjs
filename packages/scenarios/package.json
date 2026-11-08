@@ -9,6 +9,7 @@
   "dependencies": {
     "@agentsim/algorithms": "workspace:*",
     "@agentsim/core": "workspace:*",
+    "@agentsim/minds": "workspace:*",
     "@agentsim/spatial": "workspace:*",
     "@agentsim/tools-schema": "workspace:*",
     "@agentsim/trace": "workspace:*",

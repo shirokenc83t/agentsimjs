@@ -93,6 +93,11 @@ export class PlanningServiceAdapter implements PlannerPort {
     return { version: m.version, clearanceM: (x, y, maxM) => m.groundClearanceM(x, y, maxM), passableAt: (x, y) => m.inBounds(x, y) && m.freeForGround(x, y) };
   }
 
+  /** The agent's effective configuration as it is now (a `setConfig` applies from the next query), or undefined for an id that is not an agent of the run. */
+  configOf(agentId: string): EffectiveAgentConfig | undefined {
+    return this.configs.get(agentId);
+  }
+
   /** The agent's exploration scope (ADR-0040) from its planning configuration as it is now (a `setConfig` applies from the next explore). */
   exploreParams(agentId: string): { readonly radiusM: number; readonly windowMarginM: number } {
     const cfg = this.configs.get(agentId);

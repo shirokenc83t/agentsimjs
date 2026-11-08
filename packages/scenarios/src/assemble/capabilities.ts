@@ -2,7 +2,7 @@ import { err, ok, type CapabilityPort, type Scope } from "@agentsim/core";
 import { capabilityManifest, getCapability, isInjectable, validateParams } from "@agentsim/tools-schema";
 
 /** The capabilities and their parameter schemas, from the generated manifest (built once: it never changes at run time). */
-let menu: readonly { readonly name: string; readonly kind: "action" | "bookkeeping"; readonly paramsSchema: Readonly<Record<string, unknown>> }[] | undefined;
+let menu: readonly { readonly name: string; readonly kind: "action" | "bookkeeping" | "compute"; readonly paramsSchema: Readonly<Record<string, unknown>> }[] | undefined;
 function capabilityMenu(): NonNullable<typeof menu> {
   menu ??= capabilityManifest().capabilities.map((c) => ({ name: c.name, kind: c.kind, paramsSchema: c.params }));
   return menu;

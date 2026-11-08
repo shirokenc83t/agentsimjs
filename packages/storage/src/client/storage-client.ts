@@ -191,13 +191,14 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       get: (id) => call("runs.get", [id]),
       list: () => call("runs.list"),
       setStatus: (id, s) => call("runs.setStatus", [id, s]),
+      markNotReproducible: (id, tick) => call("runs.markNotReproducible", [id, tick]),
       appendInputs: (id, inputs) => call("runs.appendInputs", [id, inputs]),
       inputs: (id) => call("runs.inputs", [id]),
       sizes: (id) => call("runs.sizes", [id]),
       delete: (id) => call("runs.delete", [id]),
     },
     cache: {
-      get: (k) => call("cache.get", [k]),
+      get: (k, preferRunId) => call("cache.get", preferRunId === undefined ? [k] : [k, preferRunId]),
       put: (k, v) => call("cache.put", [k, v]),
     },
     userData: {
@@ -218,6 +219,8 @@ export function createStorageClient(worker: Worker, options: StorageClientOption
       saveVersion: (preset) => call("runConfigs.saveVersion", [preset]),
       delete: (id) => call("runConfigs.delete", [id]),
     },
+    mindProfiles: rpc("mindProfiles", ["list", "get", "saveVersion", "delete"]) as unknown as StoragePorts["mindProfiles"],
+    promptTemplates: rpc("promptTemplates", ["list", "get", "saveVersion", "delete"]) as unknown as StoragePorts["promptTemplates"],
     // The recording ports forward every call as it is (same arguments, in order): one table instead of a lambda each, to keep the initial chunk small.
     snapshots: rpc("snapshots", ["putBlobs", "getBlob", "write", "list", "read"]) as unknown as StoragePorts["snapshots"],
     beliefFrames: rpc("beliefFrames", ["append", "query", "keyframeAtOrBefore"]) as unknown as StoragePorts["beliefFrames"],

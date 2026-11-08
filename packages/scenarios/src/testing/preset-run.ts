@@ -1,10 +1,10 @@
 import { ScriptBrain, type Brain, type DecisionEnvelope, type DecisionRequest, type ScriptStep, type TimerOp } from "@agentsim/core";
 import { TraceBuffer } from "@agentsim/trace";
-import { createRun } from "../assemble/run.ts";
+import { createRun, type MindsOptions } from "../assemble/run.ts";
 import { loadScenario } from "../load.ts";
 import { f1DemoRunConfig, f1DemoScenario } from "../presets/f1-demo.ts";
 import { F2_DISCOVERY_ID, F2_TWENTY_AGENTS_ID, f2DiscoveryScenario, f2PriorReferenceScenario, f2PriorRunConfig, f2RunConfig, f2TwentyAgentsScenario } from "../presets/f2-presets.ts";
-import { resolveRunConfig } from "../run-config/resolve.ts";
+import { resolveRunConfig, type ResolveOptions } from "../run-config/resolve.ts";
 import type { RunConfigDocument } from "../run-config/schema.ts";
 import type { AgentSpec, ScenarioDocument } from "../schema.ts";
 import type { ReferenceRun } from "./reference-run.ts";
@@ -51,6 +51,12 @@ export interface PresetRunOptions {
   readonly preset: PresetId;
   /** The script of each agent, by key. */
   readonly scripts: Readonly<Record<string, readonly ScriptStep[]>>;
+  /** Minds by agent key, for the agents that have one that is not a script (an LLM mind with a scripted provider, a scripted test mind): they replace that agent's script. */
+  readonly brains?: Readonly<Record<string, Brain>>;
+  /** The library and the providers a configuration with `s2` minds is resolved over (F4). */
+  readonly resolve?: ResolveOptions;
+  /** The providers, cache and hooks of the System 2 minds the configuration gives (F4). */
+  readonly minds?: MindsOptions;
   /** Keys of the agents whose brain is a `TimedScriptBrain` (timers). */
   readonly timed?: readonly string[];
   /** Fields merged over the preset's default run configuration. */
@@ -79,12 +85,13 @@ export function buildPresetRun(o: PresetRunOptions, mode: RunMode = "genesis"): 
   };
   const loaded = loadScenario(doc);
   if (!loaded.ok) throw new Error(loaded.error.message);
-  const resolved = resolveRunConfig({ ...def.runConfig(1), ...o.runConfig }, { loaded: loaded.value, version: 1 });
+  const resolved = resolveRunConfig({ ...def.runConfig(1), ...o.runConfig }, { loaded: loaded.value, version: 1 }, o.resolve ?? {});
   if (!resolved.ok) throw new Error(resolved.error.message);
   const trace = new TraceBuffer("run-000001", () => 0, o.traceCapacity ?? 5_000_000);
   const timed = new Set(o.timed ?? []);
   const brains: Record<string, Brain> = {};
   for (const [key, steps] of Object.entries(o.scripts)) brains[key] = timed.has(key) ? new TimedScriptBrain(`script-${key}`, steps) : new ScriptBrain(`script-${key}`, steps);
-  const run = createRun(loaded.value, resolved.value, trace, { dtS: PRESET_DT_S, brains, ...(mode === "restore-target" ? { genesis: false } : {}), ...(o.beliefVsTruth ? { beliefVsTruth: o.beliefVsTruth } : {}) });
+  for (const [key, brain] of Object.entries(o.brains ?? {})) brains[key] = brain;
+  const run = createRun(loaded.value, resolved.value, trace, { dtS: PRESET_DT_S, brains, ...(o.minds === undefined ? {} : { minds: o.minds }), ...(mode === "restore-target" ? { genesis: false } : {}), ...(o.beliefVsTruth ? { beliefVsTruth: o.beliefVsTruth } : {}) });
   return { ...run, trace, resolved: resolved.value };
 }

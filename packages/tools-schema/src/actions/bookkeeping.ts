@@ -49,3 +49,31 @@ export const cancelTimer = {
   preconditions: [],
   failureCodes: ["timer_not_found"],
 } as const satisfies CapabilityDef;
+
+/** The notebook (ADR-0036 addition of 2026-10-29, F4): at most this many characters. */
+export const NOTE_MAX_CHARS = 2000;
+
+/**
+ * The notebook: a bookkeeping capability that may accompany any decision, including `idle`. The text replaces the notebook or is appended to it; the notebook is the agent's state (hashed
+ * only when it is not empty, in snapshots) and is carried in every prompt of an LLM mind. The length check is the runtime's (`note_too_long`).
+ */
+export const note = {
+  name: "note",
+  kind: "bookkeeping",
+  description:
+    "Keep a note for yourself: your notebook is returned to you in every later prompt, so use it for what you must not forget (the plan, the points still to visit, what you have seen). " +
+    "mode replace overwrites the whole notebook, mode append adds the text after what is there. It starts no action and may accompany any decision, including idle. " +
+    "The notebook holds at most 2000 characters in all; longer text is refused. Failure: note_too_long.",
+  params: Type.Object(
+    {
+      text: Type.String({ description: "The note, at most 2000 characters (the whole notebook after an append)." }),
+      mode: Type.Union([Type.Literal("replace"), Type.Literal("append")], { description: "replace overwrites the notebook, append adds to it." }),
+    },
+    { additionalProperties: false },
+  ),
+  result: Type.Object({ chars: Type.Integer({ description: "Characters in the notebook now." }) }, { additionalProperties: false }),
+  vehicles: ["uav", "ugv"],
+  scope: "self",
+  preconditions: [],
+  failureCodes: ["note_too_long"],
+} as const satisfies CapabilityDef;

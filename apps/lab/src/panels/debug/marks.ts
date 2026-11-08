@@ -19,16 +19,21 @@ export interface Mark {
 /** The kinds the Timeline marks (actions, reflexes, injected commands, degradations, snapshots); checkpoints are `event` records with op `checkpoint`. */
 export const MARK_KINDS = ["action", "reflex", "injected", "degradation", "snapshot"] as const;
 
+/** A limit of a System 2 mind that the researcher raised (F4): a `lifecycle` record with op `raiseLimit`. It is a mark of the run, not of the agent: the Timeline's run lane and the player's band show it as ◆. */
+export const isRaise = (m: Mark): boolean => m.kind === "lifecycle" && m.op === "raiseLimit";
+
 export function markOf(r: TraceRecord): Mark {
   const p = r.payload !== null && typeof r.payload === "object" ? (r.payload as { op?: unknown; status?: unknown; code?: unknown; failure?: { code?: unknown } }) : {};
   const status = r.kind === "action" && p.op === "end" && typeof p.status === "string" ? p.status : undefined;
-  const code = r.kind === "reflex" ? p.code : r.kind === "action" && (p.op === "end" || p.op === "rejected") ? p.failure?.code : undefined;
+  const raise = r.kind === "lifecycle" && p.op === "raiseLimit";
+  const raised = raise ? (r.payload as { limit?: unknown; before?: unknown; after?: unknown }) : undefined;
+  const code = raise ? `${r.agentId ?? ""} ${String(raised?.limit)} ${String(raised?.before)} → ${String(raised?.after)}`.trim() : r.kind === "reflex" ? p.code : r.kind === "action" && (p.op === "end" || p.op === "rejected") ? p.failure?.code : undefined;
   return {
     seq: r.seq,
     t: r.simTime,
     kind: r.kind,
     op: typeof p.op === "string" ? p.op : undefined,
-    agentId: r.agentId,
+    agentId: raise ? undefined : r.agentId,
     ...(status === undefined ? {} : { status }),
     ...(typeof code === "string" ? { code } : {}),
   };
@@ -47,7 +52,7 @@ export const flagRole = (m: Mark): "alarm" | "warning" | undefined => (isFailure
 export function glyphOf(m: Mark): string {
   if (isFailure(m)) return "✕";
   if (m.kind === "reflex" || isRejection(m)) return "▲";
-  if (m.kind === "injected") return "◆";
+  if (m.kind === "injected" || isRaise(m)) return "◆";
   if (m.kind === "degradation") return "▼";
   if (m.kind === "snapshot") return "◇";
   if (m.kind === "event") return "│"; // a checkpoint
@@ -60,6 +65,7 @@ export const MARK_LEGEND: readonly { readonly glyph: string; readonly name: stri
   { glyph: "✕", name: "failure", kind: "alm" },
   { glyph: "▲", name: "reflex", kind: "reflex" },
   { glyph: "◆", name: "command", kind: "injected" },
+  { glyph: "◆", name: "limit raised", kind: "lifecycle" },
   { glyph: "▼", name: "degraded", kind: "degradation" },
   { glyph: "◇", name: "snapshot", kind: "snapshot" },
 ];

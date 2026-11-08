@@ -11,6 +11,9 @@ import importedFrom0010 from "../../schema/0010_imported_from.sql?raw";
 import derivedRuns0011 from "../../schema/0011_derived_runs.sql?raw";
 import metrics0012 from "../../schema/0012_metrics.sql?raw";
 import parentCauseIndex0013 from "../../schema/0013_parent_cause_index.sql?raw";
+import mindLibrary0014 from "../../schema/0014_mind_library.sql?raw";
+import runMinds0015 from "../../schema/0015_run_minds.sql?raw";
+import cachePerRun0016 from "../../schema/0016_cache_per_run.sql?raw";
 import type { SqlDriver } from "./driver.ts";
 
 export interface Migration {
@@ -34,6 +37,9 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 11, name: "0011_derived_runs", sql: derivedRuns0011 },
   { version: 12, name: "0012_metrics", sql: metrics0012 },
   { version: 13, name: "0013_parent_cause_index", sql: parentCauseIndex0013 },
+  { version: 14, name: "0014_mind_library", sql: mindLibrary0014 },
+  { version: 15, name: "0015_run_minds", sql: runMinds0015 },
+  { version: 16, name: "0016_cache_per_run", sql: cachePerRun0016 },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.length;

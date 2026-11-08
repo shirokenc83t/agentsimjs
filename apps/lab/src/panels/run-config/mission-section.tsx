@@ -92,7 +92,7 @@ export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: 
     return (
       <section className="fs mission" data-section="mission" data-testid="rc-mission">
         <h4 className="sec">
-          <b>7 · Mission</b>
+          <b>8 · Mission</b>
           <span className="rule" />
         </h4>
         <p className="muted">No agent has a key in this scenario: a mission is given to an agent by its key.</p>
@@ -163,7 +163,7 @@ export function MissionSection(props: { draft: RunConfigDocument; onChange: (d: 
   return (
     <section className="fs mission" data-section="mission" data-testid="rc-mission">
       <h4 className="sec">
-        <b>7 · Mission</b>
+        <b>8 · Mission</b>
         <span className="rule" />
         <span data-testid="rc-status-mission">
           <span className={`st ${status.errors > 0 ? "st-alm" : status.warnings > 0 ? "st-warn" : "st-ok"}`}>{countsWords(status)}</span>

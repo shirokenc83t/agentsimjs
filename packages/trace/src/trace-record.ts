@@ -112,6 +112,10 @@ export const RunHeader = Type.Object({
   runConfig: Type.Optional(Type.Unknown()),
   runConfigHash: Type.Optional(Type.String({ pattern: "^[0-9a-f]{8}$" })),
   effectiveConfigHash: Type.Optional(Type.String({ pattern: "^[0-9a-f]{8}$" })),
+  /** Where the minds' answers came from (ADR-0036 section 7): set when the run has a System 2 mind or a mode other than `live`. In neither configuration hash. */
+  mindsRunMode: Type.Optional(Type.Union([Type.Literal("live"), Type.Literal("replay-strict"), Type.Literal("replay-then-live")])),
+  /** The tick from which a `replay-then-live` run stopped being reproducible (its first call that missed the cache); set when it happens. */
+  notReproducibleFromTick: Type.Optional(Type.Integer({ minimum: 0 })),
   /** Package version and git commit of the simulator that produced the run. */
   simulatorVersion: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
   /** Agents whose beliefs were `ideal` (ground truth), as resolved at run start; sorted (ADR-0028 addition of 2026-10-10). */

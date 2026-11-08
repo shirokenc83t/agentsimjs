@@ -19,6 +19,7 @@ import { f1DemoScenario, f1ReferenceWorldScenario, f2DiscoveryScenario, f2PriorR
 import { parseRecordingProfile, RunRecorder, type FlowControl, type PersistedHead, type RecorderItem, type TraceBuffer } from "@agentsim/trace";
 import { DummyHostedWorld, ScenarioHostedWorld, type HostedWorld } from "./hosted-world.ts";
 import { RunRecording } from "./run-recording.ts";
+import { RemoteMindCache, type CachePortLike } from "./remote-cache.ts";
 
 /** The scenario document of a preset, built here (off the main thread): the large ones take tens of ms. */
 function buildPresetDocument(preset: PresetId): unknown {
@@ -128,6 +129,10 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   let windowStart = clock.now();
   /** Recording: the channel to the storage worker (from the main thread), and the recorder of the loaded run when it is recorded. */
   let recorderPort: RecorderPort | undefined;
+  /** The minds' response cache over the channel the main thread gave (F4 M2): absent, a run keeps its cache in memory. */
+  let mindCache: RemoteMindCache | undefined;
+  /** The provider keys the main thread gave, by entry id: in this closure and in the adapters made from it, nowhere else. */
+  let providerKeys: ReadonlyMap<string, string> = new Map();
   let recorder: RunRecorder | undefined;
   /** What a recorded run writes besides its components' records: checkpoints, snapshots, pose samples, belief keyframes and deltas. */
   let recording: RunRecording | undefined;
@@ -195,6 +200,13 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     scope.postMessage({ type: "budget", runId: world.runId, ...b });
   };
 
+  /** What the System 2 minds are doing (F4): posted when it changed, at the panel rate, and at once with a forced post (a load, a step). */
+  const postMinds = (force: boolean) => {
+    if (!world.runId) return;
+    const s = world.mindStatus(force);
+    if (s) scope.postMessage({ type: "minds", runId: world.runId, ...s });
+  };
+
   /** What the Scene's ray and topology overlays watch (an agent and which streams), or nothing. Reset by a load. */
   let overlayWatch: { agentId: string | null; rays: boolean; topology: boolean } = { agentId: null, rays: false, topology: false };
   let rayPosts = 0;
@@ -254,6 +266,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     postBeliefChunks();
     postOverlays();
     postBudget(force);
+    postMinds(force);
     const status = new Float32Array(world.entityIds.length * STATUS_STRIDE);
     return world.writeStatus(status) ? status : undefined;
   };
@@ -327,11 +340,23 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
       },
       (e: unknown) => {
         deciding = false;
-        scope.postMessage({ type: "error", code: "mind_failed", message: e instanceof Error ? e.message : String(e) });
+        const text = e instanceof Error ? e.message : String(e);
+        // A limit reached (no one to ask) or a miss of a strict replay ends a headless run with that reason (ADR-0044 section 5); a run in front of a researcher shows the error and pauses.
+        const reason = text.includes("limit_reached") ? ("limit_reached" as const) : text.includes("cache_miss_strict") ? ("cache_miss_strict" as const) : undefined;
+        if (headless && reason !== undefined && w === world) {
+          endReason = reason;
+          scope.postMessage({ type: "error", code: "mind_failed", message: text });
+          finishHeadless();
+          return;
+        }
+        scope.postMessage({ type: "error", code: "mind_failed", message: text });
         pause();
       },
     );
   };
+
+  /** Why the headless run ended when it was not its end condition (a limit of a mind, a miss of a strict replay). */
+  let endReason: "limit_reached" | "cache_miss_strict" | undefined;
 
   const loop = () => {
     if (!running) return;
@@ -408,6 +433,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
       tickTimeMeanMs: mean,
       tickTimeP95Ms: p95,
       waiting: running ? waitingFor() : "none",
+      ...(endReason === undefined ? {} : { endReason }),
       recordsHandedOver: recorder?.recordsHandedOver ?? 0,
       backlogRecords: b?.records ?? 0,
       backlogBytes: b?.bytes ?? 0,
@@ -539,11 +565,30 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
   };
 
   /** Runs `count` ticks now (paused afterwards). Lockstep semantics: decisions are awaited between ticks. */
+  /**
+   * Waits for the minds' decisions of this tick and, while it waits, keeps reporting what the minds are doing (the panel rate): a stepped run has no loop, and without this a limit passed inside a decision
+   * left the step waiting for an answer nobody could see asked (T-128: no notice, the records of the decision held back).
+   */
+  const decideReporting = async () => {
+    if (headless) return world.decide();
+    let timer: unknown;
+    const poll = () => {
+      postPanels(false);
+      timer = clock.setTimer(poll, pollMs());
+    };
+    timer = clock.setTimer(poll, pollMs());
+    try {
+      await world.decide();
+    } finally {
+      clock.clearTimer(timer);
+    }
+  };
+
   const step = async (count: number) => {
     if (running) pause();
     for (let i = 0; i < count; i++) {
       if (gated()) await gateOpen(); // no await when the run may step: a step stays synchronous
-      if (world.outstandingCount > 0) await world.decide();
+      if (world.outstandingCount > 0) await decideReporting();
       scheduler.step();
       // A recorded run's backlog is judged tick by tick, so a long step waits for the writer too.
       if (recorder) {
@@ -611,7 +656,8 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
         return;
       }
     }
-    const r = ScenarioHostedWorld.load(m, () => clock.epochNow());
+    endReason = undefined;
+    const r = ScenarioHostedWorld.load(m, () => clock.epochNow(), m.minds === undefined ? {} : { minds: m.minds, headless: m.headless !== undefined, ...(mindCache === undefined ? {} : { mindCache }), keys: providerKeys });
     if (!r.ok) {
       scope.postMessage({ type: "error", code: r.error.code, message: r.error.message });
       return;
@@ -655,7 +701,7 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
     }
     scheduler = new Scheduler(world, world.dtS);
     // The run's declared time mode (run configuration, in its header and runConfigHash), not the previous one.
-    mode = r.value.loaded.timeMode;
+    mode = r.value.loaded.timeMode === "realtime" ? "realtime" : "lockstep"; // a latency-modeled run is paced as lockstep
     driver = makeDriver();
     degradations = 0;
     headless = m.headless === undefined ? undefined : { untilS: m.headless.untilS };
@@ -716,8 +762,18 @@ export function runSimHost(scope: SimScope, clock: SimClock, check?: SimMessageC
         port.start?.();
         break;
       }
+      case "providerKeys":
+        providerKeys = new Map(Object.entries(m.keys));
+        break;
+      case "cachePort":
+        mindCache = new RemoteMindCache(m.port as CachePortLike);
+        break;
       case "load":
         load(m);
+        break;
+      case "limitAnswer":
+        // The researcher's answer to a limit that paused the run: the mind's decision, which the world has been waiting for, goes on or ends the run.
+        if (m.runId === world.runId && world.answerLimit(m.action === "raise" ? { agentId: m.agentId, limit: m.limit, action: "raise", value: m.value } : { agentId: m.agentId, limit: m.limit, action: "stop" })) postMinds(true);
         break;
       case "view":
         viewed = m.agentId;

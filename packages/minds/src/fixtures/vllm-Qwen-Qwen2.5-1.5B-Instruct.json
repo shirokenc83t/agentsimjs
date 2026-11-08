@@ -1,0 +1,442 @@
+{
+  "server": "vllm",
+  "version": "0.32.0",
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "summary": {
+    "models": [
+      "Qwen/Qwen2.5-1.5B-Instruct"
+    ],
+    "plain": {
+      "ok": true,
+      "text": "Hello! How can I assist you today?"
+    },
+    "structured": {
+      "ok": true,
+      "valid": true
+    },
+    "tools": {
+      "asked": true,
+      "answered": true
+    },
+    "usage": {
+      "reported": true
+    },
+    "wrongModel": {
+      "error": "http_error 404: the server does not know this address or model (status 404)"
+    }
+  },
+  "exchanges": [
+    {
+      "name": "GET /v1/models#1",
+      "request": {
+        "method": "GET",
+        "path": "/v1/models"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "object": "list",
+          "data": [
+            {
+              "id": "Qwen/Qwen2.5-1.5B-Instruct",
+              "object": "model",
+              "created": 1793355874,
+              "owned_by": "vllm",
+              "root": "Qwen/Qwen2.5-1.5B-Instruct",
+              "parent": null,
+              "max_model_len": 8192,
+              "permission": [
+                {
+                  "id": "modelperm-b48b7ed8a05e76ea",
+                  "object": "model_permission",
+                  "created": 1793355874,
+                  "allow_create_engine": false,
+                  "allow_sampling": true,
+                  "allow_logprobs": true,
+                  "allow_search_indices": false,
+                  "allow_view": true,
+                  "allow_fine_tuning": false,
+                  "organization": "*",
+                  "group": null,
+                  "is_blocking": false
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#2",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Say hello in one short sentence."
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-bb365b182eef1183",
+          "object": "chat.completion",
+          "created": 1793355874,
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Hello! How can I assist you today?",
+                "refusal": null,
+                "annotations": null,
+                "audio": null,
+                "function_call": null,
+                "reasoning": null
+              },
+              "logprobs": null,
+              "finish_reason": "stop",
+              "stop_reason": null,
+              "token_ids": null,
+              "routed_experts": null
+            }
+          ],
+          "service_tier": null,
+          "system_fingerprint": "vllm-0.32.0-4730247d",
+          "usage": {
+            "prompt_tokens": 36,
+            "total_tokens": 46,
+            "completion_tokens": 10,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          },
+          "prompt_logprobs": null,
+          "prompt_token_ids": null,
+          "prompt_text": null,
+          "kv_transfer_params": null,
+          "ec_transfer_params": null,
+          "metrics": null
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#3",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Answer with the JSON object {\"ok\": true}."
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64,
+          "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "answer",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-9de62518b70a4d0e",
+          "object": "chat.completion",
+          "created": 1793355875,
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "{\"ok\":true}",
+                "refusal": null,
+                "annotations": null,
+                "audio": null,
+                "function_call": null,
+                "reasoning": null
+              },
+              "logprobs": null,
+              "finish_reason": "stop",
+              "stop_reason": null,
+              "token_ids": null,
+              "routed_experts": null
+            }
+          ],
+          "service_tier": null,
+          "system_fingerprint": "vllm-0.32.0-4730247d",
+          "usage": {
+            "prompt_tokens": 39,
+            "total_tokens": 45,
+            "completion_tokens": 6,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          },
+          "prompt_logprobs": null,
+          "prompt_token_ids": null,
+          "prompt_text": null,
+          "kv_transfer_params": null,
+          "ec_transfer_params": null,
+          "metrics": null
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#4",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "messages": [
+            {
+              "role": "user",
+              "content": "How many apples are there? Use the tool get_number to find out."
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_number",
+                "description": "Returns the number the user asks about.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-b2246ff6c7c71f81",
+          "object": "chat.completion",
+          "created": 1793355875,
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "refusal": null,
+                "annotations": null,
+                "audio": null,
+                "function_call": null,
+                "tool_calls": [
+                  {
+                    "id": "chatcmpl-tool-ad5d34e26a379ce7",
+                    "type": "function",
+                    "function": {
+                      "name": "get_number",
+                      "arguments": "{}"
+                    }
+                  }
+                ],
+                "reasoning": null
+              },
+              "logprobs": null,
+              "finish_reason": "tool_calls",
+              "stop_reason": null,
+              "token_ids": null,
+              "routed_experts": null
+            }
+          ],
+          "service_tier": null,
+          "system_fingerprint": "vllm-0.32.0-4730247d",
+          "usage": {
+            "prompt_tokens": 169,
+            "total_tokens": 185,
+            "completion_tokens": 16,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          },
+          "prompt_logprobs": null,
+          "prompt_token_ids": null,
+          "prompt_text": null,
+          "kv_transfer_params": null,
+          "ec_transfer_params": null,
+          "metrics": null
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#5",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "messages": [
+            {
+              "role": "user",
+              "content": "How many apples are there? Use the tool get_number to find out."
+            },
+            {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "id": "chatcmpl-tool-ad5d34e26a379ce7",
+                  "type": "function",
+                  "function": {
+                    "name": "get_number",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "chatcmpl-tool-ad5d34e26a379ce7",
+              "name": "get_number",
+              "content": "{\"number\":7}"
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_number",
+                "description": "Returns the number the user asks about.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "chatcmpl-b88a3ea48a8c05af",
+          "object": "chat.completion",
+          "created": 1793355875,
+          "model": "Qwen/Qwen2.5-1.5B-Instruct",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "There are 7 apples.",
+                "refusal": null,
+                "annotations": null,
+                "audio": null,
+                "function_call": null,
+                "reasoning": null
+              },
+              "logprobs": null,
+              "finish_reason": "stop",
+              "stop_reason": null,
+              "token_ids": null,
+              "routed_experts": null
+            }
+          ],
+          "service_tier": null,
+          "system_fingerprint": "vllm-0.32.0-4730247d",
+          "usage": {
+            "prompt_tokens": 207,
+            "total_tokens": 214,
+            "completion_tokens": 7,
+            "prompt_tokens_details": null,
+            "completion_tokens_details": null
+          },
+          "prompt_logprobs": null,
+          "prompt_token_ids": null,
+          "prompt_text": null,
+          "kv_transfer_params": null,
+          "ec_transfer_params": null,
+          "metrics": null
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#6",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "no-such-model-xyz",
+          "messages": [
+            {
+              "role": "user",
+              "content": "hi"
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64,
+          "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "answer",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 404,
+        "body": {
+          "error": {
+            "message": "The model `no-such-model-xyz` does not exist. Valid aliases: Qwen/Qwen2.5-1.5B-Instruct.",
+            "type": "NotFoundError",
+            "param": "model",
+            "code": 404
+          }
+        }
+      }
+    }
+  ]
+}

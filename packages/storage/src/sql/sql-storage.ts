@@ -1,8 +1,10 @@
 import { err, isValid, ok, type Result } from "@agentsim/core";
 import { firstNonMonotonicRecord, formatRunId, isValidTraceRecord, RunHeader, type DerivedRun, type RunStatus, type TraceRecord } from "@agentsim/trace";
 import type {
+  CacheOutcome,
   CachedResponse,
   DocumentSummary,
+  LibraryStore,
   ResponseCache,
   RunConfigStore,
   RunConfigSummary,
@@ -20,7 +22,7 @@ import type {
   TraceStore,
   UserDataStore,
 } from "../ports.ts";
-import { checkRunConfigPreset, checkScenarioEnvelope } from "../scenario-envelope.ts";
+import { checkLibraryDocument, checkRunConfigPreset, checkScenarioEnvelope } from "../scenario-envelope.ts";
 import { checkRunInputs, RUN_INPUT_LIMITS, type RunInputError, type StoredRunInput } from "../run-inputs.ts";
 import { checkRunRecording } from "../recording.ts";
 import { checkRunDerived, checkRunReferences } from "../run-references.ts";
@@ -42,6 +44,7 @@ type RunRow = {
   scenario_id: string | null; scenario_version: number | null; run_config: string | null;
   run_config_hash: string | null; effective_config_hash: string | null; simulator_version: string | null;
   ideal_agents: string | null; recording: string | null; recording_profile: string | null; recording_profile_hash: string | null; imported_from: string | null; derived: string | null;
+  minds_run_mode: string | null; not_reproducible_from_tick: number | null;
 };
 
 const opt = <K extends string, V>(key: K, v: V | null | undefined): { [P in K]?: V } =>
@@ -72,6 +75,8 @@ function rowToRun(r: RunRow): RunHeader {
     ...opt("recordingProfileHash", r.recording_profile_hash),
     ...opt("importedFrom", r.imported_from),
     ...opt("derived", r.derived === null ? null : (JSON.parse(r.derived) as DerivedRun)),
+    ...opt("mindsRunMode", r.minds_run_mode as RunHeader["mindsRunMode"] | null),
+    ...opt("notReproducibleFromTick", r.not_reproducible_from_tick),
   };
 }
 
@@ -209,8 +214,8 @@ class SqlRunStore implements RunStore {
     this.db.run(
       `INSERT INTO runs (run_id, schema_version, created_at_wall_ms, label, scenario, seed, status,
                          scenario_id, scenario_version, run_config, run_config_hash, effective_config_hash, simulator_version, ideal_agents,
-                         recording, recording_profile, recording_profile_hash, imported_from, derived)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                         recording, recording_profile, recording_profile_hash, imported_from, derived, minds_run_mode, not_reproducible_from_tick)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         header.runId, header.schemaVersion, header.createdAtWallMs, header.label, header.scenario ?? null, header.seed ?? null, header.status,
         header.scenarioId ?? null, header.scenarioVersion ?? null, header.runConfig === undefined ? null : JSON.stringify(header.runConfig),
@@ -218,6 +223,7 @@ class SqlRunStore implements RunStore {
         header.idealAgents === undefined ? null : JSON.stringify(header.idealAgents),
         header.recording ?? null, header.recordingProfile === undefined ? null : JSON.stringify(header.recordingProfile), header.recordingProfileHash ?? null,
         header.importedFrom ?? null, header.derived === undefined ? null : JSON.stringify(header.derived),
+        header.mindsRunMode ?? null, header.notReproducibleFromTick ?? null,
       ],
     );
     return ok(undefined);
@@ -239,6 +245,13 @@ class SqlRunStore implements RunStore {
   async setStatus(runId: string, status: RunStatus) {
     const { changes } = this.db.run("UPDATE runs SET status = ? WHERE run_id = ?", [status, runId]);
     return changes === 0 ? err({ code: "unknown_run" as const, message: `unknown run ${runId}` }) : ok(undefined);
+  }
+
+  async markNotReproducible(runId: string, fromTick: number) {
+    if (!this.db.get("SELECT 1 AS x FROM runs WHERE run_id = ?", [runId])) return err({ code: "unknown_run" as const, message: `unknown run ${runId}` });
+    // The first call that missed the cache is the one the header names: a later mark does not move it.
+    this.db.run("UPDATE runs SET not_reproducible_from_tick = ? WHERE run_id = ? AND not_reproducible_from_tick IS NULL", [fromTick, runId]);
+    return ok(undefined);
   }
 
   async appendInputs(runId: string, inputs: readonly StoredRunInput[]): Promise<Result<void, RunInputError>> {
@@ -299,17 +312,28 @@ class SqlRunStore implements RunStore {
 class SqlResponseCache implements ResponseCache {
   constructor(private readonly db: SqlDriver) {}
 
-  async get(key: string): Promise<CachedResponse | undefined> {
-    const r = this.db.get<{ model: string; value: string; created_at_wall_ms: number }>(
-      "SELECT model, value, created_at_wall_ms FROM response_cache WHERE key = ?", [key],
+  async get(key: string, preferRunId?: string): Promise<CachedResponse | undefined> {
+    const r = this.db.get<{ run_id: string; model: string; value: string; created_at_wall_ms: number; provider_kind: string | null; tools_hash: string | null; outcome: CacheOutcome | null; usage: string | null; latency_ms: number | null }>(
+      "SELECT run_id, model, value, created_at_wall_ms, provider_kind, tools_hash, outcome, usage, latency_ms FROM response_cache WHERE key = ? ORDER BY (run_id = ?) DESC, created_at_wall_ms DESC LIMIT 1", [key, preferRunId ?? ""],
     );
-    return r ? { model: r.model, value: JSON.parse(r.value) as unknown, createdAtWallMs: r.created_at_wall_ms } : undefined;
+    if (!r) return undefined;
+    return {
+      model: r.model,
+      value: JSON.parse(r.value) as unknown,
+      createdAtWallMs: r.created_at_wall_ms,
+      ...(r.run_id === "" ? {} : { runId: r.run_id }),
+      ...(r.provider_kind === null ? {} : { providerKind: r.provider_kind }),
+      ...(r.tools_hash === null ? {} : { toolsHash: r.tools_hash }),
+      ...(r.outcome === null ? {} : { outcome: r.outcome }),
+      ...(r.usage === null ? {} : { usage: JSON.parse(r.usage) as unknown }),
+      ...(r.latency_ms === null ? {} : { latencyMs: r.latency_ms }),
+    };
   }
 
   async put(key: string, entry: CachedResponse) {
     this.db.run(
-      "INSERT OR REPLACE INTO response_cache (key, model, value, created_at_wall_ms) VALUES (?, ?, ?, ?)",
-      [key, entry.model, JSON.stringify(entry.value ?? null), entry.createdAtWallMs],
+      "INSERT OR REPLACE INTO response_cache (key, run_id, model, value, created_at_wall_ms, provider_kind, tools_hash, outcome, usage, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [key, entry.runId ?? "", entry.model, JSON.stringify(entry.value ?? null), entry.createdAtWallMs, entry.providerKind ?? null, entry.toolsHash ?? null, entry.outcome ?? null, entry.usage === undefined ? null : JSON.stringify(entry.usage), entry.latencyMs ?? null],
     );
   }
 }
@@ -348,7 +372,7 @@ type DocumentRow = { id: string; version: number; name: string; document: string
 class SqlVersionedDocs {
   constructor(
     private readonly db: SqlDriver,
-    private readonly table: "scenarios" | "run_configs",
+    private readonly table: "scenarios" | "run_configs" | "mind_profiles" | "prompt_templates",
     private readonly nowWallMs: () => number,
   ) {}
 
@@ -455,6 +479,34 @@ class SqlRunConfigStore implements RunConfigStore {
   }
 }
 
+/** A library of versioned documents (mind profiles, prompt templates; schema v14): the run configuration presets' rules over its own table. */
+class SqlLibraryStore implements LibraryStore {
+  private readonly docs: SqlVersionedDocs;
+
+  constructor(db: SqlDriver, table: "mind_profiles" | "prompt_templates", nowWallMs: () => number) {
+    this.docs = new SqlVersionedDocs(db, table, nowWallMs);
+  }
+
+  async list(): Promise<DocumentSummary[]> {
+    return this.docs.list();
+  }
+
+  async get(id: string, version?: number): Promise<StoredDocument | undefined> {
+    return this.docs.get(id, version);
+  }
+
+  async saveVersion(doc: { readonly id: string; readonly name: string; readonly document: unknown }) {
+    const env = checkLibraryDocument(doc);
+    if (!env.ok) return env;
+    const { id, name, json, contentHash } = env.value;
+    return ok({ id, version: this.docs.insert(id, name, json, contentHash) });
+  }
+
+  async delete(id: string) {
+    return this.docs.tombstone(id) === 0 ? err({ code: "unknown_document" as const, message: `unknown document ${id}` }) : ok(undefined);
+  }
+}
+
 /** Builds the storage ports over a migrated SQL connection. */
 export function createSqlPorts(db: SqlDriver, nowWallMs: () => number): StoragePorts {
   return {
@@ -464,6 +516,8 @@ export function createSqlPorts(db: SqlDriver, nowWallMs: () => number): StorageP
     userData: new SqlUserDataStore(db, nowWallMs),
     scenarios: new SqlScenarioStore(db, nowWallMs),
     runConfigs: new SqlRunConfigStore(db, nowWallMs),
+    mindProfiles: new SqlLibraryStore(db, "mind_profiles", nowWallMs),
+    promptTemplates: new SqlLibraryStore(db, "prompt_templates", nowWallMs),
     snapshots: new SqlSnapshotStore(db),
     beliefFrames: new SqlBeliefFrameStore(db),
     metrics: new SqlMetricStore(db),

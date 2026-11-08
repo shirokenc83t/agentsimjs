@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, runCommand, step } from "./helpers.ts";
+import { layoutFacts, loadDemo, runCommand, step } from "./helpers.ts";
 
 // F3c M2, fix round 1 (U-016): the top bar at 1000 px in a live run, a replay and a derived replay. The workspace tabs never hide, the brand does not run into them, the replay segment is
 // not cut, and the palette key stays on screen: the bar gives way in steps (layout fold, theme word, brand name and run label), the tabs never.
@@ -35,6 +35,7 @@ async function checkBar(page: Page, width: number, where: string, replaying: boo
   expect(bar.brand?.r ?? Infinity, `${where}: the brand does not run into the tabs`).toBeLessThanOrEqual((bar.nav?.l ?? 0) + 1);
   expect(bar.overflow, `${where}: the bar does not overflow`).toBeLessThanOrEqual(1);
   expect(bar.key?.r ?? Infinity, `${where}: the palette key stays on screen`).toBeLessThanOrEqual(width);
+  if (replaying && (bar.segment?.cut ?? 0) > 1) console.log(`TOPBAR-FACTS ${where} ${await layoutFacts(page, 'header.top > *, [data-testid="replay-segment"], [data-testid="replay-segment"] *')}`);
   if (replaying) {
     expect(bar.segment, `${where}: the replay segment is there`).not.toBeNull();
     expect(bar.segment?.cut ?? 1, `${where}: the replay segment is not cut`).toBeLessThanOrEqual(1);

@@ -62,6 +62,8 @@ export interface RunStore {
   get(runId: string): Promise<RunHeader | undefined>;
   list(): Promise<RunSummary[]>;
   setStatus(runId: string, status: RunStatus): Promise<Result<void, CodedError<"unknown_run">>>;
+  /** Sets the header's `notReproducibleFromTick` (a replay-then-live run made a call the cache did not hold, from this tick) unless it is already set: the first miss stays. */
+  markNotReproducible(runId: string, fromTick: number): Promise<Result<void, CodedError<"unknown_run">>>;
   /**
    * Appends run inputs (researcher commands, ADR-0015 clarification): part of what the run ran, replayed to
    * reproduce it. Append-only; rejects the whole batch if one input is invalid, already stored, or out of order.
@@ -94,14 +96,27 @@ export interface RunSizes {
   readonly beliefFrames: SizeEntry;
 }
 
+/** How a model call ended (schema v14): an answer, an answer that failed validation, no answer in time, or a server or network error. */
+export type CacheOutcome = "ok" | "invalid" | "timeout" | "error";
+
 export interface CachedResponse {
   readonly model: string;
   readonly value: unknown;
   readonly createdAtWallMs: number;
+  /** Schema v14: what the call was and how it went. Absent on an entry written before v14. */
+  readonly providerKind?: string;
+  readonly toolsHash?: string;
+  readonly outcome?: CacheOutcome;
+  readonly usage?: unknown;
+  readonly latencyMs?: number;
+  /** Schema v16: the run the entry was recorded in (a replay reads its own run's entries first). Absent on an entry written before v16. */
+  readonly runId?: string;
 }
 
 export interface ResponseCache {
-  get(key: string): Promise<CachedResponse | undefined>;
+  /** The entry for the key: the one of `preferRunId` when it has one, else the latest of any run. */
+  get(key: string, preferRunId?: string): Promise<CachedResponse | undefined>;
+  /** Stored under the key and the run in the entry (`runId`, empty when absent): an entry of another run for the same key is kept. */
   put(key: string, entry: CachedResponse): Promise<void>;
 }
 
@@ -169,6 +184,14 @@ export interface RunConfigStore {
     Result<{ readonly id: string; readonly version: number }, CodedError<"invalid_document" | "too_large">>
   >;
   delete(id: string): Promise<Result<void, CodedError<"unknown_run_config">>>;
+}
+
+/** The library of mind profiles or of prompt templates (ADR-0036, schema v14): the same versioning rules as scenarios; callers validate the document with `@agentsim/minds`. */
+export interface LibraryStore {
+  list(): Promise<DocumentSummary[]>;
+  get(id: string, version?: number): Promise<StoredDocument | undefined>;
+  saveVersion(doc: { readonly id: string; readonly name: string; readonly document: unknown }): Promise<Result<{ readonly id: string; readonly version: number }, CodedError<"invalid_document" | "too_large">>>;
+  delete(id: string): Promise<Result<void, CodedError<"unknown_document">>>;
 }
 
 /** A blob of a run: a snapshot section or a belief keyframe, named by the 128-bit content hash of its bytes (ADR-0004 addition of 2026-10-18). */
@@ -298,6 +321,8 @@ export interface StoragePorts {
   readonly userData: UserDataStore;
   readonly scenarios: ScenarioStore;
   readonly runConfigs: RunConfigStore;
+  readonly mindProfiles: LibraryStore;
+  readonly promptTemplates: LibraryStore;
   readonly snapshots: SnapshotStore;
   readonly beliefFrames: BeliefFrameStore;
   readonly metrics: MetricStore;

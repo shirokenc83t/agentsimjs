@@ -2,6 +2,7 @@ import {
   ScriptBrain,
   SequenceBrain,
   type PositionedBrain,
+  type StatefulBrain,
   SnapshotWriter,
   readSnapshot,
   SectionRef,
@@ -33,6 +34,11 @@ export const RUN_SNAPSHOT_FORMAT = "agentsim-run-2";
 const RUN_SNAPSHOT_FORMAT_1 = "agentsim-run-1";
 
 /** A run whose parts a snapshot reads: the created run and its trace buffer. */
+/** A mind that keeps state a snapshot must carry and that is not one number (a System 2 mind: the use of its limits). */
+function isStateful(b: unknown): b is StatefulBrain {
+  return typeof b === "object" && b !== null && typeof (b as StatefulBrain).snapshotState === "function" && typeof (b as StatefulBrain).restoreState === "function";
+}
+
 /** A mind that holds its state as one number: a fixed script or a mission. */
 function isPositioned(b: unknown): b is PositionedBrain {
   return b instanceof ScriptBrain || b instanceof SequenceBrain;
@@ -55,7 +61,7 @@ interface RunSnapshotRoot {
   readonly observer: ObserverSnapshot | undefined;
   readonly trace: TraceCursor;
   /** The position of each script brain, by agent ID. */
-  readonly brains: readonly { readonly agentId: string; readonly position: number }[];
+  readonly brains: readonly { readonly agentId: string; readonly position: number; /** The state of a System 2 mind (its use of its limits, the limits raised, its notes of the run), which the response cache does not replace. */ readonly state?: unknown }[];
 }
 
 /**
@@ -67,7 +73,9 @@ export function snapshotRun(run: SnapshotableRun, options: SnapshotWriterOptions
   const brains = [...run.brains]
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
     .map(([agentId, brain]) => {
-      if (!isPositioned(brain)) throw new Error(`cannot snapshot a run whose mind of ${agentId} (${brain.id}) is not a script or a mission: external minds are covered by the response cache from F4`);
+      // A System 2 mind has no position: what it decides comes back from the response cache, and the little state it holds (what it has used of its limits) is its own.
+      if (isStateful(brain)) return { agentId, position: 0, state: brain.snapshotState() };
+      if (!isPositioned(brain)) throw new Error(`cannot snapshot a run whose mind of ${agentId} (${brain.id}) is not a script, a mission or a mind that keeps its state`);
       return { agentId, position: brain.position };
     });
   const { beliefGroupChunks, ...writerOptions } = options;
@@ -112,6 +120,10 @@ export function restoreRun(target: SnapshotableRun, bytes: Uint8Array, options: 
   target.trace.restoreCursor(root.trace);
   for (const b of root.brains) {
     const brain = target.brains.get(b.agentId);
+    if (isStateful(brain) && b.state !== undefined) {
+      brain.restoreState(b.state);
+      continue;
+    }
     if (!isPositioned(brain)) throw new RangeError(`snapshot has a script position for ${b.agentId}, which has no script or mission mind in this run`);
     brain.restorePosition(b.position);
   }

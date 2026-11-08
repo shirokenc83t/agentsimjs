@@ -118,7 +118,7 @@ export function KnowledgeStrip(props: { band: KnowledgeBand; marks: readonly Mar
           }}
         >
           <svg viewBox="0 0 9 9" width="9" height="9" aria-hidden="true">
-            {m.kind === "failure" ? <path d="M1 1 L8 8 M8 1 L1 8" /> : <path d="M4.5 1 L8.2 8 L0.8 8 Z" />}
+            {m.kind === "failure" ? <path d="M1 1 L8 8 M8 1 L1 8" /> : m.kind === "raise" ? <path d="M4.5 0.8 L8.2 4.5 L4.5 8.2 L0.8 4.5 Z" /> : <path d="M4.5 1 L8.2 8 L0.8 8 Z" />}
           </svg>
         </button>
       ))}

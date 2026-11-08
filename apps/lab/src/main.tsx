@@ -4,11 +4,14 @@ import { initTheme, initTooltips, UiThemeProvider, useUiContext } from "@agentsi
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
-import { connectRecorder, resolveEnvironment } from "./config/environment.ts";
+import { connectMindCache, connectRecorder, resolveEnvironment } from "./config/environment.ts";
+import { providerStore } from "./config/providers.ts";
 import { probeEnabled } from "./probe.ts";
+import { mindsFixture } from "./shell/minds-fixture.ts";
+import { setMinds } from "./shell/minds-status.ts";
 import type { RunSource } from "./sim/run-source.ts";
 import { ServicesProvider } from "./services.tsx";
-import { loadLiveSource } from "./workspaces/registry.tsx";
+import { loadLiveSource, loadRunController } from "./workspaces/registry.tsx";
 
 // TypeBox is configured lazily, by the first validate()/isValid() call (ADR-0018 addition 2026-10-08): keeping
 // it out of the entry keeps the checker out of the initial chunk. Lint allows the checker only in that wrapper.
@@ -21,6 +24,10 @@ const env = resolveEnvironment(import.meta.env["VITE_AGENTSIM_ENV"] as string | 
 const storage = env.createStorage();
 const sim = env.createSim(10);
 connectRecorder(sim, storage);
+connectMindCache(sim, storage);
+// The provider keys reach the sim worker in a message of their own, whenever they change; the entries and the remembered keys are read once storage is open.
+providerStore.connectKeys((keys) => sim.setProviderKeys(keys));
+void storage.ready().then(() => providerStore.load(storage.ports.userData), () => undefined);
 
 /** The panels' run source: the live run, or a recorded run while a replay session is open. */
 function Root() {
@@ -46,6 +53,18 @@ if (probeEnabled()) {
     selection: () => useUiContext.getState().selection,
     executedPath: (id) => Array.from(sim.executedPath(id).points),
     records: () => sim.records(),
+    mindsFixture: (state) => setMinds(mindsFixture(state)),
+    sql: async (statement, maxRows = 20_000) => {
+      const r = await storage.sql.run(statement, { maxRows, timeoutMs: 20_000 }).result;
+      if (!r.ok) throw new Error(`${r.error.code}: ${r.error.message}`);
+      return { columns: r.value.columns, rows: r.value.rows, cellsCut: r.value.cellsCut };
+    },
+    startMindsRun: async (o) => {
+      const saved = await storage.ports.mindProfiles.saveVersion({ id: "probe-llm", name: "Probe", document: { schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: o.provider, model: o.model, promptTemplate: { id: "default", version: 1 }, ...(o.limits === undefined ? {} : { limits: o.limits }) } } });
+      if (!saved.ok) throw new Error(saved.error.message);
+      const { startPresetRun } = await loadRunController();
+      await startPresetRun(storage, sim, "f2-discovery", (cfg) => ({ ...(cfg as object), minds: { byAgent: { scout: { s2: { profile: { id: "probe-llm", version: saved.value.version }, mission: o.mission ?? "Wait for events." } } } } }));
+    },
   };
 }
 

@@ -2,7 +2,10 @@ import type { PresetId, SimLoadedMessage } from "@agentsim/core";
 import { F1_DEMO_ID, F1_REFERENCE_WORLD_ID, F2_DISCOVERY_ID, F2_PRIOR_REFERENCE_ID, F2_TWENTY_AGENTS_ID, f1DemoRunConfig, f1ReferenceWorldRunConfig, f2PriorRunConfig, f2RunConfig } from "@agentsim/scenarios";
 import type { StorageClient, StoredRunInput } from "@agentsim/storage";
 import { recordingProfileHash, TRACE_SCHEMA_VERSION, type RunHeader } from "@agentsim/trace";
+import { providerStore } from "../config/providers.ts";
 import { baseLabel, rerunLabel } from "./headless-names.ts";
+import { mindsSpecFor } from "./minds-spec.ts";
+import { followRunForReplay } from "./remote-cache.ts";
 import { DEFAULT_RECORDING, takeHeadlessChoice, takeRecordingChoice, type RecordingChoice } from "./recording-choice.ts";
 import type { SimClient } from "./sim-client.ts";
 import { SIMULATOR_VERSION } from "./simulator-version.ts";
@@ -158,14 +161,28 @@ export async function startRun(
   await recorder?.flushed();
   recorder?.dispose();
   recorder = new InputRecorder(storage, sim, runId);
-  const loaded = await sim.load({ runId, scenario, scenarioVersion, runConfig, ...(inputs.length > 0 ? { inputs: [...inputs] } : {}), recording, ...(headless === undefined ? {} : { headless: headless.untilS === undefined ? {} : { untilS: headless.untilS } }) });
+  // The library and the providers a run with System 2 minds needs (nothing when no agent has one); the keys travel apart.
+  const minds = await mindsSpecFor(storage.ports, providerStore.list(), runConfig);
+  const loaded = await sim.load({ runId, scenario, scenarioVersion, runConfig, ...(minds === undefined ? {} : { minds }), ...(inputs.length > 0 ? { inputs: [...inputs] } : {}), recording, ...(headless === undefined ? {} : { headless: headless.untilS === undefined ? {} : { untilS: headless.untilS } }) });
   // Wall time is run metadata only; it never reaches the simulation (ADR-0002).
   const header = headerOf(loaded, runConfig, label, Date.now(), SIMULATOR_VERSION, recording);
+  await followForReplay(storage, runId, header.runConfigHash, runConfig);
   const created = await storage.ports.runs.create(header);
   if (!created.ok) throw new Error(`${created.error.code}: ${created.error.message}`);
   await recorder.headerCreated();
   if (headless !== undefined) markWhenDone(storage, sim, runId);
   return { loaded, header, scenario, runConfig, ...(headless === undefined ? {} : { headless }) };
+}
+
+/**
+ * A run that replays its minds' answers (`replay-strict`, `replay-then-live`) reads the answers of the latest earlier run of the same configuration that made them live (the configuration hash leaves the run mode
+ * out, so a replay and its live run have the same one); two live runs that start from the same request each keep their own answers (the cache is per run).
+ */
+async function followForReplay(storage: StorageClient, runId: string, runConfigHash: string | undefined, runConfig: unknown): Promise<void> {
+  const modeOf = (c: unknown): string => (c as { mindsRunMode?: string } | null | undefined)?.mindsRunMode ?? "live";
+  if (modeOf(runConfig) === "live" || runConfigHash === undefined) return followRunForReplay(undefined);
+  const earlier = (await storage.ports.runs.list()).filter((r) => r.runId !== runId && r.runConfigHash === runConfigHash && modeOf(r.runConfig) === "live");
+  followRunForReplay(earlier.sort((a, b) => a.createdAtWallMs - b.createdAtWallMs).at(-1)?.runId);
 }
 
 /**
@@ -202,12 +219,12 @@ export async function resimulatableRuns(storage: StorageClient): Promise<{ runId
 }
 
 /** Loads a built-in preset (built in the sim worker) with its default run configuration, as a new run. */
-export async function startPresetRun(storage: StorageClient, sim: SimClient, preset: PresetId): Promise<LabRun> {
+export async function startPresetRun(storage: StorageClient, sim: SimClient, preset: PresetId, patchRunConfig?: (runConfig: unknown) => unknown): Promise<LabRun> {
   if (storage.status().state !== "ready") throw new Error("storage_unavailable: runs need storage (see the status line)");
   const p = PRESETS[preset];
   const built = await sim.buildPreset(preset);
   const version = await presetVersion(storage, p.id, built.document, built.contentHash);
-  return startRun(storage, sim, built.document, version, p.runConfig(version), p.label);
+  return startRun(storage, sim, built.document, version, patchRunConfig === undefined ? p.runConfig(version) : patchRunConfig(p.runConfig(version)), p.label);
 }
 
 /** Loads the built-in F1 demo scenario with its default run configuration. */

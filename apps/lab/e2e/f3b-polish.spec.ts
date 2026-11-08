@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { loadDemo, loadF2, openWorkspace, runCommand, step } from "./helpers.ts";
+import { layoutFacts, loadDemo, loadF2, openWorkspace, runCommand, step } from "./helpers.ts";
 
 // F3b M5 polish (the designer's review of 2026-10-25): nothing is cut off, empty screens say what goes there, the shell keeps its shape. What can be measured is measured here.
 
@@ -128,6 +128,7 @@ async function playerHasNoOverlap(page: Page, width: number, where: string): Pro
       return { name: `${e.tagName}.${e.className.toString().slice(0, 24)}`, l: r.left, r: r.right, t: r.top, b: r.bottom };
     });
   });
+  if (boxes.some((a) => a.r > width + 1)) console.log(`PLAYER-FACTS ${where} ${await layoutFacts(page, '[data-testid="player"] > *, [data-testid="player"] .telem > *')}`);
   for (const a of boxes) expect(a.r, `${where}: ${a.name} runs past the window`).toBeLessThanOrEqual(width + 1);
   const top = boxes.filter((b) => !b.name.includes("tile")); // the player's own children, side by side
   for (let i = 0; i < top.length; i++)

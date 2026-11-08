@@ -1,0 +1,327 @@
+{
+  "server": "synthetic",
+  "version": "hand-written in the shape of the OpenAI dialect; replaced by recordings of Ollama, vLLM and SGLang (T-120)",
+  "model": "synthetic-1b",
+  "summary": {
+    "models": [
+      "synthetic-1b"
+    ],
+    "plain": {
+      "ok": true,
+      "text": "Hello there!"
+    },
+    "structured": {
+      "ok": true,
+      "valid": true
+    },
+    "tools": {
+      "asked": true,
+      "answered": true
+    },
+    "usage": {
+      "reported": true
+    },
+    "wrongModel": {
+      "error": "http_error 404: the server does not know this address or model (status 404)"
+    }
+  },
+  "exchanges": [
+    {
+      "name": "GET /v1/models#1",
+      "request": {
+        "method": "GET",
+        "path": "/v1/models"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "object": "list",
+          "data": [
+            {
+              "id": "synthetic-1b",
+              "object": "model"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#2",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "synthetic-1b",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Say hello in one short sentence."
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Hello there!"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 31,
+            "completion_tokens": 7,
+            "total_tokens": 38
+          }
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#3",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "synthetic-1b",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Answer with the JSON object {\"ok\": true}."
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64,
+          "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "answer",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "{\"ok\": true}"
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 31,
+            "completion_tokens": 7,
+            "total_tokens": 38
+          }
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#4",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "synthetic-1b",
+          "messages": [
+            {
+              "role": "user",
+              "content": "How many apples are there? Use the tool get_number to find out."
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_number",
+                "description": "Returns the number the user asks about.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [
+                  {
+                    "id": "call_synth_1",
+                    "type": "function",
+                    "function": {
+                      "name": "get_number",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              "finish_reason": "tool_calls"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 31,
+            "completion_tokens": 7,
+            "total_tokens": 38
+          }
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#5",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "synthetic-1b",
+          "messages": [
+            {
+              "role": "user",
+              "content": "How many apples are there? Use the tool get_number to find out."
+            },
+            {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "id": "call_synth_1",
+                  "type": "function",
+                  "function": {
+                    "name": "get_number",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "call_synth_1",
+              "name": "get_number",
+              "content": "{\"number\":7}"
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_number",
+                "description": "Returns the number the user asks about.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": false
+                }
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "There are 7 apples."
+              },
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 31,
+            "completion_tokens": 7,
+            "total_tokens": 38
+          }
+        }
+      }
+    },
+    {
+      "name": "POST /v1/chat/completions#6",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "body": {
+          "model": "no-such-model-xyz",
+          "messages": [
+            {
+              "role": "user",
+              "content": "hi"
+            }
+          ],
+          "stream": false,
+          "temperature": 0,
+          "max_tokens": 64,
+          "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "answer",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "ok"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 404,
+        "body": {
+          "error": {
+            "message": "model not found",
+            "type": "invalid_request_error"
+          }
+        }
+      }
+    }
+  ]
+}

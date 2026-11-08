@@ -5,7 +5,7 @@ import { contentHash64 } from "../numerics/content-hash.ts";
 import { StateHasher } from "../numerics/state-hash.ts";
 import type { Steppable, TickContext } from "../time/scheduler.ts";
 import type { Scheduler } from "../time/scheduler.ts";
-import type { Brain, DecisionEnvelope, DecisionRequest, SelfView, TimerOp } from "./brain.ts";
+import type { Brain, ComputeCaller, ComputePort, DecisionEnvelope, DecisionRequest, NoteOp, SelfView, TimerOp } from "./brain.ts";
 import { Inbox, isControl, type AgentEvent, type DecisionEvent, type InboxSnapshot } from "./events.ts";
 import { EMPTY_MIND_VIEW, round2 as r2, round3 as r3, type MindViewPort } from "./mind-view.ts";
 
@@ -35,6 +35,14 @@ export interface WorldParts {
   readonly minDecisionIntervalS?: number;
   /** The beliefs and space parts of a request (F2 M2d), from the agent's own map. None = empty views (core tests). */
   readonly mindView?: MindViewPort;
+  /** The compute tools a mind may ask for while it decides (F4 M2); none = a mind that asks is told the tool is not available. */
+  readonly compute?: ComputePort;
+  /**
+   * The latency model of the `latency-modeled` time mode (ADR-0003 addition of 2026-10-29): how many seconds of sim time a mind's decision took, from the answer and the request. A decision is then applied at
+   * `requestTick + max(1, ceil(latencyS / dtS))` instead of at the next tick; meanwhile the world runs, the agent's action goes on, its events wait in its inbox and no new request is made for it.
+   * Absent: every decision is applied at the next tick (lockstep).
+   */
+  readonly latency?: (agentId: string, envelope: DecisionEnvelope, request: DecisionRequest) => number;
   /**
    * Genesis (default true): at construction each agent with a brain gets a `start` event and its first decision request,
    * and both are traced. `false` builds the world as the target of a restore: none of that happens, and `restore` puts the
@@ -64,10 +72,12 @@ export interface WorldSnapshot {
   readonly prevSoc: readonly number[];
   /** Active timers of each agent's mind: (tag, due tick), sorted by tag. */
   readonly timers: readonly (readonly (readonly [string, number])[])[];
+  /** The agents' notebooks by agent index; present only when one is not empty (a snapshot of a run without notes is as it was). */
+  readonly notebooks?: readonly string[];
   /** Space summaries already traced, by hash, sorted. */
   readonly seenSpaces: readonly string[];
   /** Decision requests asked and not yet applied, by agent index, with the answer once it arrived. */
-  readonly slots: readonly ({ readonly agentId: string; readonly request: DecisionRequest; readonly envelope?: DecisionEnvelope } | undefined)[];
+  readonly slots: readonly ({ readonly agentId: string; readonly request: DecisionRequest; readonly envelope?: DecisionEnvelope; readonly applyTick?: number } | undefined)[];
   readonly unanswered: number;
   readonly inputLog: readonly RunInput[];
   readonly nextInput: number;
@@ -89,7 +99,11 @@ export interface RunInput {
 interface Pending {
   readonly agentId: string;
   readonly request: DecisionRequest;
+  /** The id of the record that traced the request: what the records of the mind's call and of the decision name. Not kept in a snapshot (a restored request is answered already or asked again). */
+  readonly requestRecordId?: string;
   envelope?: DecisionEnvelope;
+  /** `latency-modeled` only: the tick at which the answer is applied; absent, at the next tick. */
+  applyTick?: number;
 }
 
 function deepRound(v: unknown): unknown {
@@ -119,6 +133,8 @@ function roundEvent(e: DecisionEvent): DecisionEvent {
 const TIMER_MAX_ACTIVE = 8;
 const TIMER_MIN_DELAY_S = 0.1;
 const TIMER_MAX_DELAY_S = 3600;
+/** The notebook's limit (ADR-0036 addition of 2026-10-29); the same number as the `note` capability's description. */
+const NOTEBOOK_MAX_CHARS = 2000;
 /** Timer operations processed per decision (a mind cannot flood the brain phase); the rest are rejected. */
 const TIMER_OPS_PER_DECISION = 16;
 
@@ -153,6 +169,8 @@ export class World implements Steppable {
   private readonly minDecisionIntervalS: number;
   /** Active timers of each agent's mind by index: tag → the tick at which it fires (agent state: hashed when any). */
   private readonly timers: Map<string, number>[];
+  /** Each agent's notebook (agent state: hashed only when not empty, in snapshots). */
+  private readonly notebooks: string[];
   /** The run's step in seconds, from the last tick (timers are set in whole ticks). */
   private dtS = 0.1;
   /** Space summaries already recorded in the trace, by 64-bit content hash (see `traceRequest`). */
@@ -183,6 +201,7 @@ export class World implements Steppable {
     this.prevSoc = agents.map((a) => a.battery.soc);
     this.minDecisionIntervalS = parts.minDecisionIntervalS ?? 1;
     this.timers = agents.map(() => new Map<string, number>());
+    this.notebooks = agents.map(() => "");
     this.slots = agents.map(() => undefined);
     if (parts.genesis !== false) {
       for (let i = 0; i < agents.length; i++) {
@@ -214,8 +233,9 @@ export class World implements Steppable {
       lastRequestS: [...this.lastRequestS],
       prevSoc: [...this.prevSoc],
       timers: this.timers.map((m) => [...m].sort(byTag)),
+      ...(this.notebooks.some((t) => t !== "") ? { notebooks: [...this.notebooks] } : {}),
       seenSpaces: [...this.seenSpaces].sort(),
-      slots: this.slots.map((p) => (p ? { agentId: p.agentId, request: p.request, ...(p.envelope ? { envelope: p.envelope } : {}) } : undefined)),
+      slots: this.slots.map((p) => (p ? { agentId: p.agentId, request: p.request, ...(p.envelope ? { envelope: p.envelope } : {}), ...(p.applyTick === undefined ? {} : { applyTick: p.applyTick }) } : undefined)),
       unanswered: this.unanswered,
       inputLog: this.inputLog.map((i) => ({ ...i })),
       nextInput: this.nextInput,
@@ -246,9 +266,10 @@ export class World implements Steppable {
       const mine = this.timers[i] as Map<string, number>;
       mine.clear();
       for (const [tag, due] of s.timers[i] as readonly (readonly [string, number])[]) mine.set(tag, due);
+      this.notebooks[i] = s.notebooks?.[i] ?? "";
       const slot = s.slots[i];
       if (slot && slot.agentId !== a.id) throw new RangeError(`snapshot request of slot ${i} is for ${slot.agentId}, the world's agent is ${a.id}`);
-      this.slots[i] = slot ? { agentId: slot.agentId, request: slot.request, ...(slot.envelope ? { envelope: slot.envelope } : {}) } : undefined;
+      this.slots[i] = slot ? { agentId: slot.agentId, request: slot.request, ...(slot.envelope ? { envelope: slot.envelope } : {}), ...(slot.applyTick === undefined ? {} : { applyTick: slot.applyTick }) } : undefined;
     }
     this.seenSpaces.clear();
     for (const h of s.seenSpaces) this.seenSpaces.add(h);
@@ -302,17 +323,24 @@ export class World implements Steppable {
   async decide(): Promise<void> {
     const open: Pending[] = [];
     for (const p of this.slots) if (p && !p.envelope) open.push(p);
-    const settled = await Promise.allSettled(open.map((p) => (this.brainAt[this.indexOf(p.agentId)] as Brain).decide(p.request)));
+    const settled = await Promise.allSettled(open.map((p) => (this.brainAt[this.indexOf(p.agentId)] as Brain).decide(p.request, { ...(p.requestRecordId === undefined ? {} : { requestRecordId: p.requestRecordId }), trace: this.parts.trace, ...(this.parts.compute === undefined ? {} : { compute: this.computeFor(p.request) }) })));
     const failures: string[] = [];
     for (let i = 0; i < open.length; i++) {
       const p = open[i] as Pending;
       const r = settled[i] as PromiseSettledResult<DecisionEnvelope>;
       if (r.status === "fulfilled") {
         p.envelope = r.value;
+        // The tick the answer is applied at: the next one, or later when the run models the mind's latency.
+        if (this.parts.latency !== undefined) p.applyTick = p.request.tick + Math.max(1, Math.ceil(this.parts.latency(p.agentId, r.value, p.request) / this.dtS - 1e-9));
         this.unanswered--;
       } else failures.push(p.agentId);
     }
-    if (failures.length > 0) throw new Error(`brains failed to decide for ${failures.join(", ")}`);
+    if (failures.length > 0) {
+      // What the first mind said (a stable error of an LLM mind: `cache_miss_strict`, `limit_reached`) is in the message, so a host can tell why the run stopped.
+      const first = settled.find((x): x is PromiseRejectedResult => x.status === "rejected");
+      const why = first === undefined ? "" : `: ${first.reason instanceof Error ? first.reason.message : String(first.reason)}`;
+      throw new Error(`brains failed to decide for ${failures.join(", ")}${why}`, first === undefined ? undefined : { cause: first.reason });
+    }
   }
 
   step(ctx: TickContext): void {
@@ -350,6 +378,8 @@ export class World implements Steppable {
     for (let i = 0; i < n; i++) {
       const p = this.slots[i];
       if (!p) continue;
+      // An answer that is not due yet waits where it is: the agent keeps what it is doing and no new request is made for it.
+      if (p.applyTick !== undefined && p.applyTick > tick) continue;
       this.slots[i] = undefined;
       const agent = this.agents[i] as SimAgent;
       const brain = this.brainAt[i] as Brain;
@@ -357,6 +387,8 @@ export class World implements Steppable {
       const d = env.decision;
       const slot = mindSlot(brain);
       const decisionId = trace.emit({
+        // An S2 mind's decision names the request it answered as its cause (ADR-0005 addition of 2026-10-29); the records of its model calls are children of that request.
+        ...(slot === "S2" && p.requestRecordId !== undefined ? { causeIds: [p.requestRecordId] } : {}),
         source: `${agent.id}/${slot === "S1" ? "s1" : "s2"}`,
         simTime: simTimeS,
         kind: "thought",
@@ -372,11 +404,15 @@ export class World implements Steppable {
           ...(p.request.eventsDropped > 0 ? { eventsDropped: p.request.eventsDropped } : {}),
           decision: d,
           ...(env.rationale === undefined ? {} : { rationale: env.rationale }),
+          ...(env.mind === undefined ? {} : { mind: env.mind }),
+          ...(p.applyTick === undefined ? {} : { requestTick: p.request.tick, applyTick: p.applyTick, ...(typeof env.mind?.["latencyMs"] === "number" ? { latencyMs: env.mind["latencyMs"] } : {}) }),
           ...(env.mission === undefined ? {} : { step: env.mission.step, of: env.mission.of, ...(env.mission.done ? { done: true } : {}), ...(env.mission.stop ? { stop: env.mission.stop } : {}) }),
         },
       });
       // Timer bookkeeping comes before the decision's action, and may accompany an idle decision.
       if (env.timers && env.timers.length > 0) this.applyTimers(i, env.timers, tick, simTimeS);
+      // The notebook, applied after the timers and before the action starts.
+      if (env.note !== undefined) this.applyNote(i, env.note, tick, simTimeS);
       if (d.kind !== "action") continue;
       const started = runtime.start(agent, d.name, d.params, { scope: "self", id: agent.id }, tick, simTimeS, decisionId);
       // The brain hears about a rejection at once (at the end of this tick); a script moves on to its next step.
@@ -433,6 +469,22 @@ export class World implements Steppable {
       mine.set(op.tag, dueTick);
       this.parts.trace.emit({ source, simTime: simTimeS, kind: "event", agentId: a.id, detail: "full", payload: { op: "timer-set", tag: op.tag, delayS: op.delayS, dueTick } });
     });
+  }
+
+  /**
+   * Applies the notebook operation of a decision (ADR-0036 addition of 2026-10-29): parameters validated against the `note` capability, then the limit on the whole notebook. A refused note raises
+   * `actionRejected` (name `note`, code `note_too_long` or `invalid_params`) and changes nothing; an accepted one is traced (`event`, op `note`, from `<agent>/s2`).
+   */
+  private applyNote(i: number, op: NoteOp, tick: number, simTimeS: number): void {
+    const a = this.agents[i] as SimAgent;
+    const brain = this.brainAt[i] as Brain;
+    const reject = (code: string) => this.addEvent(i, { kind: "actionRejected", name: "note", code }, tick, simTimeS);
+    const v = this.parts.runtime.checkBookkeeping("note", { text: op.text, mode: op.mode });
+    if (!v.ok) return reject(v.error.code);
+    const next = op.mode === "replace" ? op.text : `${this.notebooks[i] as string}${op.text}`;
+    if (next.length > NOTEBOOK_MAX_CHARS) return reject("note_too_long");
+    this.notebooks[i] = next;
+    this.parts.trace.emit({ source: `${a.id}/${mindSlot(brain) === "S1" ? "s1" : "s2"}`, simTime: simTimeS, kind: "event", agentId: a.id, detail: "full", payload: { op: "note", mode: op.mode, chars: next.length, text: op.text } });
   }
 
   /** Fires the timers due at this tick, in due order then tag; each becomes a `timer` event (and is removed). */
@@ -514,8 +566,8 @@ export class World implements Steppable {
     const a = this.agents[i] as SimAgent;
     const { events, dropped } = (this.inboxes[i] as Inbox).take();
     const request = this.request(a, events, dropped, tick, simTimeS);
-    this.traceRequest(a, request);
-    this.slots[i] = { agentId: a.id, request };
+    const requestRecordId = this.traceRequest(a, request);
+    this.slots[i] = { agentId: a.id, request, requestRecordId };
     this.lastRequestS[i] = simTimeS;
     this.unanswered++;
   }
@@ -526,7 +578,7 @@ export class World implements Steppable {
    * "space"`) and referenced by it; allowed actions are names plus the hash of the capability manifest (the schemas
    * belong to the simulator version).
    */
-  private traceRequest(a: SimAgent, req: DecisionRequest): void {
+  private traceRequest(a: SimAgent, req: DecisionRequest): string {
     const brain = this.brainAt[this.indexOf(a.id)] as Brain;
     const slot = mindSlot(brain);
     const source = `${a.id}/${slot === "S1" ? "s1" : "s2"}`;
@@ -536,7 +588,7 @@ export class World implements Steppable {
       this.seenSpaces.add(ref);
       this.parts.trace.emit({ source, simTime: req.simTimeS, kind: "thought", agentId: a.id, tier: slot, detail: "full", payload: { op: "space", hash: ref, summary: req.space } });
     }
-    this.parts.trace.emit({
+    return this.parts.trace.emit({
       source,
       simTime: req.simTimeS,
       kind: "thought",
@@ -598,7 +650,18 @@ export class World implements Steppable {
       h.str((this.agents[i] as SimAgent).id).u32(mine.size);
       for (const tag of [...mine.keys()].sort()) h.str(tag).u32(mine.get(tag) as number);
     }
+    // The notebook is agent state as well: hashed only when it is not empty, so a run that never notes hashes as before.
+    for (let i = 0; i < this.agents.length; i++) {
+      const book = this.notebooks[i] as string;
+      if (book !== "") h.str((this.agents[i] as SimAgent).id).str("notebook").str(book);
+    }
     return h.hex();
+  }
+
+  /** The compute tools bound to one request: the agent, and the space summary the request carried. */
+  private computeFor(req: DecisionRequest): ComputeCaller {
+    const port = this.parts.compute as ComputePort;
+    return (tool, params) => port.call(req.agentId, tool, params, req);
   }
 
   private request(a: SimAgent, events: readonly DecisionEvent[], dropped: number, tick: number, simTimeS: number): DecisionRequest {
@@ -607,10 +670,12 @@ export class World implements Steppable {
     const running = info && info.status === "running" ? { actionId: info.actionId, name: info.name, phase: info.phase } : null;
     const mine = this.timers[this.indexOf(a.id)] as Map<string, number>;
     const timers = [...mine.keys()].sort().map((tag) => ({ tag, dueInS: r2(Math.max(0, ((mine.get(tag) as number) - tick) * this.dtS)) }));
+    const book = this.notebooks[this.indexOf(a.id)] as string;
+    const notebook = book === "" ? {} : { notebook: book };
     const self: SelfView =
       a.kind === "uav"
-        ? { kind: "uav", xM: r2(s.x), yM: r2(s.y), zM: r2(a.state.z), headingRad: r3(s.heading), soc: r3(a.battery.soc), running, timers }
-        : { kind: "ugv", xM: r2(s.x), yM: r2(s.y), headingRad: r3(s.heading), soc: r3(a.battery.soc), running, timers };
+        ? { kind: "uav", xM: r2(s.x), yM: r2(s.y), zM: r2(a.state.z), headingRad: r3(s.heading), soc: r3(a.battery.soc), running, timers, ...notebook }
+        : { kind: "ugv", xM: r2(s.x), yM: r2(s.y), headingRad: r3(s.heading), soc: r3(a.battery.soc), running, timers, ...notebook };
     const view = this.parts.mindView?.view(a.id, simTimeS) ?? EMPTY_MIND_VIEW;
     const menu = this.parts.runtime.actionMenu(a);
     return {

@@ -60,6 +60,9 @@ export {
   type ConfigLevel,
   type PlanningField,
   type ResolveOptions,
+  type MindLibrary,
+  type ProviderInfo,
+  type ResolvedS2Mind,
   type RunConfigError,
   type RunConfigErrorCode,
 } from "./run-config/resolve.ts";

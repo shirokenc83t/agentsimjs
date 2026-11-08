@@ -7,6 +7,7 @@ import type { SimSnapshot } from "../sim/sim-client.ts";
 import type { StorageStatus } from "@agentsim/storage";
 import { LazyRecordingStatus } from "../workspaces/registry.tsx";
 import { getFrameStats } from "./frame-stats.ts";
+import { MindsStatusSegments } from "./minds-ui.tsx";
 
 export interface StatusBarProps {
   readonly snap: SimSnapshot;
@@ -95,6 +96,11 @@ export function StatusBar(props: StatusBarProps) {
         {snap.hashTick !== undefined && <span className="k">@{snap.hashTick}</span>}{" "}
         <span className="k">cfg</span> {short(header?.runConfigHash)} <span className="k">eff</span> {short(header?.effectiveConfigHash)}
       </span>
+      {header?.notReproducibleFromTick !== undefined && (
+        <span className="seg s2-chip warn" data-prio="3" data-testid="status-header-not-reproducible" title="The run header says: from this tick a call was made that the response cache did not hold">
+          ▲ not reproducible from tick {header.notReproducibleFromTick}
+        </span>
+      )}
       <span className={`seg${persistent ? "" : " warn"}`} data-prio="9" data-testid="status-storage">
         db: {status.state === "ready" ? status.mode : status.state}
       </span>
@@ -108,6 +114,7 @@ export function StatusBar(props: StatusBarProps) {
           <LazyRecordingStatus header={header} snap={snap} />
         </Suspense>
       )}
+      <MindsStatusSegments />
       {snap.preparing && (
         <span className="seg" data-prio="3" data-testid="status-preparing" title="Planning views and HPA* graphs are built before tick 0 (ADR-0024)">
           ⧗ preparing planning graphs {snap.preparing.done}/{snap.preparing.total}

@@ -5,12 +5,19 @@ import { simulatorVersion } from "./simulator-version.ts";
 // Strict CSP (ADR-0018, ADR-0021): never 'unsafe-eval'; 'wasm-unsafe-eval' is required by sqlite-wasm.
 // The dev server injects a few inline module scripts (React refresh), allowed via a dev-only nonce.
 const DEV_NONCE = "agentsim-dev";
+/** Origins the server adds to `connect-src`: http(s) origins only, nothing that could carry another directive. */
+function extraConnect(): string {
+  const origins = (process.env["AGENTSIM_CONNECT_SRC"] ?? "").split(/\s+/).filter((o) => /^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?$/.test(o));
+  return origins.length === 0 ? "" : ` ${origins.join(" ")}`;
+}
 const csp = (dev: boolean) =>
   [
     "default-src 'self'",
     `script-src 'self' 'wasm-unsafe-eval'${dev ? ` 'nonce-${DEV_NONCE}'` : ""}`,
     "worker-src 'self'",
-    `connect-src 'self'${dev ? " ws: http://localhost:*" : ""}`,
+    // The addresses the page may call (ADR-0044 section 4): itself, localhost and 127.0.0.1 on any port, and the addresses the person who serves it lists in AGENTSIM_CONNECT_SRC (origins, space separated). A page
+    // cannot widen the policy it is served with, so Settings reads this one and says what it allows.
+    `connect-src 'self' http://localhost:* http://127.0.0.1:*${dev ? " ws:" : ""}${extraConnect()}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self'",

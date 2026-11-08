@@ -160,6 +160,24 @@ describe("storage worker (browser)", () => {
     expect(await c.ports.runs.inputs("run-000001")).toEqual([goTo]);
   });
 
+  it("exports the database without the provider keys remembered on this device, and keeps the other user data (ADR-0044 section 3)", async () => {
+    const c = spawn({ resetOnOpen: true });
+    await c.ready();
+    const KEY = "planted-export-key-5566778899";
+    await c.ports.userData.set("providerKeys", "local-ollama", KEY);
+    await c.ports.userData.set("ui", "reducedMotion", true);
+    await c.ports.runs.create(header("run-000001"));
+    const scan = (b: Uint8Array) => new TextDecoder("latin1").decode(b).includes(KEY);
+    const out = await c.admin.exportDb();
+    expect(scan(out)).toBe(false);
+    // Nothing is lost on this side: the key is still where the user put it.
+    expect(await c.ports.userData.get("providerKeys", "local-ollama")).toBe(KEY);
+    // Imported (the whole database is replaced), the file brings the rest of the settings and no key.
+    expect((await c.admin.importDb(out)).ok).toBe(true);
+    expect(await c.ports.userData.get("providerKeys", "local-ollama")).toBeUndefined();
+    expect(await c.ports.userData.get("ui", "reducedMotion")).toBe(true);
+  });
+
   it("exports and imports a run with snapshots, blobs and belief frames, and exports one run alone", async () => {
     const profile = RECORDING_PRESETS["default-research"];
     const recorded = { ...header("run-000001"), recording: "stored" as const, recordingProfile: profile, recordingProfileHash: recordingProfileHash(profile) };

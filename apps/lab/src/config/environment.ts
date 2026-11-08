@@ -1,6 +1,7 @@
 import { createStorageClient, DEFAULT_QUOTA_THRESHOLD_BYTES, type StorageClient } from "@agentsim/storage";
 import { readBootSetting, writeBootSetting } from "@agentsim/ui";
 import { SimClient } from "../sim/sim-client.ts";
+import { serveMindCache } from "../sim/remote-cache.ts";
 
 /**
  * Composition root (ADR-0020): the only place that maps the environment to adapters.
@@ -62,6 +63,20 @@ export function connectRecorder(sim: SimClient, storage: StorageClient): void {
   const channel = new MessageChannel();
   sim.attachRecorderPort(channel.port1);
   storage.attachRecorderPort(channel.port2);
+}
+
+/** The channel of the minds' response cache: the sim worker holds one end, this thread answers the other from the storage worker's cache (entries of answers and figures, never a key). */
+export function connectMindCache(sim: SimClient, storage: StorageClient): void {
+  const channel = new MessageChannel();
+  sim.attachCachePort(channel.port1);
+  serveMindCache(channel.port2, storage.ports.cache);
+  // The first call of a replay-then-live run that missed the cache goes into the stored run header.
+  const marked = new Set<string>();
+  sim.onNotReproducible((runId, tick) => {
+    if (marked.has(runId)) return;
+    marked.add(runId);
+    void storage.ports.runs.markNotReproducible(runId, tick);
+  });
 }
 
 export function resolveEnvironment(mode: string | undefined): Environment {

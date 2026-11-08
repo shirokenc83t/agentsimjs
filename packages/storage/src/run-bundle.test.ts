@@ -26,6 +26,13 @@ const adapters: [string, () => StoragePorts][] = [
   ],
 ];
 
+/** An `llm-call` record that names the cache entry it used (the run export takes the entries its calls used). */
+async function recordedRecords(ports: StoragePorts, runId: string) {
+  const rec = (seq: number, extra: Partial<TraceRecord> = {}): TraceRecord => ({ id: `${runId}#${seq}`, runId, seq, simTime: seq * 0.1, wallTime: 1_700_000_000_000 + seq, source: "uav-001/s2", kind: "thought", agentId: "uav-001", payload: {}, ...extra }) as TraceRecord;
+  const r = await ports.trace.append([rec(0, { kind: "lifecycle", source: "uav-001/config", payload: { op: "config" } }), rec(1, { payload: { op: "llm-call", attempt: 1, cacheKey: "key-1" } })]);
+  if (!r.ok) throw new Error(r.error.message);
+}
+
 /** A recorded run with everything a run owns: a scenario version, inputs, records with parents and causes, a snapshot with outside sections, keyframe and deltas. */
 async function recordedRun(ports: StoragePorts, runId = "run-000001", scenarioVersions = 1) {
   let version = 0;
@@ -117,6 +124,47 @@ describe.each(adapters)("a run as a file (%s)", (_name, make) => {
     expect(await b.beliefFrames.query({ runId: "run-000003", limit: 10 })).toEqual(src.frames);
     expect(await b.metrics.query({ runId: "run-000003", limit: 10 })).toEqual(src.metrics);
     expect((await b.snapshots.getBlob("run-000003", src.manifestHash))?.bytes).toEqual(src.blobs.find((x) => x.id === src.manifestHash)?.bytes);
+  });
+
+  it("takes the library documents the run's minds reference and the cache entries its model calls used, and a clean store gets them under the numbers its run configuration is rewritten to", async () => {
+    const a = make();
+    await recordedRun(a);
+    // The library has had more versions than the run uses, so the numbers differ on a clean store.
+    const tpl = (n: number) => ({ schemaVersion: 1, kind: "prompt-template", system: `v${n}`, sections: ["role"] });
+    for (let n = 1; n <= 3; n++) await a.promptTemplates.saveVersion({ id: "default", name: "Default", document: tpl(n) });
+    const prof = (templateVersion: number) => ({ schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: "local-ollama", model: "m", promptTemplate: { id: "default", version: templateVersion } } });
+    await a.mindProfiles.saveVersion({ id: "scout-llm", name: "Scout", document: prof(1) });
+    await a.mindProfiles.saveVersion({ id: "scout-llm", name: "Scout", document: prof(3) });
+    await a.promptTemplates.saveVersion({ id: "unused", name: "Unused", document: tpl(9) });
+    const runConfig = { schemaVersion: 0, scenario: { id: "demo", version: 1 }, minds: { byAgent: { scout: { s2: { profile: { id: "scout-llm", version: 2 }, mission: "go" } } } } };
+    const head = (await a.runs.get("run-000001")) as RunHeader;
+    await a.runs.delete("run-000001");
+    await a.runs.create({ ...head, runConfig });
+    await recordedRecords(a, "run-000001");
+    await a.cache.put("key-1", { model: "m", value: { message: "hi" }, createdAtWallMs: 5, providerKind: "openai-compatible", toolsHash: "ab12cd34", outcome: "ok", usage: { inputTokens: 3, outputTokens: 1 }, latencyMs: 40 });
+    await a.cache.put("key-unused", { model: "m", value: null, createdAtWallMs: 6 });
+    const file = await exportRunJsonl(a, "run-000001");
+    if (!file.ok) throw new Error(file.error.message);
+
+    const b = make();
+    const imported = await importRunJsonl(b, file.value);
+    if (!imported.ok) throw new Error(imported.error.message);
+    // Only what the run references travels: the profile version 2, the template version 3 it names, not the others.
+    expect((await b.mindProfiles.list()).map((x) => [x.id, x.latestVersion, x.versionCount])).toEqual([["scout-llm", 1, 1]]);
+    expect((await b.promptTemplates.list()).map((x) => [x.id, x.latestVersion, x.versionCount])).toEqual([["default", 1, 1]]);
+    expect((await b.promptTemplates.get("default", 1))?.document).toEqual(tpl(3));
+    expect((await b.mindProfiles.get("scout-llm", 1))?.document).toEqual(prof(1));
+    // The run configuration of the imported run points at the numbers of the new store.
+    const header = await b.runs.get(imported.value.runId);
+    expect((header?.runConfig as typeof runConfig).minds.byAgent.scout.s2.profile).toEqual({ id: "scout-llm", version: 1 });
+    // The cache entries its calls used, with what they kept; not the others.
+    expect(await b.cache.get("key-1")).toEqual({ model: "m", value: { message: "hi" }, createdAtWallMs: 5, providerKind: "openai-compatible", toolsHash: "ab12cd34", outcome: "ok", usage: { inputTokens: 3, outputTokens: 1 }, latencyMs: 40 });
+    expect(await b.cache.get("key-unused")).toBeUndefined();
+    // Importing it again reuses the documents of the same content: no new versions.
+    const again = await importRunJsonl(b, file.value);
+    expect(again.ok).toBe(true);
+    expect((await b.mindProfiles.list()).map((x) => x.versionCount)).toEqual([1]);
+    expect((await b.promptTemplates.list()).map((x) => x.versionCount)).toEqual([1]);
   });
 
   it("keeps what a derived run says of itself through a file, though its parent is not in the other database", async () => {

@@ -34,9 +34,12 @@ const ArrayBufferType = Type.Refine(
 const TickRateHz = Type.Number({ exclusiveMinimum: 0, maximum: 1000 });
 const RunId = Type.String({ pattern: "^run-[0-9]{6}$" });
 const Hash8 = Type.String({ pattern: "^[0-9a-f]{8}$" });
-/** Time mode (ADR-0003). `latency-modeled` arrives with minds (F4/F5). */
+/** How the worker's clock is driven (ADR-0003): the pace, which a `latency-modeled` run shares with lockstep. */
 export const TimeMode = Type.Union([Type.Literal("lockstep"), Type.Literal("realtime")]);
 export type TimeMode = Static<typeof TimeMode>;
+/** The time mode a run declares (its run configuration's `timeMode`): `latency-modeled` is lockstep in which a decision is applied after the latency of the mind that made it (ADR-0003 addition of 2026-10-29). */
+export const RunTimeMode = Type.Union([Type.Literal("lockstep"), Type.Literal("realtime"), Type.Literal("latency-modeled")]);
+export type RunTimeMode = Static<typeof RunTimeMode>;
 
 // ---- main → worker ----------------------------------------------------------------------------
 
@@ -104,6 +107,36 @@ export const SimLoad = Type.Object({
    * writes the end snapshot and reports the run done; without it the run goes on until it is stopped.
    */
   headless: Type.Optional(Type.Object({ untilS: Type.Optional(Type.Number({ exclusiveMinimum: 0, maximum: 86_400 })) }, { additionalProperties: false })),
+  /**
+   * What the run's System 2 minds need besides the run configuration (F4, ADR-0036 and ADR-0044): the library documents the configuration refers to, and the provider entries of Settings by id with the
+   * kind and the endpoint (never a key, which an adapter attaches itself: M3). The `scripted` kind is the fake provider of tests and demonstrations (it answers from `script`, with `delayMs` of wall time
+   * per answer); the lab sends it only in the test probe. Absent: no agent has an S2 mind.
+   */
+  minds: Type.Optional(
+    Type.Object(
+      {
+        profiles: Type.Array(Type.Object({ id: Type.String({ maxLength: 64 }), version: Type.Integer({ minimum: 1 }), document: Type.Unknown() }, { additionalProperties: false }), { maxItems: 64 }),
+        templates: Type.Array(Type.Object({ id: Type.String({ maxLength: 64 }), version: Type.Integer({ minimum: 1 }), document: Type.Unknown() }, { additionalProperties: false }), { maxItems: 64 }),
+        providers: Type.Array(
+          Type.Object(
+            {
+              id: Type.String({ maxLength: 64 }),
+              kind: Type.Union([Type.Literal("openai-compatible"), Type.Literal("scripted")]),
+              baseUrl: Type.String({ maxLength: 500 }),
+              script: Type.Optional(Type.Array(Type.Unknown(), { maxItems: 10_000 })),
+              delayMs: Type.Optional(Type.Number({ minimum: 0, maximum: 60_000 })),
+              prices: Type.Optional(Type.Object({ inputUsdPerMTok: Type.Number({ minimum: 0 }), outputUsdPerMTok: Type.Number({ minimum: 0 }) }, { additionalProperties: false })),
+            },
+            { additionalProperties: false },
+          ),
+          { maxItems: 32 },
+        ),
+        /** Calls running together and the wall-clock backoff between the attempts of a decision (ADR-0036 section 10, the global inference queue). */
+        queue: Type.Optional(Type.Object({ concurrency: Type.Optional(Type.Integer({ minimum: 1, maximum: 64 })), backoffMs: Type.Optional(Type.Number({ minimum: 0, maximum: 60_000 })) }, { additionalProperties: false })),
+      },
+      { additionalProperties: false },
+    ),
+  ),
 });
 
 /**
@@ -112,6 +145,12 @@ export const SimLoad = Type.Object({
  * transferred (it is a `MessagePort`; the schema cannot say so).
  */
 export const SimRecorderPort = Type.Object({ type: Type.Literal("recorderPort"), port: Type.Unknown() });
+
+/**
+ * The channel of the System 2 minds' response cache (F4 M2, ADR-0020 addition of 2026-10-29): the main thread keeps one end and answers from the storage worker's `cache` (a `get` is answered with a
+ * `value`, a `put` is stored); the sim worker holds the other. Entries are answers and figures, never a key. The port is transferred.
+ */
+export const SimCachePort = Type.Object({ type: Type.Literal("cachePort"), port: Type.Unknown() });
 
 /**
  * Researcher command (ADR-0015 clarification of 2026-10-04 and addition of 2026-10-12): world scope, recorded by the
@@ -208,7 +247,22 @@ export const SimStrategyTest = Type.Object({
   planOn: Type.Union([Type.Literal("belief"), Type.Literal("truth")]),
 });
 
-export const MainToSim = Type.Union([SimInit, SimControl, SimReturnBuffer, SimRecorderPort, SimLoad, SimCommand, SimBuildPreset, SimView, SimResearcherWatch, SimCellWatch, SimBeliefWatch, SimOverlayWatch, SimStrategyTest]);
+/**
+ * The researcher's answer to a limit that paused the run (ADR-0044 section 5): raise it to `value` (the confirmation dialog stated it and that consumption is the researcher's responsibility), or stop
+ * the run. The worker records the raise (`lifecycle`, op `raiseLimit`) and goes on.
+ */
+export const SimLimitAnswer = Type.Union([
+  Type.Object({ type: Type.Literal("limitAnswer"), runId: RunId, agentId: Type.String({ maxLength: 64 }), limit: Type.Union([Type.Literal("calls"), Type.Literal("tokens"), Type.Literal("costUsd")]), action: Type.Literal("raise"), value: Type.Number({ minimum: 0 }) }, { additionalProperties: false }),
+  Type.Object({ type: Type.Literal("limitAnswer"), runId: RunId, agentId: Type.String({ maxLength: 64 }), limit: Type.Union([Type.Literal("calls"), Type.Literal("tokens"), Type.Literal("costUsd")]), action: Type.Literal("stop") }, { additionalProperties: false }),
+]);
+
+/**
+ * The keys of the provider entries that have one, by entry id (F4 M3, ADR-0044 section 3): sent to the worker on their own, never inside `load` (which is validated, traced, hashed and exported), kept in the
+ * worker's memory for the adapter to put in the header of its calls, and replaced as a whole by the next message. Nothing the worker writes holds one.
+ */
+export const SimProviderKeys = Type.Object({ type: Type.Literal("providerKeys"), keys: Type.Record(Type.String({ maxLength: 64 }), Type.String({ maxLength: 1000 }), { maxProperties: 32 }) }, { additionalProperties: false });
+
+export const MainToSim = Type.Union([SimInit, SimControl, SimReturnBuffer, SimRecorderPort, SimCachePort, SimProviderKeys, SimLoad, SimCommand, SimBuildPreset, SimView, SimResearcherWatch, SimCellWatch, SimBeliefWatch, SimOverlayWatch, SimStrategyTest, SimLimitAnswer]);
 export type MainToSim = Static<typeof MainToSim>;
 
 // ---- worker → main ----------------------------------------------------------------------------
@@ -271,7 +325,7 @@ export const SimLoaded = Type.Object({
   scenarioId: Type.String({ maxLength: 64 }),
   scenarioVersion: Type.Integer({ minimum: 1 }),
   seed: Type.Integer(),
-  timeMode: TimeMode,
+  timeMode: RunTimeMode,
   runConfigHash: Hash8,
   effectiveConfigHash: Hash8,
   /** Agents with `ideal` beliefs as resolved by the worker, sorted: copied into the run header (ADR-0028 addition of 2026-10-10). */
@@ -565,6 +619,8 @@ export const SimProgress = Type.Object({
   tickTimeP95Ms: Type.Number({ minimum: 0 }),
   /** What the run is waiting for: nothing, the minds' decisions (lockstep), the run header, the writer (backlog above its high mark) or the storage quota. */
   waiting: Type.Union([Type.Literal("none"), Type.Literal("decision"), Type.Literal("header"), Type.Literal("storage_backpressure"), Type.Literal("storage_quota")]),
+  /** Why a headless run ended when it was not its end condition: a mind's limit was reached (`limit_reached`, ADR-0044 section 5) or a strict replay missed the cache (`cache_miss_strict`). */
+  endReason: Type.Optional(Type.Union([Type.Literal("limit_reached"), Type.Literal("cache_miss_strict")])),
   /** Records handed to the writer so far (profile applied), and the part of them not yet reported saved. */
   recordsHandedOver: Type.Integer({ minimum: 0 }),
   backlogRecords: Type.Integer({ minimum: 0 }),
@@ -574,7 +630,48 @@ export const SimProgress = Type.Object({
   stateHash: Type.Optional(Hash8),
 });
 
-export const SimToMain = Type.Union([SimReady, SimState, SimStats, SimDegradation, SimError, SimLoaded, SimEvents, SimGrid, SimChunks, SimTrail, SimInput, SimPreset, SimPreparing, SimPrepared, SimAgentView, SimResearcherData, SimCellBeliefs, SimBeliefChunks, SimRays, SimTopology, SimBudget, SimRecordingState, SimProgress, SimStrategyTestResult]);
+/**
+ * What the System 2 minds of the loaded run are doing (F4, T-110): how many decisions wait for a model ("waiting for S2 (n)": the sim clock waits for them in lockstep, the UI stays free), the inference
+ * queue, what each mind has used of its limits, the warnings at 80 %, and a limit that paused the run and waits for the researcher's answer. Posted when it changes, at about the panel rate.
+ */
+export const SimMinds = Type.Object({
+  type: Type.Literal("minds"),
+  runId: RunId,
+  tick: Type.Integer({ minimum: 0 }),
+  /** Where the answers come from (`live`, `replay-strict`, `replay-then-live`). */
+  mode: Type.Union([Type.Literal("live"), Type.Literal("replay-strict"), Type.Literal("replay-then-live")]),
+  /** Decisions of S2 minds not answered yet. */
+  waiting: Type.Integer({ minimum: 0 }),
+  queue: Type.Object({ active: Type.Integer({ minimum: 0 }), waiting: Type.Integer({ minimum: 0 }) }, { additionalProperties: false }),
+  agents: Type.Array(
+    Type.Object(
+      {
+        agentId: Type.String({ maxLength: 64 }),
+        /** The profile (`scout-llm v3`, absent for an inline one), the provider entry's id and the model: what the notice and the status bar name. */
+        profile: Type.Optional(Type.String({ maxLength: 100 })),
+        provider: Type.String({ maxLength: 64 }),
+        model: Type.String({ maxLength: 200 }),
+        calls: Type.Integer({ minimum: 0 }),
+        tokens: Type.Integer({ minimum: 0 }),
+        costUsd: Type.Number({ minimum: 0 }),
+        /** The limits in force (raised ones included); `costUsd` applies only when the provider has prices. */
+        limits: Type.Object({ calls: Type.Number(), tokens: Type.Number(), costUsd: Type.Number() }, { additionalProperties: false }),
+        pricesKnown: Type.Boolean(),
+        /** The limits warned of at 80 %, with the share used when warned. */
+        warnings: Type.Array(Type.Object({ limit: Type.Union([Type.Literal("calls"), Type.Literal("tokens"), Type.Literal("costUsd")]), pct: Type.Integer({ minimum: 0 }) }, { additionalProperties: false })),
+      },
+      { additionalProperties: false },
+    ),
+  ),
+  /** The tick from which a `replay-then-live` run stopped being reproducible (its first call that missed the cache); the main thread writes it into the run header. */
+  notReproducibleFromTick: Type.Optional(Type.Integer({ minimum: 0 })),
+  /** A limit that paused the run, waiting for a raise or a stop. */
+  pausedAt: Type.Optional(Type.Object({ agentId: Type.String({ maxLength: 64 }), limit: Type.Union([Type.Literal("calls"), Type.Literal("tokens"), Type.Literal("costUsd")]), used: Type.Number(), max: Type.Number(), tick: Type.Integer({ minimum: 0 }) }, { additionalProperties: false })),
+});
+export type SimMindsMessage = Static<typeof SimMinds>;
+export type SimLimitAnswerMessage = Static<typeof SimLimitAnswer>;
+
+export const SimToMain = Type.Union([SimReady, SimState, SimStats, SimDegradation, SimError, SimLoaded, SimEvents, SimGrid, SimChunks, SimTrail, SimInput, SimPreset, SimPreparing, SimPrepared, SimAgentView, SimResearcherData, SimCellBeliefs, SimBeliefChunks, SimRays, SimTopology, SimBudget, SimMinds, SimRecordingState, SimProgress, SimStrategyTestResult]);
 export type SimToMain = Static<typeof SimToMain>;
 export type SimStateMessage = Static<typeof SimState>;
 export type SimStatsMessage = Static<typeof SimStats>;

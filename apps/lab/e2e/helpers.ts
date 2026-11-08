@@ -245,3 +245,20 @@ export async function openScenarioEditor(page: Page): Promise<void> {
   await openWorkspace(page, "configurations");
   await page.getByRole("tab", { name: /Scenario editor/ }).click();
 }
+
+
+/**
+ * What a layout assertion needs to be read from a CI log when it fails on another machine (T-137): the fonts the page has and their state, the pixel ratio and the width of the cells under a selector.
+ * Printed, not asserted.
+ */
+export async function layoutFacts(page: Page, selector: string): Promise<string> {
+  return page.evaluate((sel) => {
+    const fonts = Array.from(document.fonts).map((f) => `${f.family} ${f.weight} ${f.status}`);
+    const cells = Array.from(document.querySelectorAll<HTMLElement>(sel)).map((e) => {
+      const r = e.getBoundingClientRect();
+      const cs = getComputedStyle(e);
+      return `${e.tagName}.${e.className.toString().slice(0, 30)} x=${r.left.toFixed(1)}..${r.right.toFixed(1)} w=${r.width.toFixed(1)} font=${cs.fontFamily.slice(0, 40)} ${cs.fontSize} text="${(e.textContent ?? "").replace(/\s+/g, " ").slice(0, 50)}"`;
+    });
+    return JSON.stringify({ dpr: window.devicePixelRatio, inner: window.innerWidth, fonts, cells }, null, 1);
+  }, selector);
+}

@@ -113,6 +113,11 @@ describe("run configuration v0 (ADR-0028)", () => {
     expect(a.runConfigHash).toMatch(/^[0-9a-f]{8}$/);
     const c = value(resolve({ ...base, seed: 4, timeMode: "realtime", planning: { default: { algorithm: "astar", totalBudget: 100_000 } } }));
     expect(c.runConfigHash).not.toBe(a.runConfigHash);
+    // F4 M2: latency-modeled changes when decisions are applied, so it is part of the run's hash; lockstep spelled out is not.
+    const d = value(resolve({ ...base, seed: 4, timeMode: "latency-modeled", planning: { default: { algorithm: "astar", totalBudget: 100_000 } } }));
+    expect(d.runConfigHash).not.toBe(a.runConfigHash);
+    expect(d.runConfigHash).not.toBe(c.runConfigHash);
+    expect(d.timeMode).toBe("latency-modeled");
   });
 
   it("a changed built-in default changes effectiveConfigHash but not runConfigHash", () => {

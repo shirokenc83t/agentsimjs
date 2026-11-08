@@ -34,6 +34,12 @@ export function summarizeCompute(r: TraceRecord): TraceRecord {
  */
 export function metadataMindIo(r: TraceRecord): TraceRecord {
   const p = payloadOf(r);
+  // A model call keeps its figures (attempt, model, outcome, latency, usage, cost, the cache key and the hash of the tools); the messages sent and the answer received become their content hash.
+  if (p?.op === "llm-call") {
+    const out: Record<string, unknown> = { ...p };
+    for (const key of ["messages", "response"] as const) if (key in p && p[key] !== undefined) out[key] = contentHash64(JSON.stringify(p[key]));
+    return { ...r, payload: out };
+  }
   if (!p || p.op !== "request") return r;
   const out: Record<string, unknown> = { ...p };
   for (const key of ["self", "beliefs"] as const) if (key in p && p[key] !== undefined) out[key] = contentHash64(JSON.stringify(p[key]));

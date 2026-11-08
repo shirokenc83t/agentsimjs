@@ -12,7 +12,7 @@ const kindWords = (k: string) => (k === "ugv" ? "ground vehicle" : "UAV");
 
 /** The mission of the agent with this key, or none. */
 export function missionOf(doc: RunConfigDocument, key: string): MissionStep[] {
-  return [...(doc.minds?.byAgent?.[key]?.s1.script.params.steps ?? [])].map((s) => ({ action: s.action, ...(s.args === undefined ? {} : { args: s.args }) }));
+  return [...(doc.minds?.byAgent?.[key]?.s1?.script.params.steps ?? [])].map((s) => ({ action: s.action, ...(s.args === undefined ? {} : { args: s.args }) }));
 }
 
 /** The run configuration with this agent's mission set; an empty list removes the entry (no mission), and an empty `minds` section is dropped. */

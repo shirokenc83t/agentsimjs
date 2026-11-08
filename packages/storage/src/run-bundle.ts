@@ -1,6 +1,7 @@
 import { decodeValue, err, isValid, ok, readSnapshot, type CodedError, type Result } from "@agentsim/core";
 import { firstNonMonotonicRecord, isValidTraceRecord, RunHeader, type TraceRecord } from "@agentsim/trace";
-import type { BeliefFrame, StoragePorts, StoredBlob, StoredMetricSample, StoredRunInput } from "./ports.ts";
+import type { BeliefFrame, CachedResponse, StoragePorts, StoredBlob, StoredMetricSample, StoredRunInput } from "./ports.ts";
+import { contentHash } from "./scenario-envelope.ts";
 import { checkBlobs, checkFrames, checkRunRecording, framesKeepOrder, checkSnapshot } from "./recording.ts";
 import { checkRunInputs } from "./run-inputs.ts";
 import { BELIEF_MANIFEST_FORMAT_STORED } from "./sql/recording-integrity.ts";
@@ -27,6 +28,15 @@ export interface BundleScenario {
   readonly createdAtWallMs: number;
 }
 
+/** A document of the library (a mind profile or a prompt template) the run references: it travels with the run, so the run is reproducible on another machine (ADR-0036 section 6). */
+export interface BundleLibraryDoc {
+  readonly id: string;
+  readonly version: number;
+  readonly name: string;
+  readonly document: unknown;
+  readonly contentHash: string;
+}
+
 export interface BundleSnapshot {
   readonly seq: number;
   readonly simTime: number;
@@ -46,6 +56,52 @@ export interface RunBundle {
   readonly frames: readonly BeliefFrame[];
   /** Metric samples (ADR-0035 section 4); a file written before they existed has none. */
   readonly metrics?: readonly StoredMetricSample[];
+  /** The mind profiles and prompt templates the run's configuration references (F4); a file written before has none. */
+  readonly library?: { readonly profiles: readonly BundleLibraryDoc[]; readonly templates: readonly BundleLibraryDoc[] };
+  /** The response cache entries the run's model calls used, by key (F4). Never holds a key or a header: the cache stores answers. */
+  readonly cache?: readonly { readonly key: string; readonly entry: CachedResponse }[];
+}
+
+// ---- what a run's configuration references of the library --------------------------------------------------------------------------------------
+
+interface Ref {
+  readonly id: string;
+  readonly version: number;
+}
+const isRef = (v: unknown): v is Ref => typeof v === "object" && v !== null && typeof (v as Ref).id === "string" && Number.isInteger((v as Ref).version);
+
+/** The `s2` entries of a run configuration's `minds` section: each entry that names a library profile, and the template an override of it names. */
+function mindEntries(runConfig: unknown): { profile?: Ref; overrideTemplate?: Ref; set(profile: Ref | undefined, template: Ref | undefined): void }[] {
+  const minds = (runConfig as { minds?: Record<string, unknown> } | undefined)?.minds;
+  if (minds === undefined || typeof minds !== "object" || minds === null) return [];
+  const entries: unknown[] = [minds["default"], ...Object.values((minds["byKind"] ?? {}) as Record<string, unknown>), ...Object.values((minds["byAgent"] ?? {}) as Record<string, unknown>)];
+  const out: { profile?: Ref; overrideTemplate?: Ref; set(profile: Ref | undefined, template: Ref | undefined): void }[] = [];
+  for (const e of entries) {
+    const s2 = (e as { s2?: { profile?: unknown; overrides?: { promptTemplate?: unknown } } } | undefined)?.s2;
+    if (s2 === undefined || typeof s2 !== "object" || s2 === null) continue;
+    const profile = isRef(s2.profile) ? s2.profile : undefined;
+    const template = isRef(s2.overrides?.promptTemplate) ? s2.overrides?.promptTemplate : undefined;
+    out.push({
+      ...(profile === undefined ? {} : { profile }),
+      ...(template === undefined ? {} : { overrideTemplate: template }),
+      set(p, t) {
+        if (p !== undefined && profile !== undefined) (s2 as { profile: Ref }).profile = { id: p.id, version: p.version };
+        if (t !== undefined && template !== undefined) (s2 as { overrides: { promptTemplate: Ref } }).overrides.promptTemplate = { id: t.id, version: t.version };
+      },
+    });
+  }
+  return out;
+}
+
+/** The cache keys the run's records name: every model call (`thought`, op `llm-call`) carries the key of the entry it used. */
+function cacheKeysOf(records: readonly TraceRecord[]): string[] {
+  const keys = new Set<string>();
+  for (const r of records) {
+    if (r.kind !== "thought") continue;
+    const p = r.payload as { op?: unknown; cacheKey?: unknown } | null;
+    if (p?.op === "llm-call" && typeof p.cacheKey === "string") keys.add(p.cacheKey);
+  }
+  return [...keys].sort();
 }
 
 export type RunFileErrorCode = "unknown_run" | "not_run_file" | "unsupported_version" | "too_large" | "corrupt" | "non_monotonic_trace" | "broken_recording" | "write_failed";
@@ -127,8 +183,34 @@ export async function readRunBundle(ports: StoragePorts, runId: string): Promise
       blobs.set(group.id, group);
     }
   }
+  // The library documents the run configuration references (a template named by a profile too) and the cache entries its calls used.
+  const profiles = new Map<string, BundleLibraryDoc>();
+  const templates = new Map<string, BundleLibraryDoc>();
+  const take = async (store: StoragePorts["mindProfiles"], into: Map<string, BundleLibraryDoc>, ref: Ref): Promise<unknown> => {
+    const key = `${ref.id}@${ref.version}`;
+    const have = into.get(key);
+    if (have !== undefined) return have.document;
+    const d = await store.get(ref.id, ref.version);
+    if (d === undefined) return undefined;
+    into.set(key, { id: d.id, version: d.version, name: d.name, document: d.document, contentHash: d.contentHash });
+    return d.document;
+  };
+  for (const e of mindEntries(header.runConfig)) {
+    if (e.profile !== undefined) {
+      const doc = (await take(ports.mindProfiles, profiles, e.profile)) as { s2?: { promptTemplate?: unknown } } | undefined;
+      if (isRef(doc?.s2?.promptTemplate)) await take(ports.promptTemplates, templates, doc.s2.promptTemplate);
+    }
+    if (e.overrideTemplate !== undefined) await take(ports.promptTemplates, templates, e.overrideTemplate);
+  }
+  const cache: { key: string; entry: CachedResponse }[] = [];
+  for (const key of cacheKeysOf(records)) {
+    const entry = await ports.cache.get(key);
+    if (entry !== undefined) cache.push({ key, entry });
+  }
   return ok({
     header,
+    ...(profiles.size + templates.size === 0 ? {} : { library: { profiles: [...profiles.values()], templates: [...templates.values()] } }),
+    ...(cache.length === 0 ? {} : { cache }),
     ...(scenarioDoc ? { scenario: { id: scenarioDoc.id, version: scenarioDoc.version, name: scenarioDoc.name, document: scenarioDoc.document, contentHash: scenarioDoc.contentHash, createdAtWallMs: scenarioDoc.createdAtWallMs } } : {}),
     inputs,
     records,
@@ -224,9 +306,43 @@ export async function writeRunBundle(ports: StoragePorts, b: RunBundle): Promise
     }
     scenarioVersion = reuse;
   }
+  // The library documents: the same content under the same id is the same version, whatever its number was; else a new version. The run configuration's references and the profiles' template
+  // references are rewritten to the numbers of this database.
+  const tplMap = new Map<string, number>();
+  const profMap = new Map<string, number>();
+  const settle = async (store: StoragePorts["mindProfiles"], d: BundleLibraryDoc, document: unknown): Promise<Result<number, RunFileError>> => {
+    const hash = contentHash(JSON.stringify(document));
+    const latest = (await store.list()).find((s) => s.id === d.id)?.latestVersion ?? 0;
+    for (let v = 1; v <= latest; v++) if ((await store.get(d.id, v))?.contentHash === hash) return ok(v);
+    const saved = await store.saveVersion({ id: d.id, name: d.name, document });
+    return saved.ok ? ok(saved.value.version) : err({ code: "write_failed", message: `the library document ${d.id} of the run was refused: ${saved.error.message}` });
+  };
+  for (const d of b.library?.templates ?? []) {
+    const v = await settle(ports.promptTemplates, d, d.document);
+    if (!v.ok) return v;
+    tplMap.set(`${d.id}@${d.version}`, v.value);
+  }
+  for (const d of b.library?.profiles ?? []) {
+    const doc = JSON.parse(JSON.stringify(d.document)) as { s2?: { promptTemplate?: { id: string; version: number } } };
+    const t = doc.s2?.promptTemplate;
+    const nt = t === undefined ? undefined : tplMap.get(`${t.id}@${t.version}`);
+    if (t !== undefined && nt !== undefined) t.version = nt;
+    const v = await settle(ports.mindProfiles, d, doc);
+    if (!v.ok) return v;
+    profMap.set(`${d.id}@${d.version}`, v.value);
+  }
+  let runConfig = b.header.runConfig;
+  if (profMap.size + tplMap.size > 0 && runConfig !== undefined) {
+    runConfig = JSON.parse(JSON.stringify(runConfig)) as unknown;
+    for (const e of mindEntries(runConfig)) {
+      const np = e.profile === undefined ? undefined : profMap.get(`${e.profile.id}@${e.profile.version}`);
+      const nt = e.overrideTemplate === undefined ? undefined : tplMap.get(`${e.overrideTemplate.id}@${e.overrideTemplate.version}`);
+      e.set(e.profile !== undefined && np !== undefined ? { id: e.profile.id, version: np } : undefined, e.overrideTemplate !== undefined && nt !== undefined ? { id: e.overrideTemplate.id, version: nt } : undefined);
+    }
+  }
   const runId = await ports.runs.allocateRunId();
   const from = b.header.runId;
-  const header = { ...b.header, runId, importedFrom: origin, ...(scenarioVersion === undefined ? {} : { scenarioVersion }) };
+  const header = { ...b.header, runId, importedFrom: origin, ...(scenarioVersion === undefined ? {} : { scenarioVersion }), ...(runConfig === undefined ? {} : { runConfig }) };
   const created = await ports.runs.create(header);
   if (!created.ok) return err({ code: "write_failed", message: created.error.message });
   const fail = async (message: string): Promise<Result<never, RunFileError>> => {
@@ -254,6 +370,9 @@ export async function writeRunBundle(ports: StoragePorts, b: RunBundle): Promise
       const r = await ports.metrics.append(runId, samples.slice(i, i + PAGE));
       if (!r.ok) return await fail(r.error.message);
     }
+    for (const c of b.cache ?? []) {
+      if ((await ports.cache.get(c.key)) === undefined) await ports.cache.put(c.key, c.entry);
+    }
     const frames = [...b.frames].sort((a, c) => (a.agentId < c.agentId ? -1 : a.agentId > c.agentId ? 1 : a.seq - c.seq));
     for (let i = 0; i < frames.length; i += PAGE) {
       const r = await ports.beliefFrames.append(runId, frames.slice(i, i + PAGE));
@@ -271,6 +390,9 @@ export async function writeRunBundle(ports: StoragePorts, b: RunBundle): Promise
 export function bundleToJsonl(b: RunBundle): Uint8Array {
   const lines: string[] = [JSON.stringify({ format: RUN_JSONL_FORMAT, version: RUN_JSONL_VERSION, header: b.header })];
   if (b.scenario) lines.push(JSON.stringify({ t: "scenario", v: b.scenario }));
+  for (const v of b.library?.templates ?? []) lines.push(JSON.stringify({ t: "template", v }));
+  for (const v of b.library?.profiles ?? []) lines.push(JSON.stringify({ t: "profile", v }));
+  for (const v of b.cache ?? []) lines.push(JSON.stringify({ t: "cache", v }));
   for (const v of b.inputs) lines.push(JSON.stringify({ t: "input", v }));
   for (const v of b.records) lines.push(JSON.stringify({ t: "record", v }));
   for (const x of b.blobs) lines.push(JSON.stringify({ t: "blob", id: x.id, data: bytesToBase64(x.bytes) }));
@@ -302,6 +424,9 @@ export function bundleFromJsonl(bytes: Uint8Array): Result<RunBundle, RunFileErr
   const frames: BeliefFrame[] = [];
   const metrics: StoredMetricSample[] = [];
   let scenario: BundleScenario | undefined;
+  const profiles: BundleLibraryDoc[] = [];
+  const templates: BundleLibraryDoc[] = [];
+  const cache: { key: string; entry: CachedResponse }[] = [];
   for (let n = 1; n < lines.length; n++) {
     const line = lines[n] as string;
     if (line === "") continue;
@@ -310,6 +435,9 @@ export function bundleFromJsonl(bytes: Uint8Array): Result<RunBundle, RunFileErr
       const x = JSON.parse(line) as { t?: string; v?: never; id?: string; data?: string; seq?: number; simTime?: number; tick?: number };
       switch (x.t) {
         case "scenario": scenario = x.v as unknown as BundleScenario; break;
+        case "template": templates.push(x.v as unknown as BundleLibraryDoc); break;
+        case "profile": profiles.push(x.v as unknown as BundleLibraryDoc); break;
+        case "cache": cache.push(x.v as unknown as { key: string; entry: CachedResponse }); break;
         case "input": inputs.push(x.v as unknown as StoredRunInput); break;
         case "record": records.push(x.v as unknown as TraceRecord); break;
         case "blob": blobs.push({ id: String(x.id), bytes: base64ToBytes(String(x.data)) }); break;
@@ -327,7 +455,18 @@ export function bundleFromJsonl(bytes: Uint8Array): Result<RunBundle, RunFileErr
       return err({ code: "corrupt", message: `line ${n + 1} does not parse: ${e instanceof Error ? e.message : String(e)}` });
     }
   }
-  return ok({ header: first.header as RunHeader, ...(scenario ? { scenario } : {}), inputs, records, snapshots, blobs, frames, metrics });
+  return ok({
+    header: first.header as RunHeader,
+    ...(scenario ? { scenario } : {}),
+    inputs,
+    records,
+    snapshots,
+    blobs,
+    frames,
+    metrics,
+    ...(profiles.length + templates.length === 0 ? {} : { library: { profiles, templates } }),
+    ...(cache.length === 0 ? {} : { cache }),
+  });
 }
 
 /** Reads a run out of the ports as a file. */

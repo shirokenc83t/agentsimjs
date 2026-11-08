@@ -35,6 +35,12 @@ export interface GridSearchOptions {
    * the view's lower bound on cost per metre. Ignored by Dijkstra (weight 0).
    */
   readonly heuristic?: "octile" | "euclidean";
+  /**
+   * Cells this one search treats as impassable (F4 M2, T-118: alternative routes for a mind's `kShortestPaths`), consulted next to the view and never written into it: the view, which is shared, is not copied and
+   * not touched. A blocked cell also blocks the diagonal moves that would cut its corner, as an impassable cell of the view does. Absent: the search is exactly what it was (the hot path below is not edited:
+   * a search with blocked cells has a copy of its own).
+   */
+  readonly blocked?: ReadonlySet<number>;
 }
 
 const TURN_RAD = [0, Math.PI / 4, Math.PI / 2, (3 * Math.PI) / 4, Math.PI] as const;
@@ -56,6 +62,7 @@ export class GridSearch {
   private readonly area: GridSearchOptions["bounds"];
   private readonly fast: boolean;
   private readonly euclid: boolean;
+  private readonly blocked: ReadonlySet<number> | undefined;
   private targets: Set<number> | undefined;
   private remainingTargets = 0;
   private goalState = -1;
@@ -84,7 +91,8 @@ export class GridSearch {
     this.hWeight = goalCell < 0 || algorithm.kind === "dijkstra" ? 0 : algorithm.kind === "astar" ? 1 : algorithm.weight;
     this.area = opts.bounds ?? opts.window;
     this.turnAware = space.profile.turnAware && !opts.bounds && !opts.reverse;
-    this.fast = !this.turnAware && !opts.reverse && !space.hasEdgeConstraints;
+    this.blocked = opts.blocked !== undefined && opts.blocked.size > 0 ? opts.blocked : undefined;
+    this.fast = !this.turnAware && !opts.reverse && !space.hasEdgeConstraints && !(this.blocked !== undefined && opts.heuristic === "euclidean");
     this.euclid = opts.heuristic === "euclidean";
     if (goalCell < 0 && opts.settleTargets) {
       this.targets = new Set(opts.settleTargets);
@@ -163,7 +171,8 @@ export class GridSearch {
       if (this.readChunks) this.markRead(i, j);
       if (this.fast) {
         // The octile routine is the hot path and is not edited for the euclidean option: that one is a separate copy.
-        if (this.euclid) this.expandFastEuclid(state, i, j, g);
+        if (this.blocked !== undefined) this.expandFastBlocked(state, i, j, g, this.blocked);
+        else if (this.euclid) this.expandFastEuclid(state, i, j, g);
         else this.expandFast(state, i, j, g);
         continue;
       }
@@ -191,6 +200,7 @@ export class GridSearch {
         }
         if (c === Number.POSITIVE_INFINITY) continue;
         const ncell = nj * this.sizeX + ni;
+        if (this.blocked !== undefined && this.blocked.has(ncell)) continue;
         const nstate = this.turnAware ? ncell * 9 + dir + 1 : ncell;
         let ns = this.nodes.find(nstate);
         if (ns < 0) ns = this.nodes.insert(nstate);
@@ -247,6 +257,66 @@ export class GridSearch {
       let perMetre = base + perCode * code;
       if (unk !== null && unk[ncell] === 1) perMetre *= uf; // belief views: the cost profile's unknown weight
       const c = len * perMetre; // moveCost with turnRad = 0
+      const ns = this.nodes.findOrInsert(ncell);
+      if (this.nodes.closed[ns] === 1) continue;
+      const ng = g + c;
+      if (ng < (this.nodes.g[ns] ?? Number.POSITIVE_INFINITY)) {
+        this.nodes.g[ns] = ng;
+        this.nodes.parent[ns] = state;
+        let h = 0;
+        if (hw !== 0) {
+          const ax = ni > this.goalI ? ni - this.goalI : this.goalI - ni;
+          const ay = nj > this.goalJ ? nj - this.goalJ : this.goalJ - nj;
+          const lo = ax < ay ? ax : ay;
+          h = ((ax > ay ? ax : ay) - lo + sqrt2 * lo) * hpc;
+        }
+        this.open.push(ng + hw * h, h, ncell);
+      }
+    }
+  }
+
+  /**
+   * `expandFast` for a search that has cells of its own to avoid (`GridSearch.blocked`): a deliberate copy, so that the benchmarked hot path stays byte for byte as it was. A blocked cell is impassable,
+   * and so is a diagonal move past its corner, exactly as if its mask byte were 0.
+   */
+  private expandFastBlocked(state: number, i: number, j: number, g: number, blocked: ReadonlySet<number>): void {
+    const space = this.space;
+    const mask = space.mask;
+    const sx = this.sizeX;
+    const b = this.area;
+    const i0 = b ? b.i0 : 0;
+    const j0 = b ? b.j0 : 0;
+    const i1 = b ? b.i1 : sx;
+    const j1 = b ? b.j1 : space.sizeY;
+    const base = space.basePerMetre;
+    const perCode = space.codePerMetre;
+    const unk = space.unknown;
+    const uf = space.unknownFactor;
+    const hw = this.hWeight;
+    const hpc = space.heuristicPerCell;
+    const res = space.resolutionM;
+    const dxs = DIR_DX;
+    const dys = DIR_DY;
+    const sqrt2 = SQRT2;
+    for (let dir = 0; dir < 8; dir++) {
+      const dx = dxs[dir] ?? 0;
+      const dy = dys[dir] ?? 0;
+      const ni = i + dx;
+      const nj = j + dy;
+      if (ni < i0 || nj < j0 || ni >= i1 || nj >= j1) continue;
+      const ncell = nj * sx + ni;
+      const code = mask[ncell] ?? 0;
+      if (code === 0 || blocked.has(ncell)) continue;
+      const diag = (dir & 1) === 1;
+      if (diag) {
+        const c1 = j * sx + ni;
+        const c2 = nj * sx + i;
+        if ((mask[c1] ?? 0) === 0 || (mask[c2] ?? 0) === 0 || blocked.has(c1) || blocked.has(c2)) continue; // no corner cutting
+      }
+      const len = res * (diag ? sqrt2 : 1);
+      let perMetre = base + perCode * code;
+      if (unk !== null && unk[ncell] === 1) perMetre *= uf;
+      const c = len * perMetre;
       const ns = this.nodes.findOrInsert(ncell);
       if (this.nodes.closed[ns] === 1) continue;
       const ng = g + c;

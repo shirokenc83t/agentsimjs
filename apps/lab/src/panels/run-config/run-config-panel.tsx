@@ -38,6 +38,8 @@ import {
 } from "./model.ts";
 import { headlessButton, headlessTip } from "../../sim/headless-names.ts";
 import { missionAgentsOf, MissionSection } from "./mission-section.tsx";
+import { MindsSection } from "./minds-section.tsx";
+import { useMindLibrary } from "./use-mind-library.ts";
 import { alongList, countsWords, missionOf, missionStatus } from "./mission-model.ts";
 import { StrategyPicker } from "./strategy-picker.tsx";
 
@@ -149,6 +151,7 @@ const JUMPS = [
   { id: "drive", title: "Drive" },
   { id: "beliefs", title: "Beliefs" },
   { id: "effective", title: "Effective" },
+  { id: "minds", title: "Minds" },
   { id: "mission", title: "Mission" },
   { id: "presets", title: "Presets" },
 ] as const;
@@ -197,7 +200,8 @@ function RunConfigEditor(props: { loaded: Loaded }) {
     else return;
     e.preventDefault();
   };
-  const validation = useMemo(() => validateDraft(draft, view, version), [draft, view, version]);
+  const mindLibrary = useMindLibrary();
+  const validation = useMemo(() => validateDraft(draft, view, version, { library: mindLibrary.library, providers: mindLibrary.providers }), [draft, view, version, mindLibrary]);
   // The missions: who can have one, what each says of itself (valid, or how many steps to fix), and what the run buttons say of them.
   const missions = useMemo(() => missionAgentsOf(run.loaded.agents, run.scenario), [run]);
   const missionCounts = useMemo(
@@ -258,7 +262,11 @@ function RunConfigEditor(props: { loaded: Loaded }) {
                 <button key={j.id} type="button" className="kt" onClick={() => jumpTo(j.id)} data-testid={`rc-jump-${j.id}`}>
                   {j.title} {j.id === "effective" ? (
                     <span className="muted">{validation.ok ? validation.resolved.agents.length : ""}</span>
-                  ) : j.id === "presets" ? null : j.id === "mission" ? (
+                  ) : j.id === "presets" ? null : j.id === "minds" ? (
+                    <span className={`st ${!validation.ok && (validation.error.path ?? "").startsWith("/minds") ? "st-alm" : "st-ok"}`} data-testid="rc-jump-minds-state">
+                      {!validation.ok && (validation.error.path ?? "").startsWith("/minds") ? "✕" : "✓"}
+                    </span>
+                  ) : j.id === "mission" ? (
                     <span className={`st ${missionCounts.errors > 0 ? "st-alm" : missionCounts.warnings > 0 ? "st-warn" : "st-ok"}`} data-testid="rc-jump-mission-state">
                       {missionFix === 0 ? `✓ ${missionCounts.steps}` : countsWords({ ...missionCounts, valid: false })}
                     </span>
@@ -299,7 +307,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
               <OptionField
                 label="time mode"
                 value={draft.timeMode}
-                options={["lockstep", "realtime"] as const}
+                options={["lockstep", "realtime", "latency-modeled"] as const}
                 inheritLabel="lockstep (default)"
                 onChange={(v) => setDraft((d) => withField(d, "timeMode", v))}
                 testId="rc-time-mode"
@@ -406,6 +414,7 @@ function RunConfigEditor(props: { loaded: Loaded }) {
             </section>
 
             {validation.ok && <EffectiveTable agents={validation.resolved.agents} />}
+            <MindsSection draft={draft} onChange={setDraft} agents={missions.agents} validation={validation} library={mindLibrary} />
             <MissionSection draft={draft} onChange={setDraft} agents={missions.agents} world={missions.world} />
             <Presets draft={draft} scenario={draft.scenario} onLoad={setDraft} />
             </div>
