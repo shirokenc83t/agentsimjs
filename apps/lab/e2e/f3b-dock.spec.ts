@@ -63,6 +63,11 @@ test("every panel action is a palette command, and Alt+number focuses a panel", 
   await page.keyboard.press("Alt+1");
   await expect.poll(async () => (await panel(page, "scene"))?.active).toBe(true);
 
+  // The command is given only when the Scene is the active panel (the dock may make another one active while the Scene's windows are placed): its tab is clicked until the page says so.
+  await expect(async () => {
+    if (!(await panel(page, "scene"))?.active) await page.getByRole("tab", { name: "[1] Scene" }).click();
+    expect((await panel(page, "scene"))?.active).toBe(true);
+  }).toPass({ timeout: 15_000 });
   await runCommand(page, "Close the active panel");
   await expect.poll(async () => (await panel(page, "scene")) === undefined).toBe(true);
   await runCommand(page, "Open panel: Scene");
