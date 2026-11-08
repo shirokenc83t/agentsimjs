@@ -138,7 +138,7 @@
 .queued-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16em; font-size: var(--type-label-size); }
 .top.compact .theme-btn .lbl { display: none; }
 /* Tight (the last step of the fold): the brand keeps its mark, the run label is cut shorter and the replay segment loses its connecting words; the workspace tabs are never touched. */
-.top.tight .brand .name, .top.tight .rp-words, .top.tight .k-opt { display: none; }
+.top.tight .brand .name, .top.tight .rp-words, .top.tight .rp-win, .top.tight .k-opt { display: none; }
 .top.tight .runsel { max-width: 60px; }
 .top.tight .runsel .k, .top.tight .theme-btn .k { display: none; }
 .top.tight .lay-word { display: none; }
@@ -156,6 +156,8 @@
   .telem .tile:first-child { display: none; }
   .telem .tile { padding: 0 8px; min-width: 60px; }
   .ready-sum { max-width: 110px; }
+  /* The note of the queued commands is cut shorter (its whole text is the title): where a font draws a character wider than another, the launch cell must not push the telemetry out of the window. */
+  .queued-note { max-width: 6.5em; }
   .player { grid-template-columns: auto minmax(128px, auto) minmax(200px, 1fr) auto; }
   .clock { padding: 0 8px; }
   .clock .big { font-size: 18px; }

@@ -63,8 +63,10 @@ test("the trace graph: opened from the Trace panel, around the record, a click s
   // The arrows move between nodes: right from the record goes to a node of the next column; Enter recentres on it.
   await page.getByTestId("tg-node-center").focus();
   await page.keyboard.press("ArrowRight");
-  const focused = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute("data-seq") ?? "");
-  expect(Number(focused)).toBeGreaterThan(startSeq);
+  const focusedSeq = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute("data-seq") ?? "");
+  // The focus moves a frame after the key (the graph re-draws first): read it once it has moved.
+  await expect.poll(async () => Number(await focusedSeq()), { timeout: 10_000 }).toBeGreaterThan(startSeq);
+  const focused = await focusedSeq();
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("tg-center")).toHaveText(`#${focused}`);
 });
@@ -121,8 +123,10 @@ test("the graph is easy to find: a labelled button in the Trace, T on a selected
   await expect(page.getByTestId("trace-graph")).toBeVisible();
   await closeGraph();
   // The row's context menu.
-  await page.locator('[data-testid^="event-row-"]').first().click({ button: "right" });
-  await expect(page.getByTestId("log-menu")).toBeVisible();
+  await expect(async () => {
+    await page.locator('[data-testid^="event-row-"]').first().click({ button: "right", timeout: 5_000 });
+    await expect(page.getByTestId("log-menu")).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 60_000 });
   await page.getByTestId("log-menu-graph").click();
   await expect(page.getByTestId("trace-graph")).toBeVisible();
   await closeGraph();

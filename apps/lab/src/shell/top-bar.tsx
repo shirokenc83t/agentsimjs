@@ -148,7 +148,7 @@ function ReplaySegment(props: { derived: ReplayDerived | undefined }) {
     <div className="seg r rpseg" role="status" data-testid="replay-segment" title={`REPLAY · viewing t ${at.toFixed(1)} s · a re-simulated window (${d.t0S.toFixed(1)}–${d.t1S.toFixed(1)} s) of ${d.parentRunId}: ${verdict} · the live run keeps running`}>
       {GLYPH.replay} t {at.toFixed(1)}
       <span data-testid="replay-derived">
-        {" "}· ◇ {d.t0S.toFixed(1)}–{d.t1S.toFixed(1)}<span className="rp-words"> of {d.parentRunId}</span> · {d.status === "matches" ? <span className="ok">✓</span> : <span className="danger">{GLYPH.fail} @{d.divergenceTick ?? "?"}</span>}
+        {" "}<span className="rp-win">· ◇ {d.t0S.toFixed(1)}–{d.t1S.toFixed(1)}</span><span className="rp-words"> of {d.parentRunId}</span> · {d.status === "matches" ? <span className="ok">✓</span> : <span className="danger">{GLYPH.fail} @{d.divergenceTick ?? "?"}</span>}
       </span>
     </div>
   );

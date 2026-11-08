@@ -23,6 +23,8 @@ export const isFloating = (panel: IDockviewPanel): boolean => panel.api.location
 export function floatPanel(api: DockviewApi, panel: IDockviewPanel): void {
   if (isFloating(panel)) return;
   api.addFloatingGroup(panel, { ...FLOAT_SIZE, x: 96, y: 96 });
+  // The window that was just floated is the active one: the next command that acts on "the active panel" (Dock, Maximize, Close) acts on it, whichever panel the dock made active meanwhile.
+  panel.api.setActive();
 }
 
 const POSITION = { left: "left", right: "right", above: "top", below: "bottom", within: "center" } as const;
