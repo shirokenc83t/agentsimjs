@@ -33,12 +33,25 @@ test("every panel action is a palette command, and Alt+number focuses a panel", 
   await page.getByRole("tab", { name: "[2] Explorer" }).click();
   await expect.poll(async () => (await panel(page, "explorer"))?.active).toBe(true);
 
+  // A command acts on the active panel. The Scene's collapsed windows are placed again when their host has settled (on a slow machine that is after this test has begun), and the dock makes the one added last the
+  // active panel: so before each command the Explorer is made the active one, as a researcher does by clicking its tab, and the command is given only when the page says it is.
+  const explorerActive = async () => {
+    await expect(async () => {
+      if (!(await panel(page, "explorer"))?.active) await page.getByRole("tab", { name: "[2] Explorer" }).click();
+      expect((await panel(page, "explorer"))?.active).toBe(true);
+    }).toPass({ timeout: 15_000 });
+  };
   await runCommand(page, "Float the active panel");
   await expect.poll(async () => (await panel(page, "explorer"))?.location).toBe("floating");
-  await runCommand(page, "Dock the active panel");
-  await expect.poll(async () => (await panel(page, "explorer"))?.location).toBe("grid");
+  await expect(async () => {
+    await explorerActive();
+    await runCommand(page, "Dock the active panel");
+    await expect.poll(async () => (await panel(page, "explorer"))?.location, { timeout: 3_000 }).toBe("grid");
+  }).toPass({ timeout: 30_000 });
+  await explorerActive();
   await runCommand(page, "Maximize or restore the active panel");
   await expect.poll(async () => (await panel(page, "explorer"))?.maximized).toBe(true);
+  await explorerActive();
   await runCommand(page, "Maximize or restore the active panel");
   await expect.poll(async () => (await panel(page, "explorer"))?.maximized).toBe(false);
 
