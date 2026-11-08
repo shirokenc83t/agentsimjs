@@ -19,6 +19,10 @@ on:
         description: "Also run the heavy job (build, cross-engine determinism, e2e, benchmarks)"
         type: boolean
         default: true
+      specs:
+        description: "Playwright spec files for the heavy job's e2e step, separated by spaces (empty: the whole suite)"
+        type: string
+        default: ""
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -150,9 +154,12 @@ jobs:
 
       - name: End-to-end tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: pnpm test:e2e
+        run: |
+          read -ra specs <<< "$SPECS"
+          pnpm test:e2e "${specs[@]}"
         env:
           PYTHON: python3
+          SPECS: ${{ inputs.specs }}
 
       # Runs even if e2e failed, but never after a failed build.
       - name: Benchmarks
