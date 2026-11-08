@@ -157,7 +157,7 @@
   .telem .tile { padding: 0 8px; min-width: 60px; }
   .ready-sum { max-width: 110px; }
   /* The note of the queued commands is cut shorter (its whole text is the title): where a font draws a character wider than another, the launch cell must not push the telemetry out of the window. */
-  .queued-note { max-width: 6.5em; }
+  .queued-note, .ready-block .ready-sum.queued-note { max-width: 6.5em; }
   .player { grid-template-columns: auto minmax(128px, auto) minmax(200px, 1fr) auto; }
   .clock { padding: 0 8px; }
   .clock .big { font-size: 18px; }
