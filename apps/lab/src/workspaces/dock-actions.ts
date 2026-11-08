@@ -210,11 +210,7 @@ function placeAfterLayout(api: DockviewApi, preset: WorkspacePreset): void {
       const focused = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
       panel.api.close();
       addPresetPanel(api, preset, p);
-      if (front && front.id !== p.id && api.activePanel?.id !== front.id) {
-        api.getPanel(front.id)?.api.setActive();
-        // The element that had the keyboard keeps it (a panel that handles its own keys, as the Timeline does for Esc, must not lose them to a window being placed).
-        if (focused?.isConnected) focused.focus({ preventScroll: true });
-      }
+      void front; void focused;
     }
   };
   requestAnimationFrame(() => requestAnimationFrame(again));
