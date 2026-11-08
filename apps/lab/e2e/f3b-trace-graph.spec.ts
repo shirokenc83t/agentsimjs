@@ -19,8 +19,11 @@ async function open(page: Page, hundreds: number): Promise<void> {
   await page.getByTestId("event-scroller").evaluate((el) => {
     el.scrollTop = 0;
   });
-  await page.locator('[data-testid^="event-row-"]').filter({ hasText: "start" }).first().click({ timeout: 20_000 });
-  await expect(page.getByTestId("trace-tree-selected")).toBeVisible();
+  // The list is drawn again while the recording settles, and on a slow machine for a long time (a row detached while it is clicked): the click is a real one, tried again from a fresh look at the list until the record is selected.
+  await expect(async () => {
+    await page.locator('[data-testid^="event-row-"]').filter({ hasText: "start" }).first().click({ timeout: 5_000 });
+    await expect(page.getByTestId("trace-tree-selected")).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 60_000 });
 }
 
 test("the trace graph: opened from the Trace panel, around the record, a click selects, a double click recentres with a way back, the arrows move, the side panel has the JSON", async ({ page }) => {

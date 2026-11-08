@@ -36,7 +36,13 @@ test("every panel action is a palette command, and Alt+number focuses a panel", 
   await runCommand(page, "Float the active panel");
   await expect.poll(async () => (await panel(page, "explorer"))?.location).toBe("floating");
   await runCommand(page, "Dock the active panel");
-  await expect.poll(async () => (await panel(page, "explorer"))?.location).toBe("grid");
+  try {
+    await expect.poll(async () => (await panel(page, "explorer"))?.location, { timeout: 5_000 }).toBe("grid");
+  } catch (e) {
+    // What a CI log needs (T-137): the dock as the page sees it when the panel did not dock.
+    console.log(`DOCK-FACTS ${JSON.stringify(await page.evaluate(() => ({ dock: window.__agentsim?.dock?.(), active: document.activeElement?.tagName, palette: document.querySelectorAll('[role="dialog"]').length })))}`);
+    throw e;
+  }
   await runCommand(page, "Maximize or restore the active panel");
   await expect.poll(async () => (await panel(page, "explorer"))?.maximized).toBe(true);
   await runCommand(page, "Maximize or restore the active panel");
