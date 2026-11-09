@@ -193,6 +193,33 @@ describe("the task list in the world (T-144)", () => {
     expect(second.payload.stop).toMatchObject({ status: "failed", action: "goTo" });
   });
 
+  it("a list the world refuses is not the one the decision record describes: the MissionNote is the previous list's (or absent when there was none)", async () => {
+    const tooLong = { steps: [{ text: "x".repeat(201) }] };
+    const tooMany = { steps: Array.from({ length: 17 }, (_, i) => ({ text: `s${i}` })) };
+    const invalid = { steps: [{ action: "hold" }] } as never;
+    for (const refused of [tooLong, tooMany, invalid]) {
+      // With a previous list (two steps): the record keeps describing it.
+      const withList = build([() => ({ decision: hold(5), task: TWO, step: 1 }), () => ({ decision: { kind: "idle" }, task: refused }), () => ({ decision: { kind: "idle" } })]);
+      await run(withList, 1);
+      withList.injected.push({ agentId: withList.agent.id, event: det("o-1") });
+      await run(withList, 3);
+      const second = ops(withList, "decision")[1] as unknown as { payload: Record<string, unknown> };
+      expect(second.payload, JSON.stringify(refused).slice(0, 40)).toMatchObject({ of: 2, step: 1 });
+      expect(withList.world.snapshot().tasks?.[0]?.steps).toHaveLength(2);
+      // With none: the record says nothing of a list.
+      const without = build([() => ({ decision: { kind: "idle" }, task: refused })]);
+      await run(without, 1);
+      const only = ops(without, "decision")[0] as unknown as { payload: Record<string, unknown> };
+      expect(only.payload).not.toHaveProperty("of");
+      expect(only.payload).not.toHaveProperty("step");
+      expect(without.world.snapshot().tasks).toBeUndefined();
+    }
+    // A list the world accepts is described at once, by the same check.
+    const ok = build([() => ({ decision: { kind: "idle" }, task: TWO })]);
+    await run(ok, 1);
+    expect((ops(ok, "decision")[0] as unknown as { payload: Record<string, unknown> }).payload).toMatchObject({ of: 2, step: 1 });
+  });
+
   it("a run without lists hashes as before, and a list changes the hash only once it exists", async () => {
     const a = build([() => ({ decision: hold(0.3) })]);
     const b = build([() => ({ decision: hold(0.3) })]);

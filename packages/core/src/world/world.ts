@@ -535,14 +535,20 @@ export class World implements Steppable {
    */
   private applyTask(i: number, op: TaskOp, tick: number, simTimeS: number): void {
     const a = this.agents[i] as SimAgent;
-    const reject = (code: string) => this.addEvent(i, { kind: "actionRejected", name: "task", code }, tick, simTimeS);
-    const v = this.parts.runtime.checkBookkeeping("task", { steps: op.steps });
-    if (!v.ok) return reject(v.error.code);
-    if (op.steps.length > TASK_MAX_STEPS) return reject("task_too_many_steps");
-    if (op.steps.some((s) => s.text.length > TASK_STEP_MAX_CHARS)) return reject("task_step_too_long");
+    const refusal = this.taskRefusal(op);
+    if (refusal !== undefined) return void this.addEvent(i, { kind: "actionRejected", name: "task", code: refusal }, tick, simTimeS);
     const steps: TaskStepView[] = op.steps.map((s) => ({ text: s.text, ...(s.action === undefined ? {} : { action: s.action }), ...(s.params === undefined ? {} : { params: s.params }), status: "pending" as const }));
     this.tasks[i] = steps.length === 0 ? undefined : this.listOf(steps, undefined);
     this.parts.trace.emit({ source: this.sourceOf(i), simTime: simTimeS, kind: "event", agentId: a.id, detail: "full", payload: { op: "task", steps: op.steps } });
+  }
+
+  /** The code a task list is refused with (the capability's parameters, then the two limits), or undefined when the world accepts it: the one check `applyTask` and the decision record's MissionNote both use. */
+  private taskRefusal(op: TaskOp): string | undefined {
+    const v = this.parts.runtime.checkBookkeeping("task", { steps: op.steps });
+    if (!v.ok) return v.error.code;
+    if (op.steps.length > TASK_MAX_STEPS) return "task_too_many_steps";
+    if (op.steps.some((s) => s.text.length > TASK_STEP_MAX_CHARS)) return "task_step_too_long";
+    return undefined;
   }
 
   /** The action an answer started (or went on with) works on step `step` (1-based): the step is running. A step outside the list binds nothing. */
@@ -594,9 +600,10 @@ export class World implements Steppable {
   /** What the decision record says of the agent's task list, as a mission's mind says it (`step`, `of`, `done`, `stop`): the step the answer names, or the one running, or the first that is not done. */
   private missionNoteOf(i: number, env: DecisionEnvelope): Record<string, unknown> | undefined {
     if (env.mission !== undefined) return undefined;
-    // The list the decision leaves: the one its answer writes (when it is within the limits), or the one the agent has.
-    const written = env.task !== undefined && env.task.steps.length > 0 && env.task.steps.length <= TASK_MAX_STEPS ? this.listOf(env.task.steps.map((s) => ({ ...s, status: "pending" as const })), undefined) : undefined;
-    const list = env.task !== undefined && env.task.steps.length === 0 ? undefined : (written ?? this.tasks[i]);
+    // The list the decision leaves: the one its answer writes when the world accepts it (the same check as `applyTask`: a refused list is not the agent's list), or the one the agent has.
+    const accepted = env.task !== undefined && this.taskRefusal(env.task) === undefined ? env.task : undefined;
+    const written = accepted !== undefined && accepted.steps.length > 0 ? this.listOf(accepted.steps.map((s) => ({ ...s, status: "pending" as const })), undefined) : undefined;
+    const list = accepted !== undefined && accepted.steps.length === 0 ? undefined : (written ?? this.tasks[i]);
     if (list === undefined) return undefined;
     const n = list.steps.length;
     const allDone = list.steps.every((s) => s.status === "done");
