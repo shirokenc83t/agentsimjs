@@ -180,7 +180,7 @@ export function resolveS2(profile: S2Profile, overrides: S2Overrides | undefined
 // ---- prompt templates -----------------------------------------------------------------------------------------------------------------------------
 
 /** The slots the prompt builder fills, in no particular order: a template names the ones it uses and in what order. */
-export const SLOTS = ["role", "mission", "notebook", "decisions", "self", "beliefs", "space", "events", "actions"] as const;
+export const SLOTS = ["role", "mission", "notebook", "decisions", "self", "beliefs", "space", "events", "actions", "task"] as const;
 export type Slot = (typeof SLOTS)[number];
 
 export const PROMPT_TEMPLATE_SCHEMA_VERSION = 1;
@@ -228,6 +228,21 @@ export const DEFAULT_PROMPT_TEMPLATE: PromptTemplateDocument = {
     "Each turn you receive what happened, what you may do, and your own notes. Answer with exactly one action from the allowed list, or idle to wait for the next event. " +
     "You may also keep notes for yourself; they are returned to you in every prompt.",
   sections: ["role", "mission", "notebook", "decisions", "self", "beliefs", "space", "events", "actions"],
+};
+
+/**
+ * The default template of version 2 (ADR-0036 addition of 2026-11-08): the task slot after the mission and before the beliefs and the events, and a system text that tells the model to write its task as steps, to
+ * name the step of each action and to let a running action go on. Version 1 stays as it was and renders the same bytes.
+ */
+export const DEFAULT_PROMPT_TEMPLATE_V2: PromptTemplateDocument = {
+  schemaVersion: PROMPT_TEMPLATE_SCHEMA_VERSION,
+  kind: "prompt-template",
+  system:
+    "You are the mind of one vehicle in a simulation. You see only what the vehicle senses and believes, never the world itself. " +
+    "Each turn you receive what happened, what you may do, your own notes and your task list. Answer with exactly one action from the allowed list, idle to wait for the next event, or continue to let the action that runs go on. " +
+    "Write your mission as a list of steps with task, once, and name the step each action works on with step: the simulator marks the steps done or failed from what the actions come to, and you cannot. " +
+    "While an action of yours runs, do not start it again: answer continue unless something that matters has changed. You may also keep notes for yourself; they are returned to you in every prompt.",
+  sections: ["role", "mission", "task", "notebook", "decisions", "self", "beliefs", "space", "events", "actions"],
 };
 
 // ---- hashes ----------------------------------------------------------------------------------------------------------------------------------------
