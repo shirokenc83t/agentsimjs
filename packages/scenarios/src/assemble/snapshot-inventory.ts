@@ -45,6 +45,7 @@ export const STATE_INVENTORY: Readonly<Record<string, ClassInventory>> = {
     minDecisionIntervalS: r("run configuration"),
     timers: c("active timers of each agent: tag -> due tick"),
     notebooks: c("each agent's notebook (the `note` capability): captured only when one is not empty"),
+    tasks: c("each agent's task list (the `task` capability): the steps with the status the world keeps, the step running and the last outcome; captured only when one exists"),
     dtS: c("the last tick's step: timers and requests convert with it"),
     seenSpaces: c("space summaries already traced: decides whether the next request writes a space record"),
     slots: c("requests asked and not yet applied, with their envelopes when answered (outstanding decisions)"),

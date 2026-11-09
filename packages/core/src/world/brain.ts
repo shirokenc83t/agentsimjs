@@ -44,6 +44,44 @@ export interface SelfView {
   readonly timers: readonly { readonly tag: string; readonly dueInS: number }[];
   /** The agent's notebook (ADR-0036 addition of 2026-10-29): what its mind wrote with `note`, at most 2,000 characters. Absent while it is empty, so a request of a run that never notes is as it was. */
   readonly notebook?: string;
+  /** The agent's task list (ADR-0005 addition of 2026-11-08): the steps its mind wrote with `task`, each with the status the world keeps. Absent while there is no list, so a request of a run that never writes one is as it was. */
+  readonly task?: TaskView;
+}
+
+/** The status of a task step. The world sets it, never the mind: `pending` until an action is bound to the step, `running` while that action runs, then `done` or `failed` from the action's outcome. */
+export type TaskStatus = "pending" | "running" | "done" | "failed";
+
+/** A step as a mind writes it with `task`: what it is and, optionally, the action and parameters it stands for. */
+export interface TaskStepSpec {
+  readonly text: string;
+  readonly action?: string;
+  readonly params?: Readonly<Record<string, unknown>>;
+}
+
+/** The `task` bookkeeping operation that may accompany any decision: the steps replace the agent's list, every status starting again. */
+export interface TaskOp {
+  readonly steps: readonly TaskStepSpec[];
+}
+
+/** One step of the list as a request shows it: the spec and the status. `actionId` is the action bound to it, once there is one. */
+export interface TaskStepView extends TaskStepSpec {
+  readonly status: TaskStatus;
+  readonly actionId?: string;
+}
+
+/** How the last step ended: `refused` is an action the start check rejected, `preempted` one another action or a reflex ended. */
+export interface TaskOutcome {
+  readonly step: number;
+  readonly status: "done" | "failed" | "refused" | "preempted";
+  readonly action: string;
+  readonly code?: string;
+}
+
+/** The task list of an agent, as a request shows it. `running` is the step (1-based) whose action runs now. */
+export interface TaskView {
+  readonly steps: readonly TaskStepView[];
+  readonly running?: number;
+  readonly last?: TaskOutcome;
 }
 
 /** F1 decisions: start a base action, or stay idle until the next event. Plans, policies and protocol moves follow. */
@@ -67,6 +105,12 @@ export interface DecisionEnvelope {
   readonly decision: Decision;
   readonly timers?: readonly TimerOp[];
   readonly note?: NoteOp;
+  /** The task list the answer writes (the `task` capability): applied after the notebook, before the decision's action. */
+  readonly task?: TaskOp;
+  /** The step (1-based) the answer's action works on: the world binds the action it starts to that step. */
+  readonly step?: number;
+  /** The mind turned its answer into `continue`: the running action goes on. The world writes `continued: true` and this action id into the decision record. */
+  readonly continued?: { readonly actionId: string };
   /** What an S2 mind says of how it decided (attempts, usage, whether it fell back): the world writes it into the decision record, under `mind`. */
   readonly mind?: Readonly<Record<string, unknown>>;
   readonly confidence?: number;
@@ -110,6 +154,8 @@ export interface StatefulBrain extends Brain {
 export interface Brain {
   readonly id: string;
   readonly tier: BrainTier;
+  /** The mind's wake policy (ADR-0005 addition of 2026-11-08): `all` (absent means this) asks at every event; `task` lets perception events wait while an action runs. */
+  readonly wake?: "all" | "task";
   decide(req: DecisionRequest, ctx?: DecideContext): Promise<DecisionEnvelope>;
 }
 

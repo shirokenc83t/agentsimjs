@@ -9,7 +9,7 @@ const SNAKE = /^[a-z][a-z0-9_]*$/;
 describe("capability definitions (ADR-0007)", () => {
   it("defines the base actions (F1, and explore from F2)", () => {
     expect(CAPABILITIES.filter((c) => c.kind === "action").map((c) => c.name)).toEqual(["explore", "goTo", "hold", "land", "returnToBase", "takeoff"]);
-    expect(CAPABILITIES.filter((c) => c.kind === "bookkeeping").map((c) => c.name)).toEqual(["cancelTimer", "note", "setTimer"]); // timers (F2 M2d) and the notebook (F4)
+    expect(CAPABILITIES.filter((c) => c.kind === "bookkeeping").map((c) => c.name)).toEqual(["cancelTimer", "note", "setTimer", "task"]); // timers (F2 M2d), the notebook (F4) and the task list (F4b)
     expect(CAPABILITIES.filter((c) => c.kind === "compute").map((c) => c.name)).toEqual(["estimateCost", "kShortestPaths", "planPath", "querySpace"]); // F4 M2
   });
 
@@ -121,6 +121,8 @@ describe("timer capabilities (bookkeeping, ADR-0005 addition of 2026-10-09)", ()
     ["cancelTimer", { tag: "wake-up" }],
     ["note", { text: "visit B then C", mode: "replace" }],
     ["note", { text: "", mode: "append" }],
+    ["task", { steps: [] }],
+    ["task", { steps: [{ text: "fly to P1", action: "goTo", params: { xM: 20, yM: 40 } }, { text: "return to base" }] }],
   ])("%s accepts %j", (name, params) => {
     expect(validateParams(name, params).ok).toBe(true);
   });
@@ -129,6 +131,10 @@ describe("timer capabilities (bookkeeping, ADR-0005 addition of 2026-10-09)", ()
     ["note", { text: "x" }, "a note without a mode"],
     ["note", { text: "x", mode: "prepend" }, "a mode that does not exist"],
     ["note", { mode: "append" }, "a note without text"],
+    ["task", {}, "a task without steps"],
+    ["task", { steps: [{ action: "goTo" }] }, "a step without text"],
+    ["task", { steps: [{ text: "x", done: true }] }, "a step that marks itself done"],
+    ["task", { steps: [{ text: "x" }], extra: 1 }, "an unknown field"],
     ["setTimer", { tag: "wake" }, "missing delay"],
     ["setTimer", { delayS: "5", tag: "wake" }, "string delay"],
     ["setTimer", { delayS: 5, tag: "Wake Up" }, "tag with capitals and a space"],
@@ -151,6 +157,12 @@ describe("timer capabilities (bookkeeping, ADR-0005 addition of 2026-10-09)", ()
     }
     expect(getCapability("setTimer")?.failureCodes).toEqual(["delay_out_of_range", "timer_limit"]);
     expect(getCapability("cancelTimer")?.failureCodes).toEqual(["timer_not_found"]);
+  });
+  it("the task list is bookkeeping, self-scope, for every vehicle, with its two limits as stable failure codes", () => {
+    const c = getCapability("task");
+    expect([c?.kind, c?.scope, c?.preconditions.length]).toEqual(["bookkeeping", "self", 0]);
+    expect(c?.vehicles).toEqual(["uav", "ugv"]);
+    expect(c?.failureCodes).toEqual(["task_too_many_steps", "task_step_too_long"]);
   });
   it("the researcher's injectable commands are a closed set of self-scope actions, not in the minds' manifest", () => {
     expect([...INJECTABLE_COMMANDS]).toEqual(["explore", "goTo", "hold", "land", "takeoff"]);

@@ -289,6 +289,7 @@ const CAPS: Record<string, CapDef> = {
   land: { vehicles: ["uav"], preconditions: [{ name: "airborne" }], check: () => true },
   setTimer: { kind: "bookkeeping", vehicles: ["uav", "ugv"], preconditions: [], check: (p) => num(p["delayS"]) && typeof p["tag"] === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(p["tag"] as string) },
   cancelTimer: { kind: "bookkeeping", vehicles: ["uav", "ugv"], preconditions: [], check: (p) => typeof p["tag"] === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(p["tag"] as string) },
+  task: { kind: "bookkeeping", vehicles: ["uav", "ugv"], preconditions: [], check: (p) => Array.isArray(p["steps"]) && (p["steps"] as unknown[]).every((s) => typeof s === "object" && s !== null && typeof (s as Record<string, unknown>)["text"] === "string") },
   explore: {
     vehicles: ["uav", "ugv"],
     preconditions: [{ name: "airborne", vehicles: ["uav"] }, { name: "hasRangeSensor" }],
