@@ -26,6 +26,10 @@ export interface PromptInput {
   readonly history: readonly DecisionNote[];
   /** The actions the profile's tool list leaves out of the offer (names), if it restricts them. */
   readonly offered?: readonly string[];
+  /** `continue` is among the answers (an action runs and the profile has the continuity fields): the actions slot lists it. */
+  readonly continueOffered?: boolean;
+  /** The profile allows the `task` tool: the actions slot describes `task` and `step`. */
+  readonly taskOffered?: boolean;
 }
 
 const json = (v: unknown): string => canonicalJson(v);
@@ -56,7 +60,14 @@ function slotText(slot: Slot, i: PromptInput): string {
       const offer = i.offered === undefined ? r.allowedActions : r.allowedActions.filter((a) => i.offered?.includes(a.name));
       const allowed = offer.map((a) => `- ${a.name}: parameters ${json(a.paramsSchema)}`).join("\n");
       const unavailable = r.unavailable.length === 0 ? "" : `\nNot available now: ${r.unavailable.map((u) => `${u.name} (${u.code})`).join(", ")}.`;
-      return `Answer with one JSON object: {"action": <name or "idle">, "params": {...}, "timers"?: [...], "note"?: {"text": ..., "mode": "replace"|"append"}, "rationale"?: <short reason>}.\nAllowed actions:\n${allowed.length === 0 ? "(none)" : allowed}\n- idle: wait for the next event.${unavailable}`;
+      if (i.continueOffered !== true && i.taskOffered !== true) {
+        return `Answer with one JSON object: {"action": <name or "idle">, "params": {...}, "timers"?: [...], "note"?: {"text": ..., "mode": "replace"|"append"}, "rationale"?: <short reason>}.\nAllowed actions:\n${allowed.length === 0 ? "(none)" : allowed}\n- idle: wait for the next event.${unavailable}`;
+      }
+      // With the continuity fields: `continue` while an action runs, and the task list and the step of the action when the profile allows the `task` tool.
+      const name = i.continueOffered === true ? `<name, "idle" or "continue">` : `<name or "idle">`;
+      const task = i.taskOffered === true ? `, "task"?: {"steps": [{"text": ..., "action"?: ..., "params"?: ...}]}, "step"?: <the number of the step this action works on, 1 is the first>` : "";
+      const cont = i.continueOffered === true ? "\n- continue: keep doing what you are doing; the action that runs goes on as it is." : "";
+      return `Answer with one JSON object: {"action": ${name}, "params": {...}, "timers"?: [...], "note"?: {"text": ..., "mode": "replace"|"append"}${task}, "rationale"?: <short reason>}.\nAllowed actions:\n${allowed.length === 0 ? "(none)" : allowed}\n- idle: wait for the next event.${cont}${unavailable}`;
     }
   }
 }

@@ -517,3 +517,127 @@ describe("the cache of one run", () => {
     expect(reads).toBe(1); // read once from the store, then remembered
   });
 });
+
+// F4b M1 (T-145): the wake policy of the profile and `continue` (ADR-0005 addition of 2026-11-08). The continuity fields are off by default: a profile without them is offered what it was, and its answers mean what they meant.
+describe("continuity: the wake policy and `continue` (T-145)", () => {
+  const running = (name = "goTo", actionId = "a-000001") => request({ self: { kind: "ugv", xM: 1, yM: 2, headingRad: 0, soc: 1, running: { actionId, name, phase: "driving" }, timers: [] } });
+  const ctx = (trace: TraceSink) => ({ requestRecordId: "req", trace });
+
+  it("a profile without the fields is offered the F4 schema and prompt, whatever runs; the brain's wake policy is absent", async () => {
+    const { brain, provider } = setup([ok({ action: "idle" })]);
+    expect(brain.wake).toBeUndefined();
+    const req = running();
+    await brain.decide(req);
+    const call = provider.requests[0] as unknown as { answerSchema: unknown; messages: { content: string }[] };
+    expect(call.answerSchema).toEqual(answerSchema(req.allowedActions));
+    expect(call.messages.at(-1)?.content).not.toContain("continue");
+  });
+
+  it("`wake: task` is carried by the brain; with an action running the allowed answers list `continue`, the prompt names it, and without one they do not", async () => {
+    const { brain, provider } = setup([ok({ action: "idle" }), ok({ action: "idle" })], { effective: effective({ wake: "task" }) });
+    expect(brain.wake).toBe("task");
+    await brain.decide(running());
+    await brain.decide(request());
+    const [withRun, without] = provider.requests as unknown as { answerSchema: { anyOf: { properties: { action: { const: string } } }[] }; messages: { content: string }[] }[];
+    expect(withRun?.answerSchema.anyOf.map((v) => v.properties.action.const)).toEqual(["goTo", "hold", "idle", "continue"]);
+    expect(withRun?.messages.at(-1)?.content).toContain("- continue: keep doing what you are doing");
+    expect(without?.answerSchema.anyOf.map((v) => v.properties.action.const)).toEqual(["goTo", "hold", "idle"]);
+    expect(without?.messages.at(-1)?.content).not.toContain("continue");
+  });
+
+  it("an answer of `continue` is idle underneath, names the running action in `continued`, and says why in the decision's mind notes", async () => {
+    const { brain } = setup([ok({ action: "continue", rationale: "on my way" })], { effective: effective({ wake: "task" }) });
+    const env = await brain.decide(running("goTo", "a-000007"));
+    expect(env.decision).toEqual({ kind: "idle" });
+    expect(env.continued).toEqual({ actionId: "a-000007" });
+    expect(env.mind).toMatchObject({ continued: "the answer was continue" });
+    expect(env.rationale).toBe("on my way");
+  });
+
+  it("an answer equal to the running action (same action, canonically equal parameters) becomes `continue` with the reason; a different one still starts", async () => {
+    const same = { action: "goTo", params: { xM: 5, yM: 6 } };
+    const { brain } = setup(
+      [
+        ok(same), // decision 1: starts goTo
+        ok({ action: "goTo", params: { yM: 6, xM: 5 } }), // decision 2: the same with its keys in another order, while goTo (a-000001) runs
+        ok({ action: "goTo", params: { xM: 9, yM: 6 } }), // decision 3: other parameters: a new start
+        ok({ action: "hold", params: {} }), // decision 4: another action
+      ],
+      { effective: effective({ wake: "task" }) },
+    );
+    const first = await brain.decide(request());
+    expect(first.decision).toEqual({ kind: "action", name: "goTo", params: { xM: 5, yM: 6 } });
+    expect(first.continued).toBeUndefined();
+    const second = await brain.decide(running("goTo", "a-000001"));
+    expect(second.decision).toEqual({ kind: "idle" });
+    expect(second.continued).toEqual({ actionId: "a-000001" });
+    expect(second.mind).toMatchObject({ continued: "the answer was the action that runs, with the same parameters" });
+    const third = await brain.decide(running("goTo", "a-000001"));
+    expect(third.decision).toEqual({ kind: "action", name: "goTo", params: { xM: 9, yM: 6 } });
+    expect(third.continued).toBeUndefined();
+    // The action the mind started last is goTo {9,6}, which is not the one that runs now (a new id): nothing equal to continue.
+    const fourth = await brain.decide(running("hold", "a-000002"));
+    expect(fourth.decision).toEqual({ kind: "action", name: "hold", params: {} });
+  });
+
+  it("an action started by someone else (its id is not the one this mind's action has) is never taken for the mind's own: the same answer restarts it", async () => {
+    const { brain } = setup([ok({ action: "goTo", params: { xM: 5, yM: 6 } }), ok({ action: "idle" }), ok({ action: "goTo", params: { xM: 5, yM: 6 } })], { effective: effective({ wake: "task" }) });
+    await brain.decide(request());
+    await brain.decide(running("goTo", "a-000001")); // the world shows the mind's goTo running as a-000001
+    const env = await brain.decide(running("goTo", "a-000009")); // a goTo with another id: injected by the researcher, say
+    expect(env.decision).toEqual({ kind: "action", name: "goTo", params: { xM: 5, yM: 6 } });
+    expect(env.continued).toBeUndefined();
+  });
+
+  it("without the continuity fields an equal answer restarts the action, as in F4", async () => {
+    const { brain } = setup([ok({ action: "goTo", params: { xM: 5, yM: 6 } }), ok({ action: "goTo", params: { xM: 5, yM: 6 } })]);
+    await brain.decide(request());
+    const env = await brain.decide(running("goTo", "a-000001"));
+    expect(env.decision).toEqual({ kind: "action", name: "goTo", params: { xM: 5, yM: 6 } });
+    expect(env.continued).toBeUndefined();
+  });
+
+  it("what the mind chose last is part of its state: a restored brain still knows its action", async () => {
+    const a = setup([ok({ action: "goTo", params: { xM: 5, yM: 6 } })], { effective: effective({ wake: "task" }) }).brain;
+    await a.decide(request());
+    await a.decide(running("goTo", "a-000001")).catch(() => undefined); // the script has one answer: this call falls back, which is fine for what follows
+    const state = a.snapshotState();
+    const { brain: b } = setup([ok({ action: "goTo", params: { xM: 5, yM: 6 } })], { effective: effective({ wake: "task" }) });
+    b.restoreState(state);
+    expect(b.snapshotState()).toEqual(state);
+  });
+
+  it("the trace names nothing new for a profile without the fields (the F4 records are as they were)", async () => {
+    const { brain, records, trace } = setup([ok({ action: "idle" })]);
+    await brain.decide(request(), ctx(trace));
+    expect(records.every((r) => !JSON.stringify(payload(r)).includes("continue"))).toBe(true);
+  });
+});
+
+describe("the answer schema with the task list (F4b M1)", () => {
+  const allowed = request().allowedActions;
+
+  it("without the options it is the F4 schema, byte for byte; `continue` and the task fields appear only when asked for", () => {
+    expect(canonicalJson(answerSchema(allowed, {}))).toBe(canonicalJson(answerSchema(allowed)));
+    const plain = canonicalJson(answerSchema(allowed));
+    expect(plain).not.toContain("continue");
+    expect(plain).not.toContain('"step"');
+    expect(canonicalJson(answerSchema(allowed, { task: true }))).toContain('"step"');
+    expect(canonicalJson(answerSchema(allowed, { continue: true }))).toContain('"const":"continue"');
+  });
+
+  it("parses `task` and `step` with any action, `continue` as idle underneath, and refuses them where they are not offered", () => {
+    const schema = answerSchema(allowed, { continue: true, task: true });
+    const steps = [{ text: "go to P1", action: "goTo", params: { xM: 1, yM: 2 } }, { text: "land" }];
+    expect(parseAnswer(JSON.stringify({ action: "goTo", params: { xM: 1, yM: 2 }, task: { steps }, step: 1 }), schema)).toEqual({ ok: true, value: { decision: { kind: "action", name: "goTo", params: { xM: 1, yM: 2 } }, task: { steps }, step: 1 } });
+    expect(parseAnswer('{"action":"continue","step":2}', schema)).toEqual({ ok: true, value: { decision: { kind: "idle" }, continue: true, step: 2 } });
+    // A step number is a positive integer, a step needs its text, and a field the schema was not given is refused.
+    expect(parseAnswer('{"action":"idle","step":0}', schema).ok).toBe(false);
+    expect(parseAnswer('{"action":"idle","task":{"steps":[{"action":"hold"}]}}', schema).ok).toBe(false);
+    expect(parseAnswer('{"action":"idle","step":1}', answerSchema(allowed)).ok).toBe(false);
+    expect(parseAnswer('{"action":"continue"}', answerSchema(allowed, { task: true })).ok).toBe(false);
+    // A list over the world's limits is not the schema's business (the world refuses it with its codes).
+    const many = Array.from({ length: 20 }, (_, i) => ({ text: `step ${i + 1}` }));
+    expect(parseAnswer(JSON.stringify({ action: "idle", task: { steps: many } }), schema).ok).toBe(true);
+  });
+});

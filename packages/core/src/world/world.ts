@@ -461,6 +461,9 @@ export class World implements Steppable {
       if (!this.brainAt[i] || this.slots[i]) continue;
       const inbox = this.inboxes[i] as Inbox;
       if (inbox.size === 0 || runtime.isRecovering((this.agents[i] as SimAgent).id)) continue;
+      // The wake policy `task` (ADR-0005 addition of 2026-11-08): while the agent has a running action, perception events stay in the inbox (merged as always) and do not ask; control events ask at once, and the
+      // events that waited go with them.
+      if ((this.brainAt[i] as Brain).wake === "task" && !inbox.hasControl() && runtime.info((this.agents[i] as SimAgent).id)?.status === "running") continue;
       // Control events request a decision at once; perception events wait out the minimum decision interval,
       // measured from the previous request of any kind. Delayed, not lost.
       if (!inbox.hasControl() && simTimeS - (this.lastRequestS[i] as number) < this.minDecisionIntervalS - 1e-9) continue;

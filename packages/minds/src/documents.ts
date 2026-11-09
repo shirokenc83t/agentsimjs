@@ -55,6 +55,8 @@ const Limits = Type.Object(
 const Tools = Type.Object({ allow: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: 32 })), maxCallsPerDecision: Type.Optional(Type.Number()) }, { additionalProperties: false });
 const Context = Type.Object({ decisions: Type.Optional(Type.Number()) }, { additionalProperties: false });
 const Latency = Type.Object({ model: Type.Union([Type.Literal("fixed"), Type.Literal("measured")]), fixedMs: Type.Optional(Type.Number({ minimum: 0, maximum: 600_000 })) }, { additionalProperties: false });
+/** The wake policy of a mind (ADR-0036 addition of 2026-11-08): `all` asks at every event (the F4 behaviour, the default), `task` lets perception events wait while an action runs. */
+const Wake = Type.Union([Type.Literal("all"), Type.Literal("task")]);
 const TemplateRef = Type.Object({ id: Id, version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false });
 
 /** The System 2 section of a profile (ADR-0036 section 2). `provider` names an entry of Settings, never holds a key. */
@@ -68,6 +70,7 @@ export const S2Profile = Type.Object(
     context: Type.Optional(Context),
     limits: Type.Optional(Limits),
     latency: Type.Optional(Latency),
+    wake: Type.Optional(Wake),
   },
   { additionalProperties: false },
 );
@@ -83,6 +86,7 @@ export const S2Overrides = Type.Object(
     context: Type.Optional(Context),
     limits: Type.Optional(Limits),
     latency: Type.Optional(Latency),
+    wake: Type.Optional(Wake),
   },
   { additionalProperties: false },
 );
@@ -139,6 +143,8 @@ export interface EffectiveS2 {
   readonly context: { readonly decisions: number };
   readonly limits: { readonly calls: number; readonly tokens: number; readonly costUsd: number; readonly timeoutS: number; readonly retries: number };
   readonly latency: { readonly model: "fixed" | "measured"; readonly fixedMs?: number };
+  /** The wake policy, only when the profile or the run configuration sets it (absent: `all`, so a profile without it resolves, and hashes, as before). */
+  readonly wake?: "all" | "task";
   /** The level of each field, by dotted path (`model`, `limits.calls`, `params.temperature`, …). */
   readonly sources: Readonly<Record<string, MindSource>>;
 }
@@ -167,7 +173,8 @@ export function resolveS2(profile: S2Profile, overrides: S2Overrides | undefined
   const context = group("context", ["decisions"], MIND_DEFAULTS.context, profile.context, overrides?.context) as EffectiveS2["context"];
   const tools = group("tools", ["maxCallsPerDecision", "allow"], MIND_DEFAULTS.tools, profile.tools, overrides?.tools) as EffectiveS2["tools"];
   const latency = group("latency", ["model", "fixedMs"], MIND_DEFAULTS.latency, profile.latency, overrides?.latency) as EffectiveS2["latency"];
-  return { provider, model, params, promptTemplate: template, tools, context, limits, latency, sources };
+  const wake = profile.wake === undefined && overrides?.wake === undefined ? undefined : (pick("wake", undefined, profile.wake, overrides?.wake) as "all" | "task");
+  return { provider, model, params, promptTemplate: template, tools, context, limits, latency, ...(wake === undefined ? {} : { wake }), sources };
 }
 
 // ---- prompt templates -----------------------------------------------------------------------------------------------------------------------------

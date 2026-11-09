@@ -155,7 +155,7 @@ export interface Brain {
   readonly id: string;
   readonly tier: BrainTier;
   /** The mind's wake policy (ADR-0005 addition of 2026-11-08): `all` (absent means this) asks at every event; `task` lets perception events wait while an action runs. */
-  readonly wake?: "all" | "task";
+  readonly wake?: "all" | "task" | undefined;
   decide(req: DecisionRequest, ctx?: DecideContext): Promise<DecisionEnvelope>;
 }
 

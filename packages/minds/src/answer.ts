@@ -1,4 +1,4 @@
-import { validate, type AllowedAction, type Decision, type NoteOp, type TimerOp } from "@agentsim/core";
+import { validate, type AllowedAction, type Decision, type NoteOp, type TaskOp, type TimerOp } from "@agentsim/core";
 import type { TSchema } from "typebox";
 import type { JsonSchema } from "./provider.ts";
 
@@ -27,15 +27,37 @@ const NOTE: JsonSchema = {
 
 const OPTIONAL: Record<string, JsonSchema> = { timers: TIMERS, note: NOTE, rationale: { type: "string", maxLength: 2000 } };
 
-/** The schema of the final answer for these allowed actions: a variant per action (its `action` name and its exact parameters) and one for `idle`. Deterministic: the actions in the order given. */
-export function answerSchema(allowed: readonly AllowedAction[]): JsonSchema {
+// The task list (ADR-0005 addition of 2026-11-08): the shape only. Its limits (16 steps, 200 characters) are the world's, so a list over them is refused with their stable codes and the mind hears of it.
+const TASK: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["steps"],
+  properties: {
+    steps: {
+      type: "array",
+      items: { type: "object", additionalProperties: false, required: ["text"], properties: { text: { type: "string" }, action: { type: "string" }, params: { type: "object" } } },
+    },
+  },
+};
+const STEP: JsonSchema = { type: "integer", minimum: 1 };
+
+/** What the answer may carry besides the action, beyond the F4 contract: `continue` as an answer (only while an action runs), and the task list and `step` (only for a profile that allows the `task` tool). */
+export interface AnswerOptions {
+  readonly continue?: boolean;
+  readonly task?: boolean;
+}
+
+/** The schema of the final answer for these allowed actions: a variant per action (its `action` name and its exact parameters), one for `idle` and, with the options, one for `continue`. Deterministic: the actions in the order given. */
+export function answerSchema(allowed: readonly AllowedAction[], options: AnswerOptions = {}): JsonSchema {
+  const optional: Record<string, JsonSchema> = options.task === true ? { ...OPTIONAL, task: TASK, step: STEP } : OPTIONAL;
   const variants: JsonSchema[] = allowed.map((a) => ({
     type: "object",
     additionalProperties: false,
     required: ["action", "params"],
-    properties: { action: { const: a.name }, params: a.paramsSchema, ...OPTIONAL },
+    properties: { action: { const: a.name }, params: a.paramsSchema, ...optional },
   }));
-  variants.push({ type: "object", additionalProperties: false, required: ["action"], properties: { action: { const: "idle" }, ...OPTIONAL } });
+  variants.push({ type: "object", additionalProperties: false, required: ["action"], properties: { action: { const: "idle" }, ...optional } });
+  if (options.continue === true) variants.push({ type: "object", additionalProperties: false, required: ["action"], properties: { action: { const: "continue" }, ...optional } });
   return { anyOf: variants };
 }
 
@@ -43,6 +65,10 @@ export interface ParsedAnswer {
   readonly decision: Decision;
   readonly timers?: readonly TimerOp[];
   readonly note?: NoteOp;
+  readonly task?: TaskOp;
+  readonly step?: number;
+  /** The answer was `continue`: the running action goes on (the decision is `idle` underneath). */
+  readonly continue?: true;
   readonly rationale?: string;
 }
 
@@ -105,13 +131,16 @@ export function parseAnswer(text: string, schema: JsonSchema): { readonly ok: tr
     const actionOf = (raw as { action?: unknown } | null)?.action;
     return { ok: false, message: `${typeof actionOf === "string" ? `for action "${actionOf}", ` : ""}${first === undefined ? "the answer does not match the schema" : `${first.path === "" ? "answer" : first.path}: ${first.message}`}` };
   }
-  const a = v.value as { action: string; params?: unknown; timers?: TimerOp[]; note?: NoteOp; rationale?: string };
+  const a = v.value as { action: string; params?: unknown; timers?: TimerOp[]; note?: NoteOp; task?: TaskOp; step?: number; rationale?: string };
   return {
     ok: true,
     value: {
-      decision: a.action === "idle" ? { kind: "idle" } : { kind: "action", name: a.action, params: a.params ?? {} },
+      decision: a.action === "idle" || a.action === "continue" ? { kind: "idle" } : { kind: "action", name: a.action, params: a.params ?? {} },
+      ...(a.action === "continue" ? { continue: true as const } : {}),
       ...(a.timers === undefined || a.timers.length === 0 ? {} : { timers: a.timers }),
       ...(a.note === undefined ? {} : { note: a.note }),
+      ...(a.task === undefined ? {} : { task: a.task }),
+      ...(a.step === undefined ? {} : { step: a.step }),
       ...(a.rationale === undefined || a.rationale === "" ? {} : { rationale: a.rationale }),
     },
   };
