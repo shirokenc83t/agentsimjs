@@ -10,6 +10,9 @@ export type StepState = "pending" | "running" | "done" | "preempted" | "refused"
 /** The glyph of a step's state (ADR-0032 §5: a glyph always comes with its text). */
 export const STEP_GLYPH: Readonly<Record<StepState, string>> = { done: "✓", running: "▶", pending: "○", preempted: "▲", refused: "✕", failed: "✕", skipped: "–" };
 
+/** The tone class of a step state (the Inspector's own state colours): only the glyph takes it, the text stays the foreground (U-022). Shared by the mission view and the task list of an LLM mind. */
+export const STEP_TONE = { done: "st-ok", running: "st-run", pending: "muted", preempted: "st-warn", refused: "st-alm", failed: "st-alm", skipped: "muted" } as const satisfies Readonly<Record<StepState, string>>;
+
 export interface MissionStepView {
   readonly index: number;
   readonly action: string;
@@ -48,6 +51,8 @@ export interface MissionView {
   readonly current: number;
   readonly status: "ready" | "running" | "done" | "stopped";
   readonly stop: MissionStopView | undefined;
+  /** Where the steps come from when it is not a script of the run configuration: `task list of the mind` (a language-model mind wrote them, F4b M2). */
+  readonly source?: string;
 }
 
 interface Payload {
@@ -104,6 +109,19 @@ export function missionViewOf(records: readonly TraceRecord[], agentId: string):
     const steps = p.mind?.s1?.script?.params?.steps;
     if (Array.isArray(steps)) defs = steps as typeof defs;
   }
+  // A language-model mind's task list is a mission too (U-024): its steps are the words the mind wrote (the last `task` record), followed from the decision that wrote them, which names the first step.
+  let source: string | undefined;
+  let from = 0;
+  if (defs === undefined) {
+    const lists = records.filter((r) => r.agentId === agentId && r.kind === "event" && (r.payload as Payload | undefined)?.op === "task");
+    const last = lists.at(-1);
+    const written = (last?.payload as { steps?: unknown } | undefined)?.steps;
+    if (last !== undefined && Array.isArray(written) && written.length > 0) {
+      defs = (written as { text?: unknown }[]).map((s) => ({ action: typeof s.text === "string" ? s.text : "step" }));
+      source = lists.length > 1 ? `task list of the mind · rewritten ${lists.length - 1}×` : "task list of the mind";
+      from = records.filter((r) => r.agentId === agentId && r.kind === "thought" && (r.payload as Payload | undefined)?.op === "decision" && r.seq < last.seq).at(-1)?.seq ?? last.seq;
+    }
+  }
   if (defs === undefined || defs.length === 0) return undefined;
   const of = defs.length;
   const rows: Mutable[] = defs.map(() => ({ state: "pending", detail: undefined, words: undefined, code: undefined, startedAtS: undefined, endedAtS: undefined, decisionId: undefined, decisionSeq: undefined }));
@@ -116,13 +134,14 @@ export function missionViewOf(records: readonly TraceRecord[], agentId: string):
   const reflexes: { reflex: string; message: string | undefined; atS: number }[] = [];
   const commands: { atS: number }[] = [];
   for (const r of records) {
-    if (r.agentId !== agentId) continue;
+    if (r.agentId !== agentId || r.seq < from) continue;
     const p = (r.payload ?? {}) as Payload;
     if (r.kind === "thought" && p.op === "decision" && typeof p.step === "number") {
       const i = p.step - 1;
       const row = rows[i];
       if (row === undefined) continue;
-      if (p.stop !== undefined) {
+      // The `stop` of a decision record is a script's: the world never stops a mind's task list (a failed step is only failed, and the mind may go on), so a list is not stopped by it.
+      if (p.stop !== undefined && source === undefined) {
         const s = str(p.stop.status);
         if (s === "refused" || s === "failed" || s === "preempted") {
           stop = { step: p.step, status: s, action: str(p.stop.action) ?? "?", code: str(p.stop.code) ?? "?" };
@@ -215,7 +234,7 @@ export function missionViewOf(records: readonly TraceRecord[], agentId: string):
             : `${stop.action} ${cause}${at}`;
     stopView = { step: stop.step, action: stop.action, status: stop.status, code: stop.code, cause, line: `Mission stopped at step ${stop.step} of ${of} · ${happened}${resume}${not}` };
   }
-  return { steps, of, current, status, stop: stopView };
+  return { steps, of, current, status, stop: stopView, ...(source === undefined ? {} : { source }) };
 }
 
 /** The Scene badge and the Explorer cell: `▶ 3/5`, `✓ 5/5`, `■ 3/5`; empty before the mission has begun. */
@@ -237,7 +256,12 @@ export function missionLine(v: MissionView | undefined, agentId: string): string
 export function missionViews(records: readonly TraceRecord[]): Map<string, MissionView> {
   const out = new Map<string, MissionView>();
   const ids = new Set<string>();
-  for (const r of records) if (r.agentId !== undefined && r.kind === "lifecycle" && (r.payload as Payload | undefined)?.op === "config" && (r.payload as Payload).mind !== undefined) ids.add(r.agentId);
+  for (const r of records) {
+    if (r.agentId === undefined) continue;
+    if (r.kind === "lifecycle" && (r.payload as Payload | undefined)?.op === "config" && (r.payload as Payload).mind !== undefined) ids.add(r.agentId);
+    // A language-model mind that wrote a task list has a mission too.
+    else if (r.kind === "event" && (r.payload as Payload | undefined)?.op === "task") ids.add(r.agentId);
+  }
   for (const id of ids) {
     const v = missionViewOf(records, id);
     if (v !== undefined) out.set(id, v);

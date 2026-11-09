@@ -90,6 +90,8 @@ export interface LlmBrainState {
   readonly raised?: Partial<Record<LimitName, number>>;
   /** The limits already warned of at 80 %. */
   readonly warned?: readonly LimitName[];
+  /** The last action this mind chose and, once the world showed it running, its id: what an answer equal to the running action is compared with (the continuity fields only). */
+  readonly lastAction?: { readonly name: string; readonly params: string; readonly id?: string };
 }
 
 const HISTORY_CAP = 50;
@@ -107,9 +109,15 @@ export class LlmBrain implements Brain, StatefulBrain {
   private notReproducibleFromTick: number | undefined;
   private raised: Partial<Record<LimitName, number>> = {};
   private warned = new Set<LimitName>();
+  private lastAction: { readonly name: string; readonly params: string; readonly id?: string } | undefined;
 
   constructor(private readonly o: LlmBrainOptions) {
     this.id = o.id;
+  }
+
+  /** The wake policy of the profile (ADR-0005 addition of 2026-11-08); absent means `all`. */
+  get wake(): "all" | "task" | undefined {
+    return this.o.effective.wake;
   }
 
   /** What the mind has used so far (the host shows it against the limits). */
@@ -137,6 +145,7 @@ export class LlmBrain implements Brain, StatefulBrain {
       ...(this.notReproducibleFromTick === undefined ? {} : { notReproducibleFromTick: this.notReproducibleFromTick }),
       ...(Object.keys(this.raised).length === 0 ? {} : { raised: { ...this.raised } }),
       ...(this.warned.size === 0 ? {} : { warned: [...this.warned].sort() }),
+      ...(this.lastAction === undefined ? {} : { lastAction: { ...this.lastAction } }),
     };
   }
 
@@ -150,6 +159,17 @@ export class LlmBrain implements Brain, StatefulBrain {
     this.notReproducibleFromTick = s.notReproducibleFromTick;
     this.raised = { ...(s.raised ?? {}) };
     this.warned = new Set(s.warned ?? []);
+    this.lastAction = s.lastAction === undefined ? undefined : { ...s.lastAction };
+  }
+
+  /** The action this mind chose last, as the world shows it: its id once it runs; forgotten when it ended or another action runs. */
+  private syncLastAction(req: DecisionRequest): void {
+    const last = this.lastAction;
+    if (last === undefined) return;
+    const run = req.self.running;
+    if (run === null || run.name !== last.name) this.lastAction = undefined;
+    else if (last.id === undefined) this.lastAction = { ...last, id: run.actionId };
+    else if (last.id !== run.actionId) this.lastAction = undefined;
   }
 
   // ---- the limits (ADR-0044 section 5) --------------------------------------------------------------------------------------------------------
@@ -201,8 +221,22 @@ export class LlmBrain implements Brain, StatefulBrain {
     const allow = eff.tools.allow;
     const offered = allow === undefined ? undefined : req.allowedActions.filter((a) => allow.includes(a.name)).map((a) => a.name);
     const allowed = offered === undefined ? req.allowedActions : req.allowedActions.filter((a) => offered.includes(a.name));
-    const schema = answerSchema(allowed);
-    const first = buildPrompt({ template: this.o.template, mission: this.o.mission, request: req, history: this.history.slice(-eff.context.decisions), ...(offered === undefined ? {} : { offered }) });
+    // The continuity fields (ADR-0005 addition of 2026-11-08): a profile with the `task` wake policy or the `task` tool allowed is offered `continue` while an action runs, and one that allows `task` may write the list and name the step.
+    const taskOffered = allow?.includes("task") === true;
+    const continuity = eff.wake === "task" || taskOffered;
+    this.syncLastAction(req);
+    const running = req.self.running;
+    const continueOffered = continuity && running !== null;
+    const schema = answerSchema(allowed, { continue: continueOffered, task: taskOffered });
+    const first = buildPrompt({
+      template: this.o.template,
+      mission: this.o.mission,
+      request: req,
+      history: this.history.slice(-eff.context.decisions),
+      ...(offered === undefined ? {} : { offered }),
+      ...(continueOffered ? { continueOffered: true } : {}),
+      ...(taskOffered ? { taskOffered: true } : {}),
+    });
     const source = `${req.agentId}/s2`;
     const emit = (payload: Record<string, unknown>, causeIds?: readonly string[]): string | undefined =>
       ctx?.trace?.emit({ source, simTime: req.simTimeS, kind: "thought", agentId: req.agentId, tier: "S2", detail: "full", payload, ...(ctx.requestRecordId === undefined ? {} : { parentId: ctx.requestRecordId }), ...(causeIds === undefined ? {} : { causeIds }) });
@@ -378,13 +412,31 @@ export class LlmBrain implements Brain, StatefulBrain {
 
     const meta = { attempts: used.calls, usage: { inputTokens: used.input, outputTokens: used.output }, latencyMs, ...(this.o.prices === undefined ? {} : { costUsd: used.cost }), ...(this.notReproducibleFromTick === undefined ? {} : { notReproducible: true }) };
     if (answer !== undefined) {
-      this.remember(req, answer.decision.kind === "action" ? `${answer.decision.name} ${canonicalJson(answer.decision.params)}` : "idle", answer.rationale, false);
+      // `continue`, or an action equal to the one that runs (the same action, canonically equal parameters), goes on with the running action instead of starting it again; the decision record says which and why.
+      let decision = answer.decision;
+      let continued: { readonly actionId: string } | undefined;
+      let why: string | undefined;
+      if (continuity && running !== null) {
+        if (answer.continue === true) {
+          continued = { actionId: running.actionId };
+          why = "the answer was continue";
+        } else if (decision.kind === "action" && this.lastAction !== undefined && decision.name === running.name && decision.name === this.lastAction.name && canonicalJson(decision.params) === this.lastAction.params && (this.lastAction.id === undefined || this.lastAction.id === running.actionId)) {
+          continued = { actionId: running.actionId };
+          why = "the answer was the action that runs, with the same parameters";
+          decision = { kind: "idle" };
+        }
+      }
+      this.remember(req, continued !== undefined ? "continue" : decision.kind === "action" ? `${decision.name} ${canonicalJson(decision.params)}` : "idle", answer.rationale, false);
+      if (decision.kind === "action") this.lastAction = { name: decision.name, params: canonicalJson(decision.params) };
       return {
-        decision: answer.decision,
+        decision,
         ...(answer.timers === undefined ? {} : { timers: answer.timers }),
         ...(answer.note === undefined ? {} : { note: answer.note }),
+        ...(answer.task === undefined ? {} : { task: answer.task }),
+        ...(answer.step === undefined ? {} : { step: answer.step }),
+        ...(continued === undefined ? {} : { continued }),
         ...(answer.rationale === undefined ? {} : { rationale: answer.rationale }),
-        mind: meta,
+        mind: why === undefined ? meta : { ...meta, continued: why },
       };
     }
     // The logged fallback: `hold` when the agent can hold, `idle` when it is landed (nothing to hold there) or cannot.
@@ -393,6 +445,7 @@ export class LlmBrain implements Brain, StatefulBrain {
     const decision = canHold ? ({ kind: "action", name: "hold", params: {} } as const) : ({ kind: "idle" } as const);
     emit({ op: "fallback", reason: lastWhy, attempts: used.calls, decision: canHold ? "hold" : "idle" }, lastCall === undefined ? undefined : [lastCall]);
     this.remember(req, canHold ? "hold {}" : "idle", `fallback: ${lastWhy}`, true);
+    if (canHold) this.lastAction = { name: "hold", params: "{}" };
     return { decision, rationale: `fallback after ${used.calls} attempt${used.calls === 1 ? "" : "s"}: ${lastWhy}`, mind: { ...meta, fallback: lastWhy } };
   }
 

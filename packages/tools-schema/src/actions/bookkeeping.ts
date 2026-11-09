@@ -77,3 +77,43 @@ export const note = {
   preconditions: [],
   failureCodes: ["note_too_long"],
 } as const satisfies CapabilityDef;
+
+/** The task list (ADR-0005 addition of 2026-11-08, F4b): at most this many steps, each text at most this many characters. */
+export const TASK_MAX_STEPS = 16;
+export const TASK_STEP_MAX_CHARS = 200;
+
+/**
+ * The task list: a bookkeeping capability that may accompany any decision, including `idle`. The steps replace the agent's whole list (every status starts again); the list is the agent's state
+ * (hashed only when not empty, in snapshots) and the simulator, never the mind, marks each step: the action an answer binds to step n (`step`) marks it running, then done or failed from the action's
+ * outcome. The limits are the runtime's (`task_too_many_steps`, `task_step_too_long`).
+ */
+export const task = {
+  name: "task",
+  kind: "bookkeeping",
+  description:
+    "Write your task as a list of steps; the list is returned to you in every later prompt with the status of each step, which the simulator keeps (you cannot mark a step done yourself). " +
+    "Sending a list replaces the whole list and every step starts pending again. Each step is a short text and, optionally, the action and parameters it stands for. " +
+    "To work on a step, answer with its number as step (1 is the first). It starts no action and may accompany any decision, including idle. " +
+    "At most 16 steps, each text at most 200 characters. Failures: task_too_many_steps, task_step_too_long.",
+  params: Type.Object(
+    {
+      steps: Type.Array(
+        Type.Object(
+          {
+            text: Type.String({ description: "What this step is, in a few words (at most 200 characters)." }),
+            action: Type.Optional(Type.String({ description: "The action this step stands for, if one." })),
+            params: Type.Optional(Type.Object({}, { additionalProperties: true, description: "Its parameters, if it has them." })),
+          },
+          { additionalProperties: false },
+        ),
+        { description: "The steps in order, at most 16." },
+      ),
+    },
+    { additionalProperties: false },
+  ),
+  result: Type.Object({ steps: Type.Integer({ description: "Steps in the list now." }) }, { additionalProperties: false }),
+  vehicles: ["uav", "ugv"],
+  scope: "self",
+  preconditions: [],
+  failureCodes: ["task_too_many_steps", "task_step_too_long"],
+} as const satisfies CapabilityDef;

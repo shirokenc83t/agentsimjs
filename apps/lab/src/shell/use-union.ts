@@ -17,12 +17,14 @@ interface Entry {
   costMs: number;
   busy: boolean;
   failed: Set<number>;
+  /** The ticks any panel has asked for, so far: a call that finds the work running adds its times here and the running loop takes them (a run that grows while it is read asks again and again). */
+  readonly wanted: Set<number>;
   readonly listeners: Set<() => void>;
 }
 const entries = new Map<string, Entry>();
 const entryOf = (runId: string): Entry => {
   let e = entries.get(runId);
-  if (e === undefined) entries.set(runId, (e = { points: new Map(), calls: 0, costMs: 0, busy: false, failed: new Set(), listeners: new Set() }));
+  if (e === undefined) entries.set(runId, (e = { points: new Map(), calls: 0, costMs: 0, busy: false, failed: new Set(), wanted: new Set(), listeners: new Set() }));
   return e;
 };
 
@@ -38,17 +40,18 @@ export function unionGrid(args: { readonly firstS: number; readonly headS: numbe
 }
 
 async function compute(storage: Pick<StorageClient, "replay">, runId: string, agentIds: readonly string[], dtS: number, times: readonly number[], entry: Entry): Promise<void> {
-  if (entry.busy) return;
+  for (const t of times) entry.wanted.add(Math.round(t / dtS));
+  if (entry.busy) return; // the loop below takes what was added
   entry.busy = true;
   try {
-    for (const t of times) {
-      const tick = Math.round(t / dtS);
-      if (entry.points.has(tick) || entry.failed.has(tick)) continue;
+    for (;;) {
+      const next = [...entry.wanted].filter((tick) => !entry.points.has(tick) && !entry.failed.has(tick)).sort((a, b) => a - b)[0];
+      if (next === undefined) break;
       const t0 = performance.now();
       const maps: BeliefMapBytes[] = [];
       let ok = true;
       for (const agentId of agentIds) {
-        const r = await storage.replay.beliefAt(runId, agentId, tick);
+        const r = await storage.replay.beliefAt(runId, agentId, next);
         entry.calls++;
         if (!r.ok) {
           ok = false;
@@ -57,8 +60,8 @@ async function compute(storage: Pick<StorageClient, "replay">, runId: string, ag
         maps.push(r.value);
       }
       entry.costMs += performance.now() - t0;
-      if (ok) entry.points.set(tick, unionKnown(maps).pct);
-      else entry.failed.add(tick);
+      if (ok) entry.points.set(next, unionKnown(maps).pct);
+      else entry.failed.add(next);
       for (const l of entry.listeners) l();
     }
   } finally {

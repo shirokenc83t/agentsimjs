@@ -42,10 +42,10 @@ export async function mindsSpecFor(ports: Pick<StoragePorts, "mindProfiles" | "p
     const t = (doc.document as { s2?: { promptTemplate?: unknown } } | undefined)?.s2?.promptTemplate;
     if (isRef(t)) templateRefs.set(`${t.id}@${t.version}`, { id: t.id, version: t.version });
   }
-  // The built-in default template (`default` v1) is the worker's own: it is added there when a profile names it.
+  // The built-in default templates (`default` v1 and v2) are the worker's own: they are added there when a profile names them.
   const templates: Spec["templates"][number][] = [];
   for (const r of templateRefs.values()) {
-    if (r.id === "default" && r.version === 1) continue;
+    if (r.id === "default" && (r.version === 1 || r.version === 2)) continue;
     const doc = await ports.promptTemplates.get(r.id, r.version);
     if (doc !== undefined) templates.push({ id: r.id, version: r.version, document: doc.document });
   }

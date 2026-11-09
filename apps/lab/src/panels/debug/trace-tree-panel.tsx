@@ -3,7 +3,7 @@ import { KIND_STYLE, useUiContext } from "@agentsim/ui";
 import type { TraceRecord } from "@agentsim/trace";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppActions, usePolled, useServices, useSource } from "../../services.tsx";
-import { summary } from "./log-rows.ts";
+import { summary, tagOf } from "./log-rows.ts";
 import { buildTraceTree, type TraceTree, type TreeNode } from "./trace-tree.ts";
 import { useJump } from "./use-jump.ts";
 
@@ -80,7 +80,8 @@ export function TraceTreePanel() {
 function Line(props: { node: TreeNode; depth: number; selected?: boolean; open: (r: TraceRecord) => void }) {
   const { node, depth } = props;
   const r = node.record;
-  const style = KIND_STYLE[r.kind as keyof typeof KIND_STYLE];
+  // The same tag as in the Log: a task record is TSK here too, so that Enter on a TSK row lands on a TSK row (U-025).
+  const tag = tagOf(r, KIND_STYLE[r.kind as keyof typeof KIND_STYLE]);
   return (
     <button
       type="button"
@@ -92,8 +93,8 @@ function Line(props: { node: TreeNode; depth: number; selected?: boolean; open: 
       aria-current={props.selected ? "true" : undefined}
       title={`${r.id}${node.copyOf === undefined ? "" : ` · a copy of ${node.copyOf}`}`}
     >
-      <span className="tag" style={{ color: `var(--kind-${style?.family ?? "slate"})` }}>
-        [{style?.tag ?? r.kind.slice(0, 3).toUpperCase()}]
+      <span className="tag" style={{ color: `var(--kind-${tag.family})` }}>
+        [{tag.tag}]
       </span>{" "}
       <span className="muted">{r.simTime.toFixed(2)} s</span> {r.agentId ?? "run"} <span className="muted">{r.source}</span> {summary(r)} <span className="muted">#{r.seq}</span>
       {node.copyOf !== undefined && (

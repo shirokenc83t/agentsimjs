@@ -16,11 +16,12 @@ async function open(page: Page, hundreds: number): Promise<void> {
   await openWorkspace(page, "debug");
   await page.getByTestId("log-filter").fill(`kind:action agent:${AGENT} text:start`);
   await expect.poll(async () => Number(await page.getByTestId("event-scroller").getAttribute("data-count")), { timeout: 15_000 }).toBeGreaterThan(0);
-  await page.getByTestId("event-scroller").evaluate((el) => {
-    el.scrollTop = 0;
-  });
   // The list is drawn again while the recording settles, and on a slow machine for a long time (a row detached while it is clicked): the click is a real one, tried again from a fresh look at the list until the record is selected.
+  // A new filter starts its list at the end, following the tail (the runs of the F2 scene refill it while the recording settles): the first row is in the drawn window only when the list is at its start, so each try goes there first (the Log stops following once it is scrolled up).
   await expect(async () => {
+    await page.getByTestId("event-scroller").evaluate((el) => {
+      el.scrollTop = 0;
+    });
     await page.locator('[data-testid^="event-row-"]').filter({ hasText: "start" }).first().click({ timeout: 5_000 });
     await expect(page.getByTestId("trace-tree-selected")).toBeVisible({ timeout: 3_000 });
   }).toPass({ timeout: 60_000 });

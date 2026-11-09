@@ -1,0 +1,31 @@
+{
+ "schemaVersion": 1,
+ "kind": "mind-profile",
+ "shape": "s2",
+ "s2": {
+  "provider": "local-ollama",
+  "model": "qwen2.5:7b-instruct",
+  "promptTemplate": {
+   "id": "inspect-order",
+   "version": 2
+  },
+  "params": {
+   "temperature": 0
+  },
+  "tools": {
+   "allow": [
+    "takeoff",
+    "goTo",
+    "returnToBase",
+    "land",
+    "hold",
+    "estimateCost",
+    "planPath",
+    "kShortestPaths",
+    "querySpace",
+    "task"
+   ]
+  },
+  "wake": "task"
+ }
+}

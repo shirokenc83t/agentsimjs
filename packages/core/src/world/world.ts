@@ -5,7 +5,7 @@ import { contentHash64 } from "../numerics/content-hash.ts";
 import { StateHasher } from "../numerics/state-hash.ts";
 import type { Steppable, TickContext } from "../time/scheduler.ts";
 import type { Scheduler } from "../time/scheduler.ts";
-import type { Brain, ComputeCaller, ComputePort, DecisionEnvelope, DecisionRequest, NoteOp, SelfView, TimerOp } from "./brain.ts";
+import type { Brain, ComputeCaller, ComputePort, DecisionEnvelope, DecisionRequest, NoteOp, SelfView, TaskOp, TaskOutcome, TaskStepView, TaskView, TimerOp } from "./brain.ts";
 import { Inbox, isControl, type AgentEvent, type DecisionEvent, type InboxSnapshot } from "./events.ts";
 import { EMPTY_MIND_VIEW, round2 as r2, round3 as r3, type MindViewPort } from "./mind-view.ts";
 
@@ -74,6 +74,8 @@ export interface WorldSnapshot {
   readonly timers: readonly (readonly (readonly [string, number])[])[];
   /** The agents' notebooks by agent index; present only when one is not empty (a snapshot of a run without notes is as it was). */
   readonly notebooks?: readonly string[];
+  /** The agents' task lists by agent index (null: none); present only when one exists (a snapshot of a run without lists is as it was). */
+  readonly tasks?: readonly (TaskView | null)[];
   /** Space summaries already traced, by hash, sorted. */
   readonly seenSpaces: readonly string[];
   /** Decision requests asked and not yet applied, by agent index, with the answer once it arrived. */
@@ -135,6 +137,9 @@ const TIMER_MIN_DELAY_S = 0.1;
 const TIMER_MAX_DELAY_S = 3600;
 /** The notebook's limit (ADR-0036 addition of 2026-10-29); the same number as the `note` capability's description. */
 const NOTEBOOK_MAX_CHARS = 2000;
+/** The task list's limits (ADR-0005 addition of 2026-11-08); the same numbers as the `task` capability's description. */
+const TASK_MAX_STEPS = 16;
+const TASK_STEP_MAX_CHARS = 200;
 /** Timer operations processed per decision (a mind cannot flood the brain phase); the rest are rejected. */
 const TIMER_OPS_PER_DECISION = 16;
 
@@ -171,6 +176,8 @@ export class World implements Steppable {
   private readonly timers: Map<string, number>[];
   /** Each agent's notebook (agent state: hashed only when not empty, in snapshots). */
   private readonly notebooks: string[];
+  /** Each agent's task list (agent state like the notebook: hashed only when there is one, in snapshots). The world keeps the statuses; a mind never marks a step. */
+  private readonly tasks: (TaskView | undefined)[];
   /** The run's step in seconds, from the last tick (timers are set in whole ticks). */
   private dtS = 0.1;
   /** Space summaries already recorded in the trace, by 64-bit content hash (see `traceRequest`). */
@@ -202,6 +209,7 @@ export class World implements Steppable {
     this.minDecisionIntervalS = parts.minDecisionIntervalS ?? 1;
     this.timers = agents.map(() => new Map<string, number>());
     this.notebooks = agents.map(() => "");
+    this.tasks = agents.map(() => undefined);
     this.slots = agents.map(() => undefined);
     if (parts.genesis !== false) {
       for (let i = 0; i < agents.length; i++) {
@@ -234,6 +242,7 @@ export class World implements Steppable {
       prevSoc: [...this.prevSoc],
       timers: this.timers.map((m) => [...m].sort(byTag)),
       ...(this.notebooks.some((t) => t !== "") ? { notebooks: [...this.notebooks] } : {}),
+      ...(this.tasks.some((t) => t !== undefined) ? { tasks: this.tasks.map((t) => t ?? null) } : {}),
       seenSpaces: [...this.seenSpaces].sort(),
       slots: this.slots.map((p) => (p ? { agentId: p.agentId, request: p.request, ...(p.envelope ? { envelope: p.envelope } : {}), ...(p.applyTick === undefined ? {} : { applyTick: p.applyTick }) } : undefined)),
       unanswered: this.unanswered,
@@ -267,6 +276,7 @@ export class World implements Steppable {
       mine.clear();
       for (const [tag, due] of s.timers[i] as readonly (readonly [string, number])[]) mine.set(tag, due);
       this.notebooks[i] = s.notebooks?.[i] ?? "";
+      this.tasks[i] = s.tasks?.[i] ?? undefined;
       const slot = s.slots[i];
       if (slot && slot.agentId !== a.id) throw new RangeError(`snapshot request of slot ${i} is for ${slot.agentId}, the world's agent is ${a.id}`);
       this.slots[i] = slot ? { agentId: slot.agentId, request: slot.request, ...(slot.envelope ? { envelope: slot.envelope } : {}), ...(slot.applyTick === undefined ? {} : { applyTick: slot.applyTick }) } : undefined;
@@ -407,16 +417,33 @@ export class World implements Steppable {
           ...(env.mind === undefined ? {} : { mind: env.mind }),
           ...(p.applyTick === undefined ? {} : { requestTick: p.request.tick, applyTick: p.applyTick, ...(typeof env.mind?.["latencyMs"] === "number" ? { latencyMs: env.mind["latencyMs"] } : {}) }),
           ...(env.mission === undefined ? {} : { step: env.mission.step, of: env.mission.of, ...(env.mission.done ? { done: true } : {}), ...(env.mission.stop ? { stop: env.mission.stop } : {}) }),
+          // A mind that went on with the action it was running says so, and how many perception events waited for this request instead of asking (ADR-0035 addition of 2026-11-08).
+          ...(env.continued === undefined ? {} : { continued: true, actionId: env.continued.actionId }),
+          ...(heldFor(brain, p.request.events) > 0 ? { held: heldFor(brain, p.request.events) } : {}),
+          ...(this.missionNoteOf(i, env) ?? {}),
         },
       });
       // Timer bookkeeping comes before the decision's action, and may accompany an idle decision.
       if (env.timers && env.timers.length > 0) this.applyTimers(i, env.timers, tick, simTimeS);
       // The notebook, applied after the timers and before the action starts.
       if (env.note !== undefined) this.applyNote(i, env.note, tick, simTimeS);
-      if (d.kind !== "action") continue;
+      // The task list, after the notebook: it replaces the agent's list, and the step the answer names is bound to the action it starts.
+      if (env.task !== undefined) this.applyTask(i, env.task, tick, simTimeS);
+      if (d.kind !== "action") {
+        // A decision that goes on with the running action keeps it, and the step it names is the one that action works on.
+        if (env.continued !== undefined && env.step !== undefined) this.bindStep(i, env.step, env.continued.actionId, decisionId, simTimeS);
+        continue;
+      }
+      const before = runtime.info(agent.id);
       const started = runtime.start(agent, d.name, d.params, { scope: "self", id: agent.id }, tick, simTimeS, decisionId);
+      // An action that starts replaces the one that ran (silently: no event reaches the mind for it), so the step that action worked on is over, preempted.
+      if (started.ok && before !== undefined && before.status === "running") this.preemptStep(i, before.actionId, before.name, decisionId, simTimeS);
       // The brain hears about a rejection at once (at the end of this tick); a script moves on to its next step.
-      if (!started.ok) this.addEvent(i, { kind: "actionRejected", name: d.name, code: started.error.code }, tick, simTimeS, runtime.takeRejectedRecord(agent.id));
+      if (!started.ok) {
+        const rejected = runtime.takeRejectedRecord(agent.id);
+        this.addEvent(i, { kind: "actionRejected", name: d.name, code: started.error.code }, tick, simTimeS, rejected);
+        if (env.step !== undefined) this.endStep(i, env.step - 1, { step: env.step, status: "refused", action: d.name, code: started.error.code }, undefined, rejected ?? decisionId, simTimeS);
+      } else if (env.step !== undefined) this.bindStep(i, env.step, started.value, decisionId, simTimeS);
     }
     // 3. Planning.
     planner.advance(tick);
@@ -434,6 +461,9 @@ export class World implements Steppable {
       if (!this.brainAt[i] || this.slots[i]) continue;
       const inbox = this.inboxes[i] as Inbox;
       if (inbox.size === 0 || runtime.isRecovering((this.agents[i] as SimAgent).id)) continue;
+      // The wake policy `task` (ADR-0005 addition of 2026-11-08): while the agent has a running action, perception events stay in the inbox (merged as always) and do not ask; control events ask at once, and the
+      // events that waited go with them.
+      if ((this.brainAt[i] as Brain).wake === "task" && !inbox.hasControl() && runtime.info((this.agents[i] as SimAgent).id)?.status === "running") continue;
       // Control events request a decision at once; perception events wait out the minimum decision interval,
       // measured from the previous request of any kind. Delayed, not lost.
       if (!inbox.hasControl() && simTimeS - (this.lastRequestS[i] as number) < this.minDecisionIntervalS - 1e-9) continue;
@@ -487,6 +517,109 @@ export class World implements Steppable {
     this.parts.trace.emit({ source: `${a.id}/${mindSlot(brain) === "S1" ? "s1" : "s2"}`, simTime: simTimeS, kind: "event", agentId: a.id, detail: "full", payload: { op: "note", mode: op.mode, chars: next.length, text: op.text } });
   }
 
+  /** The mind slot's source name for the records the world writes on a mind's behalf. */
+  private sourceOf(i: number): string {
+    return `${(this.agents[i] as SimAgent).id}/${mindSlot(this.brainAt[i] as Brain) === "S1" ? "s1" : "s2"}`;
+  }
+
+  /** A task list as a request shows it, from its steps (immutable: a request that holds an earlier list keeps it) and the last outcome. */
+  private listOf(steps: readonly TaskStepView[], last: TaskOutcome | undefined): TaskView {
+    const running = steps.findIndex((s) => s.status === "running");
+    return { steps, ...(running >= 0 ? { running: running + 1 } : {}), ...(last === undefined ? {} : { last }) };
+  }
+
+  /**
+   * Applies the task list of a decision (ADR-0005 addition of 2026-11-08): parameters validated against the `task` capability, then its two limits. A refused list raises `actionRejected` (name `task`, code
+   * `task_too_many_steps`, `task_step_too_long` or `invalid_params`) and changes nothing; an accepted one replaces the agent's list, every status starting again (an empty list clears it), and is traced
+   * (`event`, op `task`, from `<agent>/s2`).
+   */
+  private applyTask(i: number, op: TaskOp, tick: number, simTimeS: number): void {
+    const a = this.agents[i] as SimAgent;
+    const refusal = this.taskRefusal(op);
+    if (refusal !== undefined) return void this.addEvent(i, { kind: "actionRejected", name: "task", code: refusal }, tick, simTimeS);
+    const steps: TaskStepView[] = op.steps.map((s) => ({ text: s.text, ...(s.action === undefined ? {} : { action: s.action }), ...(s.params === undefined ? {} : { params: s.params }), status: "pending" as const }));
+    this.tasks[i] = steps.length === 0 ? undefined : this.listOf(steps, undefined);
+    this.parts.trace.emit({ source: this.sourceOf(i), simTime: simTimeS, kind: "event", agentId: a.id, detail: "full", payload: { op: "task", steps: op.steps } });
+  }
+
+  /** The code a task list is refused with (the capability's parameters, then the two limits), or undefined when the world accepts it: the one check `applyTask` and the decision record's MissionNote both use. */
+  private taskRefusal(op: TaskOp): string | undefined {
+    const v = this.parts.runtime.checkBookkeeping("task", { steps: op.steps });
+    if (!v.ok) return v.error.code;
+    if (op.steps.length > TASK_MAX_STEPS) return "task_too_many_steps";
+    if (op.steps.some((s) => s.text.length > TASK_STEP_MAX_CHARS)) return "task_step_too_long";
+    return undefined;
+  }
+
+  /** The action an answer started (or went on with) works on step `step` (1-based): the step is running. A step outside the list binds nothing. */
+  private bindStep(i: number, step: number, actionId: string, cause: string, simTimeS: number): void {
+    const list = this.tasks[i];
+    const at = step - 1;
+    if (list === undefined || !Number.isInteger(step) || at < 0 || at >= list.steps.length) return;
+    // A decision that goes on with the action a step is already bound to changes nothing: no second record of it.
+    const now = list.steps[at] as TaskStepView;
+    if (now.status === "running" && now.actionId === actionId) return;
+    const steps = list.steps.map((s, k) => (k === at ? { ...s, status: "running" as const, actionId } : s));
+    this.tasks[i] = this.listOf(steps, list.last);
+    this.parts.trace.emit({ source: this.sourceOf(i), simTime: simTimeS, kind: "event", agentId: (this.agents[i] as SimAgent).id, detail: "full", causeIds: [cause], payload: { op: "task_step", step, of: steps.length, status: "running", actionId } });
+  }
+
+  /** A step ended: `done` or `failed` (the outcome says how: failed, refused, preempted), the outcome kept as the last one, traced as `task_step` caused by the action's outcome record. */
+  private endStep(i: number, at: number, outcome: TaskOutcome, actionId: string | undefined, cause: string, simTimeS: number): void {
+    const list = this.tasks[i];
+    if (list === undefined || !Number.isInteger(at) || at < 0 || at >= list.steps.length) return;
+    const status = outcome.status === "done" ? ("done" as const) : ("failed" as const);
+    const steps = list.steps.map((s, k) => (k === at ? { ...s, status, ...(actionId === undefined ? {} : { actionId }) } : s));
+    this.tasks[i] = this.listOf(steps, outcome);
+    this.parts.trace.emit({
+      source: this.sourceOf(i),
+      simTime: simTimeS,
+      kind: "event",
+      agentId: (this.agents[i] as SimAgent).id,
+      detail: "full",
+      ...(cause === "" ? {} : { causeIds: [cause] }),
+      payload: { op: "task_step", step: at + 1, of: steps.length, status, ...(actionId === undefined ? {} : { actionId }), ...(outcome.status === "done" ? {} : { outcome: outcome.status, ...(outcome.code === undefined ? {} : { code: outcome.code }) }) },
+    });
+  }
+
+  /** The running action was replaced by a new one: the step bound to it, if any, failed as preempted. */
+  private preemptStep(i: number, actionId: string, name: string, cause: string, simTimeS: number): void {
+    const list = this.tasks[i];
+    if (list === undefined) return;
+    // Every step bound to that action (a mind may name a second step while the action runs) ends with it.
+    list.steps.forEach((s, at) => {
+      if (s.status === "running" && s.actionId === actionId) this.endStep(i, at, { step: at + 1, status: "preempted", action: name, code: "preempted" }, actionId, cause, simTimeS);
+    });
+  }
+
+  /** An action ended: the step that is bound to it, if any, is done or failed (an action another action or a reflex ended is `preempted`). The world marks it, never the mind. */
+  private onActionEnded(i: number, actionId: string, name: string, status: string, code: string | undefined, recordId: string | undefined, simTimeS: number): void {
+    const list = this.tasks[i];
+    if (list === undefined) return;
+    // Every step bound to that action ends with it (a mind may name a second step while the action runs).
+    list.steps.forEach((s, at) => {
+      if (s.status !== "running" || s.actionId !== actionId) return;
+      const outcome: TaskOutcome = status === "succeeded" ? { step: at + 1, status: "done", action: name } : { step: at + 1, status: status === "preempted" ? "preempted" : "failed", action: name, code: code ?? "failed" };
+      this.endStep(i, at, outcome, actionId, recordId ?? "", simTimeS);
+    });
+  }
+
+  /** What the decision record says of the agent's task list, as a mission's mind says it (`step`, `of`, `done`, `stop`): the step the answer names, or the one running, or the first that is not done. */
+  private missionNoteOf(i: number, env: DecisionEnvelope): Record<string, unknown> | undefined {
+    if (env.mission !== undefined) return undefined;
+    // The list the decision leaves: the one its answer writes when the world accepts it (the same check as `applyTask`: a refused list is not the agent's list), or the one the agent has.
+    const accepted = env.task !== undefined && this.taskRefusal(env.task) === undefined ? env.task : undefined;
+    const written = accepted !== undefined && accepted.steps.length > 0 ? this.listOf(accepted.steps.map((s) => ({ ...s, status: "pending" as const })), undefined) : undefined;
+    const list = accepted !== undefined && accepted.steps.length === 0 ? undefined : (written ?? this.tasks[i]);
+    if (list === undefined) return undefined;
+    const n = list.steps.length;
+    const allDone = list.steps.every((s) => s.status === "done");
+    const first = list.steps.findIndex((s) => s.status !== "done");
+    const step = env.step ?? list.running ?? (first < 0 ? n : first + 1);
+    const failed = list.last !== undefined && list.last.status !== "done" ? list.last : undefined;
+    return { step, of: n, ...(allDone ? { done: true } : {}), ...(failed === undefined ? {} : { stop: { status: failed.status, action: failed.action, code: failed.code ?? "failed" } }) };
+  }
+
   /** Fires the timers due at this tick, in due order then tag; each becomes a `timer` event (and is removed). */
   private fireTimers(tick: number, simTimeS: number): void {
     for (let i = 0; i < this.agents.length; i++) {
@@ -515,6 +648,7 @@ export class World implements Steppable {
         simTimeS,
         e.recordId,
       );
+      this.onActionEnded(i, e.actionId, e.name, e.status, e.code, e.recordId, simTimeS);
     }
     for (let i = 0; i < this.agents.length; i++) {
       const a = this.agents[i] as SimAgent;
@@ -655,6 +789,11 @@ export class World implements Steppable {
       const book = this.notebooks[i] as string;
       if (book !== "") h.str((this.agents[i] as SimAgent).id).str("notebook").str(book);
     }
+    // The task list too: hashed only when there is one (statuses, bound actions and the last outcome included), so a run that never writes one hashes as before.
+    for (let i = 0; i < this.agents.length; i++) {
+      const list = this.tasks[i];
+      if (list !== undefined) h.str((this.agents[i] as SimAgent).id).str("task").str(JSON.stringify(list));
+    }
     return h.hex();
   }
 
@@ -672,10 +811,12 @@ export class World implements Steppable {
     const timers = [...mine.keys()].sort().map((tag) => ({ tag, dueInS: r2(Math.max(0, ((mine.get(tag) as number) - tick) * this.dtS)) }));
     const book = this.notebooks[this.indexOf(a.id)] as string;
     const notebook = book === "" ? {} : { notebook: book };
+    const list = this.tasks[this.indexOf(a.id)];
+    const extra = { ...notebook, ...(list === undefined ? {} : { task: list }) };
     const self: SelfView =
       a.kind === "uav"
-        ? { kind: "uav", xM: r2(s.x), yM: r2(s.y), zM: r2(a.state.z), headingRad: r3(s.heading), soc: r3(a.battery.soc), running, timers, ...notebook }
-        : { kind: "ugv", xM: r2(s.x), yM: r2(s.y), headingRad: r3(s.heading), soc: r3(a.battery.soc), running, timers, ...notebook };
+        ? { kind: "uav", xM: r2(s.x), yM: r2(s.y), zM: r2(a.state.z), headingRad: r3(s.heading), soc: r3(a.battery.soc), running, timers, ...extra }
+        : { kind: "ugv", xM: r2(s.x), yM: r2(s.y), headingRad: r3(s.heading), soc: r3(a.battery.soc), running, timers, ...extra };
     const view = this.parts.mindView?.view(a.id, simTimeS) ?? EMPTY_MIND_VIEW;
     const menu = this.parts.runtime.actionMenu(a);
     return {
@@ -691,6 +832,12 @@ export class World implements Steppable {
       unavailable: menu.unavailable,
     };
   }
+}
+
+/** How many perception events a request carried that did not ask for it: under the `task` wake policy, the perception events of a request that control events asked for (ADR-0035 addition of 2026-11-08). Zero for any other mind. */
+function heldFor(brain: Brain, events: readonly DecisionEvent[]): number {
+  if (brain.wake !== "task" || !events.some((e) => isControl(e.kind))) return 0;
+  return events.filter((e) => !isControl(e.kind)).length;
 }
 
 /**

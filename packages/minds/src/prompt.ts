@@ -26,9 +26,24 @@ export interface PromptInput {
   readonly history: readonly DecisionNote[];
   /** The actions the profile's tool list leaves out of the offer (names), if it restricts them. */
   readonly offered?: readonly string[];
+  /** `continue` is among the answers (an action runs and the profile has the continuity fields): the actions slot lists it. */
+  readonly continueOffered?: boolean;
+  /** The profile allows the `task` tool: the actions slot describes `task` and `step`. */
+  readonly taskOffered?: boolean;
 }
 
 const json = (v: unknown): string => canonicalJson(v);
+
+/** The text of the `task` slot: each step with its status (the world's), the step running now with its action and phase, and how the last step ended. */
+function taskText(r: DecisionRequest, offered: boolean): string {
+  const t = r.self.task;
+  if (t === undefined) return offered ? '(no list yet: write one with "task", then name the step of each action with "step")' : "(none)";
+  const lines = t.steps.map((s, k) => `${k + 1}. [${s.status}] ${s.text}${s.action === undefined ? "" : ` (${s.action}${s.params === undefined ? "" : ` ${json(s.params)}`})`}`);
+  const run = r.self.running;
+  lines.push(t.running === undefined ? "Step running now: none." : `Step running now: ${t.running}${run === null ? "" : ` — ${run.name} (${run.actionId}), phase ${run.phase}`}.`);
+  if (t.last !== undefined) lines.push(`Last step outcome: step ${t.last.step} ${t.last.status} (${t.last.action}${t.last.code === undefined ? "" : `, ${t.last.code}`}).`);
+  return lines.join("\n");
+}
 
 /** The text of one slot (without its instruction). */
 function slotText(slot: Slot, i: PromptInput): string {
@@ -44,8 +59,14 @@ function slotText(slot: Slot, i: PromptInput): string {
       return i.history.length === 0
         ? "(none yet)"
         : i.history.map((d) => `- t=${d.simTimeS} s: ${d.chose}${d.fallback === true ? " (fallback)" : ""}${d.rationale === undefined ? "" : ` — ${d.rationale}`}`).join("\n");
-    case "self":
-      return json(r.self);
+    case "self": {
+      // A template that has the task slot shows the list there, not twice.
+      if (r.self.task === undefined || !i.template.sections.includes("task")) return json(r.self);
+      const { task: _task, ...rest } = r.self;
+      return json(rest);
+    }
+    case "task":
+      return taskText(r, i.taskOffered === true);
     case "beliefs":
       return json(r.beliefs);
     case "space":
@@ -56,7 +77,14 @@ function slotText(slot: Slot, i: PromptInput): string {
       const offer = i.offered === undefined ? r.allowedActions : r.allowedActions.filter((a) => i.offered?.includes(a.name));
       const allowed = offer.map((a) => `- ${a.name}: parameters ${json(a.paramsSchema)}`).join("\n");
       const unavailable = r.unavailable.length === 0 ? "" : `\nNot available now: ${r.unavailable.map((u) => `${u.name} (${u.code})`).join(", ")}.`;
-      return `Answer with one JSON object: {"action": <name or "idle">, "params": {...}, "timers"?: [...], "note"?: {"text": ..., "mode": "replace"|"append"}, "rationale"?: <short reason>}.\nAllowed actions:\n${allowed.length === 0 ? "(none)" : allowed}\n- idle: wait for the next event.${unavailable}`;
+      if (i.continueOffered !== true && i.taskOffered !== true) {
+        return `Answer with one JSON object: {"action": <name or "idle">, "params": {...}, "timers"?: [...], "note"?: {"text": ..., "mode": "replace"|"append"}, "rationale"?: <short reason>}.\nAllowed actions:\n${allowed.length === 0 ? "(none)" : allowed}\n- idle: wait for the next event.${unavailable}`;
+      }
+      // With the continuity fields: `continue` while an action runs, and the task list and the step of the action when the profile allows the `task` tool.
+      const name = i.continueOffered === true ? `<name, "idle" or "continue">` : `<name or "idle">`;
+      const task = i.taskOffered === true ? `, "task"?: {"steps": [{"text": ..., "action"?: ..., "params"?: ...}]}, "step"?: <the number of the step this action works on, 1 is the first>` : "";
+      const cont = i.continueOffered === true ? "\n- continue: keep doing what you are doing; the action that runs goes on as it is." : "";
+      return `Answer with one JSON object: {"action": ${name}, "params": {...}, "timers"?: [...], "note"?: {"text": ..., "mode": "replace"|"append"}${task}, "rationale"?: <short reason>}.\nAllowed actions:\n${allowed.length === 0 ? "(none)" : allowed}\n- idle: wait for the next event.${cont}${unavailable}`;
     }
   }
 }
@@ -65,6 +93,7 @@ const HEADINGS: Readonly<Record<Slot, string>> = {
   role: "Who you are",
   mission: "Your mission",
   notebook: "Your notebook",
+  task: "Your task list",
   decisions: "Your last decisions",
   self: "Your state",
   beliefs: "What you believe",

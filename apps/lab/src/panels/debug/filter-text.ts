@@ -3,6 +3,22 @@ import { filterTokens } from "@agentsim/trace";
 // The quick toggles of the log console write into the filter text (UI-SPEC §5.1: "quick toggles per kind/tier"): the text is the one state, so what a toggle shows is what
 // a filter typed by hand would be. These helpers read and rewrite one positive `key:a,b` term of a filter, leaving every other term, and the spacing around it, as typed.
 
+/** Whether the filter has exactly this term (`text:held`), positive. */
+export function hasToken(text: string, token: string): boolean {
+  return filterTokens(text).some((t) => t.text === token);
+}
+
+/** The filter with this exact term added at the end, or removed when it is there (the spacing that separated it goes with it): the toggle of a chip that is one fixed term, not a set of choices. */
+export function toggleToken(text: string, token: string): string {
+  const tokens = filterTokens(text);
+  const at = tokens.findIndex((t) => t.text === token);
+  if (at < 0) return `${text.trimEnd()}${text.trim() === "" ? "" : " "}${token}`;
+  const t = tokens[at] as { text: string; at: number };
+  const before = text.slice(0, t.at).trimEnd();
+  const after = text.slice(t.at + t.text.length).trimStart();
+  return `${before}${before === "" || after === "" ? "" : " "}${after}`;
+}
+
 /** The values of the first positive `key:` term of the filter, or undefined when it has none. */
 export function termValues(text: string, key: string): string[] | undefined {
   for (const t of filterTokens(text)) {

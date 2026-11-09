@@ -55,6 +55,8 @@ const Limits = Type.Object(
 const Tools = Type.Object({ allow: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: 32 })), maxCallsPerDecision: Type.Optional(Type.Number()) }, { additionalProperties: false });
 const Context = Type.Object({ decisions: Type.Optional(Type.Number()) }, { additionalProperties: false });
 const Latency = Type.Object({ model: Type.Union([Type.Literal("fixed"), Type.Literal("measured")]), fixedMs: Type.Optional(Type.Number({ minimum: 0, maximum: 600_000 })) }, { additionalProperties: false });
+/** The wake policy of a mind (ADR-0036 addition of 2026-11-08): `all` asks at every event (the F4 behaviour, the default), `task` lets perception events wait while an action runs. */
+const Wake = Type.Union([Type.Literal("all"), Type.Literal("task")]);
 const TemplateRef = Type.Object({ id: Id, version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false });
 
 /** The System 2 section of a profile (ADR-0036 section 2). `provider` names an entry of Settings, never holds a key. */
@@ -68,6 +70,7 @@ export const S2Profile = Type.Object(
     context: Type.Optional(Context),
     limits: Type.Optional(Limits),
     latency: Type.Optional(Latency),
+    wake: Type.Optional(Wake),
   },
   { additionalProperties: false },
 );
@@ -83,6 +86,7 @@ export const S2Overrides = Type.Object(
     context: Type.Optional(Context),
     limits: Type.Optional(Limits),
     latency: Type.Optional(Latency),
+    wake: Type.Optional(Wake),
   },
   { additionalProperties: false },
 );
@@ -139,6 +143,8 @@ export interface EffectiveS2 {
   readonly context: { readonly decisions: number };
   readonly limits: { readonly calls: number; readonly tokens: number; readonly costUsd: number; readonly timeoutS: number; readonly retries: number };
   readonly latency: { readonly model: "fixed" | "measured"; readonly fixedMs?: number };
+  /** The wake policy, only when the profile or the run configuration sets it (absent: `all`, so a profile without it resolves, and hashes, as before). */
+  readonly wake?: "all" | "task";
   /** The level of each field, by dotted path (`model`, `limits.calls`, `params.temperature`, …). */
   readonly sources: Readonly<Record<string, MindSource>>;
 }
@@ -167,13 +173,14 @@ export function resolveS2(profile: S2Profile, overrides: S2Overrides | undefined
   const context = group("context", ["decisions"], MIND_DEFAULTS.context, profile.context, overrides?.context) as EffectiveS2["context"];
   const tools = group("tools", ["maxCallsPerDecision", "allow"], MIND_DEFAULTS.tools, profile.tools, overrides?.tools) as EffectiveS2["tools"];
   const latency = group("latency", ["model", "fixedMs"], MIND_DEFAULTS.latency, profile.latency, overrides?.latency) as EffectiveS2["latency"];
-  return { provider, model, params, promptTemplate: template, tools, context, limits, latency, sources };
+  const wake = profile.wake === undefined && overrides?.wake === undefined ? undefined : (pick("wake", undefined, profile.wake, overrides?.wake) as "all" | "task");
+  return { provider, model, params, promptTemplate: template, tools, context, limits, latency, ...(wake === undefined ? {} : { wake }), sources };
 }
 
 // ---- prompt templates -----------------------------------------------------------------------------------------------------------------------------
 
 /** The slots the prompt builder fills, in no particular order: a template names the ones it uses and in what order. */
-export const SLOTS = ["role", "mission", "notebook", "decisions", "self", "beliefs", "space", "events", "actions"] as const;
+export const SLOTS = ["role", "mission", "notebook", "decisions", "self", "beliefs", "space", "events", "actions", "task"] as const;
 export type Slot = (typeof SLOTS)[number];
 
 export const PROMPT_TEMPLATE_SCHEMA_VERSION = 1;
@@ -221,6 +228,21 @@ export const DEFAULT_PROMPT_TEMPLATE: PromptTemplateDocument = {
     "Each turn you receive what happened, what you may do, and your own notes. Answer with exactly one action from the allowed list, or idle to wait for the next event. " +
     "You may also keep notes for yourself; they are returned to you in every prompt.",
   sections: ["role", "mission", "notebook", "decisions", "self", "beliefs", "space", "events", "actions"],
+};
+
+/**
+ * The default template of version 2 (ADR-0036 addition of 2026-11-08): the task slot after the mission and before the beliefs and the events, and a system text that tells the model to write its task as steps, to
+ * name the step of each action and to let a running action go on. Version 1 stays as it was and renders the same bytes.
+ */
+export const DEFAULT_PROMPT_TEMPLATE_V2: PromptTemplateDocument = {
+  schemaVersion: PROMPT_TEMPLATE_SCHEMA_VERSION,
+  kind: "prompt-template",
+  system:
+    "You are the mind of one vehicle in a simulation. You see only what the vehicle senses and believes, never the world itself. " +
+    "Each turn you receive what happened, what you may do, your own notes and your task list. Answer with exactly one action from the allowed list, idle to wait for the next event, or continue to let the action that runs go on. " +
+    "Write your mission as a list of steps with task, once, and name the step each action works on with step: the simulator marks the steps done or failed from what the actions come to, and you cannot. " +
+    "While an action of yours runs, do not start it again: answer continue unless something that matters has changed. You may also keep notes for yourself; they are returned to you in every prompt.",
+  sections: ["role", "mission", "task", "notebook", "decisions", "self", "beliefs", "space", "events", "actions"],
 };
 
 // ---- hashes ----------------------------------------------------------------------------------------------------------------------------------------

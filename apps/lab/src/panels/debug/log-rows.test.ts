@@ -1,6 +1,6 @@
 import type { TraceRecord } from "@agentsim/trace";
 import { describe, expect, it } from "vitest";
-import { resultOf, summary } from "./log-rows.ts";
+import { resultOf, summary, tagOf } from "./log-rows.ts";
 
 const rec = (kind: string, payload: unknown, detail?: string) => ({ seq: 1, simTime: 1, kind, payload, ...(detail ? { detail } : {}) }) as unknown as TraceRecord;
 
@@ -44,5 +44,33 @@ describe("the summary lines of a System 2 mind's records (F4 M4, T-123)", () => 
     expect(summary(rec("thought", { op: "fallback", decision: "hold", reason: "no answer in 60 s" }))).toBe("fallback · hold · no answer in 60 s");
     expect(summary(rec("thought", { op: "cache-miss", attempt: 1 }))).toBe("cache-miss · attempt 1");
     expect(summary(rec("thought", { op: "not-reproducible", fromTick: 41 }))).toBe("not-reproducible · from tick 41");
+  });
+});
+
+describe("the task records and the decisions of a mind under the wake policy `task` (F4b M2, U-024)", () => {
+  it("the task records are TSK in the run family; every other record keeps the tag of its kind", () => {
+    expect(tagOf(rec("event", { op: "task", steps: [] }), { family: "slate", tag: "EVT" })).toEqual({ tag: "TSK", family: "cyan" });
+    expect(tagOf(rec("event", { op: "task_step", step: 1 }), { family: "slate", tag: "EVT" })).toEqual({ tag: "TSK", family: "cyan" });
+    expect(tagOf(rec("event", { op: "event" }), { family: "slate", tag: "EVT" })).toEqual({ tag: "EVT", family: "slate" });
+    expect(tagOf(rec("thought", { op: "task" }), { family: "violet", tag: "THK" })).toEqual({ tag: "THK", family: "violet" });
+    expect(tagOf(rec("mystery", {}), undefined)).toEqual({ tag: "MYS", family: "slate" });
+  });
+
+  it("writes the list as written and each step as the world marks it, with the glyph of the mission view", () => {
+    expect(summary(rec("event", { op: "task", steps: [{ text: "a" }, { text: "b" }, { text: "c" }] }))).toBe("list written · 3 steps");
+    expect(summary(rec("event", { op: "task_step", step: 1, of: 5, status: "running" }))).toBe("step 1 of 5 ▶ running");
+    expect(summary(rec("event", { op: "task_step", step: 2, of: 5, status: "done" }))).toBe("step 2 of 5 ✓ done");
+    expect(summary(rec("event", { op: "task_step", step: 3, of: 5, status: "failed", outcome: "preempted", code: "preempted" }))).toBe("step 3 of 5 ▲ preempted");
+    expect(summary(rec("event", { op: "task_step", step: 3, of: 5, status: "failed", outcome: "failed", code: "no_path" }))).toBe("step 3 of 5 ✕ failed · no_path");
+    expect(summary(rec("event", { op: "task_step", step: 4, of: 5, status: "failed", outcome: "refused", code: "precondition_failed" }))).toBe("step 4 of 5 ✕ refused · precondition_failed");
+  });
+
+  it("a decision ends its line with how many perception events it held back, and says it went on with the running action, in plain words", () => {
+    expect(summary(rec("thought", { op: "decision", decision: { kind: "idle" }, step: 2, of: 5, held: 3 }))).toBe("decision · step 2 of 5 · held 3");
+    expect(summary(rec("thought", { op: "decision", decision: { kind: "action", name: "goTo" }, held: 2 }))).toBe("decision · held 2");
+    expect(summary(rec("thought", { op: "decision", decision: { kind: "idle" }, continued: true, actionId: "act-000002", events: [{ kind: "timer" }, { kind: "detected" }, { kind: "timer" }], held: 1 }))).toBe("decision · ↻ continued act-000002 · timer, detected · held 1");
+    // Nothing held: nothing said, and a decision of F4 reads as it did.
+    expect(summary(rec("thought", { op: "decision", decision: { kind: "idle" } }))).toBe("decision");
+    expect(summary(rec("thought", { op: "decision", decision: { kind: "idle" }, held: 0 }))).toBe("decision");
   });
 });

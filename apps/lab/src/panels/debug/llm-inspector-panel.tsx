@@ -5,7 +5,9 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePolled, useServices, useSource } from "../../services.tsx";
 import { buildDecisionStory, callFacts, callSays, callTokens, notebookAt, opOf, promptSections, type CallFacts, type DecisionStory, type Step } from "./decision-story.ts";
+import { STEP_GLYPH, STEP_TONE } from "../mission-view.ts";
 import { summary } from "./log-rows.ts";
+import { actionWords, continuedOf, heldOf, PERCEPTION_KINDS, taskStoryOf, wakeOf, type TaskRow, type TaskStory } from "./task-story.ts";
 import { useJump } from "./use-jump.ts";
 
 // The LLM inspector (F4 M4, T-123, the designer's LLMInspector board): one decision of a System 2 mind as a lane, in the order things happened: the request, each model call with what it said, the compute
@@ -23,6 +25,7 @@ const TAGS: Record<Step["kind"], { tag: string; tone: string }> = {
   limit: { tag: "LIM", tone: "amber" },
   cache: { tag: "CCH", tone: "slate" },
   action: { tag: "ACT", tone: "green" },
+  task: { tag: "TSK", tone: "cyan" },
 };
 const payload = (r: TraceRecord): Record<string, unknown> => (r.payload !== null && typeof r.payload === "object" ? (r.payload as Record<string, unknown>) : {});
 
@@ -32,17 +35,30 @@ export function stepMark(s: Step): { readonly glyph: string; readonly tone: "alm
   if (s.kind === "invalid") return { glyph: "✕", tone: "alm" };
   if (s.kind === "call" && (p["outcome"] === "error" || p["outcome"] === "timeout" || p["outcome"] === "invalid")) return { glyph: "✕", tone: "alm" };
   if (s.kind === "fallback" || s.kind === "limit") return { glyph: "▲", tone: "warn" };
+  // A task list the world refused is a failed step of the decision (the list is unchanged).
+  if (s.kind === "task" && p["op"] === "event") return { glyph: "✕", tone: "alm" };
   return undefined;
 }
 
+/** What the decision did that the lane words need: the perception events it held back, and the action it went on with. Both come from the record, and neither takes a colour (they are normal outcomes of `wake: task`). */
+export interface LaneFacts {
+  readonly held?: { readonly n: number; readonly kinds: string } | undefined;
+  readonly continued?: { readonly actionId: string; readonly name: string; readonly reason: string } | undefined;
+  /** The number of steps of the list a `task_step` row belongs to, for the row's words. */
+  readonly of?: number | undefined;
+}
+
 /** What the lane writes for a step, after its tag and its mark; `callNo` is the number of a model call among the calls of the decision (unique: a retry has its own call number and says its attempt). */
-export function stepText(s: Step, callNo = 1): string {
+export function stepText(s: Step, callNo = 1, facts: LaneFacts = {}): string {
   const p = payload(s.record);
   switch (s.kind) {
     case "request": {
-      const ev = Array.isArray(p["events"]) ? (p["events"] as { kind?: unknown }[]).map((e) => String(e.kind)).join(", ") : "";
+      // A decision that held perception events back names only the control event that asked: the held ones are counted after it (the summary says the same, once).
+      const kinds = Array.isArray(p["events"]) ? (p["events"] as { kind?: unknown }[]).map((e) => String(e.kind)) : [];
+      const ev = (facts.held === undefined ? kinds : [...new Set(kinds.filter((k) => !PERCEPTION_KINDS.includes(k)))]).join(", ");
       const nb = notebookAt(s.record);
-      return `request · trigger: ${ev === "" ? "—" : ev}${nb === "" ? "" : ` · notebook ${nb.length} chars`}`;
+      const held = facts.held === undefined ? "" : ` · + ${facts.held.n} held perception event${facts.held.n === 1 ? "" : "s"}${facts.held.kinds === "" ? "" : ` (${facts.held.kinds})`}`;
+      return `request · trigger: ${ev === "" ? "—" : ev}${held}${nb === "" ? "" : ` · notebook ${nb.length} chars`}`;
     }
     case "call": {
       const t = callTokens(s.record);
@@ -57,7 +73,20 @@ export function stepText(s: Step, callNo = 1): string {
       const d = p["decision"] as { kind?: unknown; name?: unknown; params?: unknown } | undefined;
       const mind = p["mind"] as { fallback?: unknown } | undefined;
       const what = d?.kind === "action" ? `${String(d.name)} ${JSON.stringify(d.params ?? {})}` : "idle";
+      if (facts.continued !== undefined) return `answer · ↻ continued ${facts.continued.name} ${facts.continued.actionId} · no new start${facts.continued.reason === "" ? "" : ` · reason: ${facts.continued.reason}`}`;
       return `${mind?.fallback === undefined ? "answer" : "fallback decision"} · ${what}`;
+    }
+    case "task": {
+      const op = String(p["op"] ?? "");
+      if (op === "task") return `list written · ${Array.isArray(p["steps"]) ? p["steps"].length : "?"} steps`;
+      if (op === "task_step") {
+        // A step the decision ended by replacing its action is preempted (▲), as in the Log; a refused or failed one is ✕.
+        const state = p["status"] === "running" ? "running" : p["status"] === "done" ? "done" : p["outcome"] === "preempted" ? "preempted" : p["outcome"] === "refused" ? "refused" : "failed";
+        const word = state === "failed" || state === "refused" || state === "preempted" ? state : String(p["status"]);
+        return `step ${String(p["step"])} of ${String(p["of"])} ${STEP_GLYPH[state]} ${word} · cause: this decision`;
+      }
+      const ev = p["event"] as { code?: unknown } | undefined;
+      return `task refused · ${String(ev?.code ?? "")} · the list is unchanged`;
     }
     case "fallback":
       return `fallback · ${String(p["decision"] ?? "idle")} · ${String(p["reason"] ?? "").slice(0, 120)}`;
@@ -69,6 +98,27 @@ export function stepText(s: Step, callNo = 1): string {
 /** A text with `code` in backticks drawn as code (Mono on the raised background) instead of raw backticks. */
 function Ticks({ text }: { text: string }): ReactNode {
   return text.split("`").map((t, i) => (i % 2 === 1 ? <code key={i} className="inline-code">{t}</code> : t));
+}
+
+/** The rows of a task list: number, glyph (the only coloured part), the mind's words, the action with its parameters, the code of a failure, `named`, the action's id. */
+function TaskRows(props: { rows: readonly TaskRow[]; prefix?: string }) {
+  return (
+    <ol className="llm-task-rows mono">
+      {props.rows.map((r) => (
+        <li key={r.n} className={`${r.named ? "named " : ""}${r.state === "running" ? "run" : ""}`} data-testid={`llm-task-${props.prefix ?? ""}row-${r.n}`} data-state={r.state} data-named={r.named ? "true" : undefined}>
+          <span className="n">{r.n}</span>
+          <span className={`g ${STEP_TONE[r.state]}`} data-testid={`llm-task-${props.prefix ?? ""}glyph-${r.n}`}>
+            {r.glyph}
+          </span>
+          <span className={`t${r.state === "pending" ? " muted" : ""}`}>{r.text}</span>
+          <span className="a muted">{actionWords(r.action, r.params)}</span>
+          {r.code !== undefined && r.state !== "done" && <span className="c muted">{r.code}</span>}
+          {r.named && <span className="tag-named">named</span>}
+          <span className="id muted">{r.actionId ?? ""}</span>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 function Tabs(props: { value: string; onChange: (v: string) => void; items: readonly string[] }) {
@@ -96,6 +146,8 @@ export function LlmInspectorPanel() {
   const [sel, setSel] = useState<number | undefined>(undefined);
   const [tab, setTab] = useState<"prompt" | "answer" | "notebook" | "raw JSON">("prompt");
   const [section, setSection] = useState(0);
+  const [tasks, setTasks] = useState<TaskStory | undefined>(undefined);
+  const [wake, setWake] = useState<"all" | "task">("all");
 
   useEffect(() => {
     if (runId === undefined || seq === undefined) return setStory(null);
@@ -105,6 +157,16 @@ export function LlmInspectorPanel() {
       live = false;
     };
   }, [storage, runId, seq, head]);
+  // The task list as the world held it at this decision, and the wake policy of the mind: read from the records, like the rest of the story.
+  useEffect(() => {
+    if (runId === undefined || !story) return setTasks(undefined);
+    let live = true;
+    void taskStoryOf(storage.ports, runId, story).then((t) => live && setTasks(t));
+    void wakeOf(storage.ports, runId, story.agentId).then((w) => live && setWake(w));
+    return () => {
+      live = false;
+    };
+  }, [storage, runId, story]);
   // A decision picked: its first model call is the one shown, unless the picked record is itself a step of it.
   useEffect(() => {
     if (story === null || story === undefined) return setSel(undefined);
@@ -178,6 +240,9 @@ export function LlmInspectorPanel() {
   const decisionP = story.decision === undefined ? {} : payload(story.decision);
   const d = decisionP["decision"] as { kind?: unknown; name?: unknown; params?: unknown } | undefined;
   const cacheHits = story.calls.filter((c) => payload(c.record)["cacheHit"] === true).length;
+  const held = heldOf(story);
+  const continued = continuedOf(story);
+  const laneFacts: LaneFacts = { held: held === undefined ? undefined : { n: held.n, kinds: held.kinds }, continued, of: tasks?.counts.total };
   const open = (seqNo: number | undefined) => seqNo !== undefined && runId !== undefined && useUiContext.getState().selectRecord({ runId, seq: seqNo });
 
   return (
@@ -206,9 +271,64 @@ export function LlmInspectorPanel() {
       </div>
       {d !== undefined && (
         <div className="llm-action mono" data-testid="llm-action">
-          {story.fallback !== undefined ? "▲" : "✓"} {d.kind === "action" ? `${String(d.name)} ${JSON.stringify(d.params ?? {})}` : "idle"}
-          {story.action !== undefined ? ` · action started #${story.action.seq}` : ""}
+          {continued !== undefined ? (
+            <>↻ continued {continued.name} {continued.actionId}</>
+          ) : (
+            <>
+              {story.fallback !== undefined ? "▲" : "✓"} {d.kind === "action" ? `${String(d.name)} ${JSON.stringify(d.params ?? {})}` : "idle"}
+              {story.action !== undefined ? ` · action started #${story.action.seq}` : ""}
+            </>
+          )}
+          {held !== undefined && (
+            <>
+              {" "}
+              <span className="llm-pill" data-testid="llm-held">held {held.n}</span>
+            </>
+          )}
+          {tasks?.stopped !== undefined && (
+            <>
+              {" "}
+              <span data-testid="llm-stopped">
+                <span className="st-alm">■</span> {tasks.stopped}
+              </span>
+            </>
+          )}
         </div>
+      )}
+      {(held !== undefined || continued !== undefined) && (
+        <div className="llm-trigger muted mono" data-testid="llm-trigger">
+          {held !== undefined && <>trigger: {held.trigger === "" ? "—" : held.trigger} (control) · wake {wake}{held.kinds === "" ? "" : ` · held: ${held.kinds}`}</>}
+          {continued !== undefined && <>{held === undefined ? "" : " · "}{continued.reason === "" ? "continued: no new start" : `${continued.reason} · no new start`}</>}
+        </div>
+      )}
+      {tasks !== undefined && (
+        <section className="llm-task" data-testid="llm-task" aria-label="Task list at this decision">
+          <h4>
+            Task list at this decision{" "}
+            <span className="muted mono" data-testid="llm-task-counts">
+              · {tasks.counts.total} step{tasks.counts.total === 1 ? "" : "s"} · {tasks.counts.done} done{tasks.counts.running > 0 ? ` · ${tasks.counts.running} running` : ""}{tasks.counts.failed > 0 ? ` · ${tasks.counts.failed} failed` : ""}
+            </span>
+          </h4>
+          <p className="muted mono llm-task-source" data-testid="llm-task-source">
+            {tasks.source.byThisDecision && tasks.source.kind === "written"
+              ? "written by this decision"
+              : tasks.source.kind === "written"
+                ? `written at ${tasks.source.at === undefined ? "an earlier decision" : `#${tasks.source.at}`}, unchanged since`
+                : `rewritten at ${tasks.source.at === undefined ? "an earlier decision" : `#${tasks.source.at}`} (was ${tasks.source.was ?? "?"} steps)${tasks.source.unchanged ? ", unchanged since" : ""}`}
+          </p>
+          <TaskRows rows={tasks.rows} />
+          {tasks.before !== undefined && (
+            <details className="llm-task-before" data-testid="llm-task-before">
+              <summary className="muted mono">list before this decision · {tasks.before.rows.length} steps</summary>
+              <TaskRows rows={tasks.before.rows} prefix="before-" />
+            </details>
+          )}
+          {tasks.last !== undefined && (
+            <p className="muted mono llm-task-last" data-testid="llm-task-last">
+              last outcome · {tasks.last.text}
+            </p>
+          )}
+        </section>
       )}
       <ol className="llm-lane mono" data-testid="llm-lane">
         {story.steps.map((s) => {
@@ -224,7 +344,7 @@ export function LlmInspectorPanel() {
                   {t.tag}
                 </span>{" "}
                 {mark !== undefined && <span className={`llm-mark ${mark.tone}`}>{mark.glyph} </span>}
-                <span className="llm-step-text">{stepText(s, callNo)}</span>
+                <span className="llm-step-text">{stepText(s, callNo, laneFacts)}</span>
                 <span className="muted llm-ms">{ms}</span>
               </button>
             </li>

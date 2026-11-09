@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseFilter } from "@agentsim/trace";
-import { shownChoices, termValues, toggleChoice, withTermValues } from "./filter-text.ts";
+import { hasToken, shownChoices, termValues, toggleChoice, toggleToken, withTermValues } from "./filter-text.ts";
 
 // The toggles of the log console write into the filter text: the text stays the one state, and every result is a filter that parses.
 
@@ -57,6 +57,27 @@ describe("the toggle of one choice (kinds, tiers)", () => {
     for (const [k, solo] of [["action", false], ["event", false], ["snapshot", true], ["snapshot", true], ["reflex", false]] as const) {
       text = toggleChoice(text, "kind", k, KINDS, solo);
       expect(parseFilter(text).ok, text).toBe(true);
+    }
+  });
+});
+
+describe("a chip that is one fixed term (F4b M2): held and continued", () => {
+  it("adds the term at the end, removes it where it is, and leaves every other term and its spacing as typed", () => {
+    expect(hasToken("agent:uav-001", "text:held")).toBe(false);
+    expect(toggleToken("agent:uav-001 kind:thought", "text:held")).toBe("agent:uav-001 kind:thought text:held");
+    expect(toggleToken("", "text:held")).toBe("text:held");
+    expect(hasToken("agent:uav-001 text:held kind:thought", "text:held")).toBe(true);
+    expect(toggleToken("agent:uav-001 text:held kind:thought", "text:held")).toBe("agent:uav-001 kind:thought");
+    expect(toggleToken("text:held", "text:held")).toBe("");
+    expect(toggleToken("agent:uav-001 text:held", "text:held")).toBe("agent:uav-001");
+    expect(hasToken("agent:uav-001 text:heldover", "text:held")).toBe(false);
+  });
+
+  it("every result is a filter that parses", () => {
+    for (const text of ["", "agent:uav-001", "agent:uav-001 kind:thought", "kind:thought text:brainkind"]) {
+      const on = toggleToken(toggleToken(text, "text:held"), "text:continued");
+      expect(parseFilter(on).ok, on).toBe(true);
+      expect(parseFilter(toggleToken(toggleToken(on, "text:held"), "text:continued")).ok).toBe(true);
     }
   });
 });

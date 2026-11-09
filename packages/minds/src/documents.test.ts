@@ -101,3 +101,33 @@ describe("the hash of a document", () => {
     expect(MIND_DEFAULTS).toEqual({ limits: { calls: 20, tokens: 40_000, costUsd: 0.05, timeoutS: 60, retries: 1 }, tools: { maxCallsPerDecision: 8 }, context: { decisions: 5 }, latency: { model: "measured" } });
   });
 });
+
+describe("the wake policy of a profile (F4b M1, ADR-0036 addition of 2026-11-08)", () => {
+  it("is `all` or `task`; any other value is refused; a profile without it resolves, and hashes, as it did", () => {
+    expect(validateMindProfile(profile({ wake: "task" })).ok).toBe(true);
+    expect(validateMindProfile(profile({ wake: "all" })).ok).toBe(true);
+    expect(validateMindProfile(profile({ wake: "sometimes" })).ok).toBe(false);
+    const plain = validateMindProfile(profile());
+    const waking = validateMindProfile(profile({ wake: "task" }));
+    expect(plain.ok && waking.ok).toBe(true);
+    if (!plain.ok || !waking.ok) return;
+    const eff = resolveS2(plain.value.s2, undefined);
+    expect(eff).not.toHaveProperty("wake");
+    expect(eff.sources).not.toHaveProperty("wake");
+    expect(documentHash(waking.value)).not.toBe(documentHash(plain.value));
+    expect(resolveS2(waking.value.s2, undefined).wake).toBe("task");
+    expect(resolveS2(waking.value.s2, undefined).sources["wake"]).toBe("profile");
+  });
+
+  it("a run configuration may override it, field by field like the rest", () => {
+    const plain = validateMindProfile(profile());
+    if (!plain.ok) throw new Error("profile");
+    const eff = resolveS2(plain.value.s2, { wake: "task" });
+    expect(eff.wake).toBe("task");
+    expect(eff.sources["wake"]).toBe("override");
+  });
+
+  it("the `task` tool is named in tools.allow like any other tool", () => {
+    expect(validateMindProfile(profile({ tools: { allow: ["goTo", "hold", "task"] } })).ok).toBe(true);
+  });
+});

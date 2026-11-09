@@ -6,7 +6,7 @@ import type { TraceRecord } from "@agentsim/trace";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type KeyboardEvent } from "react";
 import { copyOfRecord } from "./derived-tag.tsx";
 import { WordClip } from "../word-clip.tsx";
-import { resultOf, summary } from "./log-rows.ts";
+import { resultOf, summary, tagOf } from "./log-rows.ts";
 
 /** The list's own controls, for the console around it: where it is, and moving it. */
 export interface LogListHandle {
@@ -155,7 +155,7 @@ export const LogList = forwardRef<LogListHandle, LogListProps>(function LogList(
             );
           }
           const style = KIND_STYLE[r.kind as keyof typeof KIND_STYLE];
-          const tag = style?.tag ?? r.kind.slice(0, 3).toUpperCase();
+          const { tag, family } = tagOf(r, style);
           const result = resultOf(r);
           const open = expanded.has(r.seq);
           const copyOf = copyOfRecord(r.payload);
@@ -193,7 +193,7 @@ export const LogList = forwardRef<LogListHandle, LogListProps>(function LogList(
               ) : (
                 <span className="mono muted">run</span>
               )}
-              <span className="tag mono" style={{ color: `var(--kind-${style?.family ?? "slate"})` }}>
+              <span className="tag mono" style={{ color: `var(--kind-${family})` }}>
                 [{tag}]
               </span>
               <span className="mono muted">{r.source}</span>

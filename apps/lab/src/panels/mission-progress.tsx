@@ -1,10 +1,9 @@
 import { useUiContext } from "@agentsim/ui";
 import { useAppActions } from "../services.tsx";
-import { argsWords, STEP_GLYPH, type MissionView } from "./mission-view.ts";
+import { argsWords, STEP_GLYPH, STEP_TONE, type MissionView } from "./mission-view.ts";
 
 const STATE_WORDS = { done: "done", running: "running", pending: "to do", preempted: "preempted", refused: "refused", failed: "failed", skipped: "not run" } as const;
-/** The tone class of a step state (the Inspector's own state colours). */
-const TONE = { done: "st-ok", running: "st-run", pending: "muted", preempted: "st-warn", refused: "st-alm", failed: "st-alm", skipped: "muted" } as const;
+const TONE = STEP_TONE;
 /**
  * The Mission section of the agent Inspector (F3c M1): a bar of the steps' durations, one row per step (glyph, action, arguments, state, duration), and a stop in one line of words.
  * A click on a row selects the step's decision record in the trace; `edit ↗` opens the run configuration, where the mission is written.
@@ -17,7 +16,7 @@ export function MissionProgress(props: { agentId: string; runId: string; view: M
   return (
     <section className="inspector-section mission-progress" data-testid="inspector-mission" data-status={view.status}>
       <h4>
-        Mission <span className="muted mono">· step {view.current} / {view.of}</span>
+        Mission <span className="muted mono">· step {view.current} / {view.of}{view.source === undefined ? "" : ` · ${view.source}`}</span>
         <button type="button" className="kt mp-edit" onClick={() => actions.openPanel("runConfig")} data-testid="mp-edit" title="Open the run configuration, where the mission is written">
           edit ↗
         </button>

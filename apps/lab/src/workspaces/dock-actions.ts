@@ -39,6 +39,8 @@ export function dockPanel(api: DockviewApi, panel: IDockviewPanel, preset?: Work
   const beside = place ? api.getPanel(place.referencePanel) : undefined;
   if (place && beside && !isFloating(beside)) {
     panel.api.moveTo({ group: beside.group, position: POSITION[place.direction] });
+    // The panel that was just docked is the active one, as the window that was just floated is: the next command on "the active panel" acts on it, whichever panel of its group the dock made active.
+    panel.api.setActive();
     return true;
   }
   const target = api.groups.find((g) => g.api.location.type === "grid");
@@ -52,6 +54,7 @@ export function dockPanel(api: DockviewApi, panel: IDockviewPanel, preset?: Work
     return true;
   }
   panel.api.moveTo({ group: target });
+  panel.api.setActive();
   return true;
 }
 
@@ -156,7 +159,8 @@ function floatingPosition(api: DockviewApi, f: NonNullable<PresetPanel["floating
 }
 
 /** Adds a preset's panel to the dock: docked beside the one it names, or as a floating window. */
-export function addPresetPanel(api: DockviewApi, preset: WorkspacePreset, p: PresetPanel): void {
+/** `inactive`: the panel is added without becoming the active one (a window placed again while the researcher works must not take the commands that act on "the active panel"). */
+export function addPresetPanel(api: DockviewApi, preset: WorkspacePreset, p: PresetPanel, opts?: { readonly inactive?: boolean }): void {
   const base = { id: p.id, component: p.id, title: tabTitle(preset, p.id, PANELS[p.id].title) };
   if (p.floating) {
     const f = p.floating;
@@ -166,7 +170,7 @@ export function addPresetPanel(api: DockviewApi, preset: WorkspacePreset, p: Pre
     const width = f.collapsed ? collapsedWidthIn(hostWidth) : big ? Math.min(f.width, Math.max(400, api.width - 24)) : f.width;
     const height = f.collapsed ? COLLAPSED_HEIGHT_PX : big ? Math.min(f.height, Math.max(300, api.height - 24)) : f.height;
     const position = big ? { top: 12, left: Math.max(12, Math.round((api.width - width) / 2)) } : floatingPosition(api, f);
-    const panel = api.addPanel({ ...base, floating: { width, height, position } });
+    const panel = api.addPanel({ ...base, floating: { width, height, position }, ...(opts?.inactive ? { inactive: true } : {}) });
     before.set(panel.group, { width: f.width, height: f.height });
     if (f.collapsed) collapsedWidth.set(panel.group, width);
     if (f.collapsed) panel.group.element.classList.add("collapsed");
@@ -202,8 +206,9 @@ function placeAfterLayout(api: DockviewApi, preset: WorkspacePreset): void {
       if (!host || host.width === 0 || !win) continue;
       // Already on the host's bottom edge: nothing to do.
       if (Math.abs(host.bottom - win.bottom) <= STACK_GAP_PX + 4 && win.left >= host.left - 1 && win.right <= host.right + 1) continue;
+      // Added again without becoming the active panel: on a slow machine this runs after the researcher (or a test) has floated or docked a panel, and the command that acts on "the active panel" must find that one.
       panel.api.close();
-      addPresetPanel(api, preset, p);
+      addPresetPanel(api, preset, p, { inactive: true });
     }
   };
   requestAnimationFrame(() => requestAnimationFrame(again));

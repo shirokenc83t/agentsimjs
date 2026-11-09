@@ -180,6 +180,7 @@
 .kinds { flex: none; display: flex; gap: 4px; padding: 4px 28px 4px 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; background: var(--bg1); border-bottom: 1px solid var(--ln); mask-image: linear-gradient(to right, black calc(100% - 28px), transparent); }
 /* One row that scrolls, with a fade at its right edge: a chip is never cut without saying there is more (the last chip clears the fade at the end of the scroll). */
 .kinds .kt { flex: none; white-space: nowrap; }
+.kinds .kt.on { color: var(--fg); box-shadow: inset 0 -1px 0 var(--ac); }
 /* The log's own actions (saved filters, export, re-simulate) are a row of their own under the chips, which scroll: an action is never scrolled out of reach. */
 .log-actions { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 3px 8px; background: var(--bg1); border-bottom: 1px solid var(--ln); }
 .log-actions .kt { flex: none; white-space: nowrap; }
@@ -908,6 +909,24 @@
 .llm-head .sp { flex: 1; }
 .llm-tiles { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 6px; color: var(--fg2); }
 .llm-action { margin: 0 0 6px; color: var(--fg); }
+/* F4b M2 (U-024): held and continued are normal outcomes of the wake policy `task`, not warnings: a bordered pill and plain words, no colour. Only the step glyphs and the limits take one. */
+.llm-pill { display: inline-block; padding: 0 6px; border: 1px solid var(--ln2); color: var(--fg); white-space: nowrap; }
+.llm-trigger { margin: 0 0 6px; overflow-wrap: anywhere; }
+.llm-task { margin: 0 0 8px; }
+.llm-task h4 { margin: 0 0 2px; }
+.llm-task-source, .llm-task-last { margin: 0 0 4px; }
+.llm-task-rows { list-style: none; margin: 0 0 4px; padding: 0; border-top: 1px solid var(--ln); }
+.llm-task-rows li { display: flex; align-items: baseline; gap: 8px; padding: 3px 6px; border-bottom: 1px solid var(--ln); min-width: 0; }
+.llm-task-rows li.run { background: color-mix(in srgb, var(--run) 12%, transparent); }
+.llm-task-rows li.named { outline: 1px solid var(--ac); outline-offset: -1px; }
+.llm-task-rows .n { flex: none; min-width: 1.6em; color: var(--fg3); text-align: right; }
+.llm-task-rows .g { flex: none; width: 1.2em; font-weight: 600; }
+.llm-task-rows .t { flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; color: var(--fg); }
+.llm-task-rows .t.muted { color: var(--fg3); }
+.llm-task-rows .a { flex: 0 1 18em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.llm-task-rows .c { flex: none; }
+.llm-task-rows .id { flex: none; white-space: nowrap; }
+.llm-task-rows .tag-named { flex: none; padding: 0 4px; border: 1px solid var(--ac); font-size: var(--type-label-size); }
 .llm-lane { list-style: none; margin: 0 0 8px; padding: 0; border-top: 1px solid var(--ln); }
 .llm-lane li { border-bottom: 1px solid var(--ln); }
 .llm-lane li.sel { background: var(--bg3); box-shadow: inset 1px 0 0 var(--ac); }
@@ -929,6 +948,20 @@
 .compute-kv { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 4px 12px; margin: 0 0 8px; }
 .compute-kv dt { color: var(--fg3); }
 .compute-kv dd { margin: 0; overflow-wrap: anywhere; }
+
+/* The wake policy of a profile, a segmented control with both values in view, the selected one by inversion (F4b M2, U-024); the task slot fold under the template editor. */
+.lib-seg { display: inline-flex; }
+.lib-seg button { padding: 2px 12px; background: transparent; color: var(--fg); border: 1px solid var(--ln2); font: inherit; cursor: pointer; }
+.lib-seg button + button { margin-left: -1px; }
+.lib-seg button:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -1px; position: relative; }
+.lib-seg button[aria-checked="true"] { background: var(--fg); color: var(--bg0); }
+/* The wake control is in the flow of the form: its field is as tall as its content (the help and the hint push the next row down), and it is two buttons, not an input. */
+.lib-form .lib-wake { align-items: start; }
+.lib-wake-field { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.lib-wake-help { display: block; max-width: 70ch; font-family: var(--font-sans); }
+.lib-task-fold { margin: 0 0 8px; }
+.lib-task-fold summary { cursor: pointer; }
+.lib-task-text { margin: 4px 0; padding: 6px; background: var(--bg0); border: 1px solid var(--ln); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--type-mono-size); }
 
 /* The Library (F4 M4, T-124) */
 .library { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }

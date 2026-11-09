@@ -58,10 +58,14 @@ for (const theme of THEMES) {
       const decision = page.getByTestId("ah-row-1").locator('[data-kind="decision"]').first();
       await expect(decision).toBeVisible({ timeout: 30_000 });
       await decision.dblclick();
-      const started = page.getByTestId("ah-row-3").locator('[data-kind="record"]').first();
-      await expect(started).toBeVisible({ timeout: 15_000 });
-      await started.dblclick();
-      await expect(page.getByTestId("ah-row-4")).toBeVisible();
+      // The third level is read from storage when the record is opened, and the rows are drawn again while they are read: a double click that fell on a row that was replaced opens nothing, so it is given again to the record as it is
+      // then, until the next level is there.
+      await expect(async () => {
+        const started = page.getByTestId("ah-row-3").locator('[data-kind="record"]').first();
+        await expect(started).toBeVisible({ timeout: 5_000 });
+        await started.dblclick();
+        await expect(page.getByTestId("ah-row-4")).toBeVisible({ timeout: 5_000 });
+      }).toPass({ timeout: 60_000 });
       await expect.poll(async () => await page.getByTestId("ah-row-4").locator("[data-node]").count(), { timeout: 15_000 }).toBeGreaterThan(0);
       await shot(page, history, `history-mission-${theme}`);
     });
