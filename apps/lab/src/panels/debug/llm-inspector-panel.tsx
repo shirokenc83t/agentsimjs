@@ -77,7 +77,12 @@ export function stepText(s: Step, callNo = 1, facts: LaneFacts = {}): string {
     case "task": {
       const op = String(p["op"] ?? "");
       if (op === "task") return `list written · ${Array.isArray(p["steps"]) ? p["steps"].length : "?"} steps`;
-      if (op === "task_step") return `step ${String(p["step"])} of ${String(p["of"])} ${STEP_GLYPH[p["status"] === "running" ? "running" : p["status"] === "done" ? "done" : "failed"]} ${String(p["status"])} · cause: this decision`;
+      if (op === "task_step") {
+        // A step the decision ended by replacing its action is preempted (▲), as in the Log; a refused or failed one is ✕.
+        const state = p["status"] === "running" ? "running" : p["status"] === "done" ? "done" : p["outcome"] === "preempted" ? "preempted" : p["outcome"] === "refused" ? "refused" : "failed";
+        const word = state === "failed" || state === "refused" || state === "preempted" ? state : String(p["status"]);
+        return `step ${String(p["step"])} of ${String(p["of"])} ${STEP_GLYPH[state]} ${word} · cause: this decision`;
+      }
       const ev = p["event"] as { code?: unknown } | undefined;
       return `task refused · ${String(ev?.code ?? "")} · the list is unchanged`;
     }

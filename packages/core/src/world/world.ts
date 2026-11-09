@@ -556,6 +556,9 @@ export class World implements Steppable {
     const list = this.tasks[i];
     const at = step - 1;
     if (list === undefined || !Number.isInteger(step) || at < 0 || at >= list.steps.length) return;
+    // A decision that goes on with the action a step is already bound to changes nothing: no second record of it.
+    const now = list.steps[at] as TaskStepView;
+    if (now.status === "running" && now.actionId === actionId) return;
     const steps = list.steps.map((s, k) => (k === at ? { ...s, status: "running" as const, actionId } : s));
     this.tasks[i] = this.listOf(steps, list.last);
     this.parts.trace.emit({ source: this.sourceOf(i), simTime: simTimeS, kind: "event", agentId: (this.agents[i] as SimAgent).id, detail: "full", causeIds: [cause], payload: { op: "task_step", step, of: steps.length, status: "running", actionId } });
@@ -583,18 +586,22 @@ export class World implements Steppable {
   private preemptStep(i: number, actionId: string, name: string, cause: string, simTimeS: number): void {
     const list = this.tasks[i];
     if (list === undefined) return;
-    const at = list.steps.findIndex((s) => s.status === "running" && s.actionId === actionId);
-    if (at >= 0) this.endStep(i, at, { step: at + 1, status: "preempted", action: name, code: "preempted" }, actionId, cause, simTimeS);
+    // Every step bound to that action (a mind may name a second step while the action runs) ends with it.
+    list.steps.forEach((s, at) => {
+      if (s.status === "running" && s.actionId === actionId) this.endStep(i, at, { step: at + 1, status: "preempted", action: name, code: "preempted" }, actionId, cause, simTimeS);
+    });
   }
 
   /** An action ended: the step that is bound to it, if any, is done or failed (an action another action or a reflex ended is `preempted`). The world marks it, never the mind. */
   private onActionEnded(i: number, actionId: string, name: string, status: string, code: string | undefined, recordId: string | undefined, simTimeS: number): void {
     const list = this.tasks[i];
     if (list === undefined) return;
-    const at = list.steps.findIndex((s) => s.status === "running" && s.actionId === actionId);
-    if (at < 0) return;
-    const outcome: TaskOutcome = status === "succeeded" ? { step: at + 1, status: "done", action: name } : { step: at + 1, status: status === "preempted" ? "preempted" : "failed", action: name, code: code ?? "failed" };
-    this.endStep(i, at, outcome, actionId, recordId ?? "", simTimeS);
+    // Every step bound to that action ends with it (a mind may name a second step while the action runs).
+    list.steps.forEach((s, at) => {
+      if (s.status !== "running" || s.actionId !== actionId) return;
+      const outcome: TaskOutcome = status === "succeeded" ? { step: at + 1, status: "done", action: name } : { step: at + 1, status: status === "preempted" ? "preempted" : "failed", action: name, code: code ?? "failed" };
+      this.endStep(i, at, outcome, actionId, recordId ?? "", simTimeS);
+    });
   }
 
   /** What the decision record says of the agent's task list, as a mission's mind says it (`step`, `of`, `done`, `stop`): the step the answer names, or the one running, or the first that is not done. */

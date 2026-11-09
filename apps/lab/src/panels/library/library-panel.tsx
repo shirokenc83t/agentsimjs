@@ -439,7 +439,7 @@ export function LibraryPanel() {
           <p className="muted rc-note" data-testid="lib-note">
             {kind === "profile"
               ? "Editing a profile makes a new version; runs keep the version they used, so a re-run is the same mind."
-              : "A template's slots (role, mission, notebook, last decisions, state, beliefs, space, events, allowed actions) are fixed chips; only the text around them is edited, and saving makes a new version that a profile can name."}
+              : "A template's slots (role, mission, task list, notebook, last decisions, state, beliefs, space, events, allowed actions) are fixed chips; only the text around them is edited, and saving makes a new version that a profile can name."}
           </p>
         </div>
       </div>

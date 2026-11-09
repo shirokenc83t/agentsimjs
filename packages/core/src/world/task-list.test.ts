@@ -220,6 +220,30 @@ describe("the task list in the world (T-144)", () => {
     expect((ops(ok, "decision")[0] as unknown as { payload: Record<string, unknown> }).payload).toMatchObject({ of: 2, step: 1 });
   });
 
+  it("a decision that goes on with the action its step is already bound to leaves the list and the trace as they are (no second `running` record); one that names a pending step binds it to the running action", async () => {
+    const r = build([
+      () => ({ decision: hold(5), task: TWO, step: 1 }),
+      (req) => ({ decision: { kind: "idle" }, continued: { actionId: (req.self.running as { actionId: string }).actionId }, step: 1 }),
+      (req) => ({ decision: { kind: "idle" }, continued: { actionId: (req.self.running as { actionId: string }).actionId }, step: 2 }),
+      () => ({ decision: { kind: "idle" } }),
+    ]);
+    await run(r, 1);
+    expect(ops(r, "task_step")).toHaveLength(1);
+    r.injected.push({ agentId: r.agent.id, event: det("o-1") });
+    await run(r, 2);
+    // Step 1 again: nothing new is recorded.
+    expect(ops(r, "task_step")).toHaveLength(1);
+    expect(r.world.snapshot().tasks?.[0]?.steps.map((s) => s.status)).toEqual(["running", "pending"]);
+    r.injected.push({ agentId: r.agent.id, event: det("o-2") });
+    await run(r, 2);
+    // Step 2 named while the action runs: the same action is now bound to it too (a record for it).
+    expect(ops(r, "task_step")).toHaveLength(2);
+    expect(r.world.snapshot().tasks?.[0]?.steps.map((s) => s.status)).toEqual(["running", "running"]);
+    // Both end with the action.
+    await run(r, 60);
+    expect(r.world.snapshot().tasks?.[0]?.steps.map((s) => s.status)).toEqual(["done", "done"]);
+  });
+
   it("a run without lists hashes as before, and a list changes the hash only once it exists", async () => {
     const a = build([() => ({ decision: hold(0.3) })]);
     const b = build([() => ({ decision: hold(0.3) })]);

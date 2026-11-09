@@ -138,6 +138,26 @@ describe("the task list at a decision", () => {
     expect(writer?.taskRecords.written).toBeUndefined();
   });
 
+  it("a decision that replaces a running action names only the step of its own action, not the one it ended by preempting", async () => {
+    seq = 0;
+    t = 1;
+    const list = rec("event", "uav-001/s2", { op: "task", steps: STEPS });
+    const req = rec("thought", "uav-001/s2", { op: "request", events: [{ kind: "timer" }], self: { kind: "uav", running: { actionId: "act-000001", name: "hold", phase: "holding" }, task: { steps: [{ ...STEPS[0], status: "running", actionId: "act-000001" }, { ...STEPS[1], status: "pending" }, { ...STEPS[2], status: "pending" }], running: 1 } } });
+    t = 2;
+    const dec = rec("thought", "uav-001/s2", { op: "decision", decision: { kind: "action", name: "goTo" }, step: 2, of: 3 }, { causeIds: [id(req)] });
+    const pre = rec("event", "uav-001/s2", { op: "task_step", step: 1, of: 3, status: "failed", outcome: "preempted", code: "preempted", actionId: "act-000001" }, { causeIds: [id(dec)] });
+    const run2 = rec("event", "uav-001/s2", { op: "task_step", step: 2, of: 3, status: "running", actionId: "act-000002" }, { causeIds: [id(dec)] });
+    const p = await ports([list, req, dec, pre, run2]);
+    const story = (await buildDecisionStory(p, RUN, dec.seq)) as NonNullable<Awaited<ReturnType<typeof buildDecisionStory>>>;
+    expect(story.taskRecords.steps.map((x) => x.seq)).toEqual([pre.seq, run2.seq]);
+    const task = await taskStoryOf(p, RUN, story);
+    expect(task?.rows.map((r) => [r.n, r.state, r.named])).toEqual([
+      [1, "running", false],
+      [2, "pending", true],
+      [3, "pending", false],
+    ]);
+  });
+
   it("a mind with no list at all has no section", async () => {
     seq = 0;
     const req = rec("thought", "uav-001/s2", { op: "request", events: [{ kind: "start" }], self: { kind: "uav", running: null } });

@@ -119,7 +119,8 @@ export async function taskStoryOf(ports: Ports, runId: string, story: DecisionSt
     const before = story.decisions.filter((d) => d < seq).length;
     return before === 0 ? undefined : before;
   };
-  const named = new Set(story.taskRecords.steps.map((r) => stepRec(r).step));
+  // The step a decision names is the one its action was bound to: the `running` record it caused (the `task_step` records it caused for a step that ended, by preempting the action, are not named).
+  const named = new Set(story.taskRecords.steps.filter((r) => stepRec(r).status === "running").map((r) => stepRec(r).step));
 
   if (held === undefined && writtenNow !== undefined) {
     // The first decision of a list: the world held none at its request; the list is the one this decision wrote, every step pending.
