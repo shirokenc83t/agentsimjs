@@ -120,7 +120,14 @@ test("the LLM inspector shows the task list as the world held it at each decisio
     // Decision 4 rewrites the list; decision 5 sees the new one and says where it came from.
     await page.getByTestId("llm-next").click();
     await expect(page.getByTestId("llm-title")).toContainText("decision #4");
-    await expect(page.getByTestId("llm-task-source")).toContainText("this decision rewrites it");
+    // The section shows the list this decision writes (its action is step 1 of it), and the list it replaces apart, collapsed, with nothing named in it.
+    await expect(page.getByTestId("llm-task-source")).toContainText("rewritten at #4 (was 3 steps)");
+    await expect(page.getByTestId("llm-task-counts")).toContainText("2 steps");
+    await expect(page.getByTestId("llm-task-row-1")).toHaveAttribute("data-named", "true");
+    await expect(page.getByTestId("llm-task-before")).toContainText("list before this decision · 3 steps");
+    await expect(page.getByTestId("llm-task-before-row-1")).not.toHaveAttribute("data-named", "true");
+    // The failed step of an earlier decision does not stop a list that goes on: no "list stopped" line at the decisions of this run.
+    await expect(page.getByTestId("llm-stopped")).toHaveCount(0);
     await page.getByTestId("llm-next").click();
     await expect(page.getByTestId("llm-title")).toContainText("decision #5");
     await expect(page.getByTestId("llm-task-source")).toContainText("rewritten at #4 (was 3 steps)");

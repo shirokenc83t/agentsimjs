@@ -59,7 +59,7 @@ function run() {
 }
 
 describe("the task list at a decision", () => {
-  it("at the first decision the world held no list: it is the one the decision wrote, every step pending, with the step it named", async () => {
+  it("at the first decision the world held no list: it is the one the decision wrote, the step it bound running and named, the others pending", async () => {
     const r = run();
     const p = await ports(r.all);
     const story = await buildDecisionStory(p, RUN, r.dec1.seq);
@@ -70,11 +70,11 @@ describe("the task list at a decision", () => {
     expect(task?.fromThisDecision).toBe(true);
     expect(task?.source).toMatchObject({ kind: "written", at: 1, byThisDecision: true });
     expect(task?.rows.map((x) => [x.n, x.state, x.glyph, x.named])).toEqual([
-      [1, "pending", "○", true],
+      [1, "running", "▶", true],
       [2, "pending", "○", false],
       [3, "pending", "○", false],
     ]);
-    expect(task?.counts).toEqual({ total: 3, done: 0, running: 0, failed: 0 });
+    expect(task?.counts).toEqual({ total: 3, done: 0, running: 1, failed: 0 });
   });
 
   it("at a later decision it is the list `self.task` of the request, with the counts, where it came from, the step the decision names and how the last step ended", async () => {
@@ -156,6 +156,40 @@ describe("the task list at a decision", () => {
       [2, "pending", true],
       [3, "pending", false],
     ]);
+  });
+
+  it("\"list stopped\" is only for a failure that nothing has followed: a list that goes on after one shows none (U-025 must 1)", async () => {
+    const failedList = (running?: number) => ({ steps: [{ ...STEPS[0], status: "done", actionId: "act-000001" }, { ...STEPS[1], status: "failed", actionId: "act-000002" }, { ...STEPS[2], status: running === 3 ? "running" : "pending", ...(running === 3 ? { actionId: "act-000003" } : {}) }], ...(running === undefined ? {} : { running }), last: { step: 2, status: "failed", action: "goTo", code: "no_path" } });
+    for (const [running, stopped] of [[undefined, "list stopped at step 2 of 3"], [3, undefined]] as const) {
+      seq = 0;
+      t = 0;
+      const list = rec("event", "uav-001/s2", { op: "task", steps: STEPS });
+      const fail = rec("event", "uav-001/s2", { op: "task_step", step: 2, of: 3, status: "failed", outcome: "failed", code: "no_path", actionId: "act-000002" });
+      const req = rec("thought", "uav-001/s2", { op: "request", events: [{ kind: "timer" }], self: { kind: "uav", running: null, task: failedList(running) } });
+      const dec = rec("thought", "uav-001/s2", { op: "decision", decision: { kind: "idle" } }, { causeIds: [id(req)] });
+      const p = await ports([list, fail, req, dec]);
+      const task = await taskStoryOf(p, RUN, (await buildDecisionStory(p, RUN, dec.seq)) as NonNullable<Awaited<ReturnType<typeof buildDecisionStory>>>);
+      expect(task?.stopped, `running ${String(running)}`).toBe(stopped);
+    }
+  });
+
+  it("a decision that rewrites the list names a step of the list it writes; the old list is kept apart with nothing named (U-025 must 2)", async () => {
+    seq = 0;
+    t = 1;
+    const list = rec("event", "uav-001/s2", { op: "task", steps: STEPS });
+    const req = rec("thought", "uav-001/s2", { op: "request", events: [{ kind: "actionCompleted" }], self: { kind: "uav", running: null, task: { steps: [{ ...STEPS[0], status: "done", actionId: "act-000001" }, { ...STEPS[1], status: "done", actionId: "act-000002" }, { ...STEPS[2], status: "pending" }], last: { step: 2, status: "done", action: "goTo" } } } });
+    t = 2;
+    const dec = rec("thought", "uav-001/s2", { op: "decision", decision: { kind: "action", name: "returnToBase" }, step: 1, of: 2 }, { causeIds: [id(req)] });
+    const rewrite = rec("event", "uav-001/s2", { op: "task", steps: [{ text: "return to base", action: "returnToBase" }, { text: "finish" }] });
+    const running = rec("event", "uav-001/s2", { op: "task_step", step: 1, of: 2, status: "running", actionId: "act-000003" }, { causeIds: [id(dec)] });
+    const p = await ports([list, req, dec, rewrite, running]);
+    const task = await taskStoryOf(p, RUN, (await buildDecisionStory(p, RUN, dec.seq)) as NonNullable<Awaited<ReturnType<typeof buildDecisionStory>>>);
+    expect(task?.source).toMatchObject({ kind: "rewritten", was: 3, byThisDecision: true });
+    expect(task?.rows.map((r) => [r.text, r.state, r.named])).toEqual([["return to base", "running", true], ["finish", "pending", false]]);
+    expect(task?.counts).toEqual({ total: 2, done: 0, running: 1, failed: 0 });
+    expect(task?.before?.rows.map((r) => [r.text, r.state, r.named])).toEqual([["take off", "done", false], ["inspect P1", "done", false], ["return to base", "pending", false]]);
+    expect(task?.last).toBeUndefined();
+    expect(task?.stopped).toBeUndefined();
   });
 
   it("a mind with no list at all has no section", async () => {

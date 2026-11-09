@@ -9,7 +9,7 @@ import { buildDecisionStory, promptSections } from "../debug/decision-story.ts";
 const HEADING = "Your task list";
 
 /** The `task` slot of a decision's prompt, as it was rendered, and the number of the decision among its agent's. */
-export function TaskSlotFold() {
+export function TaskSlotFold(props: { readonly onTokens?: (t: { readonly no: number | undefined; readonly tokens: number } | undefined) => void }) {
   const source = useSource();
   const { storage } = useServices();
   const snap = usePolled(useCallback(() => source.snapshot(), [source]), 400);
@@ -35,6 +35,11 @@ export function TaskSlotFold() {
     };
   }, [storage, runId, seq]);
 
+  // The size the fold shows is the size the template editor's token line quotes for the slot: one number, at the same decision.
+  const { onTokens } = props;
+  useEffect(() => {
+    onTokens?.(shown?.text === undefined ? undefined : { no: shown.no, tokens: shown.tokens });
+  }, [shown, onTokens]);
   const empty = shown?.text !== undefined && (shown.text.startsWith("(no list yet") || shown.text === "(none)");
   return (
     <details className="lib-task-fold" data-testid="lib-task-fold">

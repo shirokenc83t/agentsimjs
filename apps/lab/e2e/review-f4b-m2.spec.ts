@@ -143,7 +143,10 @@ for (const theme of ["dark", "light"] as const) {
         await expect(page.getByTestId("llm-task-row-3")).toHaveAttribute("data-state", "refused");
         await shot(page, "workspace-debug", "inspector-running-refused", theme, width);
         await goToDecision(page, 7);
-        await expect(page.getByTestId("llm-task-row-4")).toHaveAttribute("data-state", "preempted");
+        // The section shows the list this decision writes, and the list it replaces in a fold (opened for the picture: step 4 of the old list is ▲ preempted, nothing is named in it).
+        await expect(page.getByTestId("llm-task-source")).toContainText("rewritten at #7 (was 5 steps)");
+        await page.getByTestId("llm-task-before").locator("summary").click();
+        await expect(page.getByTestId("llm-task-before-row-4")).toHaveAttribute("data-state", "preempted");
         await shot(page, "workspace-debug", "inspector-preempted-rewriting", theme, width);
         await goToDecision(page, 8);
         await expect(page.getByTestId("llm-task-source")).toContainText("rewritten at #7");

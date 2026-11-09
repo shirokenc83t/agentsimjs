@@ -140,7 +140,8 @@ export function missionViewOf(records: readonly TraceRecord[], agentId: string):
       const i = p.step - 1;
       const row = rows[i];
       if (row === undefined) continue;
-      if (p.stop !== undefined) {
+      // The `stop` of a decision record is a script's: the world never stops a mind's task list (a failed step is only failed, and the mind may go on), so a list is not stopped by it.
+      if (p.stop !== undefined && source === undefined) {
         const s = str(p.stop.status);
         if (s === "refused" || s === "failed" || s === "preempted") {
           stop = { step: p.step, status: s, action: str(p.stop.action) ?? "?", code: str(p.stop.code) ?? "?" };

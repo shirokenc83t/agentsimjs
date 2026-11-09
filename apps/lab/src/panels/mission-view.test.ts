@@ -193,13 +193,17 @@ describe("the task list of a language-model mind is a mission too (F4b M2, U-024
     expect(v?.steps.map((s) => [s.action, s.state])).toEqual([["return to base", "running"], ["finish", "pending"]]);
   });
 
-  it("a failed step with the world's stop says so, as for a script; an agent with neither a script nor a list has no mission", () => {
+  it("a mind's list is never stopped by the `stop` of a decision record (the world does not stop it: a failed step is only failed, and the mind may go on); an agent with neither a script nor a list has no mission", () => {
     seq = 0;
     const d1 = llmDecision(1, 0.1);
-    const records = [d1, list(WORDS, 0.1), llmDecision(2, 12, { stop: { status: "failed", action: "goTo", code: "no_path" } })];
+    const first = [d1, list(WORDS, 0.1), start("a1", "takeoff", 0.1, d1.id), end("a1", "succeeded", 10)];
+    const d2 = llmDecision(2, 12, { stop: { status: "failed", action: "goTo", code: "no_path" } });
+    const records = [...first, d2, start("a2", "goTo", 12, d2.id), end("a2", "failed", 13, "no_path")];
     const v = missionViewOf(records, "uav-001");
-    expect(v?.status).toBe("stopped");
-    expect(v?.stop?.step).toBe(2);
+    expect(v?.stop).toBeUndefined();
+    expect(v?.status).toBe("running");
+    // The failure is on its step, as the action's end says it.
+    expect(v?.steps.map((s) => s.state)).toEqual(["done", "failed", "pending"]);
     expect(missionViewOf([rec("thought", { op: "decision" }, 1)], "uav-001")).toBeUndefined();
   });
 });

@@ -43,8 +43,10 @@ export interface TaskStory {
   readonly last: { readonly text: string } | undefined;
   /** The list stopped at a failed step: `list stopped at step 3 of 5`. */
   readonly stopped: string | undefined;
-  /** The list this decision wrote when it is not the one the world held at its request (the first decision of a list): its steps, all pending. */
+  /** The list this decision wrote when it is not the one the world held at its request: its steps, the one the decision bound to its action running, the others pending. */
   readonly fromThisDecision: boolean;
+  /** When the decision rewrites a list the world held: the old list, kept apart (collapsed in the panel), with no step named in it. */
+  readonly before?: { readonly rows: readonly TaskRow[] };
 }
 
 const asList = (v: unknown): { steps: readonly ListStep[]; running?: number; last?: { step: number; status: string; action: string; code?: string } } | undefined =>
@@ -122,11 +124,23 @@ export async function taskStoryOf(ports: Ports, runId: string, story: DecisionSt
   // The step a decision names is the one its action was bound to: the `running` record it caused (the `task_step` records it caused for a step that ended, by preempting the action, are not named).
   const named = new Set(story.taskRecords.steps.filter((r) => stepRec(r).status === "running").map((r) => stepRec(r).step));
 
+  /** The list this decision writes, as the world holds it once the decision has been applied: every step pending, except the one the decision bound to its action (running), which it names. */
+  const writtenRows = (): TaskRow[] => {
+    const bound = new Map(story.taskRecords.steps.map(stepRec).filter((s) => s.status === "running").map((s) => [s.step, s.actionId] as const));
+    const steps = (payload(writtenNow as TraceRecord)["steps"] as { text: string; action?: string; params?: Record<string, unknown> }[] | undefined) ?? [];
+    return steps.map((s, i) => {
+      const running = bound.has(i + 1);
+      const state: StepState = running ? "running" : "pending";
+      return { n: i + 1, text: s.text, action: s.action, params: s.params, actionId: bound.get(i + 1), state, glyph: STEP_GLYPH[state], code: undefined, named: running };
+    });
+  };
+  const countsOf = (rows: readonly TaskRow[]) => ({ total: rows.length, done: rows.filter((r) => r.state === "done").length, running: rows.filter((r) => r.state === "running").length, failed: rows.filter((r) => r.state === "failed" || r.state === "refused" || r.state === "preempted").length });
+  const thisNo = story.decision === undefined ? undefined : story.decisions.indexOf(story.decision.seq) + 1 || undefined;
+
   if (held === undefined && writtenNow !== undefined) {
-    // The first decision of a list: the world held none at its request; the list is the one this decision wrote, every step pending.
-    const steps = ((payload(writtenNow)["steps"] as { text: string; action?: string; params?: Record<string, unknown> }[] | undefined) ?? []).map((s) => ({ ...s, status: "pending" as const }));
-    const rows: TaskRow[] = steps.map((s, i) => ({ n: i + 1, text: s.text, action: s.action, params: s.params, actionId: undefined, state: "pending", glyph: STEP_GLYPH.pending, code: undefined, named: named.has(i + 1) }));
-    return { rows, counts: { total: rows.length, done: 0, running: 0, failed: 0 }, source: { kind: "written", at: story.decisions.indexOf(story.decision?.seq ?? -1) + 1 || undefined, was: undefined, unchanged: false, byThisDecision: true }, last: undefined, stopped: undefined, fromThisDecision: true };
+    // The first decision of a list: the world held none at its request; the list is the one this decision wrote.
+    const rows = writtenRows();
+    return { rows, counts: countsOf(rows), source: { kind: "written", at: thisNo, was: undefined, unchanged: false, byThisDecision: true }, last: undefined, stopped: undefined, fromThisDecision: true };
   }
 
   const list = held as NonNullable<typeof held>;
@@ -140,8 +154,13 @@ export async function taskStoryOf(ports: Ports, runId: string, story: DecisionSt
     const state = stateOf(s, info?.outcome);
     return { n, text: s.text, action: s.action, params: s.params, actionId: s.actionId, state, glyph: STEP_GLYPH[state], code: info?.code, named: named.has(n) };
   });
-  const counts = { total: rows.length, done: rows.filter((r) => r.state === "done").length, running: rows.filter((r) => r.state === "running").length, failed: rows.filter((r) => r.state === "failed" || r.state === "refused" || r.state === "preempted").length };
+  const counts = countsOf(rows);
   const rewrittenNow = writtenNow !== undefined;
+  if (rewrittenNow) {
+    // A decision that rewrites the list: the section shows the list it writes (the step it names is a step of that list), and the list it replaces is kept apart, with nothing named in it.
+    const fresh = writtenRows();
+    return { rows: fresh, counts: countsOf(fresh), source: { kind: "rewritten", at: thisNo, was: list.steps.length, unchanged: false, byThisDecision: true }, last: undefined, stopped: undefined, fromThisDecision: true, before: { rows: rows.map((r) => ({ ...r, named: false })) } };
+  }
   const source = {
     kind: previous === undefined ? ("written" as const) : ("rewritten" as const),
     at: listRec === undefined ? undefined : decisionNo(listRec.seq),
@@ -151,7 +170,8 @@ export async function taskStoryOf(ports: Ports, runId: string, story: DecisionSt
   };
   const lastRec = since.filter((r) => stepRec(r).status !== "running").at(-1);
   const last = list.last === undefined ? undefined : { text: `step ${list.last.step} ${STEP_GLYPH[list.last.status === "done" ? "done" : list.last.status === "preempted" ? "preempted" : list.last.status === "refused" ? "refused" : "failed"]} ${list.last.status === "done" ? "done" : list.last.status}${list.last.code === undefined ? "" : ` · ${list.last.code}`} · ${list.last.action}${lastRec === undefined || stepRec(lastRec).actionId === undefined ? "" : ` ${stepRec(lastRec).actionId}`}${lastRec === undefined ? "" : ` · at ${lastRec.simTime.toFixed(1)} s`}` };
-  const stopped = list.last !== undefined && list.last.status !== "done" ? `list stopped at step ${list.last.step} of ${rows.length}` : undefined;
+  // The world never stops a mind's list: a failed step is only failed. The line is for the moment the last outcome is a failure and nothing has run since (no step running, none ended after it).
+  const stopped = list.last !== undefined && list.last.status !== "done" && list.running === undefined ? `list stopped at step ${list.last.step} of ${rows.length}` : undefined;
   return { rows, counts, source, last, stopped, fromThisDecision: false };
 }
 

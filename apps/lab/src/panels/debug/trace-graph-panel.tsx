@@ -4,6 +4,7 @@ import type { TraceRecord } from "@agentsim/trace";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { usePolled, useServices, useSource } from "../../services.tsx";
 import { kindOpShort, LANE_PAGE, layoutTraceGraph, NODE_W, nodeLines, outcomeGlyph, PAGE, RAIL_W, type GraphLayout, type GraphNode, type Side } from "./trace-graph-layout.ts";
+import { tagOf } from "./log-rows.ts";
 import { buildTraceTree, type TraceTree } from "./trace-tree.ts";
 import { useJump } from "./use-jump.ts";
 
@@ -361,7 +362,7 @@ function GraphNodeView(props: {
     );
   }
   const r = n.record as TraceRecord;
-  const st = KIND_STYLE[r.kind as keyof typeof KIND_STYLE];
+  const st = tagOf(r, KIND_STYLE[r.kind as keyof typeof KIND_STYLE]);
   const lines = nodeLines(r);
   const glyph = outcomeGlyph(r);
   return (
@@ -382,8 +383,8 @@ function GraphNodeView(props: {
       title={r.id}
     >
       <span className="tg-l1">
-        <span className="tag" style={{ color: `var(--kind-${st?.family ?? "slate"})` }}>
-          [{st?.tag ?? r.kind.slice(0, 3).toUpperCase()}]
+        <span className="tag" style={{ color: `var(--kind-${st.family})` }}>
+          [{st.tag}]
         </span>{" "}
         <span className="tg-sum">{lines.top}</span>
         {glyph !== undefined && <span className={`tg-glyph${n.failed ? " alm" : ""}`}> {glyph}</span>}

@@ -950,12 +950,15 @@
 .compute-kv dd { margin: 0; overflow-wrap: anywhere; }
 
 /* The wake policy of a profile, a segmented control with both values in view, the selected one by inversion (F4b M2, U-024); the task slot fold under the template editor. */
-.lib-seg { display: inline-flex; border: 1px solid var(--ln2); margin: 0 0 4px; }
-.lib-seg button { padding: 2px 12px; background: transparent; color: var(--fg); border: 0; font: inherit; cursor: pointer; }
-.lib-seg button + button { border-left: 1px solid var(--ln2); }
+.lib-seg { display: inline-flex; }
+.lib-seg button { padding: 2px 12px; background: transparent; color: var(--fg); border: 1px solid var(--ln2); font: inherit; cursor: pointer; }
+.lib-seg button + button { margin-left: -1px; }
+.lib-seg button:focus-visible { outline: var(--focus-ring) solid var(--ac); outline-offset: -1px; position: relative; }
 .lib-seg button[aria-checked="true"] { background: var(--fg); color: var(--bg0); }
-.lib-wake .rc-input { display: flex; flex-direction: column; align-items: flex-start; }
-.lib-wake-help { display: block; max-width: 70ch; margin: 0 0 2px; font-family: var(--font-sans); }
+/* The wake control is in the flow of the form: its field is as tall as its content (the help and the hint push the next row down), and it is two buttons, not an input. */
+.lib-form .lib-wake { align-items: start; }
+.lib-wake-field { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.lib-wake-help { display: block; max-width: 70ch; font-family: var(--font-sans); }
 .lib-task-fold { margin: 0 0 8px; }
 .lib-task-fold summary { cursor: pointer; }
 .lib-task-text { margin: 4px 0; padding: 6px; background: var(--bg0); border: 1px solid var(--ln); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--type-mono-size); }

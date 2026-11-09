@@ -7,7 +7,7 @@ import { usePolled, useServices, useSource } from "../../services.tsx";
 import { buildDecisionStory, callFacts, callSays, callTokens, notebookAt, opOf, promptSections, type CallFacts, type DecisionStory, type Step } from "./decision-story.ts";
 import { STEP_GLYPH, STEP_TONE } from "../mission-view.ts";
 import { summary } from "./log-rows.ts";
-import { actionWords, continuedOf, heldOf, taskStoryOf, wakeOf, type TaskStory } from "./task-story.ts";
+import { actionWords, continuedOf, heldOf, PERCEPTION_KINDS, taskStoryOf, wakeOf, type TaskRow, type TaskStory } from "./task-story.ts";
 import { useJump } from "./use-jump.ts";
 
 // The LLM inspector (F4 M4, T-123, the designer's LLMInspector board): one decision of a System 2 mind as a lane, in the order things happened: the request, each model call with what it said, the compute
@@ -53,7 +53,9 @@ export function stepText(s: Step, callNo = 1, facts: LaneFacts = {}): string {
   const p = payload(s.record);
   switch (s.kind) {
     case "request": {
-      const ev = Array.isArray(p["events"]) ? (p["events"] as { kind?: unknown }[]).map((e) => String(e.kind)).join(", ") : "";
+      // A decision that held perception events back names only the control event that asked: the held ones are counted after it (the summary says the same, once).
+      const kinds = Array.isArray(p["events"]) ? (p["events"] as { kind?: unknown }[]).map((e) => String(e.kind)) : [];
+      const ev = (facts.held === undefined ? kinds : [...new Set(kinds.filter((k) => !PERCEPTION_KINDS.includes(k)))]).join(", ");
       const nb = notebookAt(s.record);
       const held = facts.held === undefined ? "" : ` · + ${facts.held.n} held perception event${facts.held.n === 1 ? "" : "s"}${facts.held.kinds === "" ? "" : ` (${facts.held.kinds})`}`;
       return `request · trigger: ${ev === "" ? "—" : ev}${held}${nb === "" ? "" : ` · notebook ${nb.length} chars`}`;
@@ -96,6 +98,27 @@ export function stepText(s: Step, callNo = 1, facts: LaneFacts = {}): string {
 /** A text with `code` in backticks drawn as code (Mono on the raised background) instead of raw backticks. */
 function Ticks({ text }: { text: string }): ReactNode {
   return text.split("`").map((t, i) => (i % 2 === 1 ? <code key={i} className="inline-code">{t}</code> : t));
+}
+
+/** The rows of a task list: number, glyph (the only coloured part), the mind's words, the action with its parameters, the code of a failure, `named`, the action's id. */
+function TaskRows(props: { rows: readonly TaskRow[]; prefix?: string }) {
+  return (
+    <ol className="llm-task-rows mono">
+      {props.rows.map((r) => (
+        <li key={r.n} className={`${r.named ? "named " : ""}${r.state === "running" ? "run" : ""}`} data-testid={`llm-task-${props.prefix ?? ""}row-${r.n}`} data-state={r.state} data-named={r.named ? "true" : undefined}>
+          <span className="n">{r.n}</span>
+          <span className={`g ${STEP_TONE[r.state]}`} data-testid={`llm-task-${props.prefix ?? ""}glyph-${r.n}`}>
+            {r.glyph}
+          </span>
+          <span className={`t${r.state === "pending" ? " muted" : ""}`}>{r.text}</span>
+          <span className="a muted">{actionWords(r.action, r.params)}</span>
+          {r.code !== undefined && r.state !== "done" && <span className="c muted">{r.code}</span>}
+          {r.named && <span className="tag-named">named</span>}
+          <span className="id muted">{r.actionId ?? ""}</span>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 function Tabs(props: { value: string; onChange: (v: string) => void; items: readonly string[] }) {
@@ -265,7 +288,9 @@ export function LlmInspectorPanel() {
           {tasks?.stopped !== undefined && (
             <>
               {" "}
-              <span className="st-alm" data-testid="llm-stopped">■ {tasks.stopped}</span>
+              <span data-testid="llm-stopped">
+                <span className="st-alm">■</span> {tasks.stopped}
+              </span>
             </>
           )}
         </div>
@@ -285,26 +310,19 @@ export function LlmInspectorPanel() {
             </span>
           </h4>
           <p className="muted mono llm-task-source" data-testid="llm-task-source">
-            {tasks.source.byThisDecision
+            {tasks.source.byThisDecision && tasks.source.kind === "written"
               ? "written by this decision"
               : tasks.source.kind === "written"
                 ? `written at ${tasks.source.at === undefined ? "an earlier decision" : `#${tasks.source.at}`}, unchanged since`
                 : `rewritten at ${tasks.source.at === undefined ? "an earlier decision" : `#${tasks.source.at}`} (was ${tasks.source.was ?? "?"} steps)${tasks.source.unchanged ? ", unchanged since" : ""}`}
-            {!tasks.source.byThisDecision && !tasks.source.unchanged ? " · this decision rewrites it" : ""}
           </p>
-          <ol className="llm-task-rows mono">
-            {tasks.rows.map((r) => (
-              <li key={r.n} className={`${r.named ? "named " : ""}${r.state === "running" ? "run" : ""}`} data-testid={`llm-task-row-${r.n}`} data-state={r.state} data-named={r.named ? "true" : undefined}>
-                <span className="n">{r.n}</span>
-                <span className={`g ${STEP_TONE[r.state]}`} data-testid={`llm-task-glyph-${r.n}`}>{r.glyph}</span>
-                <span className={`t${r.state === "pending" ? " muted" : ""}`}>{r.text}</span>
-                <span className="a muted">{actionWords(r.action, r.params)}</span>
-                {r.code !== undefined && r.state !== "done" && <span className="c muted">{r.code}</span>}
-                {r.named && <span className="tag-named">named</span>}
-                <span className="id muted">{r.actionId ?? ""}</span>
-              </li>
-            ))}
-          </ol>
+          <TaskRows rows={tasks.rows} />
+          {tasks.before !== undefined && (
+            <details className="llm-task-before" data-testid="llm-task-before">
+              <summary className="muted mono">list before this decision · {tasks.before.rows.length} steps</summary>
+              <TaskRows rows={tasks.before.rows} prefix="before-" />
+            </details>
+          )}
           {tasks.last !== undefined && (
             <p className="muted mono llm-task-last" data-testid="llm-task-last">
               last outcome · {tasks.last.text}

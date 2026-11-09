@@ -22,8 +22,8 @@ export function MissionProgress(props: { agentId: string; runId: string; view: M
         </button>
       </h4>
       {view.stop !== undefined && (
-        <p className="mp-stop st-alm" role="status" data-testid="mp-stop" title={`${view.stop.status} · ${view.stop.code}`}>
-          ■ {view.stop.line}
+        <p className="mp-stop" role="status" data-testid="mp-stop" title={`${view.stop.status} · ${view.stop.code}`}>
+          <span className="st-alm">■</span> {view.stop.line}
         </p>
       )}
       <div className="mp-bar" aria-hidden="true" data-testid="mp-bar">
@@ -48,7 +48,7 @@ export function MissionProgress(props: { agentId: string; runId: string; view: M
               <span className="mp-dur muted">{s.durationS !== undefined ? `${s.durationS.toFixed(1)} s` : s.startedAtS !== undefined ? `since ${s.startedAtS.toFixed(1)} s` : ""}</span>
             </button>
             {s.words !== undefined && (
-              <p className={`mp-why ${TONE[s.state]}`} data-testid={`mp-why-${s.index}`} title={s.code}>
+              <p className="mp-why" data-testid={`mp-why-${s.index}`} title={s.code}>
                 {s.words}
               </p>
             )}

@@ -100,6 +100,8 @@ export function LibraryPanel() {
   const [compare, setCompare] = useState(false);
   const [used, setUsed] = useState<UsedBy | undefined>(undefined);
   const [editing, setEditing] = useState<{ draft?: ProfileDraft; text?: string } | undefined>(undefined);
+  // The size and the decision of the task slot as the fold under the editor shows it: the token line quotes the same number.
+  const [taskTok, setTaskTok] = useState<{ readonly no: number | undefined; readonly tokens: number } | undefined>(undefined);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | undefined>(undefined);
   const [dupName, setDupName] = useState<string | undefined>(undefined);
   const editor = useRef<TemplateEditorHandle>(null);
@@ -218,7 +220,7 @@ export function LibraryPanel() {
             {items[kind].map((i) => (
               <li key={i.id}>
                 <button type="button" className={i.id === selected ? "sel" : undefined} onClick={() => (setSelected(i.id), setMessage(undefined))} data-testid={`lib-item-${i.id}`}>
-                  <b>{i.id}</b> <span className="muted">v{i.latestVersion}</span>
+                  <b>{i.id}</b> <span className="muted">v{i.latestVersion}{i.id === selected && kind === "template" && editing?.text !== undefined && current !== undefined && editing.text !== templateToText(current.document as TemplateDoc) ? " · edited" : ""}</span>
                   <br />
                   <span className="muted mono">{i.summary}</span>
                 </button>
@@ -323,7 +325,7 @@ export function LibraryPanel() {
                     <span className="rc-label" id="lib-wake-label">
                       wake
                     </span>
-                    <span className="rc-input">
+                    <span className="lib-wake-field">
                       <span className="lib-seg" role="radiogroup" aria-labelledby="lib-wake-label">
                         {(
                           [
@@ -360,9 +362,9 @@ export function LibraryPanel() {
                     <LazyTemplateEditor key={`${item.id}@${version}:${editing === undefined ? "r" : "w"}`} ref={editor} value={draftText} readOnly={editing === undefined} onChange={(t) => editing !== undefined && setEditing({ text: t })} />
                   </Suspense>
                   <p className="muted mono" data-testid="lib-tokens">
-                    {tokens.map((t) => `${t.slot} ${t.tokens} tok`).join(" · ")} · characters / 4, an estimate · {tokens.reduce((n, t) => n + t.tokens, 0)} tok in all
+                    {tokens.map((t) => (t.slot === "task" ? (taskTok === undefined ? "task 0 tok · no decision selected" : `task ${taskTok.tokens} tok at decision ${taskTok.no === undefined ? "picked" : `#${taskTok.no}`}`) : `${t.slot} ${t.tokens} tok`)).join(" · ")} · characters / 4, an estimate · {tokens.reduce((n, t) => n + (t.slot === "task" ? (taskTok?.tokens ?? 0) : t.tokens), 0)} tok in all
                   </p>
-                  {tokens.some((x) => x.slot === "task") && <TaskSlotFold />}
+                  {tokens.some((x) => x.slot === "task") && <TaskSlotFold onTokens={setTaskTok} />}
                   {issues.length > 0 && (
                     <ul className="lib-issues" data-testid="lib-issues">
                       {issues.map((i, k) => (
@@ -377,7 +379,7 @@ export function LibraryPanel() {
                       <span className="muted">add a slot:</span>
                       {SLOT_NAMES.filter((s) => !draftText.includes(`{{${s}}}`)).map((s) => (
                         <button key={s} type="button" className="kt" onClick={() => editor.current?.insertSlot(s)} data-testid={`lib-slot-${s}`}>
-                          {`{{${s}}}`}
+                          {`‹${s}›`}
                         </button>
                       ))}
                     </div>
