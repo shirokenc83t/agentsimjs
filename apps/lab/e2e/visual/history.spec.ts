@@ -61,7 +61,7 @@ for (const theme of THEMES) {
       const started = page.getByTestId("ah-row-3").locator('[data-kind="record"]').first();
       await expect(started).toBeVisible({ timeout: 15_000 });
       await started.dblclick();
-      await expect(page.getByTestId("ah-row-4")).toBeVisible();
+      await expect(page.getByTestId("ah-row-4")).toBeVisible({ timeout: 15_000 }); // the chain is read from storage when the record is opened: the row is waited for as the two before it are
       await expect.poll(async () => await page.getByTestId("ah-row-4").locator("[data-node]").count(), { timeout: 15_000 }).toBeGreaterThan(0);
       await shot(page, history, `history-mission-${theme}`);
     });
