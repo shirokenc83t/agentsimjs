@@ -22,10 +22,10 @@ export default defineConfig({
     acceptDownloads: true,
     // `pnpm test:e2e:gpu` (ADR-0022): hardware GPU; display-rate assertions are gated only there.
     launchOptions: { args: gpuLaunchArgs(!!process.env["AGENTSIM_E2E_GPU"]) },
-    // A failure keeps its trace, a screenshot and a video (in test-results/), whatever the machine.
+    // A failure keeps its trace and a screenshot (in test-results/), whatever the machine; a video too, except on CI, where the reports of a failed run were 250-470 MB each and the traces show what the video would.
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    video: process.env["CI"] ? "off" : "retain-on-failure",
   },
   // Visual regression (ADR-0032 §9) is its own project: `pnpm test:visual`, run only on the pinned Playwright
   // image (CI job and the manual baseline update); `pnpm test:e2e` runs the functional specs only.

@@ -186,7 +186,7 @@ jobs:
           path: |
             playwright-report/
             test-results/
-          retention-days: 2
+          retention-days: 1
           if-no-files-found: ignore
 
   # Visual regression (ADR-0032 §9): the committed baselines, on the same pinned image that generates them
