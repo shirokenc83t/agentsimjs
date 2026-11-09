@@ -7,6 +7,7 @@ import { LazyTemplateEditor } from "../../workspaces/registry.tsx";
 import { diffDocs, listItems, profileLines, storeOf, usedBy, versionsOf, type LibItem, type LibKind, type LibVersion, type UsedBy } from "./library-model.ts";
 import { bumpLibraryRevision } from "./library-revision.ts";
 import type { TemplateEditorHandle } from "./template-editor.tsx";
+import { TaskSlotFold } from "./task-slot-fold.tsx";
 import { lintTemplateText, sectionTokens, SLOT_NAMES, templateToText, textToTemplate, type TemplateDoc } from "./template-text.ts";
 
 // The Library (F4 M4, T-124, the designer's LibraryMinds board): mind profiles and prompt templates of this browser, versioned. A version is never changed: editing makes a new one (`edit as v4`), and a run keeps the
@@ -33,13 +34,18 @@ interface ProfileDraft {
   retries: string;
   toolCalls: string;
   decisions: string;
+  /** The wake policy as the profile has it: empty while it is not set (the same as `all events`), so an untouched profile stays as it was. */
+  wake: "" | "all" | "task";
 }
+
+const WAKE_HELP =
+  "task: while an action runs, the mind is asked only on control events (action done, failed or refused, battery low, a timer); perception events (detected, lost, frontier exhausted) wait and come with that request, counted as held. all events: every event asks, as in F4.";
 
 function draftOf(doc: unknown): ProfileDraft {
   const s2 = ((doc as { s2?: Record<string, Record<string, unknown> | string | undefined> } | undefined)?.s2 ?? {}) as Record<string, unknown>;
   const g = (o: unknown, k: string) => (typeof o === "object" && o !== null && (o as Record<string, unknown>)[k] !== undefined ? String((o as Record<string, unknown>)[k]) : "");
   const t = s2["promptTemplate"] as { id?: string; version?: number } | undefined;
-  return { provider: String(s2["provider"] ?? ""), model: String(s2["model"] ?? ""), template: t === undefined ? "default@1" : `${t.id}@${t.version}`, temperature: g(s2["params"], "temperature"), calls: g(s2["limits"], "calls"), tokens: g(s2["limits"], "tokens"), costUsd: g(s2["limits"], "costUsd"), retries: g(s2["limits"], "retries"), toolCalls: g(s2["tools"], "maxCallsPerDecision"), decisions: g(s2["context"], "decisions") };
+  return { provider: String(s2["provider"] ?? ""), model: String(s2["model"] ?? ""), template: t === undefined ? "default@1" : `${t.id}@${t.version}`, temperature: g(s2["params"], "temperature"), calls: g(s2["limits"], "calls"), tokens: g(s2["limits"], "tokens"), costUsd: g(s2["limits"], "costUsd"), retries: g(s2["limits"], "retries"), toolCalls: g(s2["tools"], "maxCallsPerDecision"), decisions: g(s2["context"], "decisions"), wake: wakeOf(doc) };
 }
 
 /** The document a form stands for; a field left empty is left out of the document (the default applies). */
@@ -63,11 +69,18 @@ function docOf(d: ProfileDraft, base: unknown): unknown {
       ...(prune({ calls: n(d.calls), tokens: n(d.tokens), costUsd: n(d.costUsd), retries: n(d.retries) }) === undefined ? {} : { limits: prune({ calls: n(d.calls), tokens: n(d.tokens), costUsd: n(d.costUsd), retries: n(d.retries) }) }),
       ...(prune({ maxCallsPerDecision: n(d.toolCalls), allow: old.tools?.allow }) === undefined ? {} : { tools: prune({ maxCallsPerDecision: n(d.toolCalls), allow: old.tools?.allow }) }),
       ...(prune({ decisions: n(d.decisions) }) === undefined ? {} : { context: prune({ decisions: n(d.decisions) }) }),
+      ...(d.wake === "" ? {} : { wake: d.wake }),
     },
   };
 }
 
 const EMPTY_VERSIONS: LibVersion[] = [];
+
+/** The wake value a profile document carries (`""` when the field is not there). */
+const wakeOf = (doc: unknown): "" | "all" | "task" => {
+  const w = ((doc as { s2?: { wake?: unknown } } | undefined)?.s2 ?? {}).wake;
+  return w === "task" ? "task" : w === "all" ? "all" : "";
+};
 
 /** The line (1-based) of an offset of the text. */
 const lineOf = (text: string, at: number): number => text.slice(0, Math.max(0, at)).split(String.fromCharCode(10)).length;
@@ -258,8 +271,8 @@ export function LibraryPanel() {
                           <tr key={l.path} data-change={l.change}>
                             <td>{l.change === "changed" || l.change === "removed" ? "−" : l.change === "added" ? "+" : ""}</td>
                             <td>{l.path}</td>
-                            <td className="old">{l.change === "same" ? l.after : l.change === "added" ? "" : l.before}</td>
-                            <td className="new">{l.change === "changed" || l.change === "added" ? <><span className="plus">+</span> {l.after}</> : ""}</td>
+                            <td className="old">{l.change === "same" ? l.after : l.change === "added" ? (l.path === "s2.wake" ? "— (all events)" : "") : l.before}</td>
+                            <td className="new">{l.change === "changed" || l.change === "added" ? <><span className="plus">+</span> {l.after}</> : l.path === "s2.wake" && l.change === "removed" ? "— (all events)" : ""}</td>
                           </tr>
                         ))}
                     </tbody>
@@ -306,6 +319,39 @@ export function LibraryPanel() {
                       </span>
                     </div>
                   ))}
+                  <div className="st-row lib-wake" data-testid="lib-wake">
+                    <span className="rc-label" id="lib-wake-label">
+                      wake
+                    </span>
+                    <span className="rc-input">
+                      <span className="lib-seg" role="radiogroup" aria-labelledby="lib-wake-label">
+                        {(
+                          [
+                            ["all", "all events"],
+                            ["task", "task"],
+                          ] as const
+                        ).map(([value, label]) => {
+                          const on = (editing.draft?.wake === "task") === (value === "task");
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              role="radio"
+                              aria-checked={on}
+                              className={on ? "on" : undefined}
+                              // An unset profile stays unset when `all events` is clicked: the field is written only for `task`, or for `all` when the profile already had it.
+                              onClick={() => setEditing({ draft: { ...(editing.draft as ProfileDraft), wake: value === "task" ? "task" : wakeOf(current.document) === "all" ? "all" : "" } })}
+                              data-testid={`lib-wake-${value}`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </span>
+                      <span className="muted lib-wake-help" data-testid="lib-wake-help">{WAKE_HELP}</span>
+                      <span className="muted mono lib-wake-hint">not set = all events · with task, the answer may be continue</span>
+                    </span>
+                  </div>
                 </form>
               )}
               {kind === "template" && (
@@ -316,6 +362,7 @@ export function LibraryPanel() {
                   <p className="muted mono" data-testid="lib-tokens">
                     {tokens.map((t) => `${t.slot} ${t.tokens} tok`).join(" · ")} · characters / 4, an estimate · {tokens.reduce((n, t) => n + t.tokens, 0)} tok in all
                   </p>
+                  {tokens.some((x) => x.slot === "task") && <TaskSlotFold />}
                   {issues.length > 0 && (
                     <ul className="lib-issues" data-testid="lib-issues">
                       {issues.map((i, k) => (

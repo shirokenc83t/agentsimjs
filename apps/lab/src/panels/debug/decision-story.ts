@@ -17,7 +17,7 @@ export interface CallStory {
   readonly tools: readonly TraceRecord[];
 }
 
-export type StepKind = "request" | "call" | "tool" | "answer" | "invalid" | "fallback" | "limit" | "cache" | "action";
+export type StepKind = "request" | "call" | "tool" | "answer" | "invalid" | "fallback" | "limit" | "cache" | "action" | "task";
 export interface Step {
   readonly kind: StepKind;
   readonly record: TraceRecord;
@@ -32,6 +32,8 @@ export interface DecisionStory {
   readonly decision: TraceRecord | undefined;
   /** The `start` of the action the decision began, when it began one. */
   readonly action: TraceRecord | undefined;
+  /** What the decision did to the agent's task list (F4b M2): the `task` record of a list it wrote, the `task_step` records it caused (the step its action works on, running), and the refusal of a list the world did not accept. */
+  readonly taskRecords: { readonly written: TraceRecord | undefined; readonly steps: readonly TraceRecord[]; readonly refused: TraceRecord | undefined };
   readonly fallback: TraceRecord | undefined;
   /** Limit warnings and hits that came with the decision's calls, and misses of the cache. */
   readonly limits: readonly TraceRecord[];
@@ -80,7 +82,9 @@ export async function buildDecisionStory(ports: Ports, runId: string, seq: numbe
   }
   const effects = await ports.trace.query({ runId, filter: `cause:#${request.seq}`, limit: 50 });
   const decision = effects.find((r) => opOf(r) === "decision");
-  const action = decision === undefined ? undefined : (await ports.trace.query({ runId, filter: `cause:#${decision.seq}`, limit: 50 })).find((r) => r.kind === "action" && opOf(r) === "start");
+  const caused = decision === undefined ? [] : await ports.trace.query({ runId, filter: `cause:#${decision.seq}`, limit: 50 });
+  const action = caused.find((r) => r.kind === "action" && opOf(r) === "start");
+  const taskRecords = decision === undefined ? { written: undefined, steps: [], refused: undefined } : await taskRecordsOf(ports, runId, agentId, decision, caused);
   const fallback = children.find((r) => opOf(r) === "fallback");
   const limits = children.filter((r) => ["limit-warning", "limit-hit"].includes(opOf(r))).sort((a, b) => a.seq - b.seq);
   const other = children.filter((r) => ["cache-miss", "not-reproducible"].includes(opOf(r))).sort((a, b) => a.seq - b.seq);
@@ -100,11 +104,29 @@ export async function buildDecisionStory(ports: Ports, runId: string, seq: numbe
   steps.push(...ordered);
   if (decision !== undefined) steps.push({ kind: "answer", record: decision });
   if (action !== undefined) steps.push({ kind: "action", record: action });
+  // The task records the decision wrote come after it, with their cause (the decision) in the lane.
+  for (const r of [taskRecords.written, ...taskRecords.steps, taskRecords.refused]) if (r !== undefined) steps.push({ kind: "task", record: r });
 
   // The agent's decisions in order, to say which one this is and what its neighbours are.
   const thoughts = await ports.trace.query({ runId, filter: `agent:${agentId} kind:thought text:decision`, limit: 5000 });
   const decisions = thoughts.filter((r) => opOf(r) === "decision").map((r) => r.seq).sort((a, b) => a - b);
-  return { agentId, request, calls, decision, action, fallback, limits, other, steps, decisions };
+  return { agentId, request, calls, decision, action, taskRecords, fallback, limits, other, steps, decisions };
+}
+
+/**
+ * What a decision did to the task list, read from the records (no new record shape): the `task` record of a list it wrote is the first one after the decision at the same sim time (the world writes it in the same
+ * brain phase, with no cause of its own); the `task_step` records it caused name it in `causeIds`; a list the world refused is the `actionRejected` event named `task` the same phase raised.
+ */
+async function taskRecordsOf(ports: Ports, runId: string, agentId: string, decision: TraceRecord, caused: readonly TraceRecord[]): Promise<DecisionStory["taskRecords"]> {
+  const steps = caused.filter((r) => r.kind === "event" && opOf(r) === "task_step").sort((a, b) => a.seq - b.seq);
+  const after = await ports.trace.query({ runId, agentId, kinds: ["event"], afterSeq: decision.seq, limit: 12 });
+  const same = after.filter((r) => Math.abs(r.simTime - decision.simTime) < 1e-6);
+  const written = same.find((r) => opOf(r) === "task");
+  const refused = same.find((r) => {
+    const ev = payload(r)["event"] as { kind?: unknown; name?: unknown } | undefined;
+    return opOf(r) === "event" && ev?.kind === "actionRejected" && ev.name === "task";
+  });
+  return { written, steps, refused };
 }
 
 // ---- reading a model call ---------------------------------------------------------------------------------------------------------------------------

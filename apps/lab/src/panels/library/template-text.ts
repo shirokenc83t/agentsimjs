@@ -2,7 +2,7 @@
 // instruction). The slot lines are fixed: the editor makes them atomic and read-only; only the text around them is edited. The text is turned back into the document the library stores, and the lint is the same
 // rule as the schema's validator (`validatePromptTemplate`): an unknown slot, a slot twice, expression-like syntax in the text, a text that is too long. Pure; no editor here.
 
-export const SLOT_NAMES = ["role", "mission", "notebook", "decisions", "self", "beliefs", "space", "events", "actions"] as const;
+export const SLOT_NAMES = ["role", "mission", "task", "notebook", "decisions", "self", "beliefs", "space", "events", "actions"] as const;
 
 /** The template document as the library holds it (the part of it the editor works on). */
 export interface TemplateDoc {

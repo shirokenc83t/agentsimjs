@@ -24,7 +24,11 @@ const asDoc = (d: unknown): Doc => (typeof d === "object" && d !== null ? (d as 
 /** The line the list shows for a document: a profile's shape and provider, a template's number of slots. */
 export function summaryOf(kind: LibKind, document: unknown): string {
   const d = asDoc(document);
-  if (kind === "template") return `${Array.isArray(d["sections"]) ? (d["sections"] as unknown[]).length : 0} slots`;
+  if (kind === "template") {
+    const sections = Array.isArray(d["sections"]) ? (d["sections"] as unknown[]) : [];
+    // A template that places the task slot says so: a version 1 template on a profile with `wake: task` is then visible before the run (U-024).
+    return `${sections.length} slots${sections.includes("task") ? " · has ‹task›" : ""}`;
+  }
   const s2 = asDoc(d["s2"]);
   return typeof s2["provider"] === "string" ? `s2 · ${s2["provider"]}` : String(d["shape"] ?? "profile");
 }
@@ -151,7 +155,8 @@ export function profileLines(document: unknown): { readonly label: string; reado
     { label: "model", value: String(s2["model"] ?? "—") },
     { label: "template", value: tpl["id"] === undefined ? "—" : `${String(tpl["id"])} v${String(tpl["version"])}` },
     { label: "temperature", value: String(params["temperature"] ?? "provider default") },
-    { label: "tools", value: Array.isArray(tools["allow"]) ? (tools["allow"] as string[]).join(", ") : "all of them" },
+    { label: "tools", value: Array.isArray(tools["allow"]) ? `${(tools["allow"] as string[]).join(", ")}${(tools["allow"] as string[]).includes("task") ? " · the mind can write a task list" : ""}` : "all of them" },
+    { label: "wake", value: s2["wake"] === "task" ? "task" : s2["wake"] === "all" ? "all events" : "all events (not set)" },
     { label: "tool calls", value: `${String(tools["maxCallsPerDecision"] ?? "default (8)")} a decision` },
     { label: "retries", value: String(limits["retries"] ?? "default (1)") },
     { label: "limits", value: limitWords === "" ? "defaults (20 calls · 40 000 tok · 0.05 USD)" : limitWords },

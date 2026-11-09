@@ -71,3 +71,28 @@ describe("a profile as the words of its table", () => {
     expect(bare["tools"]).toBe("all of them");
   });
 });
+
+describe("the wake policy and the task slot in the library (F4b M2, U-024)", () => {
+  it("a profile table says the wake policy in words (not set reads all events) and, when the task tool is allowed, that the mind can write a task list", () => {
+    const lines = (doc: unknown) => Object.fromEntries(profileLines(doc).map((l) => [l.label, l.value]));
+    expect(lines(profile("m"))["wake"]).toBe("all events (not set)");
+    expect(lines(profile("m", { wake: "task" }))["wake"]).toBe("task");
+    expect(lines(profile("m", { wake: "all" }))["wake"]).toBe("all events");
+    expect(lines(profile("m", { tools: { allow: ["goTo", "task"] } }))["tools"]).toBe("goTo, task · the mind can write a task list");
+    expect(lines(profile("m", { tools: { allow: ["goTo", "hold"] } }))["tools"]).toBe("goTo, hold");
+  });
+
+  it("a template that places the task slot says so in its summary, so a version without it on a `wake: task` profile shows before the run", () => {
+    expect(summaryOf("template", { sections: ["role", "mission", "task", "events", "actions"] })).toBe("5 slots · has ‹task›");
+    expect(summaryOf("template", { sections: ["role", "actions"] })).toBe("2 slots");
+  });
+
+  it("the diff of two versions lists wake only when it is set: an unset profile saved again has no wake line, and setting it is a line added", () => {
+    const a = profile("m");
+    const same = profile("m");
+    expect(diffDocs(a, same).filter((l) => l.change !== "same")).toEqual([]);
+    expect(diffDocs(a, same).some((l) => l.path === "s2.wake")).toBe(false);
+    expect(diffDocs(a, profile("m", { wake: "task" })).filter((l) => l.change !== "same")).toEqual([{ path: "s2.wake", change: "added", after: '"task"' }]);
+    expect(diffDocs(profile("m", { wake: "task" }), a).filter((l) => l.change !== "same")).toEqual([{ path: "s2.wake", change: "removed", before: '"task"' }]);
+  });
+});

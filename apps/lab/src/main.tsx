@@ -60,7 +60,7 @@ if (probeEnabled()) {
       return { columns: r.value.columns, rows: r.value.rows, cellsCut: r.value.cellsCut };
     },
     startMindsRun: async (o) => {
-      const saved = await storage.ports.mindProfiles.saveVersion({ id: "probe-llm", name: "Probe", document: { schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: o.provider, model: o.model, promptTemplate: { id: "default", version: 1 }, ...(o.limits === undefined ? {} : { limits: o.limits }) } } });
+      const saved = await storage.ports.mindProfiles.saveVersion({ id: "probe-llm", name: "Probe", document: { schemaVersion: 1, kind: "mind-profile", shape: "s2", s2: { provider: o.provider, model: o.model, promptTemplate: { id: "default", version: o.task === true ? 2 : 1 }, ...(o.limits === undefined ? {} : { limits: o.limits }), ...(o.task === true ? { wake: "task", tools: { allow: ["takeoff", "goTo", "returnToBase", "land", "hold", "explore", "task"] } } : {}) } } });
       if (!saved.ok) throw new Error(saved.error.message);
       const { startPresetRun } = await loadRunController();
       await startPresetRun(storage, sim, "f2-discovery", (cfg) => ({ ...(cfg as object), minds: { byAgent: { scout: { s2: { profile: { id: "probe-llm", version: saved.value.version }, mission: o.mission ?? "Wait for events." } } } } }));

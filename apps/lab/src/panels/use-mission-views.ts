@@ -24,6 +24,8 @@ export function missionViewsOf(source: RunSource): Map<string, MissionView> {
   for (; c.scanned < records.length; c.scanned++) {
     const r = records[c.scanned];
     if (r !== undefined && r.agentId !== undefined && r.kind === "lifecycle" && (r.payload as { op?: unknown; mind?: unknown } | undefined)?.op === "config" && (r.payload as { mind?: unknown }).mind !== undefined) c.ids.add(r.agentId);
+    // A language-model mind that writes a task list has a mission too (F4b M2).
+    else if (r !== undefined && r.agentId !== undefined && r.kind === "event" && (r.payload as { op?: unknown } | undefined)?.op === "task") c.ids.add(r.agentId);
   }
   c.length = records.length;
   if (c.ids.size === 0) {

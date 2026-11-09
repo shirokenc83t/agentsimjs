@@ -5,8 +5,9 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type Keyboard
 import { loadSavedFilters, storeSavedFilters, withoutSavedFilter, withSavedFilter, type SavedFilter } from "../../config/saved-filters.ts";
 import { useAppActions, usePolled, useServices, useSource } from "../../services.tsx";
 import { DerivedTag } from "./derived-tag.tsx";
-import { resultOf } from "./log-rows.ts";
-import { shownChoices, termValues, toggleChoice, withTermValues } from "./filter-text.ts";
+import { resultOf, tagOf } from "./log-rows.ts";
+import { hasToken, shownChoices, termValues, toggleChoice, toggleToken, withTermValues } from "./filter-text.ts";
+import { seqOfId } from "./trace-tree.ts";
 import { LogList, type LogListHandle } from "./log-list.tsx";
 import { takeLogFilterRequest, useLogFilterRequest } from "./log-filter-request.ts";
 import { useJump } from "./use-jump.ts";
@@ -221,7 +222,7 @@ export function EventListPanel() {
     resimulateWindow();
   };
 
-  const selectedTag = selected ? (KIND_STYLE[selected.kind as keyof typeof KIND_STYLE]?.tag ?? selected.kind.slice(0, 3).toUpperCase()) : undefined;
+  const selectedTag = selected ? tagOf(selected, KIND_STYLE[selected.kind as keyof typeof KIND_STYLE]).tag : undefined;
   const counts =
     tail?.sampled === true ? (
       <span className="warn" data-testid="event-count" title="The display samples a tail that is faster than it can show; the recording is not sampled.">
@@ -305,6 +306,16 @@ export function EventListPanel() {
             </button>
           );
         })}
+        <span className="sep" aria-hidden="true" />
+        {/* The decisions of a mind under the wake policy `task` that held perception events back or went on with the running action (U-024): two fixed terms of the filter text, no colour. */}
+        {[
+          ["held", "held > 0", "decisions that held perception events back"],
+          ["continued", "↻ continued", "decisions that went on with the running action"],
+        ].map(([key, label, tip]) => (
+          <button key={key} type="button" className={`kt${hasToken(text, `text:${key}`) ? " on" : ""}`} aria-pressed={hasToken(text, `text:${key}`)} data-testid={`event-chip-${key}`} data-tip={`${tip}: click to filter`} onClick={() => edit(toggleToken(text, `text:${key}`))}>
+            {label}
+          </button>
+        ))}
         <span className="sep" aria-hidden="true" />
         {TIER_CHOICES.map((t) => (
           <button
@@ -395,7 +406,13 @@ export function EventListPanel() {
         selectedSeq={selected?.seq}
         expanded={expanded}
         onSelect={select}
-        onJump={(r) => jump(r.simTime, r.agentId)}
+        onJump={(r) => {
+          jump(r.simTime, r.agentId);
+          // A task record (TSK) follows its cause: the decision that bound the step, or the end of its action; the Trace and the inspectors then show that record (U-024).
+          const op = r.payload !== null && typeof r.payload === "object" ? (r.payload as { op?: unknown }).op : undefined;
+          const cause = r.kind === "event" && (op === "task" || op === "task_step") ? seqOfId(r.causeIds?.[0]) : undefined;
+          if (cause !== undefined && runId !== undefined) useUiContext.getState().selectRecord({ runId, seq: cause });
+        }}
         onKey={onKey}
         onAtEnd={setAtEnd}
         label="Events"
